@@ -1,0 +1,11 @@
+# Railway / Nixpacks — FastAPI AI Service
+# Python 3.12 (plataformas cloud no soportan 3.14 aún)
+
+[phases.setup]
+nixPkgs = ["python312", "python312Packages.pip"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT"

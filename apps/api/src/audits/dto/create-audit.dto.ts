@@ -1,0 +1,101 @@
+import {
+  IsString, IsOptional, IsEnum, IsDateString, IsNumber,
+  IsUUID, IsBoolean, IsArray, Min, Max, ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AuditType } from '@prisma/client';
+
+export class AuditRiskModelDto {
+  @ApiProperty({ example: 0.6, description: 'Riesgo Inherente (0-1)' })
+  @IsNumber()
+  @Min(0) @Max(1)
+  inherentRisk: number;
+
+  @ApiProperty({ example: 0.5, description: 'Riesgo de Control (0-1)' })
+  @IsNumber()
+  @Min(0) @Max(1)
+  controlRisk: number;
+}
+
+export class MaterialityDto {
+  @ApiProperty({ example: 500000, description: 'Base de materialidad' })
+  @IsNumber()
+  @Min(0)
+  base: number;
+
+  @ApiProperty({ example: 'Activos totales' })
+  @IsString()
+  baseDescription: string;
+
+  @ApiProperty({ example: 2, description: 'Porcentaje aplicado a la base' })
+  @IsNumber()
+  @Min(0) @Max(100)
+  percentage: number;
+}
+
+export class CreateAuditDto {
+  @ApiProperty({ example: 'Auditoría Financiera Q1 2026' })
+  @IsString()
+  title: string;
+
+  @ApiProperty({ enum: AuditType, example: 'FINANCIAL' })
+  @IsEnum(AuditType)
+  type: AuditType;
+
+  @ApiProperty({ example: 'unit-uuid' })
+  @IsUUID()
+  auditableUnitId: string;
+
+  @ApiProperty({ example: '2026-03-01' })
+  @IsDateString()
+  startDate: string;
+
+  @ApiProperty({ example: '2026-04-30' })
+  @IsDateString()
+  endDate: string;
+
+  @ApiPropertyOptional({ example: 200 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  plannedHours?: number;
+
+  @ApiPropertyOptional({ example: 'HIGH' })
+  @IsOptional()
+  @IsString()
+  riskLevel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  scope?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  objectives?: string;
+
+  @ApiPropertyOptional({ type: MaterialityDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MaterialityDto)
+  materiality?: MaterialityDto;
+
+  @ApiPropertyOptional({ type: AuditRiskModelDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AuditRiskModelDto)
+  auditRiskModel?: AuditRiskModelDto;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isInvestigationMode?: boolean;
+
+  @ApiPropertyOptional({ example: ['user-uuid-1', 'user-uuid-2'] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  teamMemberIds?: string[];
+}

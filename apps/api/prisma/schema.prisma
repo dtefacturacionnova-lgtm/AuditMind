@@ -1,0 +1,1177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── ENUMS ─────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  CAE
+  AUDIT_MANAGER
+  SENIOR_AUDITOR
+  AUDITOR
+  AUDITEE
+  READ_ONLY
+}
+
+enum AuditType {
+  INTERNAL
+  EXTERNAL
+  OPERATIONAL
+  FINANCIAL
+  IT
+  COMPLIANCE
+  ESG
+  FORENSIC
+  BCP_DRP
+}
+
+enum AuditStatus {
+  PLANNING
+  IN_PROGRESS
+  REVIEW
+  CLOSED
+  CANCELLED
+}
+
+enum WorkingPaperType {
+  PLANNING_UNDERSTANDING    // PT-PL → A-x
+  CONTROL_EVALUATION        // PT-EC → B-x
+  SUBSTANTIVE_TEST          // PT-PS → C-x
+  DATA_ANALYSIS             // PT-AD → AD-x
+  FINDING                   // PT-HF → D-x
+  CLOSURE_CONCLUSION        // PT-CC → E-x
+  INTERVIEW                 // Grabación de entrevista
+  CONFIRMATION              // Confirmación externa
+  NORMATIVE_ANALYSIS        // Análisis normativo auto-generado
+}
+
+enum WorkingPaperStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  ARCHIVED
+}
+
+enum FindingSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFORMATIONAL
+}
+
+enum FindingStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  IN_PROGRESS
+  CLOSED
+  OVERDUE
+  ACCEPTED_RISK
+}
+
+enum PbcRequestStatus {
+  PENDING
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  OVERDUE
+}
+
+enum RagBase {
+  IIA_2025
+  AUDIT_TI
+  CONTINUITY
+  COMPLIANCE
+  ANTI_FRAUD
+  AI_GOVERNANCE
+  CLIENT_NORMATIVE
+  FINANCIAL
+  SECTOR_SPECIFIC
+}
+
+enum DocScope {
+  GLOBAL
+  CLIENT
+}
+
+enum AuditRiskLevel {
+  LOW
+  MODERATE
+  HIGH
+  VERY_HIGH
+}
+
+enum AuditApproach {
+  CONTROLS_RELIANCE
+  SUBSTANTIVE_FOCUS
+  COMBINED
+}
+
+enum EscalationLevel {
+  NONE
+  MANAGER
+  CAE
+  COMMITTEE
+}
+
+enum ComplianceFramework {
+  SOX
+  BASEL_III
+  GDPR
+  LGPD
+  FATF
+  PCI_DSS
+  IFRS
+  EU_AI_ACT
+  COBIT
+  NIST_CSF
+  ISO_27001
+  ISO_22301
+  HIPAA
+  FCPA
+}
+
+enum CertificationType {
+  CIA
+  CISA
+  CFE
+  CPA
+  CRMA
+  CGAP
+  PMP
+  ISO27001_LA
+  ISO22301_LA
+  CISSP
+  CDPSE
+}
+
+enum TickMark {
+  VERIFIED          // √ Verificado contra documento fuente
+  EXCEPTION         // X Excepción identificada
+  ESTIMATED         // * Estimación del auditor
+  CONFIRMED_THIRD   // © Confirmado con tercero
+  RECALCULATED      // R Recalculado por el auditor
+  FOOTED            // F Sumatoria verificada
+  CROSS_FOOTED      // CF Totales cruzados verificados
+  NOT_APPLICABLE    // NA No aplica
+  PENDING           // ⏱ Pendiente de resolución
+  ATTENTION         // ⚑ Requiere atención del revisor
+}
+
+enum ConfirmationType {
+  BANK
+  CLIENT
+  LAWYER
+  SUPPLIER
+  OTHER
+}
+
+enum ConfirmationStatus {
+  DRAFT
+  SENT
+  RECEIVED
+  RECONCILED
+  NO_RESPONSE
+  ALT_PROCEDURE
+}
+
+enum QaipEvaluationType {
+  INTERNAL_CONTINUOUS
+  INTERNAL_PERIODIC
+  EXTERNAL
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SLACK
+  TEAMS
+}
+
+enum AIAssistantPersonality {
+  ATHENA    // Para auditores — técnico, orientado a procedimientos
+  HERMES    // Para gerentes — operacional, orientado a equipo
+  MINERVA   // Para CAE/Socios — estratégico, orientado al Comité
+}
+
+enum DataSourceType {
+  SAP_RFC        // SAP via RFC/BAPI
+  REST_API       // API REST genérica (QuickBooks, Netsuite, Oracle ERP Cloud)
+  EXCEL_UPLOAD   // Carga manual de Excel/CSV
+  CSV_UPLOAD
+}
+
+enum ConnectorStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  TESTING
+}
+
+enum ImportStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ─── MÓDULO 01: NÚCLEO MULTI-TENANT ───────────────────────────────────────────
+
+model Organization {
+  id             String    @id @default(cuid())
+  name           String
+  slug           String    @unique
+  plan           String    @default("starter") // starter | professional | enterprise
+  settings       Json      @default("{}")
+  logoUrl        String?
+  primaryColor   String?   @default("#0F2D4A")
+  active         Boolean   @default(true)
+  trialEndsAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  users                  User[]
+  auditEntities          AuditEntity[]
+  auditPlans             AuditPlan[]
+  audits                 Audit[]
+  riskRegisters          RiskRegister[]
+  pbcRequests            PbcRequest[]
+  findings               Finding[]
+  templates              Template[]
+  knowledgeDocuments     KnowledgeDocument[]
+  dataAnalysisJobs       DataAnalysisJob[]
+  auditReports           AuditReport[]
+  notifications          Notification[]
+  complianceAssessments  ComplianceAssessment[]
+  normativeExceptions    NormativeException[]
+  qaipEvaluations        QaipEvaluation[]
+  auditCharters          AuditCharter[]
+  committeeSession       CommitteeSession[]
+  committeeReports       CommitteeReport[]
+  independenceDecl       IndependenceDeclaration[]
+  llmRouterLogs          LLMRouterLog[]
+  aiInteractions         AIInteraction[]
+  dataSources            DataSource[]
+
+  @@map("organizations")
+}
+
+model User {
+  id                      String                 @id @default(cuid())
+  organizationId          String
+  supabaseUserId          String                 @unique // Supabase Auth UUID
+  email                   String                 @unique
+  name                    String
+  role                    UserRole               @default(AUDITOR)
+  avatarUrl               String?
+  active                  Boolean                @default(true)
+  lastLoginAt             DateTime?
+  timezone                String                 @default("America/Lima")
+  preferredLanguage       String                 @default("es")
+  aiAssistantPersonality  AIAssistantPersonality @default(ATHENA)
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  certifications  UserCertification[]
+  competencies    UserCompetency[]
+  cpeRecords      CpeRecord[]
+  auditTeams      AuditTeam[]
+  workingPapers   WorkingPaper[]        @relation("PreparedBy")
+  reviewedPapers  WorkingPaper[]        @relation("ReviewedBy")
+  findings        Finding[]             @relation("FindingResponsible")
+  aiInteractions  AIInteraction[]
+  notifications   Notification[]
+  dataSources     DataSource[]
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model UserCertification {
+  id               String            @id @default(cuid())
+  userId           String
+  type             CertificationType
+  certNumber       String?
+  issuedAt         DateTime
+  expiresAt        DateTime?
+  isActive         Boolean           @default(true)
+  verificationUrl  String?
+  createdAt        DateTime          @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_certifications")
+}
+
+model UserCompetency {
+  id              String   @id @default(cuid())
+  userId          String
+  area            String
+  expertiseLevel  Int      // 1-5
+  yearsExperience Int      @default(0)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_competencies")
+}
+
+model CpeRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  year        Int
+  category    String   // etica | tecnica | liderazgo
+  hours       Float
+  description String
+  completedAt DateTime
+  createdAt   DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, year])
+  @@map("cpe_records")
+}
+
+// ─── MÓDULO 02: UNIVERSO DE AUDITORÍA ─────────────────────────────────────────
+
+model AuditEntity {
+  id                          String   @id @default(cuid())
+  organizationId              String
+  name                        String
+  description                 String?
+  category                    String   // Proceso, Departamento, Sistema, Sucursal, etc.
+  parentEntityId              String?
+  responsible                 String?
+  location                    String?
+  sector                      String?
+  relatedSystems              Json     @default("[]")
+  inherentRiskScore           Int      @default(50) // 1-100
+  lastAuditDate               DateTime?
+  recommendedFrequencyMonths  Int      @default(12)
+  active                      Boolean  @default(true)
+  excluded                    Boolean  @default(false)
+  exclusionJustification      String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         AuditEntity?  @relation("EntityHierarchy", fields: [parentEntityId], references: [id])
+  children       AuditEntity[] @relation("EntityHierarchy")
+  audits         Audit[]
+  planItems      AuditPlanItem[]
+  riskRegisters  RiskRegister[]
+
+  @@index([organizationId])
+  @@index([organizationId, inherentRiskScore])
+  @@index([organizationId, active])
+  @@map("audit_entities")
+}
+
+// ─── MÓDULO 03: PLANIFICACIÓN INTELIGENTE ─────────────────────────────────────
+
+model AuditPlan {
+  id             String      @id @default(cuid())
+  organizationId String
+  year           Int
+  name           String
+  status         String      @default("DRAFT") // DRAFT | APPROVED | ACTIVE | CLOSED
+  approvedById   String?
+  approvedAt     DateTime?
+  totalHours     Float       @default(0)
+  objectives     Json        @default("[]")
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items         AuditPlanItem[]
+
+  @@unique([organizationId, year])
+  @@index([organizationId])
+  @@map("audit_plans")
+}
+
+model AuditPlanItem {
+  id                  String      @id @default(cuid())
+  planId              String
+  auditEntityId       String
+  estimatedHours      Float
+  tentativeStartDate  DateTime?
+  tentativeEndDate    DateTime?
+  priority            Int         @default(1) // 1=alta, 2=media, 3=baja
+  notes               String?
+
+  plan         AuditPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  auditEntity  AuditEntity @relation(fields: [auditEntityId], references: [id])
+
+  @@index([planId])
+  @@map("audit_plan_items")
+}
+
+// ─── MÓDULO 04: EVALUACIÓN DE RIESGOS ─────────────────────────────────────────
+
+model RiskRegister {
+  id             String   @id @default(cuid())
+  organizationId String
+  auditEntityId  String?
+  title          String
+  description    String
+  category       String   // estratégico | operacional | financiero | TI | compliance | reputacional | ESG
+  probability    Int      // 1-5
+  impact         Int      // 1-5
+  inherentScore  Int      // probability * impact
+  controlsScore  Int      @default(0) // efectividad controles
+  residualScore  Int      // calculado
+  kris           Json     @default("[]") // Key Risk Indicators
+  trend          String   @default("STABLE") // INCREASING | STABLE | DECREASING
+  lastUpdated    DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  auditEntity   AuditEntity? @relation(fields: [auditEntityId], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, inherentScore])
+  @@map("risk_registers")
+}
+
+// ─── MÓDULO 05: EJECUCIÓN DE AUDITORÍA ────────────────────────────────────────
+
+model Audit {
+  id                      String      @id @default(cuid())
+  organizationId          String
+  planId                  String?
+  auditEntityId           String?
+  title                   String
+  type                    AuditType
+  status                  AuditStatus @default(PLANNING)
+  scope                   String?
+  objectives              String?
+  startDate               DateTime?
+  endDate                 DateTime?
+  estimatedHours          Float       @default(0)
+  actualHours             Float       @default(0)
+  leadAuditorId           String?
+
+  // Modo investigación forense
+  isInvestigationMode     Boolean     @default(false)
+  investigationActivatedAt DateTime?
+  investigationActivatedBy String?
+
+  // Materialidad (NIA 320)
+  materiality             Decimal?    @db.Decimal(15, 2)
+  materialityExecution    Decimal?    @db.Decimal(15, 2) // 75% de MG
+  materialityAccumulation Decimal?    @db.Decimal(15, 2) // 50% de MG
+  materialityBase         String?     // PROFIT_BEFORE_TAX | TOTAL_REVENUE | etc.
+  materialityBaseAmount   Decimal?    @db.Decimal(15, 2)
+
+  // Modelo de riesgo de auditoría (NIA 200)
+  auditRiskModel          Json?       // { inherentRisk, controlRisk, detectionRisk, ... }
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  organization           Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  auditEntity            AuditEntity?           @relation(fields: [auditEntityId], references: [id])
+  team                   AuditTeam[]
+  workingPapers          WorkingPaper[]
+  pbcRequests            PbcRequest[]
+  findings               Finding[]
+  dataAnalysisJobs       DataAnalysisJob[]
+  auditReports           AuditReport[]
+  externalConfirmations  ExternalConfirmation[]
+  bcpAudit               BcpAudit?
+  connectorImports       ConnectorImport[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([leadAuditorId])
+  @@map("audits")
+}
+
+model AuditTeam {
+  id          String   @id @default(cuid())
+  auditId     String
+  userId      String
+  role        String   @default("AUDITOR") // LEAD | AUDITOR | SUPERVISOR | OBSERVER
+  assignedAt  DateTime @default(now())
+
+  audit  Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  user   User  @relation(fields: [userId], references: [id])
+
+  @@unique([auditId, userId])
+  @@index([auditId])
+  @@map("audit_teams")
+}
+
+model AuditProgram {
+  id             String   @id @default(cuid())
+  auditId        String   @unique
+  title          String
+  objectives     String?
+  steps          Json     @default("[]")
+  generatedByAI  Boolean  @default(false)
+  approvedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([auditId])
+  @@map("audit_programs")
+}
+
+model WorkingPaper {
+  id              String             @id @default(cuid())
+  auditId         String
+  code            String             // A-1, B-2, C-3, D-1, E-1, AD-1
+  indexSection    String             // A | B | C | D | E | AD
+  title           String
+  type            WorkingPaperType
+  status          WorkingPaperStatus @default(DRAFT)
+  content         Json               @default("{}")
+  conclusion      String?
+  preparedById    String?
+  reviewedById    String?
+  qualityScore    Int?               // 0-100
+  version         Int                @default(1)
+  tickMarks       Json               @default("[]")
+  crossReferences Json               @default("[]") // [{paperId, code, description}]
+  aiAssisted      Boolean            @default(false)
+  parentPaperId   String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  audit       Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  preparedBy  User?          @relation("PreparedBy", fields: [preparedById], references: [id])
+  reviewedBy  User?          @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  parent      WorkingPaper?  @relation("PaperHierarchy", fields: [parentPaperId], references: [id])
+  children    WorkingPaper[] @relation("PaperHierarchy")
+  versions    WorkingPaperVersion[]
+  comments    WorkingPaperComment[]
+  tickEntries TickMarkEntry[]
+  findings    Finding[]
+
+  @@index([auditId])
+  @@index([auditId, status])
+  @@index([auditId, type])
+  @@map("working_papers")
+}
+
+model WorkingPaperVersion {
+  id        String   @id @default(cuid())
+  paperId   String
+  version   Int
+  content   Json
+  changedBy String
+  changedAt DateTime @default(now())
+  diff      Json?
+
+  paper  WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@index([paperId])
+  @@map("working_paper_versions")
+}
+
+model WorkingPaperComment {
+  id          String   @id @default(cuid())
+  paperId     String
+  authorId    String
+  content     String
+  resolved    Boolean  @default(false)
+  resolvedBy  String?
+  createdAt   DateTime @default(now())
+
+  paper  WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@index([paperId])
+  @@map("working_paper_comments")
+}
+
+model TickMarkEntry {
+  id        String   @id @default(cuid())
+  paperId   String
+  fieldPath String   // ruta del campo en el JSON del papel
+  tickMark  TickMark
+  note      String?
+  createdBy String
+  createdAt DateTime @default(now())
+
+  paper  WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@index([paperId])
+  @@index([paperId, tickMark])
+  @@map("tick_mark_entries")
+}
+
+// ─── MÓDULO 05b: CONFIRMACIONES EXTERNAS (NIA 505) ────────────────────────────
+
+model ExternalConfirmation {
+  id                      String             @id @default(cuid())
+  auditId                 String
+  type                    ConfirmationType
+  respondentName          String
+  respondentEmail         String
+  amount                  Decimal?           @db.Decimal(15, 2)
+  accountRef              String?
+  sentAt                  DateTime?
+  sentBy                  String?
+  responseReceivedAt      DateTime?
+  responseContent         String?
+  responseAmount          Decimal?           @db.Decimal(15, 2)
+  difference              Decimal?           @db.Decimal(15, 2)
+  differenceExplanation   String?
+  status                  ConfirmationStatus @default(DRAFT)
+  alternativeProcedure    String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  audit  Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId])
+  @@index([auditId, status])
+  @@map("external_confirmations")
+}
+
+// ─── MÓDULO 06: PORTAL DEL AUDITADO ───────────────────────────────────────────
+
+model PbcRequest {
+  id               String          @id @default(cuid())
+  auditId          String
+  organizationId   String
+  title            String
+  description      String
+  requestedToEmail String
+  requestedToName  String?
+  dueDate          DateTime
+  status           PbcRequestStatus @default(PENDING)
+  portalToken      String           @unique
+  fileUrls         Json             @default("[]")
+  rejectionReason  String?
+  submittedAt      DateTime?
+  acceptedAt       DateTime?
+  templateId       String?
+  createdById      String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  audit         Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  messages      PbcMessage[]
+
+  @@index([auditId])
+  @@index([organizationId])
+  @@index([status, dueDate])
+  @@map("pbc_requests")
+}
+
+model PbcMessage {
+  id             String   @id @default(cuid())
+  requestId      String
+  senderEmail    String
+  senderName     String?
+  isAuditor      Boolean  @default(false)
+  content        String
+  attachmentUrls Json     @default("[]")
+  createdAt      DateTime @default(now())
+
+  request  PbcRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("pbc_messages")
+}
+
+// ─── MÓDULO 07: HALLAZGOS Y RECOMENDACIONES ───────────────────────────────────
+
+model Finding {
+  id                   String          @id @default(cuid())
+  auditId              String
+  workingPaperId       String?
+  organizationId       String
+  title                String
+  condition            String
+  criteria             String
+  cause                String
+  effect               String
+  risk                 String
+  recommendation       String
+  managementResponse   String?
+  severity             FindingSeverity
+  status               FindingStatus   @default(DRAFT)
+  qualityScore         Int             @default(0) // 0-100, mínimo 60 para pasar a revisión
+  aiDraftUsed          Boolean         @default(false)
+  normativeReference   String?         // Nombre de la norma
+  normativeArticle     String?         // Artículo exacto
+  isMaterial           Boolean?        // vs materialidad del audit
+  effectAmount         Decimal?        @db.Decimal(15, 2)
+  responsibleId        String?
+  dueDate              DateTime?
+  closedAt             DateTime?
+  closedById           String?
+  isRecurring          Boolean         @default(false)
+  previousFindingId    String?
+  escalationLevel      EscalationLevel @default(NONE)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  audit          Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  workingPaper   WorkingPaper?  @relation(fields: [workingPaperId], references: [id])
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  responsible    User?          @relation("FindingResponsible", fields: [responsibleId], references: [id])
+  previousFinding Finding?      @relation("FindingRecurrence", fields: [previousFindingId], references: [id])
+  relatedFindings Finding[]     @relation("FindingRecurrence")
+  actions        FindingAction[]
+  comments       FindingComment[]
+
+  @@index([auditId])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, severity])
+  @@index([dueDate, status])
+  @@map("findings")
+}
+
+model FindingAction {
+  id             String   @id @default(cuid())
+  findingId      String
+  organizationId String
+  description    String
+  responsibleId  String?
+  dueDate        DateTime
+  completionDate DateTime?
+  status         String   @default("PENDING") // PENDING | IN_PROGRESS | COMPLETED | OVERDUE
+  progressPct    Int      @default(0)
+  evidenceUrls   Json     @default("[]")
+  comments       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  finding  Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@map("finding_actions")
+}
+
+model FindingComment {
+  id         String   @id @default(cuid())
+  findingId  String
+  authorId   String
+  content    String
+  isInternal Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  finding  Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@map("finding_comments")
+}
+
+// ─── MÓDULO 08: ANALYTICS DE DATOS ────────────────────────────────────────────
+
+model DataAnalysisJob {
+  id             String   @id @default(cuid())
+  auditId        String
+  organizationId String
+  type           String   // GL_ANALYSIS | AP_DUPLICATES | PAYROLL | BENFORD | ANOMALY_ML | etc.
+  status         String   @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED
+  parameters     Json     @default("{}")
+  resultsSummary Json?
+  flaggedCount   Int      @default(0)
+  totalRecords   Int      @default(0)
+  processingMs   Int?
+  createdAt      DateTime @default(now())
+  completedAt    DateTime?
+
+  audit        Audit       @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
+  flags        DataFlag[]
+
+  @@index([auditId])
+  @@index([status])
+  @@map("data_analysis_jobs")
+}
+
+model DataFlag {
+  id          String   @id @default(cuid())
+  jobId       String
+  auditId     String
+  entityRef   String   // ID de la transacción o registro analizado
+  description String
+  riskScore   Float    // 0.0-1.0
+  anomalyType String   // DUPLICATE | ROUND_AMOUNT | OUT_OF_HOURS | BENFORD | ML_ANOMALY | etc.
+  rawData     Json
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  disposition String?  // ACCEPTED | FALSE_POSITIVE | FINDING_CREATED
+  createdAt   DateTime @default(now())
+
+  job  DataAnalysisJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([auditId])
+  @@index([riskScore])
+  @@map("data_flags")
+}
+
+// ─── MÓDULO 09: REPORTERÍA ─────────────────────────────────────────────────────
+
+model AuditReport {
+  id               String   @id @default(cuid())
+  auditId          String
+  organizationId   String
+  type             String   // EXECUTIVE | DETAILED | FOLLOW_UP | COMMITTEE
+  title            String
+  content          Json     @default("{}")
+  version          Int      @default(1)
+  aiGenerated      Boolean  @default(false)
+  aiModelUsed      String?
+  status           String   @default("DRAFT") // DRAFT | IN_REVIEW | APPROVED | DISTRIBUTED
+  approvedById     String?
+  approvedAt       DateTime?
+  distributionList Json     @default("[]")
+  scheduledAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  audit        Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([auditId])
+  @@index([organizationId])
+  @@map("audit_reports")
+}
+
+// ─── MÓDULO 10: PLANTILLAS ─────────────────────────────────────────────────────
+
+model Template {
+  id             String   @id @default(cuid())
+  organizationId String?  // null = template global del sistema
+  title          String
+  category       String   // Planificación | Ejecución | Hallazgos | Informe | Seguimiento
+  type           String   // WORKING_PAPER | CHECKLIST | INTERVIEW_GUIDE | CONFIRMATION | PBC
+  content        Json
+  dynamicFields  Json     @default("[]") // campos que se auto-completan al insertar
+  isPublic       Boolean  @default(false)
+  isGlobal       Boolean  @default(false)
+  tags           Json     @default("[]")
+  usageCount     Int      @default(0)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([category])
+  @@map("templates")
+}
+
+// ─── BASE DE CONOCIMIENTO RAG ─────────────────────────────────────────────────
+
+model KnowledgeDocument {
+  id             String   @id @default(cuid())
+  organizationId String?  // null = base global del sistema
+  title          String
+  docType        String   // PDF | WORD | TXT
+  ragBase        RagBase
+  scope          DocScope @default(CLIENT)
+  fileUrl        String?
+  status         String   @default("PENDING") // PENDING | PROCESSING | READY | FAILED
+  chunkCount     Int      @default(0)
+  processedAt    DateTime?
+  createdAt      DateTime @default(now())
+
+  organization  Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([ragBase, scope])
+  @@map("knowledge_documents")
+}
+
+// ─── MÓDULO 11: MOTOR IA Y AGENTES ────────────────────────────────────────────
+
+model AIInteraction {
+  id              String   @id @default(cuid())
+  organizationId  String
+  userId          String
+  agentName       String   // Scriptorium | Argus | Hermes | Cicero | etc.
+  modelUsed       String
+  inputTokens     Int
+  outputTokens    Int
+  latencyMs       Int
+  taskType        String
+  approved        Boolean?
+  feedbackScore   Int?     // 1-5
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  user          User         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, agentName])
+  @@map("ai_interactions")
+}
+
+model LLMRouterLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  taskType       String
+  modelSelected  String
+  fallbackUsed   Boolean  @default(false)
+  tokensUsed     Int
+  costUsd        Float
+  success        Boolean
+  errorMsg       String?
+  latencyMs      Int
+  createdAt      DateTime @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([createdAt])
+  @@map("llm_router_logs")
+}
+
+// ─── COMPLIANCE ────────────────────────────────────────────────────────────────
+
+model ComplianceAssessment {
+  id             String              @id @default(cuid())
+  organizationId String
+  auditId        String?
+  framework      ComplianceFramework
+  year           Int
+  gapAnalysis    Json                @default("{}")
+  overallScore   Int                 @default(0) // 0-100
+  status         String              @default("IN_PROGRESS")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, framework])
+  @@map("compliance_assessments")
+}
+
+model NormativeException {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  framework             String
+  controlRef            String   // Ej: ISO 27001 A.8.2
+  justification         String
+  compensatingControl   String?
+  approvedBy            String
+  approvedAt            DateTime
+  expiresAt             DateTime
+  residualRiskLevel     String   // LOW | MEDIUM | HIGH
+  riskOwnerSignature    String?
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, active])
+  @@map("normative_exceptions")
+}
+
+// ─── MÓDULO 13: QAIP ──────────────────────────────────────────────────────────
+
+model QaipEvaluation {
+  id             String            @id @default(cuid())
+  organizationId String
+  type           QaipEvaluationType
+  period         String            // Q1-2026 | 2026 | etc.
+  results        Json              @default("{}")
+  overallScore   Int               @default(0) // 0-100
+  status         String            @default("IN_PROGRESS")
+  conductedBy    String
+  conductedAt    DateTime
+  nextDueAt      DateTime?
+  createdAt      DateTime          @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("qaip_evaluations")
+}
+
+model IndependenceDeclaration {
+  id               String   @id @default(cuid())
+  organizationId   String
+  caeId            String
+  year             Int
+  declarationText  String
+  signedAt         DateTime
+  documentUrl      String?
+  createdAt        DateTime @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, year])
+  @@index([organizationId])
+  @@map("independence_declarations")
+}
+
+model AuditCharter {
+  id             String   @id @default(cuid())
+  organizationId String
+  version        Int
+  content        Json
+  approvedBy     String
+  approvedAt     DateTime
+  effectiveDate  DateTime
+  createdAt      DateTime @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("audit_charters")
+}
+
+// ─── MÓDULO 14: COMITÉ DE AUDITORÍA ───────────────────────────────────────────
+
+model CommitteeSession {
+  id              String   @id @default(cuid())
+  organizationId  String
+  sessionDate     DateTime
+  agenda          Json     @default("[]")
+  minutes         Json?
+  attendees       Json     @default("[]")
+  status          String   @default("SCHEDULED") // SCHEDULED | COMPLETED | CANCELLED
+  nextSessionDate DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization  Organization       @relation(fields: [organizationId], references: [id])
+  reports       CommitteeReport[]
+
+  @@index([organizationId])
+  @@map("committee_sessions")
+}
+
+model CommitteeReport {
+  id             String   @id @default(cuid())
+  organizationId String
+  sessionId      String?
+  period         String
+  type           String   // QUARTERLY | ANNUAL | SPECIAL
+  content        Json
+  preparedById   String
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  organization  Organization      @relation(fields: [organizationId], references: [id])
+  session       CommitteeSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([organizationId])
+  @@map("committee_reports")
+}
+
+// ─── MÓDULO 15: BCP/DRP ───────────────────────────────────────────────────────
+
+model BcpAudit {
+  id                 String   @id @default(cuid())
+  auditId            String   @unique
+  organizationId     String
+  framework          String   @default("ISO_22301")
+  bcpMaturityScore   Int?     // 1-5
+  components         Json     @default("{}")
+  rtoRpoAssessment   Json?
+  lastTestedAt       DateTime?
+  recommendations    Json     @default("[]")
+  createdAt          DateTime @default(now())
+
+  audit  Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("bcp_audits")
+}
+
+// ─── NOTIFICACIONES ───────────────────────────────────────────────────────────
+
+model Notification {
+  id             String              @id @default(cuid())
+  organizationId String
+  userId         String
+  type           String
+  title          String
+  body           String
+  entityType     String?
+  entityId       String?
+  read           Boolean             @default(false)
+  readAt         DateTime?
+  channel        NotificationChannel @default(IN_APP)
+  createdAt      DateTime            @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  user          User         @relation(fields: [userId], references: [id])
+
+  @@index([userId, read])
+  @@index([organizationId])
+  @@map("notifications")
+}
+
+// ─── MÓDULO 16: CONECTORES DE DATOS (2.6-2.8) ─────────────────────────────────
+
+model DataSource {
+  id              String          @id @default(cuid())
+  organizationId  String
+  name            String
+  type            DataSourceType
+  status          ConnectorStatus @default(INACTIVE)
+  // Connection config (credenciales almacenadas como JSON — encriptar en prod)
+  config          Json            @default("{}")
+  // Metadata para test de conectividad
+  lastTestedAt    DateTime?
+  lastTestStatus  String?         // "ok" | "error"
+  lastTestError   String?
+  // Estadísticas de importaciones
+  lastImportAt    DateTime?
+  totalImports    Int             @default(0)
+  createdById     String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  organization  Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy     User              @relation(fields: [createdById], references: [id])
+  imports       ConnectorImport[]
+
+  @@index([organizationId])
+  @@index([organizationId, type])
+  @@map("data_sources")
+}
+
+model ConnectorImport {
+  id           String       @id @default(cuid())
+  sourceId     String
+  auditId      String?
+  status       ImportStatus @default(PENDING)
+  // Resultados
+  recordCount  Int?
+  errorMsg     String?
+  result       Json?        // resumen de datos importados
+  // Tiempos
+  startedAt    DateTime     @default(now())
+  completedAt  DateTime?
+
+  source  DataSource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  audit   Audit?      @relation(fields: [auditId], references: [id])
+
+  @@index([sourceId])
+  @@index([auditId])
+  @@map("connector_imports")
+}

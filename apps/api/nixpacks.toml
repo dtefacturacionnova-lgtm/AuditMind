@@ -1,9 +1,9 @@
 # Railway / Nixpacks — NestJS API
-# Railway detecta Node.js automáticamente por package.json
-# Este archivo fuerza Node 22 y configura el build
+# Root Directory en Railway = apps/api
+# Por lo tanto todos los comandos corren DESDE apps/api (ya no necesita "cd")
 
 [phases.setup]
-nixPkgs = ["nodejs_22", "npm-9_x"]
+nixPkgs = ["nodejs_22"]
 
 [phases.install]
 cmds = ["npm install --include=dev"]

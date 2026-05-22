@@ -29,6 +29,6 @@
   },
   "packageManager": "npm@10.8.0",
   "overrides": {
-    "next": "15.3.9"
+    "next": "15.5.18"
   }
 }

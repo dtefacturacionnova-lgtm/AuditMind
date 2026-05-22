@@ -1,6 +1,7 @@
 import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateWorkingPaperDto, AddCommentDto, AddTickMarkEntryDto,
@@ -50,6 +51,7 @@ export class WorkingPapersService {
   constructor(
     private readonly prisma:        PrismaService,
     private readonly paperGraph:    PaperGraphService,
+    private readonly eventEmitter:  EventEmitter2,
   ) {}
 
   private async assertAuditAccess(auditId: string, user: AuthUser) {
@@ -325,52 +327,92 @@ export class WorkingPapersService {
 
   /**
    * Trigger AI consolidation of a MASTER paper.
+   *
    * 1. Validates wpKind === MASTER.
-   * 2. Sets syncStatus = REGENERATING.
-   * 3. Collects all source section data from linked upstream papers.
-   * 4. Returns the collected context — actual AI call is handled in the AI module.
+   * 2. Sets syncStatus = REGENERATING (returned immediately to caller).
+   * 3. Discovers source papers:
+   *      a) Via explicit PaperLinks (targetId = this paper, isActive = true)
+   *      b) Fallback: finds PT-A1, PT-A2, PT-A4 by paperCode in the same audit
+   * 4. Emits `paper.consolidate` event — PaperConsolidationService handles it
+   *    asynchronously: calls Gemini, updates sections, marks SYNCED.
    */
   async consolidateMasterPaper(id: string, user: AuthUser) {
     const wp = await this.findOne(id, user);
 
     if (wp.wpKind !== WpKind.MASTER) {
-      throw new BadRequestException('Solo los papeles MASTER pueden ser consolidados mediante este endpoint');
+      throw new BadRequestException(
+        'Solo los papeles MASTER pueden ser consolidados mediante este endpoint',
+      );
     }
 
-    // Set to REGENERATING (non-blocking; AI module listens for paper.consolidate event)
+    // 1. Set REGENERATING immediately so the UI reacts
     await this.prisma.workingPaper.update({
       where: { id },
       data:  { syncStatus: SyncStatus.REGENERATING },
     });
 
-    // Collect upstream source data
-    const upstreamLinks = await this.prisma.paperLink.findMany({
+    // 2a. Collect upstream papers via explicit PaperLinks
+    const links = await this.prisma.paperLink.findMany({
       where:   { targetId: id, isActive: true },
       include: {
         source: {
           select: {
-            id: true, code: true, title: true, paperCode: true, wpKind: true,
+            id: true, code: true, title: true, paperCode: true,
             sections: { orderBy: { sortOrder: 'asc' } },
           },
         },
       },
     });
 
-    const sourceData = upstreamLinks.map((link) => ({
-      linkId:      link.id,
-      mappingType: link.mappingType,
-      sourceField: link.sourceField,
-      targetField: link.targetField,
-      description: link.description,
-      sourcePaper: link.source,
+    let sourcePapers = links.map(l => ({
+      paperId:   l.source.id,
+      paperCode: l.source.paperCode,
+      title:     l.source.title,
+      sections:  l.source.sections as Array<{
+        sectionKey: string; label: string; value: unknown;
+        aiHint: string | null; isAutoFilled: boolean; sortOrder: number;
+      }>,
     }));
 
+    // 2b. Fallback: auto-discover PT-A1, PT-A2, PT-A4 in the same audit
+    if (sourcePapers.length === 0) {
+      const discovered = await this.prisma.workingPaper.findMany({
+        where: {
+          auditId:   wp.auditId,
+          paperCode: { in: ['PT-A1', 'PT-A2', 'PT-A4'] },
+        },
+        include: { sections: { orderBy: { sortOrder: 'asc' } } },
+      });
+      sourcePapers = discovered.map(p => ({
+        paperId:   p.id,
+        paperCode: p.paperCode,
+        title:     p.title,
+        sections:  p.sections as Array<{
+          sectionKey: string; label: string; value: unknown;
+          aiHint: string | null; isAutoFilled: boolean; sortOrder: number;
+        }>,
+      }));
+    }
+
+    // 3. Emit event — fire-and-forget; PaperConsolidationService handles the AI work
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const auditTitle = String((wp as any).audit?.title ?? 'Sin título');
+    this.eventEmitter.emit('paper.consolidate', {
+      paperId:    id,
+      paperCode:  wp.paperCode,
+      auditId:    wp.auditId,
+      auditTitle,
+      sourceData: sourcePapers,
+    });
+
     return {
-      paperId:     id,
-      paperCode:   wp.paperCode,
-      syncStatus:  SyncStatus.REGENERATING,
-      sourceData,
-      message:     'Consolidación iniciada. El agente IA procesará los datos y actualizará las secciones.',
+      paperId:           id,
+      paperCode:         wp.paperCode,
+      syncStatus:        SyncStatus.REGENERATING,
+      sourcePapersFound: sourcePapers.length,
+      message:           sourcePapers.length > 0
+        ? `Consolidación IA iniciada con ${sourcePapers.length} fuente(s). El estado cambiará a "Al día" en segundos.`
+        : 'Consolidación iniciada sin fuentes vinculadas — se generará contenido base. Vincule PT-A1, PT-A2 y PT-A4 para una consolidación completa.',
     };
   }
 }

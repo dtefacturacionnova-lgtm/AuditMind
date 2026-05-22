@@ -630,6 +630,7 @@ export default function WpDetailPage() {
               paperId={params.id}
               syncStatus={syncStatus}
               narrative={wp.narrative}
+              sections={wp.sections}
               lastSyncedAt={wp.lastSyncedAt}
             />
           )}

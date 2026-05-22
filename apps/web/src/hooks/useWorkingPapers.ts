@@ -53,6 +53,21 @@ export interface WorkingPaperContent {
   [key: string]: unknown;
 }
 
+export interface WpPaperSection {
+  id:           string;
+  sectionKey:   string;
+  label:        string;
+  description?: string;
+  fieldType:    string;
+  value:        unknown;
+  options?:     string[];
+  isRequired:   boolean;
+  isAutoFilled: boolean;
+  sourceRef?:   string;
+  sortOrder:    number;
+  aiHint?:      string;
+}
+
 export interface WorkingPaper {
   id:             string;
   code:           string;
@@ -78,6 +93,8 @@ export interface WorkingPaper {
   createdAt:      string;
   updatedAt:      string;
   audit?:         { id: string; title: string; type?: string; scope?: string };
+  // ─── Intelligent Papers ────────────────────────────────────────────────────
+  sections?:      WpPaperSection[];
   preparedBy?:    { id: string; name: string; avatarUrl?: string };
   reviewedBy?:    { id: string; name: string; avatarUrl?: string };
   findings?:      { id: string; title: string; severity: string; status: string }[];
@@ -143,6 +160,11 @@ export function useWorkingPaper(id: string) {
     queryFn:   () => apiClient.get(`/working-papers/${id}`),
     enabled:   !!id,
     staleTime: 15_000,
+    // Poll every 3 s while the AI is regenerating, stop once SYNCED / STALE
+    refetchInterval: (query) => {
+      const status = (query.state.data as WorkingPaper | undefined)?.syncStatus;
+      return status === 'REGENERATING' ? 3_000 : false;
+    },
   });
 }
 

@@ -15,11 +15,15 @@ RUN npx prisma generate
 # Copy all source and config files
 COPY . .
 
-# Build NestJS — compiles TypeScript → dist/
+# Build NestJS — uses tsconfig.build.json (excludes prisma/seed.ts)
+# so TypeScript infers rootDir=src → output goes to dist/main.js
 RUN npm run build
 
-# Verify build output exists (fail loudly if nest build produced nothing)
-RUN test -f dist/main.js || (echo "ERROR: dist/main.js not found after build" && exit 1)
+# Debug: show what was compiled
+RUN echo "=== dist/ contents ===" && find dist -name "*.js" | head -10 || echo "dist/ empty or missing"
+
+# Verify build output exists
+RUN test -f dist/main.js || (echo "ERROR: dist/main.js not found - check dist/ output above" && exit 1)
 
 EXPOSE 3001
 

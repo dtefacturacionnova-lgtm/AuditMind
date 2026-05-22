@@ -5,8 +5,9 @@ import { useParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import {
   Bot, CheckCircle2, Clock, AlertCircle, Lock, Plus, Trash2,
-  ChevronDown, ChevronUp, MessageSquare, History, FileText,
+  MessageSquare, History, FileText, Network,
   Link2, Save, Sparkles, Loader2, X, Wand2,
+  Brain, Star, Activity, AlertTriangle, RefreshCw,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -14,13 +15,18 @@ import {
   useAddTickMark, useRemoveTickMark, useAddWpComment, useResolveWpComment,
   useWpVersions,
   WP_STATUS_CONFIG, WP_TYPE_CONFIG, TICK_MARK_CONFIG,
-  type WpStatus, type TickMarkKey,
+  WP_KIND_CONFIG, SYNC_STATUS_CONFIG,
+  type WpStatus, type TickMarkKey, type WpKind, type WpSyncStatus,
 } from '@/hooks/useWorkingPapers';
-import { apiClient } from '@/lib/api-client';
+import { SmartPaperSections }  from '@/components/working-papers/SmartPaperSections';
+import { MasterPaperView }      from '@/components/working-papers/MasterPaperView';
+import { PaperGraphPanel }      from '@/components/working-papers/PaperGraphPanel';
+import { apiClient }            from '@/lib/api-client';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
-import type { WorkingPaper } from '@/hooks/useWorkingPapers';
+import type { WorkingPaper, TickMarkEntry } from '@/hooks/useWorkingPapers';
 
 // ─── Scriptorium Draft Modal ──────────────────────────────────────────────────
+
 interface GeneratedDraft {
   objective?: string;
   scope?: string;
@@ -84,7 +90,6 @@ function ScriptoriumDraftModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-violet-600 flex items-center justify-center">
@@ -100,7 +105,6 @@ function ScriptoriumDraftModal({
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-auto px-6 py-5">
           {!draft && !generate.isPending && (
             <div className="flex flex-col items-center py-10 gap-4 text-center">
@@ -120,7 +124,7 @@ function ScriptoriumDraftModal({
                 onClick={() => generate.mutate()}
                 className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700"
               >
-                <Sparkles className="w-4 h-4" /> ✨ Generar borrador
+                <Sparkles className="w-4 h-4" /> Generar borrador
               </button>
             </div>
           )}
@@ -172,7 +176,6 @@ function ScriptoriumDraftModal({
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0">
           <div>
             {draft && (
@@ -210,6 +213,7 @@ function DraftSection({ title, content }: { title: string; content: string }) {
 }
 
 // ─── Section editor ───────────────────────────────────────────────────────────
+
 function ContentSection({
   label,
   value,
@@ -261,7 +265,6 @@ function ContentSection({
 }
 
 // ─── Tick mark row ────────────────────────────────────────────────────────────
-import type { TickMarkEntry } from '@/hooks/useWorkingPapers';
 
 function TickMarkRow({ entry, onRemove }: {
   entry: TickMarkEntry;
@@ -291,14 +294,15 @@ function TickMarkRow({ entry, onRemove }: {
 }
 
 // ─── Add tick mark form ───────────────────────────────────────────────────────
+
 function AddTickMarkForm({ onAdd, disabled }: {
   onAdd: (fieldPath: string, tickMark: TickMarkKey, note?: string) => void;
   disabled: boolean;
 }) {
-  const [open,   setOpen]   = useState(false);
-  const [path,   setPath]   = useState('');
-  const [mark,   setMark]   = useState<TickMarkKey>('VERIFIED');
-  const [note,   setNote]   = useState('');
+  const [open, setOpen] = useState(false);
+  const [path, setPath] = useState('');
+  const [mark, setMark] = useState<TickMarkKey>('VERIFIED');
+  const [note, setNote] = useState('');
 
   const submit = () => {
     if (!path.trim()) return;
@@ -356,6 +360,7 @@ function AddTickMarkForm({ onAdd, disabled }: {
 }
 
 // ─── Status workflow ──────────────────────────────────────────────────────────
+
 const STATUS_TRANSITIONS: Record<WpStatus, WpStatus | null> = {
   DRAFT:     'IN_REVIEW',
   IN_REVIEW: 'APPROVED',
@@ -376,30 +381,88 @@ const STATUS_ICONS: Record<WpStatus, React.ElementType> = {
   ARCHIVED:  Lock,
 };
 
+// ─── WpKind badge ─────────────────────────────────────────────────────────────
+
+function WpKindBadge({ wpKind }: { wpKind: WpKind }) {
+  const cfg = WP_KIND_CONFIG[wpKind] ?? WP_KIND_CONFIG.STANDARD;
+  const icons: Record<WpKind, React.ElementType> = {
+    STANDARD: FileText,
+    SMART:    Brain,
+    MASTER:   Star,
+    LIVE:     Activity,
+  };
+  const Icon = icons[wpKind] ?? FileText;
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
+      <Icon className="w-3 h-3" />
+      {cfg.label}
+    </span>
+  );
+}
+
+// ─── SyncStatus badge ─────────────────────────────────────────────────────────
+
+function SyncStatusBadge({ syncStatus }: { syncStatus: WpSyncStatus }) {
+  const cfg = SYNC_STATUS_CONFIG[syncStatus] ?? SYNC_STATUS_CONFIG.DRAFT;
+  const isSpinning = syncStatus === 'REGENERATING';
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
+      {syncStatus === 'SYNCED'        && <CheckCircle2 className="w-3 h-3" />}
+      {syncStatus === 'STALE'         && <AlertTriangle className="w-3 h-3" />}
+      {syncStatus === 'REGENERATING'  && <RefreshCw className={`w-3 h-3 ${isSpinning ? 'animate-spin' : ''}`} />}
+      {syncStatus === 'DRAFT'         && <Clock className="w-3 h-3" />}
+      {cfg.label}
+    </span>
+  );
+}
+
+// ─── Live paper placeholder ───────────────────────────────────────────────────
+
+function LivePaperView() {
+  return (
+    <div className="flex flex-col items-center py-20 gap-4 bg-white rounded-2xl border border-gray-200 shadow-sm text-center">
+      <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+        <Activity className="w-8 h-8 text-emerald-400 animate-pulse" />
+      </div>
+      <div>
+        <p className="text-base font-semibold text-gray-700 mb-1">Panel en tiempo real</p>
+        <p className="text-sm text-gray-400 max-w-sm">
+          Los papeles de trabajo VIVO muestran indicadores en tiempo real de la auditoría.
+          Esta vista estará disponible en el Sprint 2.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab definitions ──────────────────────────────────────────────────────────
+
+type TabKey = 'content' | 'sections' | 'graph' | 'review' | 'history';
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function WpDetailPage() {
   const params = useParams<{ id: string }>();
   const { data: wp, isLoading } = useWorkingPaper(params.id);
 
-  const updateWp      = useUpdateWorkingPaper(params.id);
-  const updateStatus  = useUpdateWpStatus();
-  const addTickMark   = useAddTickMark(params.id);
-  const removeTickMark= useRemoveTickMark(params.id);
-  const addComment    = useAddWpComment(params.id);
-  const resolveComment= useResolveWpComment(params.id);
+  const updateWp       = useUpdateWorkingPaper(params.id);
+  const updateStatus   = useUpdateWpStatus();
+  const addTickMark    = useAddTickMark(params.id);
+  const removeTickMark = useRemoveTickMark(params.id);
+  const addComment     = useAddWpComment(params.id);
+  const resolveComment = useResolveWpComment(params.id);
   const { data: versions } = useWpVersions(params.id);
 
-  // Content state — synced to WP on save
-  const [content, setContent]           = useState<Record<string, string>>({});
-  const [conclusion, setConclusion]     = useState('');
-  const [dirty, setDirty]               = useState(false);
-  const [activeTab, setActiveTab]       = useState<'content' | 'review' | 'history'>('content');
-  const [commentText, setComment]       = useState('');
-  const [showVersions, setVersions]     = useState(false);
-  const [reviewNotes, setRvNotes]       = useState('');
-  const [showScriptorium, setScripto]   = useState(false);
+  const [content, setContent]         = useState<Record<string, string>>({});
+  const [conclusion, setConclusion]   = useState('');
+  const [dirty, setDirty]             = useState(false);
+  const [activeTab, setActiveTab]     = useState<TabKey>('content');
+  const [commentText, setComment]     = useState('');
+  const [reviewNotes, setRvNotes]     = useState('');
+  const [showScriptorium, setScripto] = useState(false);
 
-  // Sync local state from remote on first load
   const [initialized, setInit] = useState(false);
   if (wp && !initialized) {
     setContent((wp.content ?? {}) as Record<string, string>);
@@ -448,14 +511,34 @@ export default function WpDetailPage() {
     );
   }
 
+  const wpKind     = (wp.wpKind     ?? 'STANDARD') as WpKind;
+  const syncStatus = (wp.syncStatus ?? 'DRAFT')    as WpSyncStatus;
+
   const st         = WP_STATUS_CONFIG[wp.status];
   const typeConf   = WP_TYPE_CONFIG[wp.type];
   const nextStatus = STATUS_TRANSITIONS[wp.status];
   const StatusIcon = STATUS_ICONS[wp.status];
   const tickEntries = wp.tickEntries ?? [];
-  const comments   = wp.comments ?? [];
-  const findings   = wp.findings ?? [];
+  const comments    = wp.comments ?? [];
+  const findings    = wp.findings ?? [];
   const openComments = comments.filter(c => !c.resolved);
+
+  // Determine which tabs to show
+  const showSectionsTab = wpKind === 'SMART';
+  const showGraphTab    = wpKind === 'SMART' || wpKind === 'MASTER';
+
+  const allTabs: { key: TabKey; label: string; icon: React.ElementType; show: boolean }[] = [
+    { key: 'content'  as TabKey, label: 'Contenido',   icon: FileText,       show: wpKind !== 'MASTER' && wpKind !== 'LIVE' },
+    { key: 'sections' as TabKey, label: 'Secciones',   icon: Brain,          show: showSectionsTab },
+    { key: 'graph'    as TabKey, label: 'Grafo',        icon: Network,        show: showGraphTab },
+    { key: 'review'   as TabKey, label: `Revisión${openComments.length ? ` (${openComments.length})` : ''}`, icon: MessageSquare, show: true },
+    { key: 'history'  as TabKey, label: 'Historial',   icon: History,        show: true },
+  ];
+  const tabs = allTabs.filter(t => t.show);
+
+  // For MASTER / LIVE, default tab should not be 'content' if it isn't visible
+  const visibleTabKeys = tabs.map(t => t.key);
+  const effectiveTab: TabKey = visibleTabKeys.includes(activeTab) ? activeTab : (visibleTabKeys[0] ?? 'content');
 
   return (
     <div className="flex flex-col h-full">
@@ -473,11 +556,17 @@ export default function WpDetailPage() {
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
             <div className="flex items-start gap-4">
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
-                    {wp.code}
+                    {wp.paperCode ?? wp.code}
                   </span>
                   <span className={`text-xs font-medium ${typeConf.color}`}>{typeConf.label}</span>
+                  {/* wpKind badge */}
+                  <WpKindBadge wpKind={wpKind} />
+                  {/* syncStatus badge for SMART and MASTER */}
+                  {(wpKind === 'SMART' || wpKind === 'MASTER') && (
+                    <SyncStatusBadge syncStatus={syncStatus} />
+                  )}
                   {wp.aiAssisted && (
                     <span className="flex items-center gap-1 text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
                       <Bot className="w-2.5 h-2.5" /> Asistido por IA
@@ -489,18 +578,18 @@ export default function WpDetailPage() {
                   {wp.audit?.title} · v{wp.version} · Actualizado {formatRelativeTime(wp.updatedAt)}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${st.bg} ${st.color}`}>
                   <StatusIcon className="w-3.5 h-3.5" />
                   {st.label}
                 </span>
-                {wp.status === 'DRAFT' && (
+                {wp.status === 'DRAFT' && wpKind === 'STANDARD' && (
                   <button
                     onClick={() => setScripto(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    ✨ Generar borrador
+                    Generar borrador
                   </button>
                 )}
                 {dirty && (
@@ -518,17 +607,13 @@ export default function WpDetailPage() {
           </div>
 
           {/* ── Tabs ── */}
-          <div className="flex border-b border-gray-200 gap-1">
-            {[
-              { key: 'content', label: 'Contenido',  icon: FileText },
-              { key: 'review',  label: `Revisión${openComments.length ? ` (${openComments.length})` : ''}`, icon: MessageSquare },
-              { key: 'history', label: 'Historial',  icon: History },
-            ].map(({ key, label, icon: Icon }) => (
+          <div className="flex border-b border-gray-200 gap-1 overflow-x-auto">
+            {tabs.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
-                onClick={() => setActiveTab(key as typeof activeTab)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === key
+                onClick={() => setActiveTab(key)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  effectiveTab === key
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
@@ -539,8 +624,23 @@ export default function WpDetailPage() {
             ))}
           </div>
 
-          {/* ── Tab: Contenido ── */}
-          {activeTab === 'content' && (
+          {/* ── MASTER paper view ── */}
+          {wpKind === 'MASTER' && (
+            <MasterPaperView
+              paperId={params.id}
+              syncStatus={syncStatus}
+              narrative={wp.narrative}
+              lastSyncedAt={wp.lastSyncedAt}
+            />
+          )}
+
+          {/* ── LIVE paper view ── */}
+          {wpKind === 'LIVE' && effectiveTab !== 'review' && effectiveTab !== 'history' && (
+            <LivePaperView />
+          )}
+
+          {/* ── Tab: Contenido (STANDARD / SMART only) ── */}
+          {effectiveTab === 'content' && wpKind !== 'MASTER' && wpKind !== 'LIVE' && (
             <div className="grid grid-cols-3 gap-4">
 
               {/* Left: Editor */}
@@ -637,22 +737,20 @@ export default function WpDetailPage() {
                     disabled={addTickMark.isPending || wp.status === 'ARCHIVED'}
                   />
                 </div>
-
               </div>
 
               {/* Right: Sidebar */}
               <div className="col-span-1 space-y-4">
-
                 {/* Metadata */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
                   <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Información</p>
                   <div className="space-y-2 text-xs">
                     {[
-                      { label: 'Elaborado por',  value: wp.preparedBy?.name ?? '—' },
-                      { label: 'Revisado por',   value: wp.reviewedBy?.name  ?? 'Sin asignar' },
-                      { label: 'Versión',        value: `v${wp.version}` },
-                      { label: 'Creado',         value: formatDate(wp.createdAt) },
-                      { label: 'Actualizado',    value: formatDate(wp.updatedAt) },
+                      { label: 'Elaborado por', value: wp.preparedBy?.name ?? '—' },
+                      { label: 'Revisado por',  value: wp.reviewedBy?.name  ?? 'Sin asignar' },
+                      { label: 'Versión',       value: `v${wp.version}` },
+                      { label: 'Creado',        value: formatDate(wp.createdAt) },
+                      { label: 'Actualizado',   value: formatDate(wp.updatedAt) },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex justify-between">
                         <span className="text-gray-500">{label}</span>
@@ -684,7 +782,7 @@ export default function WpDetailPage() {
                     </button>
                     {wp.status === 'DRAFT' && (
                       <p className="text-[10px] text-gray-400 text-center">
-                        El papel pasará a estado "En Revisión" para ser aprobado
+                        El papel pasará a estado &ldquo;En Revisión&rdquo; para ser aprobado
                       </p>
                     )}
                   </div>
@@ -740,13 +838,26 @@ export default function WpDetailPage() {
                     </div>
                   </div>
                 )}
-
               </div>
             </div>
           )}
 
+          {/* ── Tab: Secciones (SMART) ── */}
+          {effectiveTab === 'sections' && wpKind === 'SMART' && (
+            <SmartPaperSections
+              paperId={params.id}
+              auditId={wp.auditId}
+              readonly={wp.status === 'APPROVED'}
+            />
+          )}
+
+          {/* ── Tab: Grafo ── */}
+          {effectiveTab === 'graph' && (
+            <PaperGraphPanel paperId={params.id} />
+          )}
+
           {/* ── Tab: Revisión ── */}
-          {activeTab === 'review' && (
+          {effectiveTab === 'review' && (
             <div className="max-w-2xl space-y-4">
               {comments.length === 0 && (
                 <div className="py-12 text-center bg-white rounded-2xl border border-gray-200">
@@ -778,13 +889,12 @@ export default function WpDetailPage() {
                       </button>
                     )}
                     {comment.resolved && (
-                      <span className="text-xs text-gray-400 shrink-0">✓ Resuelto</span>
+                      <span className="text-xs text-gray-400 shrink-0">Resuelto</span>
                     )}
                   </div>
                 </div>
               ))}
 
-              {/* Add comment */}
               <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
                 <p className="text-xs font-medium text-gray-600">Agregar comentario de revisión</p>
                 <textarea
@@ -806,7 +916,7 @@ export default function WpDetailPage() {
           )}
 
           {/* ── Tab: Historial ── */}
-          {activeTab === 'history' && (
+          {effectiveTab === 'history' && (
             <div className="max-w-lg space-y-3">
               {!versions || versions.length === 0 ? (
                 <div className="py-12 text-center bg-white rounded-2xl border border-gray-200">
@@ -816,7 +926,6 @@ export default function WpDetailPage() {
                 </div>
               ) : (
                 <>
-                  {/* Current version */}
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-blue-700">v{wp.version} — Versión actual</p>

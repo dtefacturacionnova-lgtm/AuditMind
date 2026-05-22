@@ -1,5 +1,6 @@
 import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -25,6 +26,7 @@ import { RisksModule } from './risks/risks.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    EventEmitterModule.forRoot(),
     PrismaModule,
     AuthModule,
     OrganizationsModule,

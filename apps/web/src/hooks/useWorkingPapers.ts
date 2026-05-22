@@ -4,7 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-export type WpStatus  = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'ARCHIVED';
+export type WpStatus     = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'ARCHIVED';
+export type WpKind       = 'STANDARD' | 'SMART' | 'MASTER' | 'LIVE';
+export type WpSyncStatus = 'DRAFT' | 'SYNCED' | 'STALE' | 'REGENERATING';
 export type WpType    =
   | 'PLANNING_UNDERSTANDING' | 'CONTROL_EVALUATION' | 'SUBSTANTIVE_TEST'
   | 'DATA_ANALYSIS' | 'FINDING' | 'CLOSURE_CONCLUSION'
@@ -56,6 +58,11 @@ export interface WorkingPaper {
   code:           string;
   title:          string;
   type:           WpType;
+  wpKind:         WpKind;
+  syncStatus:     WpSyncStatus;
+  lastSyncedAt?:  string;
+  narrative?:     string;
+  paperCode?:     string;
   indexSection:   string;
   status:         WpStatus;
   content:        WorkingPaperContent;
@@ -253,6 +260,20 @@ export const TICK_MARK_CONFIG: Record<TickMarkKey, { symbol: string; label: stri
   NOT_APPLICABLE:  { symbol: 'NA', label: 'No aplica',                color: 'text-gray-500' },
   PENDING:         { symbol: '⏱', label: 'Pendiente',                 color: 'text-orange-600' },
   ATTENTION:       { symbol: '⚑',  label: 'Requiere atención',        color: 'text-red-500' },
+};
+
+export const WP_KIND_CONFIG: Record<WpKind, { label: string; color: string; bg: string; border: string }> = {
+  STANDARD:  { label: 'Estándar',       color: 'text-gray-600',   bg: 'bg-gray-100',    border: 'border-gray-200' },
+  SMART:     { label: 'Inteligente',    color: 'text-blue-700',   bg: 'bg-blue-50',     border: 'border-blue-200' },
+  MASTER:    { label: 'Maestro',        color: 'text-purple-700', bg: 'bg-purple-50',   border: 'border-purple-200' },
+  LIVE:      { label: 'Vivo',           color: 'text-emerald-700',bg: 'bg-emerald-50',  border: 'border-emerald-200' },
+};
+
+export const SYNC_STATUS_CONFIG: Record<WpSyncStatus, { label: string; color: string; bg: string; border: string }> = {
+  DRAFT:        { label: 'Sin consolidar',  color: 'text-gray-600',   bg: 'bg-gray-100',   border: 'border-gray-200' },
+  SYNCED:       { label: 'Al día',          color: 'text-emerald-700',bg: 'bg-emerald-50', border: 'border-emerald-200' },
+  STALE:        { label: 'Desactualizado',  color: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-200' },
+  REGENERATING: { label: 'Consolidando…',  color: 'text-blue-700',   bg: 'bg-blue-50',    border: 'border-blue-200' },
 };
 
 export const INDEX_SECTIONS: { key: string; label: string; description: string }[] = [

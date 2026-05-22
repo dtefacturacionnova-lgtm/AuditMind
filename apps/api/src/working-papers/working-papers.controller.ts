@@ -6,6 +6,9 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { WorkingPapersService } from './working-papers.service';
 import { CreateWorkingPaperDto, AddCommentDto, AddTickMarkEntryDto } from './dto/create-working-paper.dto';
 import { UpdateWorkingPaperDto, UpdateWorkingPaperStatusDto } from './dto/update-working-paper.dto';
+import { UpdateSectionValueDto, CreatePaperLinkDto } from './dto/paper-section.dto';
+import { PaperSectionsService } from './paper-sections.service';
+import { PaperGraphService } from './paper-graph.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -15,7 +18,11 @@ import { UserRole, WorkingPaperStatus } from '@prisma/client';
 @ApiBearerAuth()
 @Controller('working-papers')
 export class WorkingPapersController {
-  constructor(private readonly service: WorkingPapersService) {}
+  constructor(
+    private readonly service:          WorkingPapersService,
+    private readonly sectionsService:  PaperSectionsService,
+    private readonly graphService:     PaperGraphService,
+  ) {}
 
   // ─── Listados ─────────────────────────────────────────────────────────────────
 
@@ -135,5 +142,66 @@ export class WorkingPapersController {
   @ApiOperation({ summary: 'Historial de versiones del papel' })
   getVersionHistory(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.getVersionHistory(id, user);
+  }
+
+  // ─── Intelligent Papers: Sections ─────────────────────────────────────────
+
+  @Get(':id/sections')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Obtener todas las secciones de un papel inteligente (ordenadas por sortOrder)' })
+  getSections(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.getSections(id, user);
+  }
+
+  @Patch(':id/sections/:sectionKey')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Actualizar el valor de una sección (dispara propagación al grafo)' })
+  updateSection(
+    @Param('id')         id:         string,
+    @Param('sectionKey') sectionKey: string,
+    @Body()              dto:        UpdateSectionValueDto,
+    @CurrentUser()       user:       AuthUser,
+  ) {
+    return this.sectionsService.updateSection(id, sectionKey, dto.value, user);
+  }
+
+  @Post(':id/sections/init/:templateKey')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Inicializar secciones de un papel desde una plantilla (PT-A1, PT-A2, PT-A4, PT-MEMO, PT-PROG)' })
+  initFromTemplate(
+    @Param('id')          id:          string,
+    @Param('templateKey') templateKey: string,
+    @CurrentUser()        user:        AuthUser,
+  ) {
+    return this.sectionsService.initFromTemplate(id, templateKey, user);
+  }
+
+  // ─── Intelligent Papers: Graph ────────────────────────────────────────────
+
+  @Get(':id/graph')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Vista del grafo de conocimiento para un papel (fuentes + dependientes)' })
+  getGraph(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.graphService.getGraphForPaper(id, user);
+  }
+
+  @Post(':id/links')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Crear un vínculo de datos entre dos papeles' })
+  createLink(
+    @Param('id')   id:   string,
+    @Body()        dto:  CreatePaperLinkDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.graphService.createLink(id, dto, user);
+  }
+
+  // ─── Intelligent Papers: Master consolidation ─────────────────────────────
+
+  @Post(':id/consolidate')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Disparar consolidación IA de un papel MASTER (pone en REGENERATING, emite evento al módulo AI)' })
+  consolidate(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.consolidateMasterPaper(id, user);
   }
 }

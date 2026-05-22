@@ -7,7 +7,8 @@ import {
 } from './dto/create-working-paper.dto';
 import { UpdateWorkingPaperDto, UpdateWorkingPaperStatusDto } from './dto/update-working-paper.dto';
 import { AuthUser } from '../auth/jwt.strategy';
-import { WorkingPaperStatus, UserRole, TickMark } from '@prisma/client';
+import { WorkingPaperStatus, UserRole, TickMark, WpKind, SyncStatus } from '@prisma/client';
+import { PaperGraphService } from './paper-graph.service';
 
 async function generateWpCode(
   prisma: PrismaService,
@@ -26,11 +27,30 @@ const INCLUDE_FULL = {
   findings:    { select: { id: true, title: true, severity: true, status: true } },
   tickEntries: { orderBy: { createdAt: 'asc' as const } },
   comments:    { orderBy: { createdAt: 'asc' as const } },
+  // ─── Intelligent Papers ─────────────────────────────────────────────────
+  sections:     { orderBy: { sortOrder: 'asc' as const } },
+  sourceLinks:  {
+    include: {
+      target: {
+        select: { id: true, code: true, title: true, wpKind: true, syncStatus: true },
+      },
+    },
+  },
+  targetLinks:  {
+    include: {
+      source: {
+        select: { id: true, code: true, title: true, wpKind: true, syncStatus: true },
+      },
+    },
+  },
 } as const;
 
 @Injectable()
 export class WorkingPapersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma:        PrismaService,
+    private readonly paperGraph:    PaperGraphService,
+  ) {}
 
   private async assertAuditAccess(auditId: string, user: AuthUser) {
     const audit = await this.prisma.audit.findFirst({
@@ -160,7 +180,7 @@ export class WorkingPapersService {
       },
     });
 
-    return this.prisma.workingPaper.update({
+    const updated = await this.prisma.workingPaper.update({
       where: { id },
       data:  {
         ...(dto.title      !== undefined && { title: dto.title }),
@@ -179,6 +199,13 @@ export class WorkingPapersService {
       },
       include: INCLUDE_FULL,
     });
+
+    // Propagate content changes to downstream graph dependents
+    if (dto.content !== undefined) {
+      await this.paperGraph.onSectionUpdated(id, 'content', dto.content);
+    }
+
+    return updated;
   }
 
   async updateStatus(id: string, dto: UpdateWorkingPaperStatusDto, user: AuthUser) {
@@ -292,5 +319,58 @@ export class WorkingPapersService {
         id: true, version: true, changedAt: true, changedBy: true,
       },
     });
+  }
+
+  // ─── Master paper consolidation ───────────────────────────────────────────
+
+  /**
+   * Trigger AI consolidation of a MASTER paper.
+   * 1. Validates wpKind === MASTER.
+   * 2. Sets syncStatus = REGENERATING.
+   * 3. Collects all source section data from linked upstream papers.
+   * 4. Returns the collected context — actual AI call is handled in the AI module.
+   */
+  async consolidateMasterPaper(id: string, user: AuthUser) {
+    const wp = await this.findOne(id, user);
+
+    if (wp.wpKind !== WpKind.MASTER) {
+      throw new BadRequestException('Solo los papeles MASTER pueden ser consolidados mediante este endpoint');
+    }
+
+    // Set to REGENERATING (non-blocking; AI module listens for paper.consolidate event)
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { syncStatus: SyncStatus.REGENERATING },
+    });
+
+    // Collect upstream source data
+    const upstreamLinks = await this.prisma.paperLink.findMany({
+      where:   { targetId: id, isActive: true },
+      include: {
+        source: {
+          select: {
+            id: true, code: true, title: true, paperCode: true, wpKind: true,
+            sections: { orderBy: { sortOrder: 'asc' } },
+          },
+        },
+      },
+    });
+
+    const sourceData = upstreamLinks.map((link) => ({
+      linkId:      link.id,
+      mappingType: link.mappingType,
+      sourceField: link.sourceField,
+      targetField: link.targetField,
+      description: link.description,
+      sourcePaper: link.source,
+    }));
+
+    return {
+      paperId:     id,
+      paperCode:   wp.paperCode,
+      syncStatus:  SyncStatus.REGENERATING,
+      sourceData,
+      message:     'Consolidación iniciada. El agente IA procesará los datos y actualizará las secciones.',
+    };
   }
 }

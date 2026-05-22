@@ -53,6 +53,45 @@ enum WorkingPaperType {
   NORMATIVE_ANALYSIS        // Análisis normativo auto-generado
 }
 
+// ─── PAPELES INTELIGENTES: Tipo estructural del papel ─────────────────────────
+enum WpKind {
+  STANDARD  // Adjuntos libres + narrativa — sin propagación
+  SMART     // Secciones estructuradas tipadas — fuente de datos del grafo
+  MASTER    // Consolida datos de múltiples PT — generado por IA + revisión humana
+  LIVE      // Actualizado en tiempo real — no requiere aprobación manual
+}
+
+// Estado de sincronización del grafo de conocimiento
+enum SyncStatus {
+  DRAFT          // Nunca fue consolidado (estado inicial)
+  SYNCED         // Datos al día — todas las fuentes actualizadas
+  STALE          // Alguna fuente cambió — requiere regeneración del auditor
+  REGENERATING   // Proceso de consolidación IA en curso
+}
+
+// Tipos de campo para secciones de PT Inteligente
+enum FieldType {
+  TEXT
+  TEXTAREA
+  NUMBER
+  CURRENCY
+  PERCENTAGE
+  BOOLEAN
+  ENUM_SELECT
+  DATE
+  MATRIX        // Tabla de riesgos/controles
+  REFERENCE     // Referencia a otro campo de otro PT
+  RISK_REF      // Referencia a riesgo del registro
+  ATTACHMENT    // Archivos adjuntos
+}
+
+// Tipo de mapeo entre papeles en el grafo
+enum MappingType {
+  DIRECT        // Copia directa del valor fuente
+  AGGREGATED    // Agregación de múltiples fuentes
+  AI_GENERATED  // Genera narrativa con IA usando datos fuente
+}
+
 enum WorkingPaperStatus {
   DRAFT
   IN_REVIEW
@@ -539,6 +578,13 @@ model WorkingPaper {
   indexSection    String             // A | B | C | D | E | AD
   title           String
   type            WorkingPaperType
+  // ─── Intelligent Papers ───────────────────────────────────────────────────
+  wpKind          WpKind             @default(STANDARD)
+  syncStatus      SyncStatus         @default(DRAFT)
+  lastSyncedAt    DateTime?          // Última vez consolidado
+  narrative       String?            // Narrativa generada por IA (PT Maestro)
+  paperCode       String?            // PT-A1, PT-MEMO, PT-PROG, etc.
+  // ─── Existing fields ─────────────────────────────────────────────────────
   status          WorkingPaperStatus @default(DRAFT)
   content         Json               @default("{}")
   conclusion      String?
@@ -553,20 +599,71 @@ model WorkingPaper {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
-  audit       Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  preparedBy  User?          @relation("PreparedBy", fields: [preparedById], references: [id])
-  reviewedBy  User?          @relation("ReviewedBy", fields: [reviewedById], references: [id])
-  parent      WorkingPaper?  @relation("PaperHierarchy", fields: [parentPaperId], references: [id])
-  children    WorkingPaper[] @relation("PaperHierarchy")
-  versions    WorkingPaperVersion[]
-  comments    WorkingPaperComment[]
-  tickEntries TickMarkEntry[]
-  findings    Finding[]
+  audit        Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  preparedBy   User?          @relation("PreparedBy", fields: [preparedById], references: [id])
+  reviewedBy   User?          @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  parent       WorkingPaper?  @relation("PaperHierarchy", fields: [parentPaperId], references: [id])
+  children     WorkingPaper[] @relation("PaperHierarchy")
+  versions     WorkingPaperVersion[]
+  comments     WorkingPaperComment[]
+  tickEntries  TickMarkEntry[]
+  findings     Finding[]
+  // ─── Knowledge graph relations ────────────────────────────────────────────
+  sourceLinks  PaperLink[]    @relation("SourcePaper")  // Este papel alimenta a...
+  targetLinks  PaperLink[]    @relation("TargetPaper")  // Este papel recibe de...
+  sections     PaperSection[]                           // Secciones tipadas (PT Inteligente)
 
   @@index([auditId])
   @@index([auditId, status])
   @@index([auditId, type])
+  @@index([auditId, wpKind])
+  @@index([auditId, syncStatus])
   @@map("working_papers")
+}
+
+// ─── GRAFO DE CONOCIMIENTO: Arcos entre papeles ───────────────────────────────
+model PaperLink {
+  id           String      @id @default(cuid())
+  sourceId     String      // PT que genera el dato
+  targetId     String      // PT que consume el dato
+  sourceField  String      // Clave de sección fuente (e.g., "S3.riskLevel")
+  targetField  String      // Clave de sección destino (e.g., "S2.inherentRisk")
+  mappingType  MappingType @default(DIRECT)
+  description  String?     // Descripción human-readable del flujo de datos
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+
+  source  WorkingPaper @relation("SourcePaper", fields: [sourceId], references: [id], onDelete: Cascade)
+  target  WorkingPaper @relation("TargetPaper", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@index([targetId])
+  @@map("paper_links")
+}
+
+// ─── SECCIONES TIPADAS: Campos estructurados de PT Inteligente ────────────────
+model PaperSection {
+  id           String    @id @default(cuid())
+  paperId      String
+  sectionKey   String    // S1, S2, S3... o campo específico
+  label        String    // Nombre display de la sección
+  description  String?   // Instrucción para el auditor
+  fieldType    FieldType @default(TEXT)
+  value        Json?     // Valor actual (tipado según fieldType)
+  options      Json?     // Para ENUM_SELECT: lista de opciones
+  isRequired   Boolean   @default(false)
+  isAutoFilled Boolean   @default(false)   // true = llenado por propagación del grafo
+  sourceRef    String?   // "paperId::sectionKey" origen si isAutoFilled = true
+  sortOrder    Int       @default(0)
+  aiHint       String?   // Contexto para el agente IA al generar esta sección
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  paper  WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@unique([paperId, sectionKey])
+  @@index([paperId])
+  @@map("paper_sections")
 }
 
 model WorkingPaperVersion {

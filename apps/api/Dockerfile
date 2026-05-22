@@ -1,6 +1,9 @@
-FROM node:22-alpine
+FROM node:22-slim
 
 WORKDIR /app
+
+# Install OpenSSL (required by Prisma engine on Debian)
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 # Copy package.json (lockfile is at monorepo root, not available here)
 COPY package.json ./
@@ -8,22 +11,18 @@ COPY package.json ./
 # Install ALL dependencies including devDeps (needed for @nestjs/cli build)
 RUN npm install --include=dev
 
-# Copy Prisma schema and generate client
+# Copy Prisma schema and generate client (auto-detects Debian/OpenSSL target)
 COPY prisma ./prisma
 RUN npx prisma generate
 
 # Copy all source and config files
 COPY . .
 
-# Build NestJS — uses tsconfig.build.json (excludes prisma/seed.ts)
-# so TypeScript infers rootDir=src → output goes to dist/main.js
+# Build NestJS
 RUN npm run build
 
-# Debug: show what was compiled
-RUN echo "=== dist/ contents ===" && find dist -name "*.js" | head -10 || echo "dist/ empty or missing"
-
 # Verify build output exists
-RUN test -f dist/main.js || (echo "ERROR: dist/main.js not found - check dist/ output above" && exit 1)
+RUN test -f dist/main.js || (echo "ERROR: dist/main.js not found" && exit 1)
 
 EXPOSE 3001
 

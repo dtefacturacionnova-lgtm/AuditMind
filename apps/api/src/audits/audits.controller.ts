@@ -31,16 +31,18 @@ export class AuditsController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, type: String })
-  @ApiQuery({ name: 'type', required: false, type: String })
+  @ApiQuery({ name: 'type',    required: false, type: String })
+  @ApiQuery({ name: 'subtype', required: false, type: String })
   findAll(
     @CurrentUser() user: AuthUser,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @Query('search') search?: string,
-    @Query('status') status?: string,
-    @Query('type') type?: string,
+    @Query('search')  search?:  string,
+    @Query('status')  status?:  string,
+    @Query('type')    type?:    string,
+    @Query('subtype') subtype?: string,
   ) {
-    return this.service.findAll(user, page, limit, search, status, type);
+    return this.service.findAll(user, page, limit, search, status, type, subtype);
   }
 
   @Get(':id')

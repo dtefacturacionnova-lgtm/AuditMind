@@ -7,6 +7,7 @@ export interface Audit {
   code: string;
   title: string;
   type: string;
+  subtype?: string;
   status: string;
   riskLevel?: string;
   startDate: string;
@@ -57,13 +58,15 @@ export function useAudits(params?: {
   search?: string;
   status?: string;
   type?: string;
+  subtype?: string;
 }) {
   const query = new URLSearchParams();
-  if (params?.page) query.set('page', String(params.page));
-  if (params?.limit) query.set('limit', String(params.limit));
-  if (params?.search) query.set('search', params.search);
-  if (params?.status) query.set('status', params.status);
-  if (params?.type) query.set('type', params.type);
+  if (params?.page)    query.set('page',    String(params.page));
+  if (params?.limit)   query.set('limit',   String(params.limit));
+  if (params?.search)  query.set('search',  params.search);
+  if (params?.status)  query.set('status',  params.status);
+  if (params?.type)    query.set('type',    params.type);
+  if (params?.subtype) query.set('subtype', params.subtype);
 
   return useQuery({
     queryKey: ['audits', params],

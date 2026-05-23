@@ -53,8 +53,9 @@ export class AuditsService {
 
     const audit = await this.prisma.audit.create({
       data: {
-        title: dto.title,
-        type: dto.type,
+        title:   dto.title,
+        type:    dto.type,
+        subtype: dto.subtype ?? null,
         auditEntityId: dto.auditableUnitId,
         organizationId: user.organizationId,
         leadAuditorId: user.id,
@@ -108,6 +109,7 @@ export class AuditsService {
     search?: string,
     status?: string,
     type?: string,
+    subtype?: string,
   ) {
     const skip = (page - 1) * limit;
     const where = {
@@ -117,8 +119,9 @@ export class AuditsService {
           { title: { contains: search, mode: 'insensitive' as const } },
         ],
       }),
-      ...(status && { status: status as AuditStatus }),
-      ...(type && { type: type as any }),
+      ...(status  && { status:  status  as AuditStatus }),
+      ...(type    && { type:    type    as any }),
+      ...(subtype && { subtype }),
     };
 
     const [audits, total] = await Promise.all([
@@ -204,10 +207,11 @@ export class AuditsService {
     return this.prisma.audit.update({
       where: { id },
       data: {
-        title: dto.title,
-        scope: dto.scope,
-        objectives: dto.objectives,
-        estimatedHours: dto.plannedHours,
+        title:              dto.title,
+        subtype:            dto.subtype,
+        scope:              dto.scope,
+        objectives:         dto.objectives,
+        estimatedHours:     dto.plannedHours,
         isInvestigationMode: dto.isInvestigationMode,
         ...(dto.startDate && { startDate: new Date(dto.startDate) }),
         ...(dto.endDate && { endDate: new Date(dto.endDate) }),

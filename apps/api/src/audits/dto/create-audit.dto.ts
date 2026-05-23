@@ -43,6 +43,11 @@ export class CreateAuditDto {
   @IsEnum(AuditType)
   type: AuditType;
 
+  @ApiPropertyOptional({ example: 'EEFF_COMPLETO', description: 'Sub-tipo dentro del tipo principal' })
+  @IsOptional()
+  @IsString()
+  subtype?: string;
+
   @ApiProperty({ example: 'unit-uuid' })
   @IsUUID()
   auditableUnitId: string;

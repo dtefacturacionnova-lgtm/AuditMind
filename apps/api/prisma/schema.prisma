@@ -512,6 +512,9 @@ model Audit {
   actualHours             Float       @default(0)
   leadAuditorId           String?
 
+  // Sub-tipo (especialización dentro del tipo principal)
+  subtype                 String?     // EEFF_COMPLETO | PROCESO | SEGURIDAD | etc.
+
   // Modo investigación forense
   isInvestigationMode     Boolean     @default(false)
   investigationActivatedAt DateTime?

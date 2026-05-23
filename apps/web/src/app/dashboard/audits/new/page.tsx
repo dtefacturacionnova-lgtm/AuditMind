@@ -6,22 +6,12 @@ import { ArrowLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useCreateAudit } from '@/hooks/useAudits';
 import { useAuditUniverse } from '@/hooks/useAuditUniverse';
-
-const AUDIT_TYPES = [
-  { value: 'FINANCIAL', label: 'Financiera' },
-  { value: 'OPERATIONAL', label: 'Operacional' },
-  { value: 'COMPLIANCE', label: 'Cumplimiento' },
-  { value: 'IT', label: 'Tecnologías de Información' },
-  { value: 'FORENSIC', label: 'Forense' },
-  { value: 'INTEGRATED', label: 'Integrada' },
-  { value: 'FOLLOW_UP', label: 'Seguimiento' },
-  { value: 'SPECIAL', label: 'Especial' },
-  { value: 'ESG', label: 'ESG / Sostenibilidad' },
-];
+import { AUDIT_TYPES, AUDIT_SUBTYPES } from '@/lib/audit-types';
 
 interface FormData {
-  title: string;
-  type: string;
+  title:   string;
+  type:    string;
+  subtype: string;
   auditableUnitId: string;
   startDate: string;
   endDate: string;
@@ -41,8 +31,9 @@ interface FormData {
 }
 
 const INITIAL_FORM: FormData = {
-  title: '',
-  type: 'FINANCIAL',
+  title:   '',
+  type:    'FINANCIAL',
+  subtype: '',
   auditableUnitId: '',
   startDate: '',
   endDate: '',
@@ -78,7 +69,12 @@ export default function NewAuditPage() {
   const { data: universeData } = useAuditUniverse({ limit: 100 });
 
   function set(field: keyof FormData, value: string | boolean) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+      // Reset subtype when type changes
+      ...(field === 'type' ? { subtype: '' } : {}),
+    }));
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   }
 
@@ -109,8 +105,9 @@ export default function NewAuditPage() {
     if (!validate()) return;
 
     const payload: any = {
-      title: form.title.trim(),
-      type: form.type,
+      title:           form.title.trim(),
+      type:            form.type,
+      subtype:         form.subtype || undefined,
       auditableUnitId: form.auditableUnitId,
       startDate: form.startDate,
       endDate: form.endDate,
@@ -232,6 +229,28 @@ export default function NewAuditPage() {
                   {errors.auditableUnitId && <FieldError msg={errors.auditableUnitId} />}
                 </div>
               </div>
+
+              {/* Subtype selector — shown only when the selected type has subtypes */}
+              {AUDIT_SUBTYPES[form.type]?.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Sub-tipo
+                    <span className="ml-1.5 text-[10px] text-gray-400 font-normal normal-case">
+                      (opcional)
+                    </span>
+                  </label>
+                  <select
+                    value={form.subtype}
+                    onChange={(e) => set('subtype', e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/30"
+                  >
+                    <option value="">— Sin sub-tipo —</option>
+                    {AUDIT_SUBTYPES[form.type].map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>

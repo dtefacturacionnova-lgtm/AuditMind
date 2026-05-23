@@ -1,0 +1,170 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs on the same branch to save minutes
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ─── 1. Type check (web + api) ─────────────────────────────────────────────
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client (needed for API type check)
+        run: npx prisma generate
+        working-directory: apps/api
+
+      - name: Type check — web
+        run: npm run type-check --workspace=apps/web
+
+      - name: Type check — api
+        run: npm run type-check --workspace=apps/api
+
+  # ─── 2. Lint ───────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Next.js ESLint (eslint-config-next is installed)
+      - name: Lint — web
+        run: npm run lint --workspace=apps/web
+
+      # API uses @typescript-eslint but deps not installed yet (tracked in TODO).
+      # Type-check covers API quality for now.
+      # TODO: add eslint + @typescript-eslint/eslint-plugin to apps/api devDeps
+
+  # ─── 3. Prisma schema validation ───────────────────────────────────────────
+  prisma-validate:
+    name: Prisma Schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema (no DB required)
+        run: npx prisma validate
+        working-directory: apps/api
+
+      - name: Check Prisma client is up-to-date
+        run: |
+          npx prisma generate
+          git diff --exit-code apps/api/src/generated/ apps/api/prisma/
+        working-directory: apps/api
+        continue-on-error: true  # warn only — generated files may not be committed
+
+  # ─── 4. Build API (NestJS) ─────────────────────────────────────────────────
+  build-api:
+    name: Build API
+    runs-on: ubuntu-latest
+    needs: [type-check, prisma-validate]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        working-directory: apps/api
+
+      - name: Build NestJS
+        run: npm run build --workspace=apps/api
+
+      - name: Upload build artifact (dist)
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-dist
+          path: apps/api/dist/
+          retention-days: 1
+
+  # ─── 5. Build Web (Next.js) ────────────────────────────────────────────────
+  build-web:
+    name: Build Web
+    runs-on: ubuntu-latest
+    needs: [type-check]
+    env:
+      # Dummy public vars — enough for Next.js to compile.
+      # Real values are injected by Vercel at deploy time.
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-ci-only
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js
+        run: npm run build --workspace=apps/web
+
+  # ─── 6. Summary gate ───────────────────────────────────────────────────────
+  ci-passed:
+    name: ✅ CI Passed
+    runs-on: ubuntu-latest
+    needs: [type-check, lint, prisma-validate, build-api, build-web]
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          echo "type-check:      ${{ needs.type-check.result }}"
+          echo "lint:            ${{ needs.lint.result }}"
+          echo "prisma-validate: ${{ needs.prisma-validate.result }}"
+          echo "build-api:       ${{ needs.build-api.result }}"
+          echo "build-web:       ${{ needs.build-web.result }}"
+
+          if [[ "${{ needs.type-check.result }}"  != "success" ]] || \
+             [[ "${{ needs.lint.result }}"         != "success" ]] || \
+             [[ "${{ needs.build-api.result }}"    != "success" ]] || \
+             [[ "${{ needs.build-web.result }}"    != "success" ]]; then
+            echo "❌ One or more required jobs failed."
+            exit 1
+          fi
+          echo "✅ All required jobs passed."

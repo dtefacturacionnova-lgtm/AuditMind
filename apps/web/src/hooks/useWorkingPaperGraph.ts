@@ -232,3 +232,48 @@ export function useAiSuggestions() {
       ),
   });
 }
+
+// ─── Gap 3: @mention references ──────────────────────────────────────────────
+
+export interface MentionSection {
+  sectionKey: string;
+  label:      string;
+}
+
+export interface MentionItem {
+  paperId:  string;
+  code:     string;
+  title:    string;
+  wpKind:   string;
+  sections: MentionSection[];
+}
+
+export function useMentionIndex(auditId: string) {
+  return useQuery<MentionItem[]>({
+    queryKey: ['mention-index', auditId],
+    queryFn:  () => apiClient.get(`/working-papers/mention-index/${auditId}`),
+    enabled:  !!auditId,
+    staleTime: 60_000,   // stable — changes only when new papers added
+  });
+}
+
+export function useCreateReference() {
+  return useMutation({
+    mutationFn: ({
+      paperId,
+      sourceSectionKey,
+      targetPaperId,
+      targetSectionKey,
+    }: {
+      paperId:          string;
+      sourceSectionKey: string;
+      targetPaperId:    string;
+      targetSectionKey?: string;
+    }) =>
+      apiClient.post(`/working-papers/${paperId}/references`, {
+        sourceSectionKey,
+        targetPaperId,
+        targetSectionKey,
+      }),
+  });
+}

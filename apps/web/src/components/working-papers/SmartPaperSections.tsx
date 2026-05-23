@@ -6,6 +6,8 @@ import {
   usePaperSections,
   useUpdateSection,
   useInitFromTemplate,
+  useMentionIndex,
+  useCreateReference,
 } from '@/hooks/useWorkingPaperGraph';
 import { SectionField } from './SectionField';
 
@@ -106,17 +108,20 @@ function SectionProgressBar({ filled, total }: { filled: number; total: number }
 // ─── SmartPaperSections ───────────────────────────────────────────────────────
 
 interface SmartPaperSectionsProps {
-  paperId: string;
-  auditId: string;
+  paperId:  string;
+  auditId:  string;
   readonly?: boolean;
 }
 
 export function SmartPaperSections({
   paperId,
+  auditId,
   readonly = false,
 }: SmartPaperSectionsProps) {
   const { data: sections, isLoading, error } = usePaperSections(paperId);
-  const updateSection = useUpdateSection();
+  const updateSection    = useUpdateSection();
+  const createReference  = useCreateReference();
+  const { data: mentionItems = [] } = useMentionIndex(auditId);
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
   if (isLoading) {
@@ -183,6 +188,17 @@ export function SmartPaperSections({
             section={section}
             readonly={readonly}
             onSave={handleSave}
+            paperId={paperId}
+            mentionItems={mentionItems}
+            onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+              // Fire-and-forget: persist the @mention reference
+              void createReference.mutateAsync({
+                paperId,
+                sourceSectionKey: sectionKey,
+                targetPaperId,
+                targetSectionKey,
+              });
+            }}
           />
         ))}
       </div>

@@ -214,6 +214,13 @@ enum ConfirmationType {
   OTHER
 }
 
+// Tipo de referencia @mention entre secciones de papeles
+enum RefType {
+  INDEX        // @[A-02]          — referencia al papel completo por código de índice
+  FIELD        // @[A-02::S3]      — referencia a sección específica
+  PROPAGATION  // propagación automática de valor (reemplaza sourceRef string)
+}
+
 enum ConfirmationStatus {
   DRAFT
   SENT
@@ -609,9 +616,12 @@ model WorkingPaper {
   tickEntries  TickMarkEntry[]
   findings     Finding[]
   // ─── Knowledge graph relations ────────────────────────────────────────────
-  sourceLinks  PaperLink[]    @relation("SourcePaper")  // Este papel alimenta a...
-  targetLinks  PaperLink[]    @relation("TargetPaper")  // Este papel recibe de...
-  sections     PaperSection[]                           // Secciones tipadas (PT Inteligente)
+  sourceLinks   PaperLink[]       @relation("SourcePaper")  // Este papel alimenta a...
+  targetLinks   PaperLink[]       @relation("TargetPaper")  // Este papel recibe de...
+  sections      PaperSection[]                              // Secciones tipadas (PT Inteligente)
+  // ─── @mention references ─────────────────────────────────────────────────
+  refsFromHere  PaperReference[]  @relation("RefSource")   // Este papel menciona a...
+  refsToHere    PaperReference[]  @relation("RefTarget")   // Este papel es mencionado por...
 
   @@index([auditId])
   @@index([auditId, status])
@@ -664,6 +674,30 @@ model PaperSection {
   @@unique([paperId, sectionKey])
   @@index([paperId])
   @@map("paper_sections")
+}
+
+// ─── @MENTION REFERENCIAS ENTRE PAPELES ──────────────────────────────────────
+model PaperReference {
+  id               String   @id @default(cuid())
+  // Origen — la sección que contiene el @mention
+  sourcePaperId    String
+  sourceSectionKey String   // sectionKey del campo que contiene el token @[CODE::SKEY]
+  // Destino — el papel/sección referenciado
+  targetPaperId    String
+  targetSectionKey String?  // null = referencia al papel completo (RefType.INDEX)
+  // Tipo
+  refType          RefType  @default(FIELD)
+  // Timestamps
+  resolvedAt       DateTime? // última propagación de valor
+  createdAt        DateTime  @default(now())
+
+  sourcePaper  WorkingPaper @relation("RefSource", fields: [sourcePaperId], references: [id], onDelete: Cascade)
+  targetPaper  WorkingPaper @relation("RefTarget", fields: [targetPaperId], references: [id], onDelete: Cascade)
+
+  @@unique([sourcePaperId, sourceSectionKey, targetPaperId, targetSectionKey])
+  @@index([sourcePaperId])
+  @@index([targetPaperId])
+  @@map("paper_references")
 }
 
 model WorkingPaperVersion {

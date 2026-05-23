@@ -7,6 +7,7 @@ import { PaperConsolidationService } from './paper-consolidation.service';
 import { PaperQualityService } from './paper-quality.service';
 import { PaperLiveService } from './paper-live.service';
 import { CrossAuditLearningService } from './cross-audit-learning.service';
+import { PaperReferencesService } from './paper-references.service';
 
 @Module({
   controllers: [WorkingPapersController],
@@ -18,6 +19,7 @@ import { CrossAuditLearningService } from './cross-audit-learning.service';
     PaperQualityService,           // Sprint 3: Semantic quality gate
     PaperLiveService,              // Sprint 3: LIVE paper dashboard
     CrossAuditLearningService,     // Sprint 3: Cross-audit learning
+    PaperReferencesService,        // Gap 3: @mention references
   ],
   exports: [
     WorkingPapersService,
@@ -27,6 +29,7 @@ import { CrossAuditLearningService } from './cross-audit-learning.service';
     PaperQualityService,
     PaperLiveService,
     CrossAuditLearningService,
+    PaperReferencesService,
   ],
 })
 export class WorkingPapersModule {}

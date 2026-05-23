@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Pencil, Bot, X, Check } from 'lucide-react';
-import type { PaperSection, SectionFieldType } from '@/hooks/useWorkingPaperGraph';
+import type { MentionItem, PaperSection, SectionFieldType } from '@/hooks/useWorkingPaperGraph';
+import { HighlightedMentions, MentionableTextarea } from './MentionableTextarea';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,26 +87,30 @@ function ReferenceBadge({ value }: { value: unknown }) {
 // ─── Editable input ───────────────────────────────────────────────────────────
 
 interface EditInputProps {
-  section: PaperSection;
-  value: unknown;
-  onChange: (v: unknown) => void;
-  onBlur: () => void;
+  section:      PaperSection;
+  value:        unknown;
+  onChange:     (v: unknown) => void;
+  onBlur:       () => void;
+  paperId?:     string;
+  mentionItems?: MentionItem[];
+  onMentionSelect?: (targetPaperId: string, targetSectionKey?: string) => void;
 }
 
-function EditInput({ section, value, onChange, onBlur }: EditInputProps) {
+function EditInput({ section, value, onChange, onBlur, mentionItems, onMentionSelect }: EditInputProps) {
   const baseInput =
     'w-full text-sm border border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white';
 
   switch (section.fieldType) {
     case 'TEXTAREA':
       return (
-        <textarea
-          autoFocus
+        <MentionableTextarea
+          multiline
           rows={4}
-          className={`${baseInput} resize-y`}
           value={String(value ?? '')}
-          onChange={e => onChange(e.target.value)}
+          onChange={v => onChange(v)}
           onBlur={onBlur}
+          mentionItems={mentionItems}
+          onMentionSelect={onMentionSelect}
         />
       );
 
@@ -189,13 +194,13 @@ function EditInput({ section, value, onChange, onBlur }: EditInputProps) {
 
     default: // TEXT
       return (
-        <input
-          autoFocus
-          type="text"
-          className={baseInput}
+        <MentionableTextarea
+          multiline={false}
           value={String(value ?? '')}
-          onChange={e => onChange(e.target.value)}
+          onChange={v => onChange(v)}
           onBlur={onBlur}
+          mentionItems={mentionItems}
+          onMentionSelect={onMentionSelect}
         />
       );
   }
@@ -204,12 +209,15 @@ function EditInput({ section, value, onChange, onBlur }: EditInputProps) {
 // ─── Main SectionField component ─────────────────────────────────────────────
 
 export interface SectionFieldProps {
-  section: PaperSection;
-  readonly?: boolean;
-  onSave: (sectionKey: string, value: unknown) => void;
+  section:          PaperSection;
+  readonly?:        boolean;
+  onSave:           (sectionKey: string, value: unknown) => void;
+  paperId?:         string;
+  mentionItems?:    MentionItem[];
+  onMentionSelect?: (sectionKey: string, targetPaperId: string, targetSectionKey?: string) => void;
 }
 
-export function SectionField({ section, readonly = false, onSave }: SectionFieldProps) {
+export function SectionField({ section, readonly = false, onSave, paperId, mentionItems, onMentionSelect }: SectionFieldProps) {
   const [editing, setEditing]     = useState(false);
   const [localValue, setLocal]    = useState<unknown>(section.value);
   const [overriding, setOverride] = useState(false);
@@ -325,6 +333,11 @@ export function SectionField({ section, readonly = false, onSave }: SectionField
             value={localValue}
             onChange={setLocal}
             onBlur={handleBlur}
+            paperId={paperId}
+            mentionItems={mentionItems}
+            onMentionSelect={(targetPaperId, targetSectionKey) =>
+              onMentionSelect?.(section.sectionKey, targetPaperId, targetSectionKey)
+            }
           />
         ) : (
           <div
@@ -365,7 +378,13 @@ export function SectionField({ section, readonly = false, onSave }: SectionField
                   : 'text-gray-400 italic'
               }`}>
                 {effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== ''
-                  ? displayValue(effectiveValue, section.fieldType)
+                  ? (
+                    // Highlight @[mention] tokens in TEXT / TEXTAREA fields
+                    (section.fieldType === 'TEXT' || section.fieldType === 'TEXTAREA') &&
+                    String(effectiveValue).includes('@[')
+                      ? <HighlightedMentions text={displayValue(effectiveValue, section.fieldType)} />
+                      : displayValue(effectiveValue, section.fieldType)
+                  )
                   : section.description
                     ? 'Sin valor — haz clic para editar'
                     : 'Haz clic para editar'}

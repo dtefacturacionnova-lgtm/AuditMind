@@ -2,7 +2,7 @@ import {
   IsString, IsOptional, IsEnum, IsBoolean, IsInt, IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MappingType, FieldType } from '@prisma/client';
+import { MappingType, FieldType, RefType } from '@prisma/client';
 
 // ─── PaperSection DTOs ────────────────────────────────────────────────────────
 
@@ -45,6 +45,28 @@ export class CreatePaperLinkDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+// ─── PaperReference DTOs ─────────────────────────────────────────────────────
+
+export class CreatePaperReferenceDto {
+  @ApiProperty({ description: 'sectionKey de la sección origen que contiene el @mention' })
+  @IsString()
+  sourceSectionKey: string;
+
+  @ApiProperty({ description: 'ID del papel destino referenciado' })
+  @IsString()
+  targetPaperId: string;
+
+  @ApiPropertyOptional({ description: 'sectionKey del campo destino (null = INDEX)' })
+  @IsOptional()
+  @IsString()
+  targetSectionKey?: string;
+
+  @ApiPropertyOptional({ enum: RefType, default: RefType.FIELD })
+  @IsOptional()
+  @IsEnum(RefType)
+  refType?: RefType;
 }
 
 // ─── SectionTemplate (used internally by paper-templates.ts) ─────────────────

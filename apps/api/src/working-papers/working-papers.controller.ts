@@ -6,12 +6,13 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { WorkingPapersService } from './working-papers.service';
 import { CreateWorkingPaperDto, AddCommentDto, AddTickMarkEntryDto } from './dto/create-working-paper.dto';
 import { UpdateWorkingPaperDto, UpdateWorkingPaperStatusDto } from './dto/update-working-paper.dto';
-import { UpdateSectionValueDto, CreatePaperLinkDto } from './dto/paper-section.dto';
+import { UpdateSectionValueDto, CreatePaperLinkDto, CreatePaperReferenceDto } from './dto/paper-section.dto';
 import { PaperSectionsService } from './paper-sections.service';
 import { PaperGraphService } from './paper-graph.service';
 import { PaperQualityService } from './paper-quality.service';
 import { PaperLiveService } from './paper-live.service';
 import { CrossAuditLearningService } from './cross-audit-learning.service';
+import { PaperReferencesService } from './paper-references.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -28,6 +29,7 @@ export class WorkingPapersController {
     private readonly qualityService:   PaperQualityService,
     private readonly liveService:      PaperLiveService,
     private readonly crossAudit:       CrossAuditLearningService,
+    private readonly references:       PaperReferencesService,
   ) {}
 
   // ─── Listados ─────────────────────────────────────────────────────────────────
@@ -236,5 +238,32 @@ export class WorkingPapersController {
   @ApiOperation({ summary: 'Generar sugerencias de procedimientos IA basadas en el historial de hallazgos de la entidad' })
   generateAiSuggestions(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
     return this.crossAudit.generateSuggestions(auditId, user);
+  }
+
+  // ─── Gap 3: @mention references ───────────────────────────────────────────
+
+  @Get('mention-index/:auditId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Índice de papeles+secciones para el autocomplete @mention (por auditoría)' })
+  getMentionIndex(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
+    return this.references.getMentionIndex(auditId, user);
+  }
+
+  @Get(':id/references')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Listar referencias @mention que parten de este papel' })
+  getReferences(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.references.getReferencesForPaper(id, user);
+  }
+
+  @Post(':id/references')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Registrar una referencia @mention desde una sección de este papel' })
+  createReference(
+    @Param('id')   id:   string,
+    @Body()        dto:  CreatePaperReferenceDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.references.createReference(id, dto, user);
   }
 }

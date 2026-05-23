@@ -13,6 +13,7 @@ import { useAudit, useUpdateAuditStatus } from '@/hooks/useAudits';
 import { useFindingsByAudit, SEVERITY_CONFIG, STATUS_CONFIG } from '@/hooks/useFindings';
 import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
+import { MinervaAuditPanel } from '@/components/audits/MinervaAuditPanel';
 
 const STATUS_STYLES: Record<string, string> = {
   PLANNING: 'bg-blue-100 text-blue-700 border border-blue-200',
@@ -638,6 +639,26 @@ function OverviewTab({ audit, progressPct }: { audit: any; progressPct: number }
   const [showProgramModal, setShowProgramModal] = useState(false);
   return (
     <div className="space-y-6">
+      {/* MINERVA Coordinadora */}
+      <MinervaAuditPanel
+        audit={{
+          id:             audit.id,
+          title:          audit.title,
+          type:           audit.type,
+          status:         audit.status,
+          riskLevel:      audit.riskLevel,
+          scope:          audit.scope,
+          objectives:     audit.objectives,
+          estimatedHours: audit.estimatedHours ?? 0,
+          actualHours:    audit.actualHours ?? 0,
+          workingPapers:  audit._count?.workingPapers ?? 0,
+          findings:       audit._count?.findings ?? 0,
+          pbcRequests:    audit._count?.pbcRequests ?? 0,
+          materialityGlobal: audit.materiality,
+          riskModel:      audit.auditRiskModel,
+        }}
+      />
+
       {/* AI Audit Program Banner */}
       <div className="flex items-center justify-between bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-xl px-5 py-4">
         <div className="flex items-center gap-3">

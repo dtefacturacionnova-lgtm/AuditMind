@@ -24,7 +24,8 @@ import { PaperGraphPanel }         from '@/components/working-papers/PaperGraphP
 import { QualityGatePanel }        from '@/components/working-papers/QualityGatePanel';
 import { LivePaperDashboard }      from '@/components/working-papers/LivePaperDashboard';
 import { CrossAuditSuggestions }   from '@/components/working-papers/CrossAuditSuggestions';
-import { PaperAgentPanel, PaperAgentButton } from '@/components/working-papers/PaperAgentPanel';
+import { PaperAgentPanel, PaperAgentButton, PAPER_AGENT_MAP, DEFAULT_AGENT } from '@/components/working-papers/PaperAgentPanel';
+import type { AiDraftConfig } from '@/components/working-papers/SectionField';
 import { apiClient }            from '@/lib/api-client';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import type { WorkingPaper, TickMarkEntry } from '@/hooks/useWorkingPapers';
@@ -528,6 +529,23 @@ export default function WpDetailPage() {
   const findings    = wp.findings ?? [];
   const openComments = comments.filter(c => !c.resolved);
 
+  // Build AI draft context for SMART paper sections
+  const agentMeta = PAPER_AGENT_MAP[wp.type] ?? DEFAULT_AGENT;
+  const aiDraftConfig: AiDraftConfig = {
+    agentId:     agentMeta.agentId,
+    agentName:   agentMeta.agentName,
+    agentColor:  agentMeta.agentColor,
+    paperContext: {
+      auditTitle:  (wp.audit as any)?.title  ?? '',
+      auditType:   (wp.audit as any)?.type   ?? '',
+      auditScope:  (wp.audit as any)?.scope  ?? '',
+      riskLevel:   (wp.audit as any)?.riskLevel ?? '',
+      paperCode:   wp.paperCode ?? wp.code,
+      paperTitle:  wp.title,
+      paperType:   wp.type,
+    },
+  };
+
   // Determine which tabs to show
   const showSectionsTab = wpKind === 'SMART';
   const showGraphTab    = wpKind === 'SMART' || wpKind === 'MASTER';
@@ -862,6 +880,7 @@ export default function WpDetailPage() {
                 paperId={params.id}
                 auditId={wp.auditId}
                 readonly={wp.status === 'APPROVED'}
+                aiDraftConfig={wp.status !== 'APPROVED' ? aiDraftConfig : undefined}
               />
               <CrossAuditSuggestions auditId={wp.auditId} />
             </div>

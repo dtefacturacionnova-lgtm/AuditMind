@@ -382,6 +382,10 @@ export function PaperAgentPanel({ wp, onClose }: PaperAgentPanelProps) {
   );
 }
 
+// ─── Shared exports ───────────────────────────────────────────────────────────
+export { PAPER_AGENT_MAP, DEFAULT_AGENT };
+export type { AgentMeta };
+
 // ─── Toggle button shown in the WP header ────────────────────────────────────
 
 export function PaperAgentButton({

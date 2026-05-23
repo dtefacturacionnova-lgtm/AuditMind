@@ -10,6 +10,7 @@ import {
   useCreateReference,
 } from '@/hooks/useWorkingPaperGraph';
 import { SectionField } from './SectionField';
+import type { AiDraftConfig } from './SectionField';
 
 // ─── Template key selector ────────────────────────────────────────────────────
 
@@ -108,15 +109,17 @@ function SectionProgressBar({ filled, total }: { filled: number; total: number }
 // ─── SmartPaperSections ───────────────────────────────────────────────────────
 
 interface SmartPaperSectionsProps {
-  paperId:  string;
-  auditId:  string;
-  readonly?: boolean;
+  paperId:        string;
+  auditId:        string;
+  readonly?:      boolean;
+  aiDraftConfig?: AiDraftConfig;
 }
 
 export function SmartPaperSections({
   paperId,
   auditId,
   readonly = false,
+  aiDraftConfig,
 }: SmartPaperSectionsProps) {
   const { data: sections, isLoading, error } = usePaperSections(paperId);
   const updateSection    = useUpdateSection();
@@ -190,6 +193,7 @@ export function SmartPaperSections({
             onSave={handleSave}
             paperId={paperId}
             mentionItems={mentionItems}
+            aiDraftConfig={aiDraftConfig}
             onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
               // Fire-and-forget: persist the @mention reference
               void createReference.mutateAsync({

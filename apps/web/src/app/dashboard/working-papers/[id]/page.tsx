@@ -7,7 +7,7 @@ import {
   Bot, CheckCircle2, Clock, AlertCircle, Lock, Plus, Trash2,
   MessageSquare, History, FileText, Network,
   Link2, Save, Sparkles, Loader2, X, Wand2,
-  Brain, Star, Activity, AlertTriangle, RefreshCw,
+  Brain, Star, Activity, AlertTriangle, RefreshCw, Zap,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -466,8 +466,10 @@ export default function WpDetailPage() {
   const [activeTab, setActiveTab]     = useState<TabKey>('content');
   const [commentText, setComment]     = useState('');
   const [reviewNotes, setRvNotes]     = useState('');
-  const [showScriptorium, setScripto]     = useState(false);
+  const [showScriptorium, setScripto]    = useState(false);
   const [showAgentPanel,  setAgentPanel] = useState(false);
+  const [reviewAlert,     setReviewAlert] = useState(false);
+  const [agentAutoMsg,    setAgentAutoMsg] = useState('');
 
   const [initialized, setInit] = useState(false);
   if (wp && !initialized) {
@@ -492,8 +494,40 @@ export default function WpDetailPage() {
   };
 
   const handleStatusChange = async (next: WpStatus) => {
+    if (!wp) return;
     await updateStatus.mutateAsync({ id: params.id, status: next, reviewNotes: reviewNotes || undefined });
     setRvNotes('');
+
+    // Level-3: proactive agent review suggestion after DRAFT → IN_REVIEW
+    if (next === 'IN_REVIEW') {
+      const code  = wp.paperCode ?? wp.code;
+      const audit = (wp.audit as any)?.title ?? 'la auditoría';
+      const reviewPrompts: Record<string, string> = {
+        PLANNING_UNDERSTANDING:
+          `Revisa el papel ${code} de ${audit}. Identifica: (1) gaps en el entendimiento del negocio, (2) riesgos significativos no cubiertos en el alcance, (3) si la materialidad y los riesgos están correctamente documentados según NIA 315. Sé específico sobre qué falta.`,
+        CONTROL_EVALUATION:
+          `Revisa la evaluación de controles internos ${code} de ${audit}. Verifica: (1) si las pruebas de controles son suficientes para cada riesgo, (2) si las deficiencias están documentadas según COSO 2013, (3) si el impacto de las debilidades en el riesgo de detección es correcto.`,
+        SUBSTANTIVE_TEST:
+          `Revisa las pruebas sustantivas ${code} de ${audit}. Evalúa: (1) si el tamaño muestral es suficiente según NIA 530, (2) si la evidencia obtenida soporta las conclusiones, (3) si hay excepciones sin documentar o sin respuesta.`,
+        DATA_ANALYSIS:
+          `Revisa el análisis de datos ${code} de ${audit}. Evalúa: (1) si las conclusiones están respaldadas por los resultados CAAT, (2) si las anomalías tienen seguimiento adecuado, (3) si las limitaciones del análisis están documentadas.`,
+        FINDING:
+          `Revisa los hallazgos en ${code} de ${audit}. Para cada hallazgo verifica: (1) estructura C-C-C-E-R-R completa, (2) impacto correctamente cuantificado, (3) recomendaciones específicas y medibles. Mejora la redacción ejecutiva donde sea necesario.`,
+        CLOSURE_CONCLUSION:
+          `Revisa el papel de cierre ${code} de ${audit}. Verifica: (1) si la conclusión es consistente con los hallazgos, (2) si la opinión propuesta está justificada según NIAs, (3) si las limitaciones del alcance están documentadas correctamente.`,
+        INTERVIEW:
+          `Revisa la documentación de entrevistas ${code} de ${audit}. Evalúa: (1) si las respuestas están con suficiente detalle, (2) si hay inconsistencias que requieren seguimiento, (3) si las conclusiones están vinculadas a los hallazgos de la auditoría.`,
+        CONFIRMATION:
+          `Revisa las confirmaciones externas ${code} de ${audit}. Verifica: (1) si el proceso siguió NIA 505, (2) si las diferencias están documentadas, (3) si los procedimientos alternativos para confirmaciones no recibidas son suficientes.`,
+        NORMATIVE_ANALYSIS:
+          `Revisa el análisis normativo ${code} de ${audit}. Evalúa: (1) si todos los requisitos regulatorios relevantes están cubiertos, (2) si los incumplimientos tienen evidencia suficiente, (3) si las implicaciones legales están correctamente evaluadas.`,
+      };
+      const prompt = reviewPrompts[wp.type]
+        ?? `Revisa el contenido del papel ${code} de ${audit}. Identifica gaps, inconsistencias y oportunidades de mejora en la documentación.`;
+
+      setAgentAutoMsg(prompt);
+      setReviewAlert(true);
+    }
   };
 
   const handleAddTickMark = async (fieldPath: string, tickMark: TickMarkKey, note?: string) => {
@@ -635,6 +669,49 @@ export default function WpDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* ── Level-3: Proactive review alert ── */}
+          {reviewAlert && (
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+              <CheckCircle2 className="w-5 h-5 text-blue-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-blue-800">Papel enviado a revisión</p>
+                <p className="text-xs text-blue-600">
+                  ¿Quieres que{' '}
+                  <span className="font-semibold">{agentMeta.agentName}</span>{' '}
+                  revise el contenido y detecte gaps antes de aprobar?
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {(wpKind === 'SMART' || wpKind === 'MASTER') && (
+                  <button
+                    onClick={() => { setActiveTab('review'); setReviewAlert(false); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"
+                  >
+                    <Star className="w-3.5 h-3.5" /> Quality Gate
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setAgentPanel(true);
+                    setReviewAlert(false);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-[#0F2D4A] rounded-lg hover:bg-[#1a4a7a] transition-colors"
+                >
+                  <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white ${agentMeta.agentColor}`}>
+                    {agentMeta.agentName.charAt(0)}
+                  </div>
+                  Revisar con {agentMeta.agentName}
+                </button>
+                <button
+                  onClick={() => setReviewAlert(false)}
+                  className="p-1 rounded hover:bg-blue-200 text-blue-400 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── Tabs ── */}
           <div className="flex border-b border-gray-200 gap-1 overflow-x-auto">
@@ -995,7 +1072,8 @@ export default function WpDetailPage() {
       {showAgentPanel && (
         <PaperAgentPanel
           wp={wp}
-          onClose={() => setAgentPanel(false)}
+          onClose={() => { setAgentPanel(false); setAgentAutoMsg(''); }}
+          autoMessage={agentAutoMsg || undefined}
         />
       )}
       </div>{/* flex row wrapper */}

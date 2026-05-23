@@ -134,23 +134,35 @@ interface PanelMessage {
 }
 
 export interface PaperAgentPanelProps {
-  wp:      WorkingPaper;
-  onClose: () => void;
+  wp:           WorkingPaper;
+  onClose:      () => void;
+  /** If provided, this message is auto-sent to the agent when the panel opens. */
+  autoMessage?: string;
 }
 
-export function PaperAgentPanel({ wp, onClose }: PaperAgentPanelProps) {
+export function PaperAgentPanel({ wp, onClose, autoMessage }: PaperAgentPanelProps) {
   const agent       = PAPER_AGENT_MAP[wp.type] ?? DEFAULT_AGENT;
   const suggestions = buildSuggestions(wp.type, wp);
 
   const [messages, setMessages] = useState<PanelMessage[]>([]);
   const [input,    setInput]    = useState('');
   const [loading,  setLoading]  = useState(false);
-  const endRef  = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const endRef   = useRef<HTMLDivElement>(null);
+  const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const didAutoSend = useRef(false);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-send pre-loaded message on mount (e.g. after status transition)
+  useEffect(() => {
+    if (autoMessage && !didAutoSend.current) {
+      didAutoSend.current = true;
+      sendMessage(autoMessage);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Build context object injected into every agent call */
   function buildContext() {

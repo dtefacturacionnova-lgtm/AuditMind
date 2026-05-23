@@ -3,8 +3,9 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    # Anthropic (Claude)
-    ANTHROPIC_API_KEY: str
+    # Anthropic (Claude) — opcional; proveedor primario es Gemini.
+    # Sólo necesario si DEFAULT_PROVIDER se cambia a LLMProvider.CLAUDE.
+    ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_DEFAULT_MODEL: str = "claude-sonnet-4-5"
     ANTHROPIC_OPUS_MODEL: str = "claude-opus-4-5"
     ANTHROPIC_HAIKU_MODEL: str = "claude-haiku-4-5"

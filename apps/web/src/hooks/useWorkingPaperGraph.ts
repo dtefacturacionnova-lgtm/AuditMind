@@ -122,3 +122,113 @@ export function useInitFromTemplate() {
     },
   });
 }
+
+// ─── Sprint 3: Semantic quality gate ─────────────────────────────────────────
+
+export type IssueType     = 'COMPLETENESS' | 'COHERENCE' | 'CONSISTENCY' | 'DEPTH';
+export type IssueSeverity = 'WARNING' | 'ERROR';
+export type QualityLevel  = 'INSUFICIENTE' | 'ACEPTABLE' | 'BUENA' | 'EXCELENTE';
+
+export interface QualityIssue {
+  sectionKey: string;
+  label:      string;
+  type:       IssueType;
+  message:    string;
+  severity:   IssueSeverity;
+}
+
+export interface QualityCheckResult {
+  paperId:        string;
+  score:          number;
+  level:          QualityLevel;
+  aiGenerated:    boolean;
+  issues:         QualityIssue[];
+  strengths:      string[];
+  recommendation: string;
+  checkedAt:      string;
+}
+
+export function useQualityCheck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<QualityCheckResult>(`/working-papers/${paperId}/quality-check`, {}),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
+// ─── Sprint 3: LIVE paper stats ───────────────────────────────────────────────
+
+export interface LiveStats {
+  auditId:    string;
+  auditTitle: string;
+  papers: {
+    total: number; draft: number; inReview: number;
+    approved: number; archived: number; coveragePercent: number;
+    bySection: Record<string, { total: number; approved: number }>;
+  };
+  findings: {
+    total: number; open: number; closed: number;
+    critical: number; high: number; medium: number;
+    low: number; informational: number; closureRate: number;
+  };
+  budget: {
+    estimatedHours: number; actualHours: number;
+    usagePercent: number; onTrack: boolean;
+  };
+  team: {
+    total: number;
+    members: Array<{ name: string; role: string; avatarUrl?: string | null }>;
+  };
+  intelligentPapers: {
+    smart: number; master: number; synced: number; stale: number; avgQuality: number;
+  };
+  recentActivity: Array<{ type: string; description: string; date: string }>;
+  updatedAt: string;
+}
+
+export function useLiveStats(paperId: string) {
+  return useQuery<LiveStats>({
+    queryKey:        ['wp', paperId, 'live-stats'],
+    queryFn:         () => apiClient.get(`/working-papers/${paperId}/live-stats`),
+    enabled:         !!paperId,
+    staleTime:       15_000,
+    refetchInterval: 30_000,  // auto-refresh every 30s — "live" feel
+  });
+}
+
+// ─── Sprint 3: Cross-audit AI suggestions ────────────────────────────────────
+
+export type SuggestionPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface AiProcedureSuggestion {
+  id:        string;
+  area:      string;
+  procedure: string;
+  rationale: string;
+  priority:  SuggestionPriority;
+  basedOn:   string;
+  niaRef?:   string;
+}
+
+export interface CrossAuditSuggestionsResult {
+  auditId:       string;
+  suggestions:   AiProcedureSuggestion[];
+  basedOnAudits: number;
+  totalFindings: number;
+  recurringAreas: string[];
+  generatedAt:   string;
+  aiGenerated:   boolean;
+}
+
+export function useAiSuggestions() {
+  return useMutation({
+    mutationFn: (auditId: string) =>
+      apiClient.post<CrossAuditSuggestionsResult>(
+        `/working-papers/by-audit/${auditId}/ai-suggestions`,
+        {},
+      ),
+  });
+}

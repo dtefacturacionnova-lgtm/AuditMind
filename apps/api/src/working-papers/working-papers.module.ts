@@ -4,6 +4,9 @@ import { WorkingPapersService } from './working-papers.service';
 import { PaperGraphService } from './paper-graph.service';
 import { PaperSectionsService } from './paper-sections.service';
 import { PaperConsolidationService } from './paper-consolidation.service';
+import { PaperQualityService } from './paper-quality.service';
+import { PaperLiveService } from './paper-live.service';
+import { CrossAuditLearningService } from './cross-audit-learning.service';
 
 @Module({
   controllers: [WorkingPapersController],
@@ -11,13 +14,19 @@ import { PaperConsolidationService } from './paper-consolidation.service';
     WorkingPapersService,
     PaperGraphService,
     PaperSectionsService,
-    PaperConsolidationService,   // ← Sprint 2: AI consolidation engine
+    PaperConsolidationService,     // Sprint 2: AI consolidation engine
+    PaperQualityService,           // Sprint 3: Semantic quality gate
+    PaperLiveService,              // Sprint 3: LIVE paper dashboard
+    CrossAuditLearningService,     // Sprint 3: Cross-audit learning
   ],
   exports: [
     WorkingPapersService,
     PaperGraphService,
     PaperSectionsService,
     PaperConsolidationService,
+    PaperQualityService,
+    PaperLiveService,
+    CrossAuditLearningService,
   ],
 })
 export class WorkingPapersModule {}

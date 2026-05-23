@@ -9,6 +9,9 @@ import { UpdateWorkingPaperDto, UpdateWorkingPaperStatusDto } from './dto/update
 import { UpdateSectionValueDto, CreatePaperLinkDto } from './dto/paper-section.dto';
 import { PaperSectionsService } from './paper-sections.service';
 import { PaperGraphService } from './paper-graph.service';
+import { PaperQualityService } from './paper-quality.service';
+import { PaperLiveService } from './paper-live.service';
+import { CrossAuditLearningService } from './cross-audit-learning.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -22,6 +25,9 @@ export class WorkingPapersController {
     private readonly service:          WorkingPapersService,
     private readonly sectionsService:  PaperSectionsService,
     private readonly graphService:     PaperGraphService,
+    private readonly qualityService:   PaperQualityService,
+    private readonly liveService:      PaperLiveService,
+    private readonly crossAudit:       CrossAuditLearningService,
   ) {}
 
   // ─── Listados ─────────────────────────────────────────────────────────────────
@@ -203,5 +209,32 @@ export class WorkingPapersController {
   @ApiOperation({ summary: 'Disparar consolidación IA de un papel MASTER (pone en REGENERATING, emite evento al módulo AI)' })
   consolidate(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.consolidateMasterPaper(id, user);
+  }
+
+  // ─── Sprint 3: Semantic quality gate ──────────────────────────────────────
+
+  @Post(':id/quality-check')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Ejecutar gate de calidad semántica con IA sobre un papel inteligente' })
+  runQualityCheck(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.qualityService.runQualityCheck(id, user);
+  }
+
+  // ─── Sprint 3: LIVE paper dashboard ───────────────────────────────────────
+
+  @Get(':id/live-stats')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Estadísticas en tiempo real para un papel LIVE (papeles, hallazgos, presupuesto, equipo)' })
+  getLiveStats(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.liveService.getLiveStats(id, user);
+  }
+
+  // ─── Sprint 3: Cross-audit learning ───────────────────────────────────────
+
+  @Post('by-audit/:auditId/ai-suggestions')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Generar sugerencias de procedimientos IA basadas en el historial de hallazgos de la entidad' })
+  generateAiSuggestions(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
+    return this.crossAudit.generateSuggestions(auditId, user);
   }
 }

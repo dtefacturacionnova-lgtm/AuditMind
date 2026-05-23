@@ -18,9 +18,12 @@ import {
   WP_KIND_CONFIG, SYNC_STATUS_CONFIG,
   type WpStatus, type TickMarkKey, type WpKind, type WpSyncStatus,
 } from '@/hooks/useWorkingPapers';
-import { SmartPaperSections }  from '@/components/working-papers/SmartPaperSections';
-import { MasterPaperView }      from '@/components/working-papers/MasterPaperView';
-import { PaperGraphPanel }      from '@/components/working-papers/PaperGraphPanel';
+import { SmartPaperSections }     from '@/components/working-papers/SmartPaperSections';
+import { MasterPaperView }         from '@/components/working-papers/MasterPaperView';
+import { PaperGraphPanel }         from '@/components/working-papers/PaperGraphPanel';
+import { QualityGatePanel }        from '@/components/working-papers/QualityGatePanel';
+import { LivePaperDashboard }      from '@/components/working-papers/LivePaperDashboard';
+import { CrossAuditSuggestions }   from '@/components/working-papers/CrossAuditSuggestions';
 import { apiClient }            from '@/lib/api-client';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import type { WorkingPaper, TickMarkEntry } from '@/hooks/useWorkingPapers';
@@ -637,7 +640,7 @@ export default function WpDetailPage() {
 
           {/* ── LIVE paper view ── */}
           {wpKind === 'LIVE' && effectiveTab !== 'review' && effectiveTab !== 'history' && (
-            <LivePaperView />
+            <LivePaperDashboard paperId={params.id} />
           )}
 
           {/* ── Tab: Contenido (STANDARD / SMART only) ── */}
@@ -845,11 +848,14 @@ export default function WpDetailPage() {
 
           {/* ── Tab: Secciones (SMART) ── */}
           {effectiveTab === 'sections' && wpKind === 'SMART' && (
-            <SmartPaperSections
-              paperId={params.id}
-              auditId={wp.auditId}
-              readonly={wp.status === 'APPROVED'}
-            />
+            <div className="space-y-4">
+              <SmartPaperSections
+                paperId={params.id}
+                auditId={wp.auditId}
+                readonly={wp.status === 'APPROVED'}
+              />
+              <CrossAuditSuggestions auditId={wp.auditId} />
+            </div>
           )}
 
           {/* ── Tab: Grafo ── */}
@@ -860,6 +866,11 @@ export default function WpDetailPage() {
           {/* ── Tab: Revisión ── */}
           {effectiveTab === 'review' && (
             <div className="max-w-2xl space-y-4">
+              {/* Semantic quality gate — SMART and MASTER papers only */}
+              {(wpKind === 'SMART' || wpKind === 'MASTER') && (
+                <QualityGatePanel paperId={params.id} existingScore={wp.qualityScore} />
+              )}
+
               {comments.length === 0 && (
                 <div className="py-12 text-center bg-white rounded-2xl border border-gray-200">
                   <MessageSquare className="w-10 h-10 text-gray-200 mx-auto mb-3" />

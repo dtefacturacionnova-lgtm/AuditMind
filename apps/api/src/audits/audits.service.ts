@@ -5,13 +5,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
 import { AuthUser } from '../auth/jwt.strategy';
-import { AuditStatus, UserRole } from '@prisma/client';
+import { AuditStatus, AuditType, UserRole } from '@prisma/client';
+import { AuditIndexService } from './audit-index.service';
 
 const AUDIT_RISK_TARGET = 0.05;
 
 @Injectable()
 export class AuditsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly auditIndex: AuditIndexService,
+  ) {}
 
   private computeMateriality(base: number, pct: number) {
     const mg = (base * pct) / 100;
@@ -90,6 +94,9 @@ export class AuditsService {
       create: { auditId: audit.id, userId: user.id, role: 'LEAD' },
       update: { role: 'LEAD' },
     });
+
+    // Auto-scaffold working papers based on audit type (fire-and-forget)
+    void this.auditIndex.scaffold(audit.id, audit.type as AuditType, user.id);
 
     return this.findOne(audit.id, user);
   }

@@ -24,6 +24,7 @@ import { PaperGraphPanel }         from '@/components/working-papers/PaperGraphP
 import { QualityGatePanel }        from '@/components/working-papers/QualityGatePanel';
 import { LivePaperDashboard }      from '@/components/working-papers/LivePaperDashboard';
 import { CrossAuditSuggestions }   from '@/components/working-papers/CrossAuditSuggestions';
+import { PaperAgentPanel, PaperAgentButton } from '@/components/working-papers/PaperAgentPanel';
 import { apiClient }            from '@/lib/api-client';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import type { WorkingPaper, TickMarkEntry } from '@/hooks/useWorkingPapers';
@@ -464,7 +465,8 @@ export default function WpDetailPage() {
   const [activeTab, setActiveTab]     = useState<TabKey>('content');
   const [commentText, setComment]     = useState('');
   const [reviewNotes, setRvNotes]     = useState('');
-  const [showScriptorium, setScripto] = useState(false);
+  const [showScriptorium, setScripto]     = useState(false);
+  const [showAgentPanel,  setAgentPanel] = useState(false);
 
   const [initialized, setInit] = useState(false);
   if (wp && !initialized) {
@@ -552,6 +554,7 @@ export default function WpDetailPage() {
         ]}
       />
 
+      <div className="flex flex-1 overflow-hidden">
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-6xl mx-auto space-y-4">
 
@@ -586,6 +589,12 @@ export default function WpDetailPage() {
                   <StatusIcon className="w-3.5 h-3.5" />
                   {st.label}
                 </span>
+                {/* Agent panel toggle — always visible */}
+                <PaperAgentButton
+                  type={wp.type}
+                  onClick={() => setAgentPanel(p => !p)}
+                  active={showAgentPanel}
+                />
                 {wp.status === 'DRAFT' && wpKind === 'STANDARD' && (
                   <button
                     onClick={() => setScripto(true)}
@@ -962,6 +971,15 @@ export default function WpDetailPage() {
 
         </div>
       </div>
+
+      {/* ── Agent Panel (side panel, slides in when active) ── */}
+      {showAgentPanel && (
+        <PaperAgentPanel
+          wp={wp}
+          onClose={() => setAgentPanel(false)}
+        />
+      )}
+      </div>{/* flex row wrapper */}
 
       {/* ── Scriptorium Draft Modal ── */}
       {showScriptorium && (

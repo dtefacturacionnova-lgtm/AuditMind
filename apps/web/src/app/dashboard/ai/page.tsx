@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
+// badge tiers: 'Flash' = gemini-2.5-flash standard | 'Flash ✦' = flash con reasoning depth (análisis complejo)
 const AGENTS = [
   {
     id: 'MINERVA',
@@ -12,7 +13,7 @@ const AGENTS = [
     role: 'Coordinadora de Auditoría IA',
     description: 'Planificación, riesgo, materiality, estrategia de auditoría',
     color: 'bg-indigo-600',
-    badge: 'Opus',
+    badge: 'Flash',
   },
   {
     id: 'SCRIPTORIUM',
@@ -20,7 +21,7 @@ const AGENTS = [
     role: 'Generador de Programas de Trabajo',
     description: 'Crea programas de auditoría personalizados con procedimientos NIA',
     color: 'bg-violet-600',
-    badge: 'Sonnet',
+    badge: 'Flash',
   },
   {
     id: 'ARGUS',
@@ -28,7 +29,7 @@ const AGENTS = [
     role: 'Evaluador de Controles Internos',
     description: 'COSO, COBIT, ISO 27001, evaluación de controles',
     color: 'bg-blue-600',
-    badge: 'Sonnet',
+    badge: 'Flash',
   },
   {
     id: 'HERMES',
@@ -36,7 +37,7 @@ const AGENTS = [
     role: 'Analista Forense Financiero',
     description: 'Detección de fraude, Benford, análisis de transacciones',
     color: 'bg-red-600',
-    badge: 'Opus',
+    badge: 'Flash',
   },
   {
     id: 'CICERO',
@@ -44,7 +45,7 @@ const AGENTS = [
     role: 'Redactor de Informes',
     description: 'Hallazgos, recomendaciones, informes ejecutivos en tono profesional',
     color: 'bg-emerald-600',
-    badge: 'Sonnet',
+    badge: 'Flash ✦',
   },
   {
     id: 'SOCRATES',
@@ -52,7 +53,7 @@ const AGENTS = [
     role: 'Asistente de Entrevistas',
     description: 'Preguntas de entrevista, análisis de respuestas, documentación',
     color: 'bg-amber-600',
-    badge: 'Haiku',
+    badge: 'Flash',
   },
   {
     id: 'CASSANDRA',
@@ -60,7 +61,7 @@ const AGENTS = [
     role: 'Analista Predictiva de Riesgos',
     description: 'Modelos predictivos, tendencias de riesgo, alertas tempranas',
     color: 'bg-purple-600',
-    badge: 'Opus',
+    badge: 'Flash ✦',
   },
   {
     id: 'VULCANO',
@@ -68,7 +69,7 @@ const AGENTS = [
     role: 'Auditor de TI',
     description: 'COBIT, ciberseguridad, riesgo tecnológico, controles de TI',
     color: 'bg-orange-600',
-    badge: 'Sonnet',
+    badge: 'Flash',
   },
   {
     id: 'SENADO',
@@ -76,7 +77,7 @@ const AGENTS = [
     role: 'Especialista en Compliance',
     description: 'Regulaciones, cumplimiento normativo, Ley Karin, SOX, GDPR',
     color: 'bg-teal-600',
-    badge: 'Sonnet',
+    badge: 'Flash ✦',
   },
   {
     id: 'ATLAS',
@@ -84,7 +85,7 @@ const AGENTS = [
     role: 'Auditor de ESG',
     description: 'Sostenibilidad, GRI, TCFD, impacto ambiental y social',
     color: 'bg-green-600',
-    badge: 'Sonnet',
+    badge: 'Flash',
   },
   {
     id: 'FENIX',
@@ -92,7 +93,7 @@ const AGENTS = [
     role: 'Seguimiento de Recomendaciones',
     description: 'Monitoreo de implementación, avance de planes de acción',
     color: 'bg-cyan-600',
-    badge: 'Haiku',
+    badge: 'Flash',
   },
   {
     id: 'LEX',
@@ -100,7 +101,7 @@ const AGENTS = [
     role: 'Asesor Legal-Normativo',
     description: 'Normativa chilena, contratos, riesgo legal, compliance regulatorio',
     color: 'bg-slate-600',
-    badge: 'Sonnet',
+    badge: 'Flash',
   },
   {
     id: 'SHERLOCK',
@@ -108,7 +109,7 @@ const AGENTS = [
     role: 'Investigador de Anomalías',
     description: 'Patrones de fraude, análisis forense, cadena de custodia',
     color: 'bg-rose-600',
-    badge: 'Opus',
+    badge: 'Flash ✦',
   },
   {
     id: 'MINERVA_QAIP',
@@ -116,7 +117,7 @@ const AGENTS = [
     role: 'Calidad e Mejora Continua (QAIP)',
     description: 'Evaluaciones IIA, autoevaluaciones, mejoras al departamento',
     color: 'bg-pink-600',
-    badge: 'Sonnet',
+    badge: 'Flash',
   },
 ] as const;
 
@@ -129,10 +130,10 @@ interface Message {
   timestamp: Date;
 }
 
+// Gemini model badge styles
 const BADGE_STYLES: Record<string, string> = {
-  Opus: 'bg-violet-100 text-violet-700',
-  Sonnet: 'bg-blue-100 text-blue-700',
-  Haiku: 'bg-emerald-100 text-emerald-700',
+  'Flash':   'bg-sky-100 text-sky-700 border border-sky-200',
+  'Flash ✦': 'bg-indigo-100 text-indigo-700 border border-indigo-200',
 };
 
 export default function AIPage() {
@@ -276,7 +277,7 @@ export default function AIPage() {
               <div className="flex items-center gap-2">
                 <h1 className="font-semibold text-gray-800">{selectedAgent.name}</h1>
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${BADGE_STYLES[selectedAgent.badge]}`}>
-                  Claude {selectedAgent.badge}
+                  Gemini {selectedAgent.badge}
                 </span>
               </div>
               <p className="text-xs text-gray-400 truncate">{selectedAgent.role}</p>

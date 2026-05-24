@@ -77,7 +77,8 @@ export function useExpediente(auditId: string) {
 export function useInitializeExpediente(auditId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => apiClient.post(`/audits/${auditId}/expediente/initialize`, {}),
+    mutationFn: (templateId?: string) =>
+      apiClient.post(`/audits/${auditId}/expediente/initialize`, { templateId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expediente', auditId] }),
   });
 }

@@ -23,6 +23,7 @@ import { AiModule } from './ai/ai.module';
 import { DataSourcesModule } from './data-sources/data-sources.module';
 import { RisksModule } from './risks/risks.module';
 import { AuditFoldersModule } from './audit-folders/audit-folders.module';
+import { IndexTemplatesModule } from './index-templates/index-templates.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { AuditFoldersModule } from './audit-folders/audit-folders.module';
     DataSourcesModule,
     RisksModule,
     AuditFoldersModule,
+    IndexTemplatesModule,
   ],
   providers: [
     // Guards globales — aplican a todos los endpoints excepto los @Public()

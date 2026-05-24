@@ -333,6 +333,7 @@ model Organization {
   llmRouterLogs          LLMRouterLog[]
   aiInteractions         AIInteraction[]
   dataSources            DataSource[]
+  indexTemplates         IndexTemplate[]
 
   @@map("organizations")
 }
@@ -360,8 +361,9 @@ model User {
   auditTeams        AuditTeam[]
   workingPapers     WorkingPaper[]        @relation("PreparedBy")
   reviewedPapers    WorkingPaper[]        @relation("ReviewedBy")
-  signedOffPapers   WorkingPaper[]        @relation("WpSignedOffBy")
-  signedOffPhases   AuditPhase[]          @relation("PhaseSignOff")
+  signedOffPapers       WorkingPaper[]        @relation("WpSignedOffBy")
+  signedOffPhases       AuditPhase[]          @relation("PhaseSignOff")
+  createdIndexTemplates IndexTemplate[]       @relation("IndexTemplateCreator")
   findings          Finding[]             @relation("FindingResponsible")
   aiInteractions    AIInteraction[]
   notifications     Notification[]
@@ -633,6 +635,28 @@ model AuditFolder {
   @@index([phaseId])
   @@index([auditId, phaseId])
   @@map("audit_folders")
+}
+
+// ─── PLANTILLAS DE ÍNDICE DEL EXPEDIENTE ─────────────────────────────────────
+// Estructura de fases+carpetas pre-definida a nivel de organización.
+// El usuario selecciona la plantilla al inicializar el expediente de una auditoría.
+model IndexTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String   @db.VarChar(120)  // "IIA Estándar", "Auditoría TI"…
+  description    String?
+  isDefault      Boolean  @default(false)   // única plantilla por defecto de la org
+  isSystem       Boolean  @default(false)   // precargada — no se puede eliminar
+  structure      Json     // PhaseTemplate[] (phaseType, name, order, folders[])
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy     User         @relation("IndexTemplateCreator", fields: [createdById], references: [id])
+
+  @@index([organizationId])
+  @@map("index_templates")
 }
 
 model AuditTeam {

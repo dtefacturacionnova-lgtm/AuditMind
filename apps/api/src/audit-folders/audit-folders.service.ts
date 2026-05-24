@@ -9,6 +9,7 @@ import {
   CreateFolderDto, UpdateFolderDto, ReorderFoldersDto,
   CreateFilePaperDto,
 } from './dto/folder.dto';
+import { IndexTemplatesService } from '../index-templates/index-templates.service';
 
 // ─── Selección mínima de papel para el árbol del expediente ──────────────────
 const PAPER_STUB_SELECT = {
@@ -18,68 +19,14 @@ const PAPER_STUB_SELECT = {
   createdAt: true,
 } as const;
 
-// ─── Plantilla estándar de índice (IIA / COSO) ───────────────────────────────
-// Se inserta automáticamente al crear una auditoría.
-// El usuario puede modificarla a su gusto después.
-const DEFAULT_INDEX_TEMPLATE = [
-  {
-    phaseType: PhaseType.PLANNING,
-    name: 'Planificación de la Auditoría',
-    order: 0,
-    folders: [
-      { ref: 'A',   name: 'Planificación',              sortOrder: 0, children: [
-        { ref: 'A-1', name: 'Comunicación de Auditoría',    sortOrder: 0 },
-        { ref: 'A-2', name: 'Entendimiento del Negocio',     sortOrder: 1 },
-        { ref: 'A-3', name: 'Evaluación de Riesgos',         sortOrder: 2 },
-        { ref: 'A-4', name: 'Materialidad',                  sortOrder: 3 },
-        { ref: 'A-5', name: 'Programa de Auditoría',         sortOrder: 4 },
-      ]},
-    ],
-  },
-  {
-    phaseType: PhaseType.FIELDWORK,
-    name: 'Ejecución de la Auditoría',
-    order: 1,
-    folders: [
-      { ref: 'B',   name: 'Evaluación de Controles',    sortOrder: 0, children: [
-        { ref: 'B-1', name: 'Ambiente de Control (COSO)',    sortOrder: 0 },
-        { ref: 'B-2', name: 'Evaluación de Controles Clave', sortOrder: 1 },
-      ]},
-      { ref: 'C',   name: 'Pruebas Sustantivas',         sortOrder: 1, children: [
-        { ref: 'C-1', name: 'Área 1',                        sortOrder: 0 },
-        { ref: 'C-2', name: 'Área 2',                        sortOrder: 1 },
-      ]},
-      { ref: 'AD',  name: 'Análisis de Datos (CAATs)',   sortOrder: 2 },
-      { ref: 'I',   name: 'Entrevistas',                 sortOrder: 3 },
-    ],
-  },
-  {
-    phaseType: PhaseType.REPORTING,
-    name: 'Informe',
-    order: 2,
-    folders: [
-      { ref: 'D',   name: 'Hallazgos',                  sortOrder: 0 },
-      { ref: 'E',   name: 'Cierre y Conclusión',         sortOrder: 1, children: [
-        { ref: 'E-1', name: 'Borrador de Informe',           sortOrder: 0 },
-        { ref: 'E-2', name: 'Revisión de Gerencia',          sortOrder: 1 },
-        { ref: 'E-3', name: 'Informe Final',                 sortOrder: 2 },
-      ]},
-    ],
-  },
-  {
-    phaseType: PhaseType.FOLLOWUP,
-    name: 'Eventos Posteriores',
-    order: 3,
-    folders: [
-      { ref: 'F',   name: 'Seguimiento de Recomendaciones', sortOrder: 0 },
-      { ref: 'G',   name: 'Archivo Permanente',              sortOrder: 1 },
-    ],
-  },
-];
+// DEFAULT_INDEX_TEMPLATE moved to IndexTemplatesService (IIA_STANDARD_STRUCTURE)
 
 @Injectable()
 export class AuditFoldersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly indexTemplates: IndexTemplatesService,
+  ) {}
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -97,14 +44,21 @@ export class AuditFoldersService {
 
   // ─── Inicializar expediente (plantilla estándar) ──────────────────────────
 
-  async initializeFromTemplate(auditId: string, user: AuthUser): Promise<void> {
+  async initializeFromTemplate(
+    auditId: string,
+    user: AuthUser,
+    templateId?: string,
+  ): Promise<void> {
     await this.verifyAuditAccess(auditId, user);
 
     // Verificar que no tenga fases ya creadas
     const existing = await this.prisma.auditPhase.count({ where: { auditId } });
     if (existing > 0) throw new BadRequestException('El expediente ya fue inicializado');
 
-    for (const tplPhase of DEFAULT_INDEX_TEMPLATE) {
+    // Obtener estructura: desde DB (templateId o default) o fallback hardcoded
+    const structure = await this.indexTemplates.getStructureForInit(templateId, user);
+
+    for (const tplPhase of structure) {
       const phase = await this.prisma.auditPhase.create({
         data: {
           auditId,

@@ -30,10 +30,14 @@ export class AuditFoldersController {
 
   @Post('initialize')
   @Roles(UserRole.AUDITOR)
-  @ApiOperation({ summary: 'Inicializar expediente con plantilla estándar IIA' })
+  @ApiOperation({ summary: 'Inicializar expediente (se puede pasar templateId opcional)' })
   @HttpCode(HttpStatus.CREATED)
-  initialize(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
-    return this.service.initializeFromTemplate(auditId, user);
+  initialize(
+    @Param('auditId') auditId: string,
+    @Body() body: { templateId?: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.initializeFromTemplate(auditId, user, body?.templateId);
   }
 
   // ─── Fases ────────────────���───────────────────────────────────────────────

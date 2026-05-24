@@ -5,7 +5,7 @@ import {
   FolderOpen, FolderPlus, Folder, FileText, Plus, ChevronRight, ChevronDown,
   MoreHorizontal, Pencil, Trash2, CheckCircle2, Lock, AlertCircle, Clock,
   Loader2, FilePlus, Upload, X, Music, Image as ImageIcon, FileSpreadsheet,
-  Presentation, File,
+  Presentation, File, Star, Settings2,
 } from 'lucide-react';
 import {
   useExpediente, useInitializeExpediente, useCreateFolder,
@@ -13,6 +13,7 @@ import {
   AuditPhase, AuditFolder, WpStub, PHASE_CONFIG, PHASE_STATUS_CONFIG,
 } from '@/hooks/useExpediente';
 import { WP_STATUS_CONFIG, type WpStatus } from '@/hooks/useWorkingPapers';
+import { useIndexTemplates, type IndexTemplate } from '@/hooks/useIndexTemplates';
 import { cn } from '@/lib/utils';
 
 // ─── Helpers de archivo ───────────────────────────────────────────────────────
@@ -522,6 +523,7 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
   const updateFolder = useUpdateFolder(auditId);
   const deleteFolder = useDeleteFolder(auditId);
   const signOff      = useSignOffPhase(auditId);
+  const { data: templates } = useIndexTemplates();
 
   // Modal state
   const [folderModal, setFolderModal] = useState<{
@@ -531,7 +533,8 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
     folder?: AuditFolder;
   } | null>(null);
 
-  const [uploadFolderId, setUploadFolderId] = useState<string | null>(null);
+  const [uploadFolderId, setUploadFolderId]       = useState<string | null>(null);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -574,9 +577,10 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
     );
   }
 
-  // ── Empty state ───────────────────────────────────────────────────────────
+  // ── Empty state + template picker ────────────────────────────────────────
 
   if (!phases || phases.length === 0) {
+    const hasMultiple = (templates?.length ?? 0) > 1;
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
@@ -585,21 +589,56 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
         <div>
           <p className="text-base font-semibold text-slate-800">Expediente vacío</p>
           <p className="mt-1 text-sm text-slate-500">
-            Inicializa el expediente con la plantilla estándar IIA<br />
-            o crea las fases y carpetas manualmente.
+            Selecciona una plantilla de índice para inicializar<br />
+            la estructura de fases y carpetas del expediente.
           </p>
         </div>
-        <button
-          onClick={() => initMutation.mutate()}
-          disabled={initMutation.isPending}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-        >
-          {initMutation.isPending
-            ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <FolderPlus className="h-4 w-4" />
-          }
-          Inicializar con plantilla estándar
-        </button>
+
+        {showTemplatePicker && hasMultiple ? (
+          <div className="w-full max-w-sm space-y-2 text-left">
+            <p className="text-xs font-medium text-slate-600 text-center">Selecciona una plantilla:</p>
+            {templates!.map((tpl) => (
+              <button
+                key={tpl.id}
+                onClick={() => { initMutation.mutate(tpl.id); setShowTemplatePicker(false); }}
+                disabled={initMutation.isPending}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-xl border px-4 py-3 hover:bg-blue-50 disabled:opacity-60 transition-colors',
+                  tpl.isDefault ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200 bg-white',
+                )}
+              >
+                <Settings2 className="h-5 w-5 shrink-0 text-blue-400" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium text-slate-800">{tpl.name}</span>
+                    {tpl.isDefault && <Star className="h-3 w-3 text-amber-400 fill-amber-400" />}
+                  </div>
+                  {tpl.description && (
+                    <p className="truncate text-xs text-slate-500">{tpl.description}</p>
+                  )}
+                </div>
+              </button>
+            ))}
+            <button
+              onClick={() => setShowTemplatePicker(false)}
+              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 py-1"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => { if (hasMultiple) setShowTemplatePicker(true); else initMutation.mutate(undefined); }}
+            disabled={initMutation.isPending}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {initMutation.isPending
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <FolderPlus className="h-4 w-4" />
+            }
+            {hasMultiple ? 'Elegir plantilla e inicializar' : 'Inicializar expediente'}
+          </button>
+        )}
       </div>
     );
   }

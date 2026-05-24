@@ -94,6 +94,7 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { label: 'Organización', href: '/dashboard/admin/organization', icon: Building2 },
       { label: 'Usuarios', href: '/dashboard/admin/users', icon: Users2 },
+      { label: 'Plantillas de Índice', href: '/dashboard/admin/index-templates', icon: FolderOpen },
       { label: 'Conectores de Datos', href: '/dashboard/admin/data-sources', icon: Plug },
       { label: 'Base de Conocimiento', href: '/dashboard/admin/knowledge', icon: BookOpen },
       { label: 'Configuración', href: '/dashboard/admin/settings', icon: Settings },

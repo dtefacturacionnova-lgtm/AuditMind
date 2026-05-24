@@ -428,6 +428,7 @@ function WpKindBadge({ wpKind }: { wpKind: WpKind }) {
     SMART:    Brain,
     MASTER:   Star,
     LIVE:     Activity,
+    FILE:     FileText,
   };
   const Icon = icons[wpKind] ?? FileText;
 

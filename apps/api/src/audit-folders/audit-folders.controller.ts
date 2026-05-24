@@ -6,6 +6,7 @@ import { AuditFoldersService } from './audit-folders.service';
 import {
   CreatePhaseDto, UpdatePhaseDto,
   CreateFolderDto, UpdateFolderDto, ReorderFoldersDto,
+  CreateFilePaperDto,
 } from './dto/folder.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -111,7 +112,22 @@ export class AuditFoldersController {
     return this.service.reorderFolders(dto, user);
   }
 
-  // ─── Asignar papel a carpeta ──────────────────────────────────���───────────
+  // ─── Registrar archivo adjunto como papel de trabajo ────────────────────
+
+  @Post('folders/:folderId/files')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Registrar archivo subido a Supabase Storage como papel de trabajo' })
+  @HttpCode(HttpStatus.CREATED)
+  createFilePaper(
+    @Param('auditId') auditId: string,
+    @Param('folderId') folderId: string,
+    @Body() dto: CreateFilePaperDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.createFilePaper(auditId, folderId, dto, user);
+  }
+
+  // ─── Asignar papel a carpeta ──────────────────────────────────────────────
 
   @Patch('papers/:paperId/assign')
   @Roles(UserRole.AUDITOR)

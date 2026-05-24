@@ -9,7 +9,7 @@ export type WpStatus =
   | 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'ARCHIVED'           // legacy
   | 'NOT_STARTED' | 'IN_PROGRESS' | 'PENDING_REVIEW'          // new
   | 'RETURNED' | 'REVIEWED' | 'SIGNED_OFF' | 'CLOSED';        // new
-export type WpKind       = 'STANDARD' | 'SMART' | 'MASTER' | 'LIVE';
+export type WpKind       = 'STANDARD' | 'SMART' | 'MASTER' | 'LIVE' | 'FILE';
 export type WpSyncStatus = 'DRAFT' | 'SYNCED' | 'STALE' | 'REGENERATING';
 export type WpType    =
   | 'PLANNING_UNDERSTANDING' | 'CONTROL_EVALUATION' | 'SUBSTANTIVE_TEST'
@@ -101,6 +101,11 @@ export interface WorkingPaper {
   carryForward?:  boolean;
   signedOffById?: string;
   signedOffAt?:   string;
+  // ─── Archivo adjunto (wpKind = FILE) ─────────────────────────────────────
+  fileUrl?:          string;
+  originalFilename?: string;
+  mimeType?:         string;
+  fileSize?:         number;
   preparedById?:  string;
   reviewedById?:  string;
   createdAt:      string;
@@ -318,6 +323,7 @@ export const WP_KIND_CONFIG: Record<WpKind, { label: string; color: string; bg: 
   SMART:     { label: 'Inteligente',    color: 'text-blue-700',   bg: 'bg-blue-50',     border: 'border-blue-200' },
   MASTER:    { label: 'Maestro',        color: 'text-purple-700', bg: 'bg-purple-50',   border: 'border-purple-200' },
   LIVE:      { label: 'Vivo',           color: 'text-emerald-700',bg: 'bg-emerald-50',  border: 'border-emerald-200' },
+  FILE:      { label: 'Archivo',        color: 'text-slate-600',  bg: 'bg-slate-100',   border: 'border-slate-200' },
 };
 
 export const SYNC_STATUS_CONFIG: Record<WpSyncStatus, { label: string; color: string; bg: string; border: string }> = {

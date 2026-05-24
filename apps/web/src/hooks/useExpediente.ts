@@ -1,11 +1,27 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
+import { createClient } from '@/lib/supabase/client';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export type PhaseType = 'PLANNING' | 'FIELDWORK' | 'REPORTING' | 'FOLLOWUP';
 export type PhaseStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETE' | 'LOCKED';
+
+/** Resumen mínimo de un papel en el árbol del expediente */
+export interface WpStub {
+  id: string;
+  ref?: string;
+  code: string;
+  title: string;
+  status: string;
+  wpKind: 'STANDARD' | 'SMART' | 'MASTER' | 'LIVE' | 'FILE';
+  type: string;
+  mimeType?: string;
+  originalFilename?: string;
+  fileUrl?: string;
+  createdAt: string;
+}
 
 export interface AuditFolder {
   id: string;
@@ -16,7 +32,7 @@ export interface AuditFolder {
   parentId?: string;
   sortOrder: number;
   children: AuditFolder[];
-  _count: { papers: number };
+  papers: WpStub[];            // archivos + papeles en esta carpeta
 }
 
 export interface AuditPhase {
@@ -114,6 +130,59 @@ export function useAssignPaperToFolder(auditId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expediente', auditId] });
       qc.invalidateQueries({ queryKey: ['working-papers'] });
+    },
+  });
+}
+
+// ─── Subir archivo a una carpeta del expediente ───────────────────────────────
+// 1. Upload directo a Supabase Storage (bucket "audit-files")
+// 2. Registro del WP en la API como wpKind = FILE
+
+export interface UploadFileArgs {
+  folderId: string;
+  file: File;
+  title: string;
+  ref?: string;
+}
+
+export function useUploadFileToFolder(auditId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ folderId, file, title, ref }: UploadFileArgs) => {
+      const supabase = createClient();
+
+      // Path: audit-files/{auditId}/{timestamp}_{sanitizedName}
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${auditId}/${Date.now()}_${safeName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('audit-files')
+        .upload(path, file, { cacheControl: '3600', upsert: false });
+
+      if (uploadError) throw new Error(`Error al subir: ${uploadError.message}`);
+
+      // Get public URL
+      const { data: urlData } = supabase.storage.from('audit-files').getPublicUrl(path);
+      const fileUrl = urlData.publicUrl;
+
+      // Register in API
+      return apiClient.post(
+        `/audits/${auditId}/expediente/folders/${folderId}/files`,
+        {
+          title,
+          ref: ref || undefined,
+          fileUrl,
+          originalFilename: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+        },
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expediente', auditId] });
+      qc.invalidateQueries({ queryKey: ['wps', 'audit', auditId] });
     },
   });
 }

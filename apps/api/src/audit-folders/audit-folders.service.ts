@@ -3,11 +3,20 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
-import { PhaseStatus, PhaseType } from '@prisma/client';
+import { PhaseStatus, PhaseType, WpKind, WorkingPaperType, WorkingPaperStatus } from '@prisma/client';
 import {
   CreatePhaseDto, UpdatePhaseDto,
   CreateFolderDto, UpdateFolderDto, ReorderFoldersDto,
+  CreateFilePaperDto,
 } from './dto/folder.dto';
+
+// ─── Selección mínima de papel para el árbol del expediente ──────────────────
+const PAPER_STUB_SELECT = {
+  id: true, ref: true, code: true, title: true,
+  status: true, wpKind: true, type: true,
+  mimeType: true, originalFilename: true, fileUrl: true,
+  createdAt: true,
+} as const;
 
 // ─── Plantilla estándar de índice (IIA / COSO) ───────────────────────────────
 // Se inserta automáticamente al crear una auditoría.
@@ -156,13 +165,13 @@ export class AuditFoldersService {
                 children: {             // Nivel 3 máximo
                   orderBy: { sortOrder: 'asc' },
                   include: {
-                    _count: { select: { papers: true } },
+                    papers: { select: PAPER_STUB_SELECT, orderBy: { createdAt: 'asc' } },
                   },
                 },
-                _count: { select: { papers: true } },
+                papers: { select: PAPER_STUB_SELECT, orderBy: { createdAt: 'asc' } },
               },
             },
-            _count: { select: { papers: true } },
+            papers: { select: PAPER_STUB_SELECT, orderBy: { createdAt: 'asc' } },
           },
         },
       },
@@ -325,6 +334,56 @@ export class AuditFoldersService {
     );
     await this.prisma.$transaction(updates);
     return { reordered: dto.items.length };
+  }
+
+  // ─── Registrar archivo adjunto como papel de trabajo ────────────────────
+
+  async createFilePaper(
+    auditId: string,
+    folderId: string,
+    dto: CreateFilePaperDto,
+    user: AuthUser,
+  ) {
+    await this.verifyAuditAccess(auditId, user);
+
+    const folder = await this.prisma.auditFolder.findUnique({ where: { id: folderId } });
+    if (!folder) throw new NotFoundException('Carpeta no encontrada');
+    if (folder.auditId !== auditId) throw new BadRequestException('La carpeta pertenece a otra auditoría');
+
+    // Auto-code: FILE-001, FILE-002…
+    const count = await this.prisma.workingPaper.count({ where: { auditId } });
+    const code = `FILE-${String(count + 1).padStart(3, '0')}`;
+
+    return this.prisma.workingPaper.create({
+      data: {
+        auditId,
+        folderId,
+        ref: dto.ref ?? null,
+        code,
+        indexSection: folder.ref ?? 'FILE',
+        title: dto.title,
+        type: this.mimeToWpType(dto.mimeType),
+        wpKind: WpKind.FILE,
+        status: WorkingPaperStatus.IN_PROGRESS,
+        fileUrl: dto.fileUrl,
+        originalFilename: dto.originalFilename,
+        mimeType: dto.mimeType,
+        fileSize: dto.fileSize ?? null,
+        preparedById: user.id,
+      },
+      select: PAPER_STUB_SELECT,
+    });
+  }
+
+  private mimeToWpType(mimeType: string): WorkingPaperType {
+    const m = mimeType.toLowerCase();
+    if (m.includes('spreadsheet') || m.includes('excel') || m.endsWith('.xls'))
+      return WorkingPaperType.SUBSTANTIVE_TEST;
+    if (m.includes('presentation') || m.includes('powerpoint'))
+      return WorkingPaperType.CLOSURE_CONCLUSION;
+    if (m.startsWith('audio/'))
+      return WorkingPaperType.INTERVIEW;
+    return WorkingPaperType.PLANNING_UNDERSTANDING; // Word / PDF / image / default
   }
 
   // ─── Asignar papel a carpeta ──────────────────────────────────────────────

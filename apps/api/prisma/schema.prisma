@@ -59,6 +59,7 @@ enum WpKind {
   SMART     // Secciones estructuradas tipadas — fuente de datos del grafo
   MASTER    // Consolida datos de múltiples PT — generado por IA + revisión humana
   LIVE      // Actualizado en tiempo real — no requiere aprobación manual
+  FILE      // Archivo adjunto (Word, Excel, PPT, PDF, Imagen, Audio) — Supabase Storage
 }
 
 // Estado de sincronización del grafo de conocimiento
@@ -701,6 +702,11 @@ model WorkingPaper {
   crossReferences Json               @default("[]")
   aiAssisted      Boolean            @default(false)
   parentPaperId   String?
+  // ─── Archivo adjunto (wpKind = FILE) ─────────────────────────────────────
+  fileUrl          String?           // Supabase Storage public URL
+  originalFilename String?           // Nombre original del archivo
+  mimeType         String?           // MIME type (application/vnd.openxmlformats...)
+  fileSize         Int?              // Tamaño en bytes
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 

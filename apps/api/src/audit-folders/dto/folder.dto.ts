@@ -120,3 +120,35 @@ export class ReorderFoldersDto {
   @ApiProperty({ description: 'Array of { id, sortOrder } pairs' })
   items: { id: string; sortOrder: number }[];
 }
+
+// ─── Archivo adjunto ──────────────────────────────────────────────────────────
+
+export class CreateFilePaperDto {
+  @ApiProperty({ example: 'Programa de Auditoría — Área 1' })
+  @IsString()
+  @MaxLength(300)
+  title: string;
+
+  @ApiPropertyOptional({ example: 'A-01' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  ref?: string;
+
+  @ApiProperty({ description: 'URL pública de Supabase Storage' })
+  @IsString()
+  fileUrl: string;
+
+  @ApiProperty({ example: 'programa_auditoria.xlsx' })
+  @IsString()
+  @MaxLength(300)
+  originalFilename: string;
+
+  @ApiProperty({ example: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  @IsString()
+  mimeType: string;
+
+  @ApiPropertyOptional({ description: 'Tamaño en bytes' })
+  @IsOptional()
+  fileSize?: number;
+}

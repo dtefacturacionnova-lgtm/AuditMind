@@ -8,13 +8,14 @@ import {
   MessageSquare, History, FileText, Network,
   Link2, Save, Sparkles, Loader2, X, Wand2,
   Brain, Star, Activity, AlertTriangle, RefreshCw, Zap,
+  Folder, ChevronRight, Calendar, User, RotateCcw,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
   useWorkingPaper, useUpdateWorkingPaper, useUpdateWpStatus,
   useAddTickMark, useRemoveTickMark, useAddWpComment, useResolveWpComment,
   useWpVersions,
-  WP_STATUS_CONFIG, WP_TYPE_CONFIG, TICK_MARK_CONFIG,
+  WP_STATUS_CONFIG, WP_STATUS_FLOW, WP_TYPE_CONFIG, TICK_MARK_CONFIG,
   WP_KIND_CONFIG, SYNC_STATUS_CONFIG,
   type WpStatus, type TickMarkKey, type WpKind, type WpSyncStatus,
 } from '@/hooks/useWorkingPapers';
@@ -366,24 +367,56 @@ function AddTickMarkForm({ onAdd, disabled }: {
 
 // ─── Status workflow ──────────────────────────────────────────────────────────
 
-const STATUS_TRANSITIONS: Record<WpStatus, WpStatus | null> = {
-  DRAFT:     'IN_REVIEW',
-  IN_REVIEW: 'APPROVED',
-  APPROVED:  'ARCHIVED',
-  ARCHIVED:  null,
+const STATUS_TRANSITIONS: Partial<Record<WpStatus, WpStatus>> = {
+  // Flujo nuevo (estándar industria)
+  NOT_STARTED:    'IN_PROGRESS',
+  IN_PROGRESS:    'PENDING_REVIEW',
+  PENDING_REVIEW: 'REVIEWED',
+  RETURNED:       'IN_PROGRESS',      // Volver a en proceso tras observación
+  REVIEWED:       'SIGNED_OFF',
+  SIGNED_OFF:     'CLOSED',
+  // Flujo legacy (compatibilidad)
+  DRAFT:          'IN_REVIEW',
+  IN_REVIEW:      'APPROVED',
+  APPROVED:       'ARCHIVED',
+};
+
+// Transición regresiva (devolver al preparador)
+const STATUS_RETURN: Partial<Record<WpStatus, WpStatus>> = {
+  PENDING_REVIEW: 'RETURNED',
+  IN_REVIEW:      'DRAFT',
 };
 
 const STATUS_ACTIONS: Partial<Record<WpStatus, string>> = {
-  DRAFT:     'Enviar a revisión',
-  IN_REVIEW: 'Aprobar',
-  APPROVED:  'Archivar (finalizar)',
+  NOT_STARTED:    'Iniciar trabajo',
+  IN_PROGRESS:    'Enviar a revisión',
+  PENDING_REVIEW: 'Marcar como revisado',
+  RETURNED:       'Re-enviar a revisión',
+  REVIEWED:       'Aprobar (firmar)',
+  SIGNED_OFF:     'Cerrar papel',
+  // Legacy
+  DRAFT:          'Enviar a revisión',
+  IN_REVIEW:      'Aprobar',
+  APPROVED:       'Archivar (finalizar)',
 };
 
-const STATUS_ICONS: Record<WpStatus, React.ElementType> = {
-  DRAFT:     Clock,
-  IN_REVIEW: AlertCircle,
-  APPROVED:  CheckCircle2,
-  ARCHIVED:  Lock,
+const STATUS_RETURN_LABEL: Partial<Record<WpStatus, string>> = {
+  PENDING_REVIEW: 'Devolver (observar)',
+  IN_REVIEW:      'Devolver al preparador',
+};
+
+const STATUS_ICONS: Partial<Record<WpStatus, React.ElementType>> = {
+  NOT_STARTED:    Clock,
+  IN_PROGRESS:    Activity,
+  PENDING_REVIEW: AlertCircle,
+  RETURNED:       AlertTriangle,
+  REVIEWED:       CheckCircle2,
+  SIGNED_OFF:     CheckCircle2,
+  CLOSED:         Lock,
+  DRAFT:          Clock,
+  IN_REVIEW:      AlertCircle,
+  APPROVED:       CheckCircle2,
+  ARCHIVED:       Lock,
 };
 
 // ─── WpKind badge ─────────────────────────────────────────────────────────────
@@ -554,10 +587,10 @@ export default function WpDetailPage() {
   const wpKind     = (wp.wpKind     ?? 'STANDARD') as WpKind;
   const syncStatus = (wp.syncStatus ?? 'DRAFT')    as WpSyncStatus;
 
-  const st         = WP_STATUS_CONFIG[wp.status];
+  const st         = WP_STATUS_CONFIG[wp.status] ?? WP_STATUS_CONFIG.IN_PROGRESS;
   const typeConf   = WP_TYPE_CONFIG[wp.type];
-  const nextStatus = STATUS_TRANSITIONS[wp.status];
-  const StatusIcon = STATUS_ICONS[wp.status];
+  const nextStatus = STATUS_TRANSITIONS[wp.status] ?? null;
+  const StatusIcon = STATUS_ICONS[wp.status] ?? Clock;
   const tickEntries = wp.tickEntries ?? [];
   const comments    = wp.comments ?? [];
   const findings    = wp.findings ?? [];
@@ -601,8 +634,9 @@ export default function WpDetailPage() {
     <div className="flex flex-col h-full">
       <Header
         breadcrumbs={[
-          { label: 'Papeles de Trabajo', href: '/dashboard/working-papers' },
-          { label: wp.code },
+          { label: 'Auditorías', href: '/dashboard/audits' },
+          ...(wp.audit ? [{ label: wp.audit.title, href: `/dashboard/audits/${wp.auditId}?tab=expediente` }] : []),
+          { label: wp.ref ?? wp.paperCode ?? wp.code },
         ]}
       />
 
@@ -610,63 +644,162 @@ export default function WpDetailPage() {
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-6xl mx-auto space-y-4">
 
-          {/* ── Paper header ── */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-            <div className="flex items-start gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
-                    {wp.paperCode ?? wp.code}
-                  </span>
-                  <span className={`text-xs font-medium ${typeConf.color}`}>{typeConf.label}</span>
-                  {/* wpKind badge */}
-                  <WpKindBadge wpKind={wpKind} />
-                  {/* syncStatus badge for SMART and MASTER */}
-                  {(wpKind === 'SMART' || wpKind === 'MASTER') && (
-                    <SyncStatusBadge syncStatus={syncStatus} />
-                  )}
-                  {wp.aiAssisted && (
-                    <span className="flex items-center gap-1 text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
-                      <Bot className="w-2.5 h-2.5" /> Asistido por IA
+          {/* ── Paper header — encabezado estándar de auditoría ── */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            {/* Franja superior: auditoría + ruta */}
+            <div className="bg-[#0F2D4A] px-5 py-2.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0 text-xs text-blue-200">
+                <FileText className="h-3.5 w-3.5 shrink-0 text-blue-300" />
+                <span className="font-semibold text-white truncate">{wp.audit?.title ?? '—'}</span>
+                {wp.folder && (
+                  <>
+                    <ChevronRight className="h-3 w-3 shrink-0 text-blue-400" />
+                    <Folder className="h-3 w-3 shrink-0 text-amber-300" />
+                    <span className="truncate text-blue-200">
+                      <span className="font-mono">{wp.folder.ref}</span>
+                      {' — '}{wp.folder.name}
                     </span>
-                  )}
-                </div>
-                <h1 className="text-lg font-bold text-gray-900">{wp.title}</h1>
-                <p className="text-xs text-gray-400 mt-1">
-                  {wp.audit?.title} · v{wp.version} · Actualizado {formatRelativeTime(wp.updatedAt)}
-                </p>
+                  </>
+                )}
               </div>
-              <div className="flex items-center gap-2 flex-wrap justify-end">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${st.bg} ${st.color}`}>
-                  <StatusIcon className="w-3.5 h-3.5" />
-                  {st.label}
-                </span>
-                {/* Agent panel toggle — always visible */}
+              <div className="flex items-center gap-2 shrink-0">
                 <PaperAgentButton
                   type={wp.type}
                   onClick={() => setAgentPanel(p => !p)}
                   active={showAgentPanel}
                 />
-                {wp.status === 'DRAFT' && wpKind === 'STANDARD' && (
+                {(wp.status === 'DRAFT' || wp.status === 'IN_PROGRESS') && wpKind === 'STANDARD' && (
                   <button
                     onClick={() => setScripto(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700"
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Generar borrador
+                    <Sparkles className="w-3 h-3" />
+                    Borrador IA
                   </button>
                 )}
                 {dirty && (
                   <button
                     onClick={handleSave}
                     disabled={updateWp.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-400 disabled:opacity-60"
                   >
-                    <Save className="w-3.5 h-3.5" />
-                    {updateWp.isPending ? 'Guardando...' : 'Guardar'}
+                    <Save className="w-3 h-3" />
+                    {updateWp.isPending ? 'Guardando…' : 'Guardar'}
                   </button>
                 )}
               </div>
+            </div>
+
+            {/* Cuerpo del encabezado */}
+            <div className="p-5">
+              {/* Ref + badges */}
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <span className="font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-lg text-sm">
+                  {wp.ref ?? wp.paperCode ?? wp.code}
+                </span>
+                <span className={`text-xs font-medium ${typeConf.color}`}>{typeConf.label}</span>
+                <WpKindBadge wpKind={wpKind} />
+                {(wpKind === 'SMART' || wpKind === 'MASTER') && (
+                  <SyncStatusBadge syncStatus={syncStatus} />
+                )}
+                {wp.aiAssisted && (
+                  <span className="flex items-center gap-1 text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+                    <Bot className="w-2.5 h-2.5" /> IA
+                  </span>
+                )}
+              </div>
+
+              {/* Título */}
+              <h1 className="text-lg font-bold text-gray-900 mb-3">{wp.title}</h1>
+
+              {/* Grid de metadatos */}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs sm:grid-cols-4">
+                <div>
+                  <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Elaborado por</p>
+                  <p className="text-gray-700 font-medium flex items-center gap-1 mt-0.5">
+                    <User className="h-3 w-3 text-gray-400" />
+                    {wp.preparedBy?.name ?? '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Revisado por</p>
+                  <p className="text-gray-700 font-medium flex items-center gap-1 mt-0.5">
+                    <User className="h-3 w-3 text-gray-400" />
+                    {wp.reviewedBy?.name ?? 'Sin asignar'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Período auditado</p>
+                  <p className="text-gray-700 font-medium flex items-center gap-1 mt-0.5">
+                    <Calendar className="h-3 w-3 text-gray-400" />
+                    {wp.periodStart
+                      ? `${formatDate(wp.periodStart)} — ${formatDate(wp.periodEnd ?? wp.periodStart)}`
+                      : '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Versión</p>
+                  <p className="text-gray-700 font-medium mt-0.5">
+                    v{wp.version} · {formatRelativeTime(wp.updatedAt)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Pipeline de estados */}
+              <div className="mt-4 flex items-center gap-1 flex-wrap">
+                {WP_STATUS_FLOW.map((s, i) => {
+                  const sCfg = WP_STATUS_CONFIG[s];
+                  const isActive  = wp.status === s;
+                  const isPast    = WP_STATUS_FLOW.indexOf(wp.status as WpStatus) > i;
+                  const isLegacy  = !WP_STATUS_FLOW.includes(wp.status as WpStatus);
+                  return (
+                    <div key={s} className="flex items-center gap-1">
+                      <span className={[
+                        'text-[11px] font-medium px-2 py-0.5 rounded-full border transition-all',
+                        isActive ? `${sCfg.bg} ${sCfg.color} ${sCfg.border} ring-2 ring-offset-1 ring-current` :
+                        isPast   ? 'bg-emerald-50 text-emerald-600 border-emerald-200 opacity-70' :
+                                   'bg-gray-50 text-gray-400 border-gray-200 opacity-50',
+                      ].join(' ')}>
+                        {isActive && '● '}{sCfg.label}
+                      </span>
+                      {i < WP_STATUS_FLOW.length - 1 && (
+                        <ChevronRight className="h-3 w-3 text-gray-300 shrink-0" />
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Mostrar estado legacy si no está en el nuevo flujo */}
+                {!WP_STATUS_FLOW.includes(wp.status as WpStatus) && (
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${st.bg} ${st.color}`}>
+                    ● {st.label}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Acciones de estado */}
+            <div className="border-t border-gray-100 px-5 py-3 flex items-center gap-2 flex-wrap bg-gray-50/50">
+              {nextStatus && (
+                <button
+                  onClick={() => handleStatusChange(nextStatus)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F2D4A] text-white text-xs font-medium rounded-lg hover:bg-[#1a4a7a]"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {STATUS_ACTIONS[wp.status] ?? 'Avanzar estado'}
+                </button>
+              )}
+              {STATUS_RETURN[wp.status] && (
+                <button
+                  onClick={() => handleStatusChange(STATUS_RETURN[wp.status]!)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-700 text-xs font-medium rounded-lg hover:bg-red-50"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  {STATUS_RETURN_LABEL[wp.status] ?? 'Devolver'}
+                </button>
+              )}
+              <span className="ml-auto text-xs text-gray-400">
+                {wp.qualityScore != null ? `Calidad: ${wp.qualityScore}/100` : ''}
+              </span>
             </div>
           </div>
 
@@ -868,33 +1001,7 @@ export default function WpDetailPage() {
                   </div>
                 </div>
 
-                {/* Workflow */}
-                {wp.status !== 'ARCHIVED' && nextStatus && (
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
-                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Workflow</p>
-                    {wp.status === 'IN_REVIEW' && (
-                      <textarea
-                        rows={2}
-                        value={reviewNotes}
-                        onChange={e => setRvNotes(e.target.value)}
-                        placeholder="Notas de revisión (opcionales)..."
-                        className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                      />
-                    )}
-                    <button
-                      onClick={() => handleStatusChange(nextStatus)}
-                      disabled={updateStatus.isPending}
-                      className="w-full py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-60"
-                    >
-                      {STATUS_ACTIONS[wp.status] ?? `→ ${WP_STATUS_CONFIG[nextStatus].label}`}
-                    </button>
-                    {wp.status === 'DRAFT' && (
-                      <p className="text-[10px] text-gray-400 text-center">
-                        El papel pasará a estado &ldquo;En Revisión&rdquo; para ser aprobado
-                      </p>
-                    )}
-                  </div>
-                )}
+                {/* Workflow — acciones de estado movidas al encabezado del papel */}
 
                 {/* Linked findings */}
                 {findings.length > 0 && (

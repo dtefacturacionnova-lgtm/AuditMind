@@ -4,7 +4,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-export type WpStatus     = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'ARCHIVED';
+// Legacy statuses (backward compat) + new industry-standard statuses
+export type WpStatus =
+  | 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'ARCHIVED'           // legacy
+  | 'NOT_STARTED' | 'IN_PROGRESS' | 'PENDING_REVIEW'          // new
+  | 'RETURNED' | 'REVIEWED' | 'SIGNED_OFF' | 'CLOSED';        // new
 export type WpKind       = 'STANDARD' | 'SMART' | 'MASTER' | 'LIVE';
 export type WpSyncStatus = 'DRAFT' | 'SYNCED' | 'STALE' | 'REGENERATING';
 export type WpType    =
@@ -88,11 +92,21 @@ export interface WorkingPaper {
   aiAssisted:     boolean;
   qualityScore?:  number;
   auditId:        string;
+  // ─── Nuevos campos del expediente ─────────────────────────────────────────
+  folderId?:      string;
+  ref?:           string;       // "A-01", "B-2.3"
+  periodStart?:   string;
+  periodEnd?:     string;
+  notesToReviewer?: string;
+  carryForward?:  boolean;
+  signedOffById?: string;
+  signedOffAt?:   string;
   preparedById?:  string;
   reviewedById?:  string;
   createdAt:      string;
   updatedAt:      string;
   audit?:         { id: string; title: string; type?: string; scope?: string };
+  folder?:        { id: string; ref: string; name: string; phaseId?: string };
   // ─── Intelligent Papers ────────────────────────────────────────────────────
   sections?:      WpPaperSection[];
   preparedBy?:    { id: string; name: string; avatarUrl?: string };
@@ -264,12 +278,27 @@ export const WP_TYPE_CONFIG: Record<WpType, { label: string; section: string; co
   NORMATIVE_ANALYSIS:     { label: 'Análisis Normativo',    section: 'N',  color: 'text-rose-700' },
 };
 
-export const WP_STATUS_CONFIG: Record<WpStatus, { label: string; color: string; bg: string }> = {
-  DRAFT:     { label: 'Borrador',    color: 'text-gray-600',    bg: 'bg-gray-100' },
-  IN_REVIEW: { label: 'En Revisión', color: 'text-amber-700',   bg: 'bg-amber-100' },
-  APPROVED:  { label: 'Aprobado',    color: 'text-emerald-700', bg: 'bg-emerald-100' },
-  ARCHIVED:  { label: 'Archivado',   color: 'text-gray-500',    bg: 'bg-gray-100' },
+export const WP_STATUS_CONFIG: Record<WpStatus, { label: string; color: string; bg: string; border?: string }> = {
+  // ─── Nuevos estados (flujo estándar industria) ────────────────────────────
+  NOT_STARTED:    { label: 'No Iniciado',   color: 'text-slate-500',   bg: 'bg-slate-100',   border: 'border-slate-200' },
+  IN_PROGRESS:    { label: 'En Proceso',    color: 'text-blue-700',    bg: 'bg-blue-50',     border: 'border-blue-200' },
+  PENDING_REVIEW: { label: 'En Revisión',   color: 'text-amber-700',   bg: 'bg-amber-100',   border: 'border-amber-200' },
+  RETURNED:       { label: 'Observado',     color: 'text-red-700',     bg: 'bg-red-50',      border: 'border-red-200' },
+  REVIEWED:       { label: 'Revisado',      color: 'text-indigo-700',  bg: 'bg-indigo-50',   border: 'border-indigo-200' },
+  SIGNED_OFF:     { label: 'Aprobado',      color: 'text-emerald-700', bg: 'bg-emerald-50',  border: 'border-emerald-200' },
+  CLOSED:         { label: 'Cerrado',       color: 'text-gray-500',    bg: 'bg-gray-100',    border: 'border-gray-200' },
+  // ─── Legacy (compatibilidad hacia atrás) ─────────────────────────────────
+  DRAFT:          { label: 'Borrador',      color: 'text-gray-600',    bg: 'bg-gray-100',    border: 'border-gray-200' },
+  IN_REVIEW:      { label: 'En Revisión',   color: 'text-amber-700',   bg: 'bg-amber-100',   border: 'border-amber-200' },
+  APPROVED:       { label: 'Aprobado',      color: 'text-emerald-700', bg: 'bg-emerald-100', border: 'border-emerald-200' },
+  ARCHIVED:       { label: 'Archivado',     color: 'text-gray-500',    bg: 'bg-gray-100',    border: 'border-gray-200' },
 };
+
+// Orden del flujo de estados para mostrar pipeline visual
+export const WP_STATUS_FLOW: WpStatus[] = [
+  'NOT_STARTED', 'IN_PROGRESS', 'PENDING_REVIEW', 'RETURNED',
+  'REVIEWED', 'SIGNED_OFF', 'CLOSED',
+];
 
 export const TICK_MARK_CONFIG: Record<TickMarkKey, { symbol: string; label: string; color: string }> = {
   VERIFIED:        { symbol: '√',  label: 'Verificado',               color: 'text-emerald-600' },

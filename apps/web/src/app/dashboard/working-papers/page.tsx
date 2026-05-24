@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   FileText, Search, Plus, ChevronRight, ChevronDown, Bot,
-  CheckCircle2, Clock, AlertCircle, Lock,
+  CheckCircle2, Clock, AlertCircle, AlertTriangle, Lock,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -24,11 +24,20 @@ const WP_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'ADMINISTRATIVE',        label: 'AD — Administrativo' },
 ];
 
-const STATUS_ICONS: Record<WpStatus, React.ElementType> = {
-  DRAFT:     Clock,
-  IN_REVIEW: AlertCircle,
-  APPROVED:  CheckCircle2,
-  ARCHIVED:  Lock,
+const STATUS_ICONS: Partial<Record<WpStatus, React.ElementType>> = {
+  // Legacy
+  DRAFT:          Clock,
+  IN_REVIEW:      AlertCircle,
+  APPROVED:       CheckCircle2,
+  ARCHIVED:       Lock,
+  // New
+  NOT_STARTED:    Clock,
+  IN_PROGRESS:    AlertCircle,
+  PENDING_REVIEW: AlertCircle,
+  RETURNED:       AlertTriangle,
+  REVIEWED:       CheckCircle2,
+  SIGNED_OFF:     CheckCircle2,
+  CLOSED:         Lock,
 };
 
 // ─── Create modal ─────────────────────────────────────────────────────────────
@@ -152,7 +161,7 @@ function SectionGroup({ sectionKey, papers }: { sectionKey: string; papers: Work
           {papers.map(wp => {
             const st      = WP_STATUS_CONFIG[wp.status];
             const typeConf = WP_TYPE_CONFIG[wp.type];
-            const StatusIcon = STATUS_ICONS[wp.status];
+            const StatusIcon = STATUS_ICONS[wp.status] ?? FileText;
             return (
               <Link
                 key={wp.id}

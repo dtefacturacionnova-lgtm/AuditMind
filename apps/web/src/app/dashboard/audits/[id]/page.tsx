@@ -14,6 +14,7 @@ import { useFindingsByAudit, SEVERITY_CONFIG, STATUS_CONFIG } from '@/hooks/useF
 import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
 import { MinervaAuditPanel } from '@/components/audits/MinervaAuditPanel';
+import { ExpedienteTab } from '@/components/audits/ExpedienteTab';
 
 const STATUS_STYLES: Record<string, string> = {
   PLANNING: 'bg-blue-100 text-blue-700 border border-blue-200',
@@ -42,7 +43,7 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-type Tab = 'overview' | 'team' | 'findings' | 'pbc' | 'confirmations';
+type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations';
 
 function StatCard({ icon: Icon, label, value, color }: {
   icon: React.ElementType;
@@ -105,10 +106,11 @@ export default function AuditDetailPage() {
     : 0;
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: 'overview', label: 'Resumen' },
-    { key: 'team', label: 'Equipo', count: audit.team?.length ?? 0 },
-    { key: 'findings', label: 'Hallazgos', count: audit._count?.findings ?? 0 },
-    { key: 'pbc', label: 'PBC', count: audit._count?.pbcRequests ?? 0 },
+    { key: 'overview',    label: 'Resumen' },
+    { key: 'expediente',  label: '📁 Expediente' },
+    { key: 'team',        label: 'Equipo',         count: audit.team?.length ?? 0 },
+    { key: 'findings',    label: 'Hallazgos',       count: audit._count?.findings ?? 0 },
+    { key: 'pbc',         label: 'PBC',             count: audit._count?.pbcRequests ?? 0 },
     { key: 'confirmations', label: 'Confirmaciones', count: audit._count?.externalConfirmations ?? 0 },
   ];
 
@@ -221,6 +223,15 @@ export default function AuditDetailPage() {
             <div className="p-6">
               {activeTab === 'overview' && (
                 <OverviewTab audit={audit} progressPct={progressPct} />
+              )}
+              {activeTab === 'expediente' && (
+                <ExpedienteTab
+                  auditId={id}
+                  auditTitle={audit.title}
+                  onCreatePaper={(folderId) => {
+                    router.push(`/dashboard/working-papers/new?auditId=${id}&folderId=${folderId}`);
+                  }}
+                />
               )}
               {activeTab === 'team' && (
                 <TeamTab team={audit.team ?? []} />

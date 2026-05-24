@@ -93,10 +93,34 @@ enum MappingType {
 }
 
 enum WorkingPaperStatus {
-  DRAFT
-  IN_REVIEW
-  APPROVED
-  ARCHIVED
+  // ─── Valores legacy (compatibilidad hacia atrás) ──────────────────────────
+  DRAFT      // → migrar a IN_PROGRESS
+  IN_REVIEW  // → migrar a PENDING_REVIEW
+  APPROVED   // → migrar a SIGNED_OFF
+  ARCHIVED   // → migrar a CLOSED
+  // ─── Nuevos valores (estándar industria: TeamMate+, CaseWare, AuditBoard) ─
+  NOT_STARTED    // No Iniciado   — papel creado, sin trabajo aún
+  IN_PROGRESS    // En Proceso    — auditor trabajando activamente
+  PENDING_REVIEW // En Revisión   — enviado al supervisor/revisor
+  RETURNED       // Observado     — revisor devolvió con comentarios
+  REVIEWED       // Revisado      — revisor aceptó el trabajo
+  SIGNED_OFF     // Aprobado      — firma final del gerente/CAE
+  CLOSED         // Cerrado       — auditoría cerrada, papel bloqueado
+}
+
+// ─── Fases del Proyecto de Auditoría ──────────────────────────────────────
+enum PhaseType {
+  PLANNING   // Planificación de la Auditoría
+  FIELDWORK  // Ejecución de la Auditoría
+  REPORTING  // Informe
+  FOLLOWUP   // Eventos Posteriores / Seguimiento
+}
+
+enum PhaseStatus {
+  PENDING      // Pendiente de inicio
+  IN_PROGRESS  // En curso
+  COMPLETE     // Completada y firmada
+  LOCKED       // Bloqueada — auditoría cerrada
 }
 
 enum FindingSeverity {
@@ -328,17 +352,19 @@ model User {
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
 
-  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  certifications  UserCertification[]
-  competencies    UserCompetency[]
-  cpeRecords      CpeRecord[]
-  auditTeams      AuditTeam[]
-  workingPapers   WorkingPaper[]        @relation("PreparedBy")
-  reviewedPapers  WorkingPaper[]        @relation("ReviewedBy")
-  findings        Finding[]             @relation("FindingResponsible")
-  aiInteractions  AIInteraction[]
-  notifications   Notification[]
-  dataSources     DataSource[]
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  certifications    UserCertification[]
+  competencies      UserCompetency[]
+  cpeRecords        CpeRecord[]
+  auditTeams        AuditTeam[]
+  workingPapers     WorkingPaper[]        @relation("PreparedBy")
+  reviewedPapers    WorkingPaper[]        @relation("ReviewedBy")
+  signedOffPapers   WorkingPaper[]        @relation("WpSignedOffBy")
+  signedOffPhases   AuditPhase[]          @relation("PhaseSignOff")
+  findings          Finding[]             @relation("FindingResponsible")
+  aiInteractions    AIInteraction[]
+  notifications     Notification[]
+  dataSources       DataSource[]
 
   @@index([organizationId])
   @@index([email])
@@ -544,11 +570,68 @@ model Audit {
   externalConfirmations  ExternalConfirmation[]
   bcpAudit               BcpAudit?
   connectorImports       ConnectorImport[]
+  // ─── Expediente de auditoría (fases y carpetas) ───────────────────────────
+  phases                 AuditPhase[]
+  folders                AuditFolder[]
 
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([leadAuditorId])
   @@map("audits")
+}
+
+// ─── EXPEDIENTE: Fase del proyecto de auditoría ───────────────────────────────
+// Agrupa carpetas y papeles. Actúa como "puerta de workflow":
+// no se puede avanzar a Ejecución sin cerrar Planificación.
+model AuditPhase {
+  id            String      @id @default(cuid())
+  auditId       String
+  phaseType     PhaseType
+  name          String      // Nombre display editable: "Planificación de la Auditoría"
+  order         Int         @default(0)
+  status        PhaseStatus @default(PENDING)
+  signedOffById String?
+  signedOffAt   DateTime?
+  startDate     DateTime?
+  targetDate    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  audit        Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  signedOffBy  User?        @relation("PhaseSignOff", fields: [signedOffById], references: [id])
+  folders      AuditFolder[]
+
+  @@unique([auditId, phaseType])
+  @@index([auditId])
+  @@map("audit_phases")
+}
+
+// ─── EXPEDIENTE: Carpeta / sub-carpeta (árbol libre, máx 3 niveles) ───────────
+// Los usuarios crean/renombran/eliminan carpetas a su gusto.
+// Al crear una auditoría desde plantilla, el sistema pre-carga la estructura.
+model AuditFolder {
+  id          String   @id @default(cuid())
+  auditId     String
+  phaseId     String?  // null = sin fase asignada (caso raro)
+  parentId    String?  // null = carpeta raíz de la fase
+  ref         String   // "A", "A-1", "A-1.2" — editable por usuario
+  name        String   // "Planificación", "Comunicación de Auditoría"
+  description String?
+  sortOrder   Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  audit    Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  phase    AuditPhase?  @relation(fields: [phaseId], references: [id])
+  parent   AuditFolder?  @relation("FolderTree", fields: [parentId], references: [id])
+  children AuditFolder[] @relation("FolderTree")
+  papers   WorkingPaper[]
+
+  @@index([auditId])
+  @@index([phaseId])
+  @@index([auditId, phaseId])
+  @@map("audit_folders")
 }
 
 model AuditTeam {
@@ -584,6 +667,10 @@ model AuditProgram {
 model WorkingPaper {
   id              String             @id @default(cuid())
   auditId         String
+  // ─── Expediente: ubicación en el árbol de carpetas ────────────────────────
+  folderId        String?            // null = papel sin carpeta asignada (legacy)
+  ref             String?            // "A-01", "B-2.3" — código editable por usuario
+  // ─── Identificadores legacy (mantener para compatibilidad) ────────────────
   code            String             // A-1, B-2, C-3, D-1, E-1, AD-1
   indexSection    String             // A | B | C | D | E | AD
   title           String
@@ -591,11 +678,19 @@ model WorkingPaper {
   // ─── Intelligent Papers ───────────────────────────────────────────────────
   wpKind          WpKind             @default(STANDARD)
   syncStatus      SyncStatus         @default(DRAFT)
-  lastSyncedAt    DateTime?          // Última vez consolidado
-  narrative       String?            // Narrativa generada por IA (PT Maestro)
-  paperCode       String?            // PT-A1, PT-MEMO, PT-PROG, etc.
-  // ─── Existing fields ─────────────────────────────────────────────────────
-  status          WorkingPaperStatus @default(DRAFT)
+  lastSyncedAt    DateTime?
+  narrative       String?
+  paperCode       String?
+  // ─── Encabezado estándar de papel de trabajo ──────────────────────────────
+  status          WorkingPaperStatus @default(IN_PROGRESS)
+  periodStart     DateTime?          // Inicio del período auditado
+  periodEnd       DateTime?          // Fin del período auditado
+  notesToReviewer String?            // Canal preparer → revisor
+  carryForward    Boolean            @default(false) // Copiar a próximo año
+  // ─── Firma adicional (Gerente / CAE) ─────────────────────────────────────
+  signedOffById   String?
+  signedOffAt     DateTime?
+  // ─── Campos existentes ───────────────────────────────────────────────────
   content         Json               @default("{}")
   conclusion      String?
   preparedById    String?
@@ -603,15 +698,17 @@ model WorkingPaper {
   qualityScore    Int?               // 0-100
   version         Int                @default(1)
   tickMarks       Json               @default("[]")
-  crossReferences Json               @default("[]") // [{paperId, code, description}]
+  crossReferences Json               @default("[]")
   aiAssisted      Boolean            @default(false)
   parentPaperId   String?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
   audit        Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  preparedBy   User?          @relation("PreparedBy", fields: [preparedById], references: [id])
-  reviewedBy   User?          @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  folder       AuditFolder?   @relation(fields: [folderId], references: [id])
+  preparedBy   User?          @relation("PreparedBy",   fields: [preparedById],  references: [id])
+  reviewedBy   User?          @relation("ReviewedBy",   fields: [reviewedById],  references: [id])
+  signedOffBy  User?          @relation("WpSignedOffBy", fields: [signedOffById], references: [id])
   parent       WorkingPaper?  @relation("PaperHierarchy", fields: [parentPaperId], references: [id])
   children     WorkingPaper[] @relation("PaperHierarchy")
   versions     WorkingPaperVersion[]
@@ -631,6 +728,7 @@ model WorkingPaper {
   @@index([auditId, type])
   @@index([auditId, wpKind])
   @@index([auditId, syncStatus])
+  @@index([folderId])
   @@map("working_papers")
 }
 

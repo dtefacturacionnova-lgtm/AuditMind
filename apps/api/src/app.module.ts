@@ -22,6 +22,7 @@ import { ReportsModule } from './reports/reports.module';
 import { AiModule } from './ai/ai.module';
 import { DataSourcesModule } from './data-sources/data-sources.module';
 import { RisksModule } from './risks/risks.module';
+import { AuditFoldersModule } from './audit-folders/audit-folders.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { RisksModule } from './risks/risks.module';
     AiModule,
     DataSourcesModule,
     RisksModule,
+    AuditFoldersModule,
   ],
   providers: [
     // Guards globales — aplican a todos los endpoints excepto los @Public()

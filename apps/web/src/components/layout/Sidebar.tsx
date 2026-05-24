@@ -7,6 +7,7 @@ import {
   FileText, LineChart, Bot, Leaf, BadgeCheck, Users2,
   ServerCrash, Settings, ChevronDown, ChevronRight,
   Building2, LogOut, Bell, Plug, BookOpen,
+  Briefcase, TrendingUp, FolderOpen,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -28,23 +29,36 @@ const NAV_ITEMS: NavItem[] = [
     href: '/dashboard',
     icon: LayoutDashboard,
   },
+  // ── Planificación Anual ───────────────────────────────────────────────────
   {
-    label: 'Planificación',
+    label: 'Planificación Anual',
     icon: CalendarDays,
     children: [
-      { label: 'Universo de Auditoría', href: '/dashboard/universe', icon: Globe },
-      { label: 'Plan Anual', href: '/dashboard/plans', icon: CalendarDays },
-      { label: 'Auditorías', href: '/dashboard/audits', icon: ClipboardList },
+      { label: 'Universo de Auditoría',     href: '/dashboard/universe', icon: Globe },
+      { label: 'Plan Anual',                href: '/dashboard/plans',   icon: CalendarDays },
+      { label: 'Auditorías Planificadas',   href: '/dashboard/audits',  icon: ClipboardList },
     ],
   },
+  // ── Ejecución del Plan Anual ──────────────────────────────────────────────
+  // "Ejecución" como grupo global confundía con la fase de ejecución de una
+  // auditoría específica. Ahora refleja la ejecución del PLAN ANUAL completo.
+  // Los Papeles de Trabajo se gestionan DENTRO de cada Proyecto de Auditoría.
   {
-    label: 'Ejecución',
-    icon: ClipboardList,
+    label: 'Ejecución del Plan Anual',
+    icon: Briefcase,
     children: [
-      { label: 'Papeles de Trabajo', href: '/dashboard/working-papers', icon: FileText },
-      { label: 'Hallazgos', href: '/dashboard/findings', icon: AlertTriangle },
-      { label: 'Portal Auditado (PBC)', href: '/dashboard/pbc', icon: Upload },
-      { label: 'Confirmaciones Ext.', href: '/dashboard/confirmations', icon: BadgeCheck },
+      { label: 'Proyectos de Auditoría', href: '/dashboard/audits',         icon: FolderOpen },
+      { label: 'Vista Global de Papeles', href: '/dashboard/working-papers', icon: FileText },
+    ],
+  },
+  // ── Seguimiento ───────────────────────────────────────────────────────────
+  {
+    label: 'Seguimiento',
+    icon: TrendingUp,
+    children: [
+      { label: 'Hallazgos',              href: '/dashboard/findings',      icon: AlertTriangle },
+      { label: 'Portal Auditado (PBC)',   href: '/dashboard/pbc',           icon: Upload },
+      { label: 'Confirmaciones Ext.',    href: '/dashboard/confirmations', icon: BadgeCheck },
     ],
   },
   {

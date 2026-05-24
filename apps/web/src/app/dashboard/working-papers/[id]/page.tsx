@@ -9,6 +9,8 @@ import {
   Link2, Save, Sparkles, Loader2, X, Wand2,
   Brain, Star, Activity, AlertTriangle, RefreshCw, Zap,
   Folder, ChevronRight, Calendar, User, RotateCcw,
+  Download, ExternalLink, FileSpreadsheet, Presentation, Music,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -419,6 +421,130 @@ const STATUS_ICONS: Partial<Record<WpStatus, React.ElementType>> = {
   ARCHIVED:       Lock,
 };
 
+// ─── FilePaperView ────────────────────────────────────────────────────────────
+// Vista especial para papeles de tipo FILE (Word/Excel/PPT/PDF/Imagen/Audio)
+
+function FilePaperView({ wp }: { wp: WorkingPaper }) {
+  const mime    = wp.mimeType ?? '';
+  const fileUrl = wp.fileUrl ?? '';
+
+  // Type detection
+  const isImage = mime.startsWith('image/');
+  const isPdf   = mime === 'application/pdf';
+  const isAudio = mime.startsWith('audio/');
+  const isWord  = mime.includes('word') || mime.includes('document');
+  const isExcel = mime.includes('spreadsheet') || mime.includes('excel') || mime.endsWith('.xls');
+  const isPpt   = mime.includes('presentation') || mime.includes('powerpoint');
+
+  // Icon + label
+  let TypeIcon: React.ElementType = FileText;
+  let iconCls = 'text-slate-400';
+  let typeLabel = 'Archivo';
+  if (isImage)  { TypeIcon = ImageIcon;       iconCls = 'text-pink-500';    typeLabel = 'Imagen'; }
+  else if (isPdf) { TypeIcon = FileText;      iconCls = 'text-red-500';     typeLabel = 'PDF'; }
+  else if (isAudio) { TypeIcon = Music;       iconCls = 'text-purple-500';  typeLabel = 'Audio'; }
+  else if (isWord)  { TypeIcon = FileText;    iconCls = 'text-blue-600';    typeLabel = 'Word'; }
+  else if (isExcel) { TypeIcon = FileSpreadsheet; iconCls = 'text-emerald-600'; typeLabel = 'Excel'; }
+  else if (isPpt)   { TypeIcon = Presentation;    iconCls = 'text-orange-500';  typeLabel = 'PowerPoint'; }
+
+  const fmtBytes = (b?: number | null) => {
+    if (!b) return '';
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+    return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <div className="space-y-4 p-6 max-w-3xl">
+      {/* Info card */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start gap-5">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
+            <TypeIcon className={`h-8 w-8 ${iconCls}`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-base font-semibold text-slate-800">
+              {wp.originalFilename ?? wp.title}
+            </p>
+            <div className="mt-1 flex items-center gap-2.5 text-sm text-slate-500">
+              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                {typeLabel}
+              </span>
+              {wp.fileSize && <span>{fmtBytes(wp.fileSize)}</span>}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {fileUrl && (
+                <a
+                  href={fileUrl}
+                  download={wp.originalFilename}
+                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  <Download className="h-4 w-4" /> Descargar archivo
+                </a>
+              )}
+              {fileUrl && (
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  <ExternalLink className="h-4 w-4" /> Abrir en nueva pestaña
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Preview zone */}
+      {isImage && fileUrl && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Vista previa</p>
+          <img
+            src={fileUrl}
+            alt={wp.originalFilename ?? wp.title}
+            className="mx-auto max-h-[500px] w-auto rounded-xl object-contain"
+          />
+        </div>
+      )}
+
+      {isPdf && fileUrl && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Vista previa</p>
+          <iframe
+            src={`${fileUrl}#toolbar=0`}
+            title={wp.originalFilename ?? wp.title}
+            className="h-[600px] w-full rounded-xl border border-slate-100"
+          />
+        </div>
+      )}
+
+      {isAudio && fileUrl && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Reproducir audio</p>
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio controls src={fileUrl} className="w-full" />
+        </div>
+      )}
+
+      {(isWord || isExcel || isPpt) && (
+        <div className="rounded-xl border border-slate-100 bg-slate-50 px-5 py-4 text-sm text-slate-500">
+          <span className="font-medium text-slate-700">Vista previa no disponible</span> para archivos {typeLabel}.
+          Usa el botón de descarga para abrirlo en{' '}
+          {isWord ? 'Microsoft Word' : isExcel ? 'Excel' : 'PowerPoint'}.
+        </div>
+      )}
+
+      {!isImage && !isPdf && !isAudio && !isWord && !isExcel && !isPpt && (
+        <div className="rounded-xl border border-slate-100 bg-slate-50 px-5 py-4 text-sm text-slate-500">
+          Usa el botón de descarga para abrir el archivo.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── WpKind badge ─────────────────────────────────────────────────────────────
 
 function WpKindBadge({ wpKind }: { wpKind: WpKind }) {
@@ -615,11 +741,12 @@ export default function WpDetailPage() {
   };
 
   // Determine which tabs to show
+  const isFilePaper     = wpKind === 'FILE';
   const showSectionsTab = wpKind === 'SMART';
   const showGraphTab    = wpKind === 'SMART' || wpKind === 'MASTER';
 
   const allTabs: { key: TabKey; label: string; icon: React.ElementType; show: boolean }[] = [
-    { key: 'content'  as TabKey, label: 'Contenido',   icon: FileText,       show: wpKind !== 'MASTER' && wpKind !== 'LIVE' },
+    { key: 'content'  as TabKey, label: 'Contenido',   icon: FileText,       show: !isFilePaper && wpKind !== 'MASTER' && wpKind !== 'LIVE' },
     { key: 'sections' as TabKey, label: 'Secciones',   icon: Brain,          show: showSectionsTab },
     { key: 'graph'    as TabKey, label: 'Grafo',        icon: Network,        show: showGraphTab },
     { key: 'review'   as TabKey, label: `Revisión${openComments.length ? ` (${openComments.length})` : ''}`, icon: MessageSquare, show: true },
@@ -669,7 +796,7 @@ export default function WpDetailPage() {
                   onClick={() => setAgentPanel(p => !p)}
                   active={showAgentPanel}
                 />
-                {(wp.status === 'DRAFT' || wp.status === 'IN_PROGRESS') && wpKind === 'STANDARD' && (
+                {(wp.status === 'DRAFT' || wp.status === 'IN_PROGRESS') && wpKind === 'STANDARD' && !isFilePaper && (
                   <button
                     onClick={() => setScripto(true)}
                     className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700"
@@ -864,6 +991,11 @@ export default function WpDetailPage() {
               </button>
             ))}
           </div>
+
+          {/* ── FILE paper view ── */}
+          {isFilePaper && effectiveTab !== 'review' && effectiveTab !== 'history' && (
+            <FilePaperView wp={wp} />
+          )}
 
           {/* ── MASTER paper view ── */}
           {wpKind === 'MASTER' && (

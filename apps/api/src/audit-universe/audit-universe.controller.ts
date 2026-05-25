@@ -53,6 +53,14 @@ export class AuditUniverseController {
     return this.service.getRiskSummary(user);
   }
 
+  // Static routes MUST come before @Get(':id') to avoid NestJS matching them as params
+  @Get('tree')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Árbol jerárquico de entidades (organigrama)' })
+  getEntityTree(@CurrentUser() user: AuthUser) {
+    return this.service.getEntityTree(user);
+  }
+
   @Get(':id')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Obtener entidad con unidades auditables' })
@@ -72,13 +80,6 @@ export class AuditUniverseController {
   @ApiOperation({ summary: 'Desactivar entidad auditable' })
   remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.remove(id, user);
-  }
-
-  @Get('tree')
-  @Roles(UserRole.AUDITOR)
-  @ApiOperation({ summary: 'Árbol jerárquico de entidades (organigrama)' })
-  getEntityTree(@CurrentUser() user: AuthUser) {
-    return this.service.getEntityTree(user);
   }
 
   // ─── AuditProcess ─────────────────────────────────────────────────────────

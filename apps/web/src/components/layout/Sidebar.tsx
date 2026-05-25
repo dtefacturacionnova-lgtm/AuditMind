@@ -7,7 +7,7 @@ import {
   FileText, LineChart, Bot, Leaf, BadgeCheck, Users2,
   ServerCrash, Settings, ChevronDown, ChevronRight,
   Building2, LogOut, Bell, Plug, BookOpen,
-  Briefcase, TrendingUp, FolderOpen, ListTree,
+  Briefcase, TrendingUp, FolderOpen, ListTree, Target,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -34,9 +34,10 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Planificación Anual',
     icon: CalendarDays,
     children: [
-      { label: 'Universo de Auditoría',     href: '/dashboard/universe', icon: Globe },
-      { label: 'Plan Anual',                href: '/dashboard/plans',   icon: CalendarDays },
-      { label: 'Auditorías Planificadas',   href: '/dashboard/audits',  icon: ClipboardList },
+      { label: 'Plan Estratégico',          href: '/dashboard/strategic', icon: Target },
+      { label: 'Universo de Auditoría',     href: '/dashboard/universe',  icon: Globe },
+      { label: 'Plan Anual',                href: '/dashboard/plans',     icon: CalendarDays },
+      { label: 'Auditorías Planificadas',   href: '/dashboard/audits',    icon: ClipboardList },
     ],
   },
   // ── Ejecución del Plan Anual ──────────────────────────────────────────────

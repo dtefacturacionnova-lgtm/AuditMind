@@ -378,6 +378,9 @@ model Organization {
   indexTemplates         IndexTemplate[]
   entityTypeConfigs      EntityTypeConfig[]
   processCategoryConfigs ProcessCategoryConfig[]
+  strategicObjectives    StrategicObjective[]
+  strategicLines         StrategicLine[]
+  auditProjects         AuditProject[]
 
   @@map("organizations")
 }
@@ -506,7 +509,9 @@ model AuditEntity {
   audits          Audit[]
   planItems       AuditPlanItem[]
   riskRegisters   RiskRegister[]
-  auditableUnits  AuditableUnit[]
+  auditableUnits        AuditableUnit[]
+  projectsAsResponsible AuditProject[] @relation("ProjectResponsible")
+  projectsAsSupport     AuditProject[] @relation("ProjectSupport")
 
   @@index([organizationId])
   @@index([organizationId, entityType])
@@ -552,6 +557,102 @@ model ProcessCategoryConfig {
   @@unique([organizationId, code])
   @@index([organizationId])
   @@map("process_category_configs")
+}
+
+// ─── PLAN ESTRATÉGICO ─────────────────────────────────────────────────────────
+model StrategicObjective {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String   // OE-1, OE-2…
+  name           String
+  description    String?
+  color          String   @default("blue")  // blue|green|amber|rose|purple|teal|orange|indigo
+  icon           String   @default("🎯")
+  sortOrder      Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines         StrategicLine[]
+  auditProjects AuditProject[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("strategic_objectives")
+}
+
+model StrategicLine {
+  id             String   @id @default(cuid())
+  organizationId String
+  objectiveId    String
+  code           String   // LE-1.1, LE-1.2…
+  name           String
+  description    String?
+  sortOrder      Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  objective     StrategicObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  auditProjects AuditProject[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([objectiveId])
+  @@map("strategic_lines")
+}
+
+// ─── BANCO DE PROYECTOS DE AUDITORÍA ─────────────────────────────────────────
+model AuditProject {
+  id             String   @id @default(cuid())
+  organizationId String
+  correlative    String   // "BAP-001"
+  name           String
+  planYear       Int      // año del plan (histórico o actual)
+
+  // Tab 1 — Identificación
+  strategicObjectiveId String?
+  strategicLineId      String?
+  responsibleEntityId  String?  // área responsable (del organigrama)
+  supportEntityId      String?  // área de apoyo (del organigrama)
+  riskCategory         String?  // 8 categorías predefinidas
+  notes                String?
+
+  // Tab 2 — Evaluación de Riesgo (escala 1–4)
+  areaScore         Float?  // score 0–100 del área (se mapea a 1-4)
+  strategicImpact   Int?    // 1=Nulo 2=Bajo 3=Directo 4=Crítico
+  operationalImpact Int?    // 1=Nulo 2=Menor 3=Moderado 4=Paralizante
+  legalRequirement  Int?    // 1=No aplica 2=Recomendación 3=Norma 4=Ley
+  lastAuditAge      Int?    // 1=<12m 2=12-24m 3=24-36m 4=>36m/Nunca
+  riskPerception    Int?    // 1=Bajo 2=Moderado 3=Alto 4=Crítico
+  finalRiskScore    Float?  // 1.0–4.0 calculado automáticamente
+  finalRiskLevel    String? // BAJO|MEDIO|ALTO|CRITICO
+  includeInPlan     Boolean @default(false)
+  targetPlanYear    Int?    // año del plan anual donde se incluirá
+
+  // Tab 3 — Planificación de recursos
+  legalBasis       String?
+  frequencyPerYear Int?    @default(1)
+  plannedHours     Float?
+  teamJson         Json?   // [{role,count,costPerHour,hours}]
+  totalBudget      Float?
+
+  status    String   @default("DRAFT") // DRAFT|ACTIVE|ARCHIVED
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization       Organization        @relation(fields: [organizationId],       references: [id], onDelete: Cascade)
+  strategicObjective StrategicObjective? @relation(fields: [strategicObjectiveId], references: [id])
+  strategicLine      StrategicLine?      @relation(fields: [strategicLineId],      references: [id])
+  responsibleEntity  AuditEntity?        @relation("ProjectResponsible", fields: [responsibleEntityId], references: [id])
+  supportEntity      AuditEntity?        @relation("ProjectSupport",      fields: [supportEntityId],      references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, planYear])
+  @@map("audit_projects")
 }
 
 // ─── CATÁLOGO DE PROCESOS ─────────────────────────────────────────────────────

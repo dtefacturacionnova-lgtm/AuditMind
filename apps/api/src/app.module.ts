@@ -25,6 +25,8 @@ import { RisksModule } from './risks/risks.module';
 import { AuditFoldersModule } from './audit-folders/audit-folders.module';
 import { IndexTemplatesModule } from './index-templates/index-templates.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
+import { StrategicModule } from './strategic/strategic.module';
+import { AuditProjectsModule } from './audit-projects/audit-projects.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { CatalogsModule } from './catalogs/catalogs.module';
     AuditFoldersModule,
     IndexTemplatesModule,
     CatalogsModule,
+    StrategicModule,
+    AuditProjectsModule,
   ],
   providers: [
     // Guards globales — aplican a todos los endpoints excepto los @Public()

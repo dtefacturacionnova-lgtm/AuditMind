@@ -560,7 +560,7 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
 
 function EntityCard({
   node, depth, isLast, ancestorIsLast,
-  onAddChild, onEdit, onDelete, onSelect, isSelected,
+  onAddChild, onEdit, onDelete, onSelect, selectedId,
   catalog,
 }: {
   node: AuditEntityNode;
@@ -571,7 +571,7 @@ function EntityCard({
   onEdit: (node: AuditEntityNode) => void;
   onDelete: (id: string) => void;
   onSelect: (node: AuditEntityNode) => void;
-  isSelected: boolean;
+  selectedId: string | undefined;
   catalog: EntityTypeConfig[];
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
@@ -622,7 +622,7 @@ function EntityCard({
           'flex-1 mb-1.5 rounded-lg border border-slate-200 border-l-[3px] bg-white shadow-sm',
           'hover:shadow-md transition-shadow cursor-pointer',
           accentBorder,
-          isSelected && 'ring-2 ring-blue-400 ring-offset-1 shadow-md',
+          node.id === selectedId && 'ring-2 ring-blue-400 ring-offset-1 shadow-md',
         )}
           onClick={() => onSelect(node)}
         >
@@ -716,7 +716,7 @@ function EntityCard({
               onEdit={onEdit}
               onDelete={onDelete}
               onSelect={onSelect}
-              isSelected={isSelected}
+              selectedId={selectedId}
               catalog={catalog}
             />
           ))}
@@ -726,9 +726,9 @@ function EntityCard({
   );
 }
 
-// ─── EntityDetailPanel ────────────────────────────────────────────────────────
+// ─── EntityDetailModal ────────────────────────────────────────────────────────
 
-function EntityDetailPanel({
+function EntityDetailModal({
   node, catalog, onEdit, onAddChild, onClose,
 }: {
   node: AuditEntityNode;
@@ -745,168 +745,210 @@ function EntityDetailPanel({
   const rl = rs > 0 ? RISK_LEVEL_CONFIG[riskLevel as keyof typeof RISK_LEVEL_CONFIG] : null;
   const statusCfg = STATUS_CONFIG[node.status ?? 'ACTIVE'] ?? STATUS_CONFIG['ACTIVE'];
 
+  const hasContactInfo = node.responsible || node.contactEmail || node.contactPhone || node.location;
+
   return (
-    <div className="w-80 shrink-0 flex flex-col border-l border-slate-200 bg-white overflow-hidden">
-      {/* Header */}
-      <div className={cn('px-4 py-3 border-b border-slate-200 border-l-4', accentBorder)}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-lg">{etConfig.icon}</span>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(2px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        style={{ maxHeight: '85vh', animation: 'modalIn 0.18s ease-out' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Styled header with color accent */}
+        <div className={cn('border-l-4 px-5 py-4 flex items-start justify-between gap-3 bg-slate-50', accentBorder)}>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-2xl shrink-0">{etConfig.icon}</span>
             <div className="min-w-0">
-              <h3 className="font-semibold text-sm text-slate-900 truncate">{node.name}</h3>
-              <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium inline-block mt-0.5', etConfig.color)}>
-                {etConfig.label}
-              </span>
+              <h2 className="font-bold text-base text-slate-900 leading-tight">{node.name}</h2>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className={cn('text-[11px] px-2 py-0.5 rounded-full font-medium', etConfig.color)}>
+                  {etConfig.label}
+                </span>
+                <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                  <span className={cn('w-1.5 h-1.5 rounded-full', statusCfg.dot)} />
+                  {statusCfg.label}
+                </span>
+                {rl && rs > 0 && (
+                  <span className={cn('text-[11px] px-2 py-0.5 rounded-full font-medium border', rl.bg, rl.color, rl.border)}>
+                    Riesgo {rl.label}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 shrink-0">
-            <X className="h-3.5 w-3.5 text-slate-400" />
+          <button
+            onClick={onClose}
+            className="shrink-0 p-1.5 rounded-lg hover:bg-slate-200 transition-colors"
+          >
+            <X className="h-4 w-4 text-slate-500" />
           </button>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
-        {/* Status + Risk */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-50 border border-slate-200 text-xs">
-            <span className={cn('w-2 h-2 rounded-full', statusCfg.dot)} />
-            {statusCfg.label}
-          </span>
-          {rl && rs > 0 && (
-            <span className={cn('px-2 py-1 rounded-full text-xs font-medium border', rl.bg, rl.color, rl.border)}>
-              Riesgo {rl.label}
-            </span>
+        {/* Scrollable content */}
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+
+          {/* Objective */}
+          {node.objective && (
+            <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500 mb-1">Objetivo General</p>
+              <p className="text-sm text-blue-900 leading-relaxed">{node.objective}</p>
+            </div>
           )}
-        </div>
 
-        {/* Objective */}
-        {node.objective && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Objetivo General</p>
-            <p className="text-xs text-slate-700 leading-relaxed">{node.objective}</p>
+          {/* Description */}
+          {node.description && !node.objective && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Descripción</p>
+              <p className="text-sm text-slate-700 leading-relaxed">{node.description}</p>
+            </div>
+          )}
+
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-2">
+            {(node.employeeCount ?? 0) > 0 && (
+              <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-3 text-center">
+                <p className="text-xl font-bold text-slate-900">{node.employeeCount}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Empleados</p>
+              </div>
+            )}
+            <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-3 text-center">
+              <p className="text-xl font-bold text-slate-900">{node._count?.auditableUnits ?? 0}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Unid. audit.</p>
+            </div>
+            {(node._count?.audits ?? 0) > 0 && (
+              <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-3 text-center">
+                <p className="text-xl font-bold text-slate-900">{node._count?.audits}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">Auditorías</p>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Description */}
-        {node.description && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Descripción</p>
-            <p className="text-xs text-slate-700 leading-relaxed">{node.description}</p>
-          </div>
-        )}
-
-        {/* Contact info */}
-        <div className="space-y-1.5">
-          {node.responsible && (
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <Users className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-              <span>{node.responsible}</span>
-            </div>
-          )}
-          {node.contactEmail && (
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-              <a href={`mailto:${node.contactEmail}`} className="hover:text-blue-600 hover:underline truncate">
-                {node.contactEmail}
-              </a>
-            </div>
-          )}
-          {node.contactPhone && (
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-              <span>{node.contactPhone}</span>
-            </div>
-          )}
-          {node.location && (
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-              <span>{node.location}{node.sector ? ` · ${node.sector}` : ''}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-2">
-          {(node.employeeCount ?? 0) > 0 && (
-            <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-center">
-              <p className="text-base font-bold text-slate-900">{node.employeeCount}</p>
-              <p className="text-[10px] text-slate-500">Empleados</p>
-            </div>
-          )}
-          <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-center">
-            <p className="text-base font-bold text-slate-900">{node._count?.auditableUnits ?? 0}</p>
-            <p className="text-[10px] text-slate-500">Unidades audit.</p>
-          </div>
-          {(node._count?.audits ?? 0) > 0 && (
-            <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-center">
-              <p className="text-base font-bold text-slate-900">{node._count?.audits ?? 0}</p>
-              <p className="text-[10px] text-slate-500">Auditorías</p>
-            </div>
-          )}
-          {node.budget && (
-            <div className="col-span-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
-              <div className="flex items-center gap-1.5">
-                <DollarSign className="h-3.5 w-3.5 text-slate-400" />
-                <div>
-                  <p className="text-xs font-medium text-slate-700">{node.budget}</p>
-                  <p className="text-[10px] text-slate-400">Presupuesto anual</p>
+          {/* Contact / location info */}
+          {hasContactInfo && (
+            <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+              {node.responsible && (
+                <div className="flex items-center gap-3 px-4 py-2.5">
+                  <Users className="h-4 w-4 text-slate-400 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-slate-400">Responsable</p>
+                    <p className="text-sm font-medium text-slate-800">{node.responsible}</p>
+                  </div>
                 </div>
+              )}
+              {node.contactEmail && (
+                <div className="flex items-center gap-3 px-4 py-2.5">
+                  <Mail className="h-4 w-4 text-slate-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-slate-400">Email</p>
+                    <a href={`mailto:${node.contactEmail}`}
+                      className="text-sm text-blue-600 hover:underline truncate block">
+                      {node.contactEmail}
+                    </a>
+                  </div>
+                </div>
+              )}
+              {node.contactPhone && (
+                <div className="flex items-center gap-3 px-4 py-2.5">
+                  <Phone className="h-4 w-4 text-slate-400 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-slate-400">Teléfono</p>
+                    <p className="text-sm text-slate-800">{node.contactPhone}</p>
+                  </div>
+                </div>
+              )}
+              {node.location && (
+                <div className="flex items-center gap-3 px-4 py-2.5">
+                  <MapPin className="h-4 w-4 text-slate-400 shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-slate-400">Ubicación</p>
+                    <p className="text-sm text-slate-800">{node.location}{node.sector ? ` · ${node.sector}` : ''}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Budget */}
+          {node.budget && (
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3">
+              <DollarSign className="h-4 w-4 text-slate-400 shrink-0" />
+              <div>
+                <p className="text-[10px] text-slate-400">Presupuesto anual</p>
+                <p className="text-sm font-semibold text-slate-800">{node.budget}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Regulations */}
+          {(node.applicableRegulations?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Regulaciones aplicables</p>
+              <div className="flex flex-wrap gap-1.5">
+                {node.applicableRegulations!.map((r, i) => (
+                  <span key={i} className="px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                    {r}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Children summary */}
+          {node.children.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Sub-entidades ({node.children.length})
+              </p>
+              <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                {node.children.slice(0, 6).map(child => {
+                  const childCfg = resolveTypeConfig(child.entityType, catalog);
+                  return (
+                    <div key={child.id} className="flex items-center gap-2.5 px-4 py-2">
+                      <span className="text-sm">{childCfg.icon}</span>
+                      <span className="flex-1 text-sm text-slate-700 truncate">{child.name}</span>
+                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium', childCfg.color)}>
+                        {childCfg.label}
+                      </span>
+                    </div>
+                  );
+                })}
+                {node.children.length > 6 && (
+                  <div className="px-4 py-2 text-[11px] text-slate-400">
+                    +{node.children.length - 6} sub-entidades más
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Regulations */}
-        {(node.applicableRegulations?.length ?? 0) > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Regulaciones</p>
-            <div className="flex flex-wrap gap-1">
-              {node.applicableRegulations!.map((r, i) => (
-                <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
-                  {r}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Children summary */}
-        {node.children.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
-              Sub-entidades ({node.children.length})
-            </p>
-            <div className="space-y-1">
-              {node.children.slice(0, 5).map(child => {
-                const childCfg = resolveTypeConfig(child.entityType, catalog);
-                return (
-                  <div key={child.id} className="flex items-center gap-2 text-xs text-slate-600">
-                    <span>{childCfg.icon}</span>
-                    <span className="flex-1 truncate">{child.name}</span>
-                    <span className={cn('text-[9px] px-1 rounded', childCfg.color)}>{childCfg.label}</span>
-                  </div>
-                );
-              })}
-              {node.children.length > 5 && (
-                <p className="text-[10px] text-slate-400">+{node.children.length - 5} más</p>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Footer actions */}
+        <div className="shrink-0 border-t border-slate-100 px-5 py-3 flex gap-2 bg-slate-50/60">
+          <button
+            onClick={() => { onAddChild(node.id, node.name); onClose(); }}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> Agregar sub-entidad
+          </button>
+          <button
+            onClick={() => { onEdit(node); onClose(); }}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+          >
+            <Edit2 className="h-3.5 w-3.5" /> Editar entidad
+          </button>
+        </div>
       </div>
 
-      {/* Actions */}
-      <div className="shrink-0 border-t border-slate-200 p-3 flex gap-2">
-        <button onClick={() => onAddChild(node.id, node.name)}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 transition-colors">
-          <Plus className="h-3.5 w-3.5" /> Sub-entidad
-        </button>
-        <button onClick={() => onEdit(node)}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs hover:bg-blue-700 transition-colors">
-          <Edit2 className="h-3.5 w-3.5" /> Editar
-        </button>
-      </div>
+      <style>{`
+        @keyframes modalIn {
+          from { opacity: 0; transform: scale(0.96) translateY(8px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0);   }
+        }
+      `}</style>
     </div>
   );
 }
@@ -917,7 +959,7 @@ function EntityTreeView() {
   const { data: tree = [], isLoading } = useEntityTree();
   const { data: catalog = [] } = useEntityTypeConfigs();
   const deleteEntity = useDeleteAuditEntity();
-  const [selectedNode, setSelectedNode] = useState<AuditEntityNode | null>(null);
+  const [detailNode, setDetailNode] = useState<AuditEntityNode | null>(null);
 
   type ModalState =
     | { mode: 'add'; parentId?: string; parentName?: string }
@@ -950,42 +992,34 @@ function EntityTreeView() {
           </button>
         </div>
       ) : (
-        <div className="flex gap-0 rounded-xl border border-slate-200 overflow-hidden bg-white">
-          {/* Tree panel */}
-          <div className={cn('flex-1 p-3 overflow-auto', selectedNode ? 'min-w-0' : '')}>
-            {tree.map((root, idx) => (
-              <EntityCard
-                key={root.id}
-                node={root}
-                depth={0}
-                isLast={idx === tree.length - 1}
-                ancestorIsLast={[]}
-                onAddChild={(id, name) => setModal({ mode: 'add', parentId: id, parentName: name })}
-                onEdit={(node) => setModal({ mode: 'edit', node })}
-                onDelete={(id) => { deleteEntity.mutate(id); if (selectedNode?.id === id) setSelectedNode(null); }}
-                onSelect={(node) => setSelectedNode(prev => prev?.id === node.id ? null : node)}
-                isSelected={selectedNode?.id === root.id}
-                catalog={catalog}
-              />
-            ))}
-            {selectedNode === null && (
-              <p className="mt-3 text-center text-[11px] text-slate-300">
-                Haz clic en una entidad para ver sus detalles
-              </p>
-            )}
-          </div>
-
-          {/* Detail panel */}
-          {selectedNode && (
-            <EntityDetailPanel
-              node={selectedNode}
-              catalog={catalog}
-              onEdit={(node) => setModal({ mode: 'edit', node })}
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          {tree.map((root, idx) => (
+            <EntityCard
+              key={root.id}
+              node={root}
+              depth={0}
+              isLast={idx === tree.length - 1}
+              ancestorIsLast={[]}
               onAddChild={(id, name) => setModal({ mode: 'add', parentId: id, parentName: name })}
-              onClose={() => setSelectedNode(null)}
+              onEdit={(node) => setModal({ mode: 'edit', node })}
+              onDelete={(id) => { deleteEntity.mutate(id); if (detailNode?.id === id) setDetailNode(null); }}
+              onSelect={(node) => setDetailNode(prev => prev?.id === node.id ? null : node)}
+              selectedId={detailNode?.id}
+              catalog={catalog}
             />
-          )}
+          ))}
         </div>
+      )}
+
+      {/* Detail overlay modal */}
+      {detailNode && (
+        <EntityDetailModal
+          node={detailNode}
+          catalog={catalog}
+          onEdit={(node) => { setModal({ mode: 'edit', node }); setDetailNode(null); }}
+          onAddChild={(id, name) => { setModal({ mode: 'add', parentId: id, parentName: name }); setDetailNode(null); }}
+          onClose={() => setDetailNode(null)}
+        />
       )}
 
       {modal?.mode === 'add' && (

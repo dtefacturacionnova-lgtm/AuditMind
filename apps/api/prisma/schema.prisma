@@ -39,6 +39,36 @@ enum AuditStatus {
   REVIEW
   CLOSED
   CANCELLED
+  DEFERRED   // Postergada a período futuro (con justificación)
+}
+
+enum AuditEntityType {
+  PROCESS         // Proceso de negocio (Compras, Nómina, etc.)
+  BUSINESS_UNIT   // Área / Departamento / División
+  LEGAL_ENTITY    // Entidad legal / Subsidiaria
+  LOCATION        // Sucursal / Planta / Región
+  IT_SYSTEM       // Sistema / Aplicación TI
+  IT_GC           // Dominio de Controles Generales TI
+  PROJECT         // Proyecto / Programa
+  VENDOR          // Proveedor / Tercero crítico
+  REGULATORY      // Dominio regulatorio
+  STRATEGIC       // Objetivo estratégico
+}
+
+enum AuditOriginType {
+  PLANNED              // Originado del Plan Anual aprobado
+  UNPLANNED            // Riesgo emergente — agregado mid-year
+  MANAGEMENT_REQUEST   // Solicitado por gerencia / junta
+  REGULATORY_MANDATE   // Mandato regulatorio / legal
+  FOLLOW_UP            // Seguimiento de hallazgos previos
+}
+
+enum AuditOpinion {
+  SATISFACTORY        // Sin observaciones significativas
+  NEEDS_IMPROVEMENT   // Oportunidades de mejora identificadas
+  UNSATISFACTORY      // Deficiencias significativas
+  CRITICAL            // Deficiencias críticas — acción inmediata
+  NOT_RATED           // Sin calificación (advisory / especial)
 }
 
 enum WorkingPaperType {
@@ -313,6 +343,8 @@ model Organization {
   // Relations
   users                  User[]
   auditEntities          AuditEntity[]
+  auditProcesses         AuditProcess[]
+  auditableUnits         AuditableUnit[]
   auditPlans             AuditPlan[]
   audits                 Audit[]
   riskRegisters          RiskRegister[]
@@ -364,6 +396,7 @@ model User {
   signedOffPapers       WorkingPaper[]        @relation("WpSignedOffBy")
   signedOffPhases       AuditPhase[]          @relation("PhaseSignOff")
   createdIndexTemplates IndexTemplate[]       @relation("IndexTemplateCreator")
+  ownedEntities     AuditEntity[]         @relation("EntityOwner")
   findings          Finding[]             @relation("FindingResponsible")
   aiInteractions    AIInteraction[]
   notifications     Notification[]
@@ -424,52 +457,169 @@ model CpeRecord {
 // ─── MÓDULO 02: UNIVERSO DE AUDITORÍA ─────────────────────────────────────────
 
 model AuditEntity {
-  id                          String   @id @default(cuid())
+  id                          String          @id @default(cuid())
   organizationId              String
   name                        String
   description                 String?
-  category                    String   // Proceso, Departamento, Sistema, Sucursal, etc.
+  entityType                  AuditEntityType @default(BUSINESS_UNIT)
+  category                    String?         // campo libre legado / sub-categoría
   parentEntityId              String?
-  responsible                 String?
+  // Dueño del proceso (negocio)
+  ownerId                     String?
+  responsible                 String?         // legado — texto libre
   location                    String?
   sector                      String?
-  relatedSystems              Json     @default("[]")
-  inherentRiskScore           Int      @default(50) // 1-100
+  relatedSystems              Json            @default("[]")
+  applicableRegulations       Json            @default("[]") // ["SOX","GDPR","DORA",...]
+  inherentRiskScore           Int             @default(50)   // 1-100 (legado — scoring simple)
   lastAuditDate               DateTime?
-  recommendedFrequencyMonths  Int      @default(12)
-  active                      Boolean  @default(true)
-  excluded                    Boolean  @default(false)
+  recommendedFrequencyMonths  Int             @default(12)
+  active                      Boolean         @default(true)
+  excluded                    Boolean         @default(false)
   exclusionJustification      String?
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
 
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent         AuditEntity?  @relation("EntityHierarchy", fields: [parentEntityId], references: [id])
-  children       AuditEntity[] @relation("EntityHierarchy")
-  audits         Audit[]
-  planItems      AuditPlanItem[]
-  riskRegisters  RiskRegister[]
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner           User?           @relation("EntityOwner", fields: [ownerId], references: [id])
+  parent          AuditEntity?    @relation("EntityHierarchy", fields: [parentEntityId], references: [id])
+  children        AuditEntity[]   @relation("EntityHierarchy")
+  audits          Audit[]
+  planItems       AuditPlanItem[]
+  riskRegisters   RiskRegister[]
+  auditableUnits  AuditableUnit[]
 
   @@index([organizationId])
+  @@index([organizationId, entityType])
   @@index([organizationId, inherentRiskScore])
   @@index([organizationId, active])
   @@map("audit_entities")
 }
 
+// ─── CATÁLOGO DE PROCESOS ─────────────────────────────────────────────────────
+// Segunda dimensión del universo auditable (Organización × Proceso)
+model AuditProcess {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String   // "PROC-FIN-01"
+  name           String   // "Gestión de Compras"
+  description    String?
+  category       String?  // Financiero | Operacional | TI | RR.HH. | Compliance
+  active         Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  auditableUnits AuditableUnit[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("audit_processes")
+}
+
+// ─── UNIDAD AUDITABLE (EntityProcess) ────────────────────────────────────────
+// Intersección AuditEntity × AuditProcess = objeto real de planificación.
+// Equivale al EntityProcess de Pentana / Auditable Item de SAP.
+model AuditableUnit {
+  id             String   @id @default(cuid())
+  organizationId String
+  auditEntityId  String
+  auditProcessId String
+  name           String?  // nombre display override (si null: "Entity — Process")
+  auditType      String   @default("OPERATIONAL") // FINANCIAL|OPERATIONAL|IT|COMPLIANCE|FORENSIC|ADVISORY
+  isMandatory    Boolean  @default(false)  // mandato legal/regulatorio → entrada directa al plan
+  mandatoryBasis String?  // "Ley 29720 Art. 5", "Norma SBS N°2024-001", etc.
+  active         Boolean  @default(true)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  auditEntity   AuditEntity               @relation(fields: [auditEntityId], references: [id])
+  auditProcess  AuditProcess              @relation(fields: [auditProcessId], references: [id])
+  assessments   AuditableUnitAssessment[]
+  planItems     AuditPlanItem[]
+
+  @@unique([organizationId, auditEntityId, auditProcessId, auditType])
+  @@index([organizationId])
+  @@index([auditEntityId])
+  @@index([organizationId, isMandatory])
+  @@map("auditable_units")
+}
+
+// ─── EVALUACIÓN DE RIESGOS POR UNIDAD AUDITABLE ──────────────────────────────
+// Motor de scoring multi-factor. Una evaluación por año por unidad.
+// Score final determina candidatura al Plan Anual.
+model AuditableUnitAssessment {
+  id              String   @id @default(cuid())
+  auditableUnitId String
+  assessmentYear  Int
+  assessedById    String?
+
+  // ── Grupo A — Riesgo Residual (peso 70%) ─────────────────────────────────
+  impactScore           Int   @default(3) // 1-5: magnitud del daño si ocurre el riesgo
+  likelihoodScore       Int   @default(3) // 1-5: probabilidad de ocurrencia
+  controlMaturityScore  Int   @default(3) // 1-5: (1=Ad-hoc, 3=Definido, 5=Optimizado)
+  inherentRiskScore     Float @default(9) // calculado: impact × likelihood (1-25)
+  residualRiskScore     Float @default(6) // calculado: inherent × (1 - maturity/5)
+
+  // ── Grupo B — Factores Secundarios (peso 30%) ─────────────────────────────
+  materialityScore      Int @default(3) // 1-5: tamaño financiero/presupuesto del área
+  strategicAlignScore   Int @default(1) // 1-5: impacto en objetivos del Plan Estratégico
+  operationalAlignScore Int @default(1) // 1-5: criticidad en el Plan Operativo
+  fraudHistoryScore     Int @default(1) // 1-5: antecedentes de fraude o denuncias
+  managementReqScore    Int @default(1) // 1-5: solicitud expresa de dirección / junta
+  changeVelocityScore   Int @default(1) // 1-5: cambios recientes (sistema, gestión, M&A)
+
+  // ── Score Ponderado Final ─────────────────────────────────────────────────
+  totalScore   Float  @default(0) // calculado: (residual×0.70) + (secundarios×0.30)
+  riskLevel    String @default("MEDIUM") // CRITICAL|HIGH|MEDIUM|LOW — del totalScore
+
+  // ── Historial de cobertura ────────────────────────────────────────────────
+  lastAuditDate         DateTime?
+  lastAuditOpinion      String?   // SATISFACTORY|NEEDS_IMPROVEMENT|UNSATISFACTORY|CRITICAL
+  recommendedFreqMonths Int       @default(12) // meses entre auditorías
+  nextRecommendedDate   DateTime? // calculado: lastAuditDate + freq
+  coverageGapDays       Int?      // calculado: today − nextRecommendedDate (>0 = vencido)
+
+  notes      String?
+  assessedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  auditableUnit  AuditableUnit @relation(fields: [auditableUnitId], references: [id], onDelete: Cascade)
+
+  @@unique([auditableUnitId, assessmentYear])
+  @@index([auditableUnitId])
+  @@index([assessmentYear, totalScore])
+  @@map("auditable_unit_assessments")
+}
+
 // ─── MÓDULO 03: PLANIFICACIÓN INTELIGENTE ─────────────────────────────────────
 
 model AuditPlan {
-  id             String      @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
   year           Int
   name           String
-  status         String      @default("DRAFT") // DRAFT | APPROVED | ACTIVE | CLOSED
+  // DRAFT | PENDING_REVIEW | APPROVED | ACTIVE | AMENDED | CLOSED
+  status         String   @default("DRAFT")
+  planType       String   @default("ANNUAL") // ANNUAL | ROLLING | MULTI_YEAR | INTERIM
+  objectives     Json     @default("[]")
+  totalHours     Float    @default(0)
+  totalBudget    Float?   // presupuesto monetario (moneda local)
+  // Aprobación
   approvedById   String?
   approvedAt     DateTime?
-  totalHours     Float       @default(0)
-  objectives     Json        @default("[]")
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  rejectedById   String?
+  rejectedAt     DateTime?
+  rejectionReason String?
+  // Versionado (enmiendas post-aprobación)
+  version        Int      @default(1)
+  amendments     Json     @default("[]") // [{date, description, approvedBy}]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   items         AuditPlanItem[]
@@ -480,19 +630,30 @@ model AuditPlan {
 }
 
 model AuditPlanItem {
-  id                  String      @id @default(cuid())
+  id                  String   @id @default(cuid())
   planId              String
-  auditEntityId       String
-  estimatedHours      Float
+  // Referencia a entidad (legado) O a unidad auditable (nuevo)
+  auditEntityId       String?
+  auditableUnitId     String?  // FK a AuditableUnit (nuevo modelo)
+  estimatedHours      Float    @default(0)
   tentativeStartDate  DateTime?
   tentativeEndDate    DateTime?
-  priority            Int         @default(1) // 1=alta, 2=media, 3=baja
+  priority            Int      @default(1) // 1=alta, 2=media, 3=baja
+  // Origen del item en el plan
+  isMandatory         Boolean  @default(false)  // mandato regulatorio → bypass scoring
+  mandatoryReason     String?  // "Ley 29720 Art. 5"
+  originScore         Float?   // totalScore en el momento de selección (trazabilidad)
+  // Vínculo con la auditoría cuando se ejecuta
+  auditId             String?  @unique // FK a Audit (una vez iniciada)
   notes               String?
 
-  plan         AuditPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
-  auditEntity  AuditEntity @relation(fields: [auditEntityId], references: [id])
+  plan           AuditPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  auditEntity    AuditEntity?   @relation(fields: [auditEntityId], references: [id])
+  auditableUnit  AuditableUnit? @relation(fields: [auditableUnitId], references: [id])
+  audit          Audit?         @relation("PlanItemAudit", fields: [auditId], references: [id])
 
   @@index([planId])
+  @@index([auditableUnitId])
   @@map("audit_plan_items")
 }
 
@@ -544,6 +705,18 @@ model Audit {
   // Sub-tipo (especialización dentro del tipo principal)
   subtype                 String?     // EEFF_COMPLETO | PROCESO | SEGURIDAD | etc.
 
+  // ─── Planificación Anual — trazabilidad ──────────────────────────────────
+  originType              AuditOriginType @default(PLANNED)
+  auditPeriodStart        DateTime?   // período examinado (≠ fechas de ejecución)
+  auditPeriodEnd          DateTime?
+  methodology             String?     // RISK_BASED|COMPLIANCE|SUBSTANTIVE|ANALYTICAL
+  reportIssuanceDate      DateTime?   // fecha emisión del informe final
+  deferralReason          String?     // si status = DEFERRED
+  deferredToDate          DateTime?   // nueva fecha tentativa si fue diferida
+
+  // ─── Opinión final de la auditoría ───────────────────────────────────────
+  auditOpinion            AuditOpinion?   // retroalimenta universo / coverage gap
+
   // Modo investigación forense
   isInvestigationMode     Boolean     @default(false)
   investigationActivatedAt DateTime?
@@ -564,6 +737,7 @@ model Audit {
 
   organization           Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   auditEntity            AuditEntity?           @relation(fields: [auditEntityId], references: [id])
+  planItem               AuditPlanItem?         @relation("PlanItemAudit")
   team                   AuditTeam[]
   workingPapers          WorkingPaper[]
   pbcRequests            PbcRequest[]

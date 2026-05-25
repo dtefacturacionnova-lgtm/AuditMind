@@ -17,20 +17,27 @@ const DEFAULT_ENTITY_TYPES = [
   { value: 'SUBSIDIARY', label: 'Subsidiaria / Filial',          icon: '⚖️', color: 'bg-purple-100 text-purple-700', sortOrder: 7 },
 ];
 
+const DEFAULT_STRATEGIC_CATEGORIES = [
+  { code: '0.1', name: 'Gobierno Corporativo y Dirección',    type: 'STRATEGIC', sortOrder: 0 },
+  { code: '0.2', name: 'Planificación Estratégica',           type: 'STRATEGIC', sortOrder: 1 },
+  { code: '0.3', name: 'Gestión del Riesgo Empresarial',      type: 'STRATEGIC', sortOrder: 2 },
+];
+
 const DEFAULT_PROCESS_CATEGORIES = [
-  { code: '1.0',  name: 'Desarrollar Visión y Estrategia',        type: 'OPERATING', sortOrder: 0  },
-  { code: '2.0',  name: 'Desarrollar y Gestionar Productos',      type: 'OPERATING', sortOrder: 1  },
-  { code: '3.0',  name: 'Comercializar y Vender',                 type: 'OPERATING', sortOrder: 2  },
-  { code: '4.0',  name: 'Entregar Productos y Servicios',         type: 'OPERATING', sortOrder: 3  },
-  { code: '5.0',  name: 'Gestionar Servicio al Cliente',          type: 'OPERATING', sortOrder: 4  },
-  { code: '6.0',  name: 'Gestionar Inteligencia de Negocio',      type: 'OPERATING', sortOrder: 5  },
-  { code: '7.0',  name: 'Gestionar Recursos Humanos',             type: 'SUPPORT',   sortOrder: 6  },
-  { code: '8.0',  name: 'Gestionar Tecnología de Información',    type: 'SUPPORT',   sortOrder: 7  },
-  { code: '9.0',  name: 'Gestionar Recursos Financieros',         type: 'SUPPORT',   sortOrder: 8  },
-  { code: '10.0', name: 'Adquirir, Construir y Gestionar Activos',type: 'SUPPORT',   sortOrder: 9  },
-  { code: '11.0', name: 'Gestionar Riesgo, Cumplimiento y Res.',  type: 'SUPPORT',   sortOrder: 10 },
-  { code: '12.0', name: 'Gestionar Relaciones Externas',          type: 'SUPPORT',   sortOrder: 11 },
-  { code: '13.0', name: 'Desarrollar y Gestionar Capacidades',    type: 'SUPPORT',   sortOrder: 12 },
+  ...DEFAULT_STRATEGIC_CATEGORIES,
+  { code: '1.0',  name: 'Desarrollar Visión y Estrategia',        type: 'OPERATING', sortOrder: 10 },
+  { code: '2.0',  name: 'Desarrollar y Gestionar Productos',      type: 'OPERATING', sortOrder: 11 },
+  { code: '3.0',  name: 'Comercializar y Vender',                 type: 'OPERATING', sortOrder: 12 },
+  { code: '4.0',  name: 'Entregar Productos y Servicios',         type: 'OPERATING', sortOrder: 13 },
+  { code: '5.0',  name: 'Gestionar Servicio al Cliente',          type: 'OPERATING', sortOrder: 14 },
+  { code: '6.0',  name: 'Gestionar Inteligencia de Negocio',      type: 'OPERATING', sortOrder: 15 },
+  { code: '7.0',  name: 'Gestionar Recursos Humanos',             type: 'SUPPORT',   sortOrder: 20 },
+  { code: '8.0',  name: 'Gestionar Tecnología de Información',    type: 'SUPPORT',   sortOrder: 21 },
+  { code: '9.0',  name: 'Gestionar Recursos Financieros',         type: 'SUPPORT',   sortOrder: 22 },
+  { code: '10.0', name: 'Adquirir, Construir y Gestionar Activos',type: 'SUPPORT',   sortOrder: 23 },
+  { code: '11.0', name: 'Gestionar Riesgo, Cumplimiento y Res.',  type: 'SUPPORT',   sortOrder: 24 },
+  { code: '12.0', name: 'Gestionar Relaciones Externas',          type: 'SUPPORT',   sortOrder: 25 },
+  { code: '13.0', name: 'Desarrollar y Gestionar Capacidades',    type: 'SUPPORT',   sortOrder: 26 },
 ];
 
 @Injectable()
@@ -41,11 +48,11 @@ export class CatalogsService {
 
   async getEntityTypes(user: AuthUser) {
     const count = await this.prisma.entityTypeConfig.count({
-      where: { organizationId: user.organizationId },
+      where: { organizationId: user.organizationId, active: true },
     });
     if (count === 0) await this.seedEntityTypes(user.organizationId);
     return this.prisma.entityTypeConfig.findMany({
-      where: { organizationId: user.organizationId },
+      where: { organizationId: user.organizationId, active: true },
       orderBy: { sortOrder: 'asc' },
     });
   }
@@ -64,21 +71,31 @@ export class CatalogsService {
   }
 
   async deleteEntityType(id: string, user: AuthUser) {
-    return this.prisma.entityTypeConfig.update({
-      where: { id },
-      data: { active: false },
-    });
+    return this.prisma.entityTypeConfig.delete({ where: { id } });
   }
 
   // ─── Process Categories ────────────────────────────────────────────────────
 
   async getProcessCategories(user: AuthUser) {
     const count = await this.prisma.processCategoryConfig.count({
-      where: { organizationId: user.organizationId },
+      where: { organizationId: user.organizationId, active: true },
     });
-    if (count === 0) await this.seedProcessCategories(user.organizationId);
+    if (count === 0) {
+      await this.seedProcessCategories(user.organizationId);
+    } else {
+      // Ensure STRATEGIC entries exist (added after initial seeding)
+      const strategicCount = await this.prisma.processCategoryConfig.count({
+        where: { organizationId: user.organizationId, type: 'STRATEGIC' },
+      });
+      if (strategicCount === 0) {
+        await this.prisma.processCategoryConfig.createMany({
+          data: DEFAULT_STRATEGIC_CATEGORIES.map(c => ({ ...c, organizationId: user.organizationId })),
+          skipDuplicates: true,
+        });
+      }
+    }
     return this.prisma.processCategoryConfig.findMany({
-      where: { organizationId: user.organizationId },
+      where: { organizationId: user.organizationId, active: true },
       orderBy: { sortOrder: 'asc' },
     });
   }
@@ -97,10 +114,7 @@ export class CatalogsService {
   }
 
   async deleteProcessCategory(id: string, user: AuthUser) {
-    return this.prisma.processCategoryConfig.update({
-      where: { id },
-      data: { active: false },
-    });
+    return this.prisma.processCategoryConfig.delete({ where: { id } });
   }
 
   // ─── Seeds ─────────────────────────────────────────────────────────────────

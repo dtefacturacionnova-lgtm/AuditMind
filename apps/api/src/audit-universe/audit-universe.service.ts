@@ -61,7 +61,7 @@ export class AuditUniverseService {
         description: dto.description,
         category: dto.division,
         location: dto.location,
-        responsible: dto.responsibleId,
+        responsible: dto.responsible ?? dto.responsibleId ?? null,
         inherentRiskScore: dto.riskScore ?? 0,
         active: dto.isActive ?? true,
         parentEntityId: dto.parentEntityId ?? null,
@@ -74,6 +74,7 @@ export class AuditUniverseService {
         contactEmail: dto.contactEmail ?? null,
         contactPhone: dto.contactPhone ?? null,
         budget: dto.budget ?? null,
+        sector: dto.sector ?? null,
       },
     });
   }
@@ -142,6 +143,7 @@ export class AuditUniverseService {
         ...(dto.description !== undefined       && { description: dto.description }),
         ...(dto.division !== undefined          && { category: dto.division }),
         ...(dto.location !== undefined          && { location: dto.location }),
+        ...(dto.responsible !== undefined        && { responsible: dto.responsible }),
         ...(dto.responsibleId !== undefined     && { responsible: dto.responsibleId }),
         ...(dto.riskScore !== undefined         && { inherentRiskScore: dto.riskScore }),
         ...(dto.isActive !== undefined          && { active: dto.isActive }),
@@ -155,6 +157,7 @@ export class AuditUniverseService {
         ...(dto.contactEmail !== undefined      && { contactEmail: dto.contactEmail }),
         ...(dto.contactPhone !== undefined      && { contactPhone: dto.contactPhone }),
         ...(dto.budget !== undefined            && { budget: dto.budget }),
+        ...(dto.sector !== undefined            && { sector: dto.sector }),
       },
     });
   }

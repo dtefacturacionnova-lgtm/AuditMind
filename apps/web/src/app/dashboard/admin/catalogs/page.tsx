@@ -5,7 +5,7 @@ import {
   useProcessCategoryConfigs, useCreateProcessCategory, useUpdateProcessCategory, useDeleteProcessCategory,
   EntityTypeConfig, ProcessCategoryConfig,
 } from '@/hooks/useCatalogs';
-import { Plus, Pencil, Trash2, GripVertical, CheckCircle2, XCircle, Tag, LayoutList } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Tag, LayoutList, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ICON_OPTIONS = ['🏛️','🏢','🗂️','📁','👥','🔹','📍','⚖️','🔷','🔸','🌐','🏭','💼','🏗️'];
@@ -21,6 +21,7 @@ const COLOR_OPTIONS = [
   { label: 'Rose',    value: 'bg-rose-100 text-rose-700' },
   { label: 'Orange',  value: 'bg-orange-100 text-orange-700' },
   { label: 'Cyan',    value: 'bg-cyan-100 text-cyan-700' },
+  { label: 'Emerald', value: 'bg-emerald-100 text-emerald-700' },
 ];
 
 // ─── Entity Type Modal ────────────────────────────────────────────────────────
@@ -34,11 +35,12 @@ interface EntityTypeFormData {
 }
 
 function EntityTypeModal({
-  initial, onClose, onSave,
+  initial, onClose, onSave, isPending,
 }: {
   initial?: EntityTypeConfig;
   onClose: () => void;
   onSave: (data: EntityTypeFormData) => void;
+  isPending: boolean;
 }) {
   const [form, setForm] = useState<EntityTypeFormData>({
     value: initial?.value ?? '',
@@ -49,29 +51,35 @@ function EntityTypeModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-        <h3 className="text-lg font-semibold mb-4">
-          {initial ? 'Editar Tipo de Entidad' : 'Nuevo Tipo de Entidad'}
-        </h3>
-        <div className="space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="px-6 py-5 border-b">
+          <h3 className="text-base font-semibold text-gray-900">
+            {initial ? 'Editar Tipo de Entidad' : 'Nuevo Tipo de Entidad'}
+          </h3>
+        </div>
+        <div className="px-6 py-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Clave (value)</label>
             <input
-              className="w-full border rounded-lg px-3 py-2 text-sm font-mono uppercase"
+              className={cn(
+                'w-full border rounded-lg px-3 py-2 text-sm font-mono uppercase',
+                initial ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'focus:outline-none focus:ring-2 focus:ring-blue-500',
+              )}
               value={form.value}
               onChange={e => setForm(f => ({ ...f, value: e.target.value.toUpperCase().replace(/\s/g, '_') }))}
               placeholder="EJEMPLO_TIPO"
               disabled={!!initial}
             />
+            {initial && <p className="mt-1 text-[11px] text-gray-400">La clave no se puede modificar</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Etiqueta</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Etiqueta visible *</label>
             <input
-              className="w-full border rounded-lg px-3 py-2 text-sm"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.label}
               onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
-              placeholder="Nombre visible"
+              placeholder="Nombre que verán los usuarios"
             />
           </div>
           <div>
@@ -84,7 +92,7 @@ function EntityTypeModal({
                   onClick={() => setForm(f => ({ ...f, icon: ico }))}
                   className={cn(
                     'w-9 h-9 rounded-lg text-lg flex items-center justify-center border-2 transition-all',
-                    form.icon === ico ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:border-gray-300',
+                    form.icon === ico ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:border-gray-300 hover:bg-gray-50',
                   )}
                 >{ico}</button>
               ))}
@@ -101,29 +109,44 @@ function EntityTypeModal({
                   className={cn(
                     'px-3 py-1 rounded-full text-xs font-medium border-2 transition-all',
                     opt.value,
-                    form.color === opt.value ? 'border-blue-500 ring-2 ring-blue-200' : 'border-transparent',
+                    form.color === opt.value ? 'border-blue-500 ring-2 ring-blue-200' : 'border-transparent hover:border-gray-300',
                   )}
                 >{opt.label}</button>
               ))}
             </div>
+            {/* Preview */}
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs text-gray-400">Vista previa:</span>
+              <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-medium', form.color)}>
+                {form.label || 'Etiqueta'}
+              </span>
+              <span className="text-lg">{form.icon}</span>
+            </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Orden</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Orden de aparición</label>
             <input
               type="number"
-              className="w-24 border rounded-lg px-3 py-2 text-sm"
+              className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.sortOrder}
               onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) }))}
             />
           </div>
         </div>
-        <div className="mt-6 flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border hover:bg-gray-50">Cancelar</button>
+        <div className="px-6 py-4 border-t flex gap-2 justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm rounded-lg border hover:bg-gray-50 transition-colors"
+            disabled={isPending}
+          >Cancelar</button>
           <button
             onClick={() => onSave(form)}
-            disabled={!form.value || !form.label}
-            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-          >Guardar</button>
+            disabled={!form.value || !form.label || isPending}
+            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+          >
+            {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {isPending ? 'Guardando…' : 'Guardar'}
+          </button>
         </div>
       </div>
     </div>
@@ -133,11 +156,12 @@ function EntityTypeModal({
 // ─── Process Category Modal ───────────────────────────────────────────────────
 
 function ProcessCategoryModal({
-  initial, onClose, onSave,
+  initial, onClose, onSave, isPending,
 }: {
   initial?: ProcessCategoryConfig;
   onClose: () => void;
   onSave: (data: { code: string; name: string; type: string; sortOrder: number }) => void;
+  isPending: boolean;
 }) {
   const [form, setForm] = useState({
     code: initial?.code ?? '',
@@ -147,61 +171,75 @@ function ProcessCategoryModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-        <h3 className="text-lg font-semibold mb-4">
-          {initial ? 'Editar Categoría de Proceso' : 'Nueva Categoría de Proceso'}
-        </h3>
-        <div className="space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="px-6 py-5 border-b">
+          <h3 className="text-base font-semibold text-gray-900">
+            {initial ? 'Editar Categoría de Proceso' : 'Nueva Categoría de Proceso'}
+          </h3>
+        </div>
+        <div className="px-6 py-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Código</label>
               <input
-                className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
+                className={cn(
+                  'w-full border rounded-lg px-3 py-2 text-sm font-mono',
+                  initial ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'focus:outline-none focus:ring-2 focus:ring-blue-500',
+                )}
                 value={form.code}
                 onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
                 placeholder="14.0"
                 disabled={!!initial}
               />
+              {initial && <p className="mt-1 text-[11px] text-gray-400">El código no se puede cambiar</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
               <select
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={form.type}
                 onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
               >
-                <option value="OPERATING">Operativo (1.0–6.0)</option>
-                <option value="SUPPORT">Soporte / Gestión (7.0+)</option>
+                <option value="STRATEGIC">Estratégico</option>
+                <option value="OPERATING">Misional / Operativo</option>
+                <option value="SUPPORT">Soporte / Gestión</option>
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
             <input
-              className="w-full border rounded-lg px-3 py-2 text-sm"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="Nombre de la categoría"
+              placeholder="Nombre de la categoría de proceso"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Orden</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Orden de aparición</label>
             <input
               type="number"
-              className="w-24 border rounded-lg px-3 py-2 text-sm"
+              className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.sortOrder}
               onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) }))}
             />
           </div>
         </div>
-        <div className="mt-6 flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border hover:bg-gray-50">Cancelar</button>
+        <div className="px-6 py-4 border-t flex gap-2 justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm rounded-lg border hover:bg-gray-50 transition-colors"
+            disabled={isPending}
+          >Cancelar</button>
           <button
             onClick={() => onSave(form)}
-            disabled={!form.code || !form.name}
-            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-          >Guardar</button>
+            disabled={!form.code || !form.name || isPending}
+            className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 transition-colors"
+          >
+            {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {isPending ? 'Guardando…' : 'Guardar'}
+          </button>
         </div>
       </div>
     </div>
@@ -223,11 +261,15 @@ export default function CatalogsPage() {
   const updatePC = useUpdateProcessCategory();
   const deletePC = useDeleteProcessCategory();
 
+  const etPending = createET.isPending || updateET.isPending;
+  const pcPending = createPC.isPending || updatePC.isPending;
+
   const [etModal, setEtModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: EntityTypeConfig } | null>(null);
   const [pcModal, setPcModal] = useState<{ mode: 'create' } | { mode: 'edit'; item: ProcessCategoryConfig } | null>(null);
 
+  const strategicCats = processCategories.filter(c => c.type === 'STRATEGIC');
   const operatingCats = processCategories.filter(c => c.type === 'OPERATING');
-  const supportCats   = processCategories.filter(c => c.type !== 'OPERATING');
+  const supportCats   = processCategories.filter(c => c.type === 'SUPPORT');
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -282,34 +324,35 @@ export default function CatalogsPage() {
           </div>
 
           {loadingET ? (
-            <div className="text-center py-12 text-gray-400">Cargando…</div>
+            <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin" /> Cargando…
+            </div>
           ) : (
             <div className="bg-white rounded-xl border divide-y">
               {entityTypes.map((et) => (
-                <div key={et.id} className="flex items-center gap-4 px-4 py-3">
+                <div key={et.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition-colors">
                   <GripVertical className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                  <span className="text-lg w-8 text-center">{et.icon}</span>
+                  <span className="text-xl w-8 text-center">{et.icon}</span>
                   <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-medium', et.color)}>
                     {et.label}
                   </span>
-                  <span className="font-mono text-xs text-gray-400">{et.value}</span>
-                  <div className="ml-auto flex items-center gap-2">
-                    {et.active ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-500" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-gray-300" />
-                    )}
+                  <span className="font-mono text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{et.value}</span>
+                  <span className="text-xs text-gray-400 ml-auto mr-0">orden: {et.sortOrder}</span>
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={() => setEtModal({ mode: 'edit', item: et })}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+                      className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+                      title="Editar"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => deleteET.mutate(et.id)}
-                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                      onClick={() => { if (confirm(`¿Eliminar el tipo "${et.label}"?`)) deleteET.mutate(et.id); }}
+                      disabled={deleteET.isPending}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 disabled:opacity-40 transition-colors"
+                      title="Eliminar"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      {deleteET.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
@@ -327,9 +370,9 @@ export default function CatalogsPage() {
         <div>
           <div className="flex justify-between items-center mb-4">
             <div>
-              <h2 className="text-base font-semibold text-gray-800">Categorías APQC PCF</h2>
+              <h2 className="text-base font-semibold text-gray-800">Categorías de Proceso</h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Marco de Clasificación de Procesos de tu organización (basado en APQC PCF v8.0)
+                Marco de clasificación basado en APQC PCF v8.0 — adaptable a tu organización
               </p>
             </div>
             <button
@@ -341,44 +384,46 @@ export default function CatalogsPage() {
           </div>
 
           {loadingPC ? (
-            <div className="text-center py-12 text-gray-400">Cargando…</div>
+            <div className="flex items-center justify-center py-12 gap-2 text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin" /> Cargando…
+            </div>
           ) : (
             <div className="space-y-6">
+              {/* Strategic */}
+              <ProcessSection
+                title="Procesos Estratégicos"
+                subtitle="Gobierno, dirección y gestión del riesgo empresarial"
+                badgeClass="bg-emerald-100 text-emerald-800"
+                categories={strategicCats}
+                onEdit={(cat) => setPcModal({ mode: 'edit', item: cat })}
+                onDelete={(cat) => { if (confirm(`¿Eliminar "${cat.name}"?`)) deletePC.mutate(cat.id); }}
+                emptyLabel="Sin categorías estratégicas"
+                isPendingDelete={deletePC.isPending}
+              />
+
               {/* Operating */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-blue-600">Procesos Operativos</span>
-                  <span className="text-xs text-gray-400">(generan valor directo al cliente)</span>
-                </div>
-                <div className="bg-white rounded-xl border divide-y">
-                  {operatingCats.map((cat) => (
-                    <CategoryRow
-                      key={cat.id} cat={cat}
-                      onEdit={() => setPcModal({ mode: 'edit', item: cat })}
-                      onDelete={() => deletePC.mutate(cat.id)}
-                    />
-                  ))}
-                  {operatingCats.length === 0 && <EmptyRow label="Sin categorías operativas" />}
-                </div>
-              </div>
+              <ProcessSection
+                title="Procesos Misionales / Operativos"
+                subtitle="Generan valor directo al cliente o usuario final"
+                badgeClass="bg-blue-100 text-blue-800"
+                categories={operatingCats}
+                onEdit={(cat) => setPcModal({ mode: 'edit', item: cat })}
+                onDelete={(cat) => { if (confirm(`¿Eliminar "${cat.name}"?`)) deletePC.mutate(cat.id); }}
+                emptyLabel="Sin categorías operativas"
+                isPendingDelete={deletePC.isPending}
+              />
 
               {/* Support */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-purple-600">Procesos de Soporte y Gestión</span>
-                  <span className="text-xs text-gray-400">(habilitan los procesos operativos)</span>
-                </div>
-                <div className="bg-white rounded-xl border divide-y">
-                  {supportCats.map((cat) => (
-                    <CategoryRow
-                      key={cat.id} cat={cat}
-                      onEdit={() => setPcModal({ mode: 'edit', item: cat })}
-                      onDelete={() => deletePC.mutate(cat.id)}
-                    />
-                  ))}
-                  {supportCats.length === 0 && <EmptyRow label="Sin categorías de soporte" />}
-                </div>
-              </div>
+              <ProcessSection
+                title="Procesos de Soporte / Gestión"
+                subtitle="Habilitan y dan soporte a los procesos operativos"
+                badgeClass="bg-purple-100 text-purple-800"
+                categories={supportCats}
+                onEdit={(cat) => setPcModal({ mode: 'edit', item: cat })}
+                onDelete={(cat) => { if (confirm(`¿Eliminar "${cat.name}"?`)) deletePC.mutate(cat.id); }}
+                emptyLabel="Sin categorías de soporte"
+                isPendingDelete={deletePC.isPending}
+              />
             </div>
           )}
         </div>
@@ -389,11 +434,14 @@ export default function CatalogsPage() {
         <EntityTypeModal
           initial={etModal.mode === 'edit' ? etModal.item : undefined}
           onClose={() => setEtModal(null)}
+          isPending={etPending}
           onSave={(data) => {
             if (etModal.mode === 'create') {
               createET.mutate(data, { onSuccess: () => setEtModal(null) });
             } else {
-              updateET.mutate({ id: etModal.item.id, data }, { onSuccess: () => setEtModal(null) });
+              // Strip `value` — it's immutable and not accepted by UpdateEntityTypeDto
+              const { value: _v, ...updateData } = data;
+              updateET.mutate({ id: etModal.item.id, data: updateData }, { onSuccess: () => setEtModal(null) });
             }
           }}
         />
@@ -403,11 +451,14 @@ export default function CatalogsPage() {
         <ProcessCategoryModal
           initial={pcModal.mode === 'edit' ? pcModal.item : undefined}
           onClose={() => setPcModal(null)}
+          isPending={pcPending}
           onSave={(data) => {
             if (pcModal.mode === 'create') {
               createPC.mutate(data, { onSuccess: () => setPcModal(null) });
             } else {
-              updatePC.mutate({ id: pcModal.item.id, data }, { onSuccess: () => setPcModal(null) });
+              // Strip `code` — it's immutable and not accepted by UpdateProcessCategoryDto
+              const { code: _c, ...updateData } = data;
+              updatePC.mutate({ id: pcModal.item.id, data: updateData }, { onSuccess: () => setPcModal(null) });
             }
           }}
         />
@@ -416,30 +467,87 @@ export default function CatalogsPage() {
   );
 }
 
-function CategoryRow({ cat, onEdit, onDelete }: { cat: ProcessCategoryConfig; onEdit: () => void; onDelete: () => void }) {
+// ─── Process Section ──────────────────────────────────────────────────────────
+
+function ProcessSection({
+  title, subtitle, badgeClass, categories, onEdit, onDelete, emptyLabel, isPendingDelete,
+}: {
+  title: string;
+  subtitle: string;
+  badgeClass: string;
+  categories: ProcessCategoryConfig[];
+  onEdit: (cat: ProcessCategoryConfig) => void;
+  onDelete: (cat: ProcessCategoryConfig) => void;
+  emptyLabel: string;
+  isPendingDelete: boolean;
+}) {
   return (
-    <div className="flex items-center gap-4 px-4 py-3">
-      <GripVertical className="w-4 h-4 text-gray-300 flex-shrink-0" />
-      <span className="font-mono text-sm font-bold text-gray-500 w-10">{cat.code}</span>
-      <span className="text-sm text-gray-800 flex-1">{cat.name}</span>
-      <span className={cn(
-        'px-2 py-0.5 rounded-full text-xs font-medium',
-        cat.type === 'OPERATING' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700',
-      )}>
-        {cat.type === 'OPERATING' ? 'Operativo' : 'Soporte'}
-      </span>
-      <div className="flex items-center gap-1">
-        <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700">
-          <Pencil className="w-4 h-4" />
-        </button>
-        <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600">
-          <Trash2 className="w-4 h-4" />
-        </button>
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className={cn('text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full', badgeClass)}>
+          {title}
+        </span>
+        <span className="text-xs text-gray-400">{subtitle}</span>
+      </div>
+      <div className="bg-white rounded-xl border divide-y">
+        {categories.map((cat) => (
+          <CategoryRow
+            key={cat.id}
+            cat={cat}
+            onEdit={() => onEdit(cat)}
+            onDelete={() => onDelete(cat)}
+            isPendingDelete={isPendingDelete}
+          />
+        ))}
+        {categories.length === 0 && (
+          <div className="text-center py-8 text-sm text-gray-400">{emptyLabel}</div>
+        )}
       </div>
     </div>
   );
 }
 
-function EmptyRow({ label }: { label: string }) {
-  return <div className="text-center py-8 text-sm text-gray-400">{label}</div>;
+function CategoryRow({
+  cat, onEdit, onDelete, isPendingDelete,
+}: {
+  cat: ProcessCategoryConfig;
+  onEdit: () => void;
+  onDelete: () => void;
+  isPendingDelete: boolean;
+}) {
+  const typeLabel =
+    cat.type === 'STRATEGIC' ? 'Estratégico' :
+    cat.type === 'OPERATING' ? 'Misional / Op.' : 'Soporte / Gest.';
+  const typeBadge =
+    cat.type === 'STRATEGIC' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+    cat.type === 'OPERATING' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+    'bg-purple-50 text-purple-700 border-purple-200';
+
+  return (
+    <div className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition-colors">
+      <GripVertical className="w-4 h-4 text-gray-300 flex-shrink-0" />
+      <span className="font-mono text-sm font-bold text-gray-500 w-12 shrink-0">{cat.code}</span>
+      <span className="text-sm text-gray-800 flex-1">{cat.name}</span>
+      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium border shrink-0', typeBadge)}>
+        {typeLabel}
+      </span>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={onEdit}
+          className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+          title="Editar"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
+        <button
+          onClick={onDelete}
+          disabled={isPendingDelete}
+          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 disabled:opacity-40 transition-colors"
+          title="Eliminar"
+        >
+          {isPendingDelete ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  );
 }

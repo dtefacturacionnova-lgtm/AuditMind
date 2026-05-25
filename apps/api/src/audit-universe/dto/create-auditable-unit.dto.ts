@@ -112,4 +112,15 @@ export class CreateAuditableUnitDto {
   @IsOptional()
   @IsString()
   budget?: string;
+
+  // Nombre (texto libre) del responsable del área — distinto de ownerId (UUID de usuario)
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  responsible?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sector?: string;
 }

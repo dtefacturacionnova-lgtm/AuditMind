@@ -43,16 +43,26 @@ enum AuditStatus {
 }
 
 enum AuditEntityType {
-  PROCESS         // Proceso de negocio (Compras, Nómina, etc.)
-  BUSINESS_UNIT   // Área / Departamento / División
-  LEGAL_ENTITY    // Entidad legal / Subsidiaria
-  LOCATION        // Sucursal / Planta / Región
-  IT_SYSTEM       // Sistema / Aplicación TI
-  IT_GC           // Dominio de Controles Generales TI
-  PROJECT         // Proyecto / Programa
-  VENDOR          // Proveedor / Tercero crítico
-  REGULATORY      // Dominio regulatorio
-  STRATEGIC       // Objetivo estratégico
+  // Tipos jerárquicos de organigrama
+  CORPORATE     // Corporativo / Holding
+  COMPANY       // Empresa / Razón Social
+  DIVISION      // División / Vicepresidencia
+  DEPARTMENT    // Departamento / Dirección
+  AREA          // Área / Gerencia
+  TEAM          // Equipo / Unidad operativa
+  BRANCH        // Sucursal / Sede / Planta
+  SUBSIDIARY    // Subsidiaria / Filial
+  // Tipos legados (compatibilidad)
+  PROCESS
+  BUSINESS_UNIT
+  LEGAL_ENTITY
+  LOCATION
+  IT_SYSTEM
+  IT_GC
+  PROJECT
+  VENDOR
+  REGULATORY
+  STRATEGIC
 }
 
 enum AuditOriginType {
@@ -461,7 +471,7 @@ model AuditEntity {
   organizationId              String
   name                        String
   description                 String?
-  entityType                  AuditEntityType @default(BUSINESS_UNIT)
+  entityType                  AuditEntityType @default(AREA)
   category                    String?         // campo libre legado / sub-categoría
   parentEntityId              String?
   // Dueño del proceso (negocio)

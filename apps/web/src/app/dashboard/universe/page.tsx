@@ -1,17 +1,17 @@
 'use client';
 import { useState } from 'react';
 import {
-  Plus, Trash2, ChevronRight, ChevronDown,
+  Plus, Trash2, ChevronRight, ChevronDown, Edit2,
   Layers, FlaskConical, X, Save, Target, Building2,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAuditUniverse, useRiskSummary } from '@/hooks/useAuditUniverse';
 import {
-  useEntityTree, useCreateAuditEntity, useDeleteAuditEntity,
+  useEntityTree, useCreateAuditEntity, useUpdateAuditEntity, useDeleteAuditEntity,
   useAuditProcesses, useCreateAuditProcess, useDeleteAuditProcess,
   useAuditableUnits, useCreateAuditableUnit, useDeleteAuditableUnit,
   useUpsertAssessment, usePlanCandidates,
-  ENTITY_TYPE_CONFIG, RISK_LEVEL_CONFIG,
+  ENTITY_TYPE_CONFIG, ORG_ENTITY_TYPES, RISK_LEVEL_CONFIG,
   type AuditEntityNode, type AuditProcess, type AuditableUnit,
   type AuditEntityType,
 } from '@/hooks/useAuditUniverse2';
@@ -274,21 +274,140 @@ function PlanCandidatesView() {
   );
 }
 
+// ─── EntityModal (crear y editar) ─────────────────────────────────────────────
+
+function EntityModal({ node, parentId, parentName, onClose }: {
+  node?: AuditEntityNode;       // presente = edición; ausente = creación
+  parentId?: string;
+  parentName?: string;
+  onClose: () => void;
+}) {
+  const createEntity = useCreateAuditEntity();
+  const updateEntity = useUpdateAuditEntity();
+  const isPending = createEntity.isPending || updateEntity.isPending;
+  const isEdit = !!node;
+
+  const [form, setForm] = useState({
+    name:                   node?.name ?? '',
+    entityType:             node?.entityType ?? 'AREA',
+    description:            node?.description ?? '',
+    applicableRegulations:  (node?.applicableRegulations ?? []).join(', '),
+    riskScore:              node?.inherentRiskScore ?? 0,
+  });
+  const set = (k: string, v: string | number) => setForm((f) => ({ ...f, [k]: v }));
+
+  const RISK_LEVELS = [
+    { score: 0,  label: 'Sin evaluar' },
+    { score: 20, label: 'Bajo (20)' },
+    { score: 40, label: 'Medio (40)' },
+    { score: 60, label: 'Alto (60)' },
+    { score: 80, label: 'Crítico (80)' },
+  ];
+
+  const save = () => {
+    const regs = form.applicableRegulations
+      ? form.applicableRegulations.split(',').map((r) => r.trim()).filter(Boolean)
+      : [];
+    const payload = {
+      name:                  form.name,
+      entityType:            form.entityType,
+      description:           form.description || undefined,
+      applicableRegulations: regs,
+      riskScore:             form.riskScore,
+    };
+    if (isEdit) {
+      updateEntity.mutate({ id: node!.id, data: payload }, { onSuccess: onClose });
+    } else {
+      createEntity.mutate(
+        { ...payload, parentEntityId: parentId },
+        { onSuccess: onClose },
+      );
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h2 className="font-semibold text-slate-900">
+              {isEdit ? 'Editar Entidad' : parentId ? 'Agregar Subentidad' : 'Nueva Entidad Raíz'}
+            </h2>
+            {!isEdit && parentName && <p className="text-xs text-slate-500">Bajo: {parentName}</p>}
+            {isEdit && <p className="text-xs text-slate-500">{node!.name}</p>}
+          </div>
+          <button onClick={onClose} className="rounded p-1 hover:bg-slate-100"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-slate-700">Nombre *</label>
+            <input value={form.name} onChange={(e) => set('name', e.target.value)}
+              placeholder="Ej: Gerencia de Finanzas"
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-700">Nivel jerárquico *</label>
+            <select value={form.entityType} onChange={(e) => set('entityType', e.target.value)}
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
+              {ORG_ENTITY_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-700">Descripción</label>
+            <input value={form.description} onChange={(e) => set('description', e.target.value)}
+              placeholder="Breve descripción (opcional)"
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-700">Nivel de Riesgo Inherente</label>
+            <select value={form.riskScore} onChange={(e) => set('riskScore', Number(e.target.value))}
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
+              {RISK_LEVELS.map((r) => (
+                <option key={r.score} value={r.score}>{r.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-slate-400">
+              Este valor se usa como indicador inicial; el score definitivo lo calcula la evaluación multi-factor de la Unidad Auditable.
+            </p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-700">Regulaciones aplicables</label>
+            <input value={form.applicableRegulations} onChange={(e) => set('applicableRegulations', e.target.value)}
+              placeholder="SOX, GDPR, UAF, CMF (separados por coma)"
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div className="border-t px-6 py-4 flex justify-end gap-3">
+          <button onClick={onClose} className="rounded px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50">Cancelar</button>
+          <button onClick={save} disabled={!form.name || isPending}
+            className="rounded px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1.5">
+            <Save className="h-3.5 w-3.5" />
+            {isPending ? 'Guardando…' : isEdit ? 'Guardar Cambios' : 'Crear Entidad'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── EntityTreeNode ───────────────────────────────────────────────────────────
 
 function EntityTreeNode({
-  node, depth, isLast, ancestorIsLast, onAddChild, onDelete,
+  node, depth, isLast, ancestorIsLast, onAddChild, onEdit, onDelete,
 }: {
   node: AuditEntityNode;
   depth: number;
   isLast: boolean;
   ancestorIsLast: boolean[];
   onAddChild: (id: string, name: string) => void;
+  onEdit: (node: AuditEntityNode) => void;
   onDelete: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children.length > 0;
-  const etConfig = ENTITY_TYPE_CONFIG[node.entityType];
+  const etConfig = ENTITY_TYPE_CONFIG[node.entityType] ?? ENTITY_TYPE_CONFIG['AREA'];
   const rs = node.inherentRiskScore;
   const riskLevel = rs >= 75 ? 'CRITICAL' : rs >= 55 ? 'HIGH' : rs >= 35 ? 'MEDIUM' : 'LOW';
   const rl = RISK_LEVEL_CONFIG[riskLevel as keyof typeof RISK_LEVEL_CONFIG];
@@ -300,9 +419,7 @@ function EntityTreeNode({
         {/* Ancestor continuation lines */}
         {ancestorIsLast.map((wasLast, i) => (
           <div key={i} className="w-5 shrink-0 self-stretch relative">
-            {!wasLast && (
-              <div className="absolute left-2.5 inset-y-0 w-px bg-slate-200" />
-            )}
+            {!wasLast && <div className="absolute left-2.5 inset-y-0 w-px bg-slate-200" />}
           </div>
         ))}
 
@@ -315,38 +432,28 @@ function EntityTreeNode({
           </div>
         )}
 
-        {/* Expand/collapse toggle */}
-        <button
-          onClick={() => hasChildren && setExpanded(!expanded)}
-          className={cn(
-            'w-5 h-5 shrink-0 flex items-center justify-center rounded',
-            hasChildren ? 'hover:bg-slate-200 cursor-pointer' : 'cursor-default',
-          )}
-        >
+        {/* Expand/collapse */}
+        <button onClick={() => hasChildren && setExpanded(!expanded)}
+          className={cn('w-5 h-5 shrink-0 flex items-center justify-center rounded',
+            hasChildren ? 'hover:bg-slate-200 cursor-pointer' : 'cursor-default')}>
           {hasChildren
-            ? expanded
-              ? <ChevronDown className="h-3 w-3 text-slate-500" />
-              : <ChevronRight className="h-3 w-3 text-slate-500" />
+            ? expanded ? <ChevronDown className="h-3 w-3 text-slate-500" /> : <ChevronRight className="h-3 w-3 text-slate-500" />
             : <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />}
         </button>
 
-        {/* Entity type icon */}
-        <span className="ml-1.5 text-sm shrink-0">{etConfig?.icon}</span>
-
-        {/* Name */}
-        <span className="ml-2 text-sm font-medium text-slate-800 flex-1 min-w-0 truncate">
-          {node.name}
-        </span>
+        {/* Icon + name */}
+        <span className="ml-1.5 text-sm shrink-0">{etConfig.icon}</span>
+        <span className="ml-2 text-sm font-medium text-slate-800 flex-1 min-w-0 truncate">{node.name}</span>
 
         {/* Type badge */}
-        <span className={cn('shrink-0 text-[11px] px-1.5 py-0.5 rounded font-medium', etConfig?.color ?? 'bg-slate-100 text-slate-600')}>
-          {etConfig?.label ?? node.entityType}
+        <span className={cn('shrink-0 text-[11px] px-1.5 py-0.5 rounded font-medium', etConfig.color)}>
+          {etConfig.label}
         </span>
 
         {/* Risk badge */}
         {rs > 0 && (
           <span className={cn('shrink-0 ml-1.5 text-[10px] px-1.5 py-0.5 rounded border', rl.bg, rl.color, rl.border)}>
-            {rl.label}
+            {rl.label} ({rs})
           </span>
         )}
 
@@ -369,6 +476,10 @@ function EntityTreeNode({
             className="p-1 rounded hover:bg-blue-50 text-blue-500" title="Agregar subentidad">
             <Plus className="h-3 w-3" />
           </button>
+          <button onClick={() => onEdit(node)}
+            className="p-1 rounded hover:bg-amber-50 text-slate-400 hover:text-amber-600" title="Editar">
+            <Edit2 className="h-3 w-3" />
+          </button>
           <button onClick={() => onDelete(node.id)}
             className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Eliminar">
             <Trash2 className="h-3 w-3" />
@@ -385,92 +496,10 @@ function EntityTreeNode({
           isLast={idx === node.children.length - 1}
           ancestorIsLast={[...ancestorIsLast, isLast]}
           onAddChild={onAddChild}
+          onEdit={onEdit}
           onDelete={onDelete}
         />
       ))}
-    </div>
-  );
-}
-
-// ─── AddEntityModal ───────────────────────────────────────────────────────────
-
-function AddEntityModal({ parentId, parentName, onClose }: {
-  parentId?: string; parentName?: string; onClose: () => void;
-}) {
-  const createEntity = useCreateAuditEntity();
-  const [form, setForm] = useState({
-    name: '',
-    entityType: 'BUSINESS_UNIT' as AuditEntityType,
-    description: '',
-    applicableRegulations: '',
-  });
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
-
-  const save = () => {
-    const regs = form.applicableRegulations
-      ? form.applicableRegulations.split(',').map((r) => r.trim()).filter(Boolean)
-      : [];
-    createEntity.mutate(
-      {
-        name: form.name,
-        entityType: form.entityType,
-        description: form.description || undefined,
-        parentEntityId: parentId,
-        applicableRegulations: regs.length > 0 ? regs : undefined,
-      },
-      { onSuccess: onClose },
-    );
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <div>
-            <h2 className="font-semibold text-slate-900">
-              {parentId ? 'Agregar Subentidad' : 'Nueva Entidad Raíz'}
-            </h2>
-            {parentName && <p className="text-xs text-slate-500">Bajo: {parentName}</p>}
-          </div>
-          <button onClick={onClose} className="rounded p-1 hover:bg-slate-100"><X className="h-4 w-4" /></button>
-        </div>
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <label className="text-xs font-medium text-slate-700">Nombre *</label>
-            <input value={form.name} onChange={(e) => set('name', e.target.value)}
-              placeholder="Ej: Gerencia de Finanzas"
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-700">Tipo de Entidad *</label>
-            <select value={form.entityType} onChange={(e) => set('entityType', e.target.value)}
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
-              {Object.entries(ENTITY_TYPE_CONFIG).map(([key, cfg]) => (
-                <option key={key} value={key}>{cfg.icon} {cfg.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-700">Descripción</label>
-            <input value={form.description} onChange={(e) => set('description', e.target.value)}
-              placeholder="Breve descripción (opcional)"
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-700">Regulaciones aplicables</label>
-            <input value={form.applicableRegulations} onChange={(e) => set('applicableRegulations', e.target.value)}
-              placeholder="SOX, GDPR, PCAOB (separados por coma)"
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-        </div>
-        <div className="border-t px-6 py-4 flex justify-end gap-3">
-          <button onClick={onClose} className="rounded px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50">Cancelar</button>
-          <button onClick={save} disabled={!form.name || createEntity.isPending}
-            className="rounded px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
-            {createEntity.isPending ? 'Creando…' : 'Crear Entidad'}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -480,7 +509,11 @@ function AddEntityModal({ parentId, parentName, onClose }: {
 function EntityTreeView() {
   const { data: tree = [], isLoading } = useEntityTree();
   const deleteEntity = useDeleteAuditEntity();
-  const [addModal, setAddModal] = useState<{ parentId?: string; parentName?: string } | null>(null);
+  type ModalState =
+    | { mode: 'add'; parentId?: string; parentName?: string }
+    | { mode: 'edit'; node: AuditEntityNode }
+    | null;
+  const [modal, setModal] = useState<ModalState>(null);
 
   if (isLoading) return <div className="py-8 text-center text-slate-400 text-sm">Cargando árbol…</div>;
 
@@ -488,7 +521,7 @@ function EntityTreeView() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">Estructura jerárquica de la organización auditada</p>
-        <button onClick={() => setAddModal({})}
+        <button onClick={() => setModal({ mode: 'add' })}
           className="flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700">
           <Plus className="h-3.5 w-3.5" /> Nueva Entidad Raíz
         </button>
@@ -499,20 +532,23 @@ function EntityTreeView() {
           <Building2 className="mx-auto h-8 w-8 text-slate-300 mb-3" />
           <p className="text-sm font-medium text-slate-500">Sin entidades registradas</p>
           <p className="text-xs text-slate-400 mt-1">Crea la primera entidad raíz de tu organigrama</p>
-          <button onClick={() => setAddModal({})}
+          <button onClick={() => setModal({ mode: 'add' })}
             className="mt-4 rounded bg-blue-600 px-4 py-2 text-xs text-white hover:bg-blue-700">
             Crear Primera Entidad
           </button>
         </div>
       ) : (
         <div className="rounded-lg border border-slate-200 bg-white p-3">
-          {/* Legend */}
-          <div className="mb-3 pb-3 border-b border-slate-100 flex items-center gap-4 flex-wrap">
-            {Object.entries(ENTITY_TYPE_CONFIG).map(([key, cfg]) => (
-              <span key={key} className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', cfg.color)}>
-                {cfg.icon} {cfg.label}
-              </span>
-            ))}
+          {/* Legend — solo tipos org-chart */}
+          <div className="mb-3 pb-3 border-b border-slate-100 flex items-center gap-2 flex-wrap">
+            {ORG_ENTITY_TYPES.map((t) => {
+              const cfg = ENTITY_TYPE_CONFIG[t.value];
+              return (
+                <span key={t.value} className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', cfg?.color)}>
+                  {cfg?.icon} {t.label}
+                </span>
+              );
+            })}
           </div>
           {tree.map((root, idx) => (
             <EntityTreeNode
@@ -521,18 +557,25 @@ function EntityTreeView() {
               depth={0}
               isLast={idx === tree.length - 1}
               ancestorIsLast={[]}
-              onAddChild={(id, name) => setAddModal({ parentId: id, parentName: name })}
+              onAddChild={(id, name) => setModal({ mode: 'add', parentId: id, parentName: name })}
+              onEdit={(node) => setModal({ mode: 'edit', node })}
               onDelete={(id) => deleteEntity.mutate(id)}
             />
           ))}
         </div>
       )}
 
-      {addModal !== null && (
-        <AddEntityModal
-          parentId={addModal.parentId}
-          parentName={addModal.parentName}
-          onClose={() => setAddModal(null)}
+      {modal?.mode === 'add' && (
+        <EntityModal
+          parentId={modal.parentId}
+          parentName={modal.parentName}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.mode === 'edit' && (
+        <EntityModal
+          node={modal.node}
+          onClose={() => setModal(null)}
         />
       )}
     </div>

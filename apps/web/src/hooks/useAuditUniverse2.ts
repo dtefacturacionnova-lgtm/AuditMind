@@ -4,21 +4,46 @@ import { apiClient } from '@/lib/api-client';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
+// Tipos jerárquicos de organigrama (principales)
 export type AuditEntityType =
-  | 'PROCESS' | 'BUSINESS_UNIT' | 'LEGAL_ENTITY' | 'LOCATION'
-  | 'IT_SYSTEM' | 'IT_GC' | 'PROJECT' | 'VENDOR' | 'REGULATORY' | 'STRATEGIC';
+  | 'CORPORATE' | 'COMPANY' | 'DIVISION' | 'DEPARTMENT'
+  | 'AREA' | 'TEAM' | 'BRANCH' | 'SUBSIDIARY'
+  | 'BUSINESS_UNIT' | 'LEGAL_ENTITY' | 'LOCATION'  // legados
+  | 'PROCESS' | 'IT_SYSTEM' | 'IT_GC' | 'PROJECT' | 'VENDOR' | 'REGULATORY' | 'STRATEGIC';
 
-export const ENTITY_TYPE_CONFIG: Record<AuditEntityType, { label: string; icon: string; color: string }> = {
-  PROCESS:        { label: 'Proceso',           icon: '⚙️', color: 'bg-blue-100 text-blue-700' },
-  BUSINESS_UNIT:  { label: 'Área / Depto.',      icon: '🏢', color: 'bg-slate-100 text-slate-700' },
-  LEGAL_ENTITY:   { label: 'Entidad Legal',      icon: '⚖️', color: 'bg-purple-100 text-purple-700' },
-  LOCATION:       { label: 'Sucursal / Planta',  icon: '📍', color: 'bg-green-100 text-green-700' },
-  IT_SYSTEM:      { label: 'Sistema TI',         icon: '💻', color: 'bg-cyan-100 text-cyan-700' },
-  IT_GC:          { label: 'CGTI / Dominio',     icon: '🔐', color: 'bg-red-100 text-red-700' },
-  PROJECT:        { label: 'Proyecto',           icon: '📋', color: 'bg-amber-100 text-amber-700' },
-  VENDOR:         { label: 'Proveedor',          icon: '🤝', color: 'bg-orange-100 text-orange-700' },
-  REGULATORY:     { label: 'Dominio Regulatorio',icon: '📜', color: 'bg-rose-100 text-rose-700' },
-  STRATEGIC:      { label: 'Obj. Estratégico',   icon: '🎯', color: 'bg-indigo-100 text-indigo-700' },
+// Tipos que aparecen en el selector del formulario (solo los org-chart)
+export const ORG_ENTITY_TYPES: { value: AuditEntityType; label: string }[] = [
+  { value: 'CORPORATE',   label: 'Corporativo / Holding' },
+  { value: 'COMPANY',     label: 'Empresa / Razón Social' },
+  { value: 'DIVISION',    label: 'División / Vicepresidencia' },
+  { value: 'DEPARTMENT',  label: 'Departamento / Dirección' },
+  { value: 'AREA',        label: 'Área / Gerencia' },
+  { value: 'TEAM',        label: 'Equipo / Unidad operativa' },
+  { value: 'BRANCH',      label: 'Sucursal / Sede / Planta' },
+  { value: 'SUBSIDIARY',  label: 'Subsidiaria / Filial' },
+];
+
+export const ENTITY_TYPE_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
+  // Org-chart
+  CORPORATE:    { label: 'Corporativo',     icon: '🏛️', color: 'bg-slate-200 text-slate-800'   },
+  COMPANY:      { label: 'Empresa',         icon: '🏢', color: 'bg-blue-100 text-blue-800'     },
+  DIVISION:     { label: 'División',        icon: '🗂️', color: 'bg-indigo-100 text-indigo-700' },
+  DEPARTMENT:   { label: 'Departamento',    icon: '📁', color: 'bg-sky-100 text-sky-700'       },
+  AREA:         { label: 'Área / Gerencia', icon: '👥', color: 'bg-teal-100 text-teal-700'     },
+  TEAM:         { label: 'Equipo',          icon: '🔹', color: 'bg-green-100 text-green-700'   },
+  BRANCH:       { label: 'Sucursal',        icon: '📍', color: 'bg-amber-100 text-amber-700'   },
+  SUBSIDIARY:   { label: 'Subsidiaria',     icon: '⚖️', color: 'bg-purple-100 text-purple-700' },
+  // Legados
+  BUSINESS_UNIT:{ label: 'Área / Depto.',   icon: '🏢', color: 'bg-slate-100 text-slate-700'  },
+  LEGAL_ENTITY: { label: 'Entidad Legal',   icon: '⚖️', color: 'bg-purple-100 text-purple-700' },
+  LOCATION:     { label: 'Ubicación',       icon: '📍', color: 'bg-green-100 text-green-700'  },
+  PROCESS:      { label: 'Proceso',         icon: '⚙️', color: 'bg-blue-100 text-blue-700'    },
+  IT_SYSTEM:    { label: 'Sistema TI',      icon: '💻', color: 'bg-cyan-100 text-cyan-700'    },
+  IT_GC:        { label: 'CGTI',            icon: '🔐', color: 'bg-red-100 text-red-700'      },
+  PROJECT:      { label: 'Proyecto',        icon: '📋', color: 'bg-amber-100 text-amber-700'  },
+  VENDOR:       { label: 'Proveedor',       icon: '🤝', color: 'bg-orange-100 text-orange-700'},
+  REGULATORY:   { label: 'Regulatorio',     icon: '📜', color: 'bg-rose-100 text-rose-700'   },
+  STRATEGIC:    { label: 'Estratégico',     icon: '🎯', color: 'bg-indigo-100 text-indigo-700'},
 };
 
 export interface AuditEntityNode {
@@ -139,6 +164,24 @@ export function useCreateAuditEntity() {
       name: string; entityType?: string; parentEntityId?: string;
       description?: string; applicableRegulations?: string[];
     }) => apiClient.post('/audit-universe', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['entity-tree'] });
+      qc.invalidateQueries({ queryKey: ['audit-universe'] });
+    },
+  });
+}
+
+export function useUpdateAuditEntity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: {
+      id: string;
+      data: {
+        name?: string; entityType?: string; parentEntityId?: string | null;
+        description?: string; applicableRegulations?: string[];
+        riskScore?: number; isActive?: boolean;
+      };
+    }) => apiClient.patch(`/audit-universe/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['entity-tree'] });
       qc.invalidateQueries({ queryKey: ['audit-universe'] });

@@ -59,11 +59,15 @@ export class AuditUniverseService {
         organizationId: user.organizationId,
         name: dto.name,
         description: dto.description,
-        category: dto.division ?? 'Proceso',
+        category: dto.division,
         location: dto.location,
         responsible: dto.responsibleId,
-        inherentRiskScore: dto.riskScore ?? 50,
+        inherentRiskScore: dto.riskScore ?? 0,
         active: dto.isActive ?? true,
+        parentEntityId: dto.parentEntityId ?? null,
+        entityType: (dto.entityType as any) ?? 'AREA',
+        applicableRegulations: dto.applicableRegulations ?? [],
+        ownerId: dto.ownerId ?? null,
       },
     });
   }
@@ -128,13 +132,17 @@ export class AuditUniverseService {
     return this.prisma.auditEntity.update({
       where: { id },
       data: {
-        name: dto.name,
-        description: dto.description,
-        category: dto.division,
-        location: dto.location,
-        responsible: dto.responsibleId,
-        inherentRiskScore: dto.riskScore,
-        active: dto.isActive,
+        ...(dto.name !== undefined        && { name: dto.name }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.division !== undefined    && { category: dto.division }),
+        ...(dto.location !== undefined    && { location: dto.location }),
+        ...(dto.responsibleId !== undefined && { responsible: dto.responsibleId }),
+        ...(dto.riskScore !== undefined   && { inherentRiskScore: dto.riskScore }),
+        ...(dto.isActive !== undefined    && { active: dto.isActive }),
+        ...(dto.parentEntityId !== undefined && { parentEntityId: dto.parentEntityId }),
+        ...(dto.entityType !== undefined  && { entityType: dto.entityType as any }),
+        ...(dto.applicableRegulations !== undefined && { applicableRegulations: dto.applicableRegulations }),
+        ...(dto.ownerId !== undefined     && { ownerId: dto.ownerId }),
       },
     });
   }

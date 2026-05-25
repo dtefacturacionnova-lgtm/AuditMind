@@ -6,7 +6,7 @@ import {
   Users, MapPin, Mail, Phone, DollarSign,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
-import { useAuditUniverse, useRiskSummary } from '@/hooks/useAuditUniverse';
+import { useRiskSummary } from '@/hooks/useAuditUniverse';
 import {
   useEntityTree, useCreateAuditEntity, useUpdateAuditEntity, useDeleteAuditEntity,
   useAuditProcesses, useCreateAuditProcess, useDeleteAuditProcess,
@@ -1483,19 +1483,47 @@ function ProcessesTab() {
 // ─── EditUnitModal ────────────────────────────────────────────────────────────
 
 const AUDIT_TYPE_LABELS: Record<string, string> = {
-  OPERATIONAL: 'Operacional',
-  FINANCIAL:   'Financiero',
-  IT:          'Tecnología (TI)',
-  COMPLIANCE:  'Cumplimiento',
-  FORENSIC:    'Forense',
-  ADVISORY:    'Consultoría',
+  FINANCIERA:      'Auditoría Financiera',
+  OPERACIONAL:     'Auditoría Operacional',
+  GESTION:         'Auditoría de Gestión',
+  TECNOLOGIA:      'Auditoría de Tecnología',
+  EXAMEN_ESPECIAL: 'Examen Especial',
+  CONSULTORIA:     'Consultoría',
+  FORENSE:         'Investigación Forense',
+  FRAUDE:          'Fraude',
+  CALIDAD:         'Revisión de Calidad',
+  OTROS:           'Otros',
+  // legado — mantener para registros anteriores
+  OPERATIONAL:     'Operacional',
+  FINANCIAL:       'Financiero',
+  IT:              'Tecnología (TI)',
+  COMPLIANCE:      'Cumplimiento',
+  FORENSIC:        'Forense',
+  ADVISORY:        'Consultoría (legacy)',
 };
+
+// Helper: flattens recursive entity tree for <select> display with indentation
+function flattenTree(
+  nodes: AuditEntityNode[],
+  depth = 0,
+): Array<{ id: string; label: string }> {
+  const result: Array<{ id: string; label: string }> = [];
+  for (const node of nodes) {
+    const indent = '    '.repeat(depth);
+    const prefix = depth > 0 ? '└ ' : '';
+    result.push({ id: node.id, label: `${indent}${prefix}${node.name}` });
+    if (node.children && node.children.length > 0) {
+      result.push(...flattenTree(node.children, depth + 1));
+    }
+  }
+  return result;
+}
 
 function EditUnitModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => void }) {
   const updateUnit = useUpdateAuditableUnit();
   const [form, setForm] = useState({
     name:          unit.name ?? '',
-    auditType:     unit.auditType ?? 'OPERATIONAL',
+    auditType:     unit.auditType ?? 'OPERACIONAL',
     isMandatory:   unit.isMandatory ?? false,
     mandatoryBasis: unit.mandatoryBasis ?? '',
     notes:         unit.notes ?? '',
@@ -1532,9 +1560,16 @@ function EditUnitModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => 
             <label className="text-xs font-medium text-slate-700">Tipo de Auditoría</label>
             <select value={form.auditType} onChange={(e) => set('auditType', e.target.value)}
               className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
-              {Object.entries(AUDIT_TYPE_LABELS).map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
-              ))}
+              <option value="FINANCIERA">Auditoría Financiera</option>
+              <option value="OPERACIONAL">Auditoría Operacional</option>
+              <option value="GESTION">Auditoría de Gestión</option>
+              <option value="TECNOLOGIA">Auditoría de Tecnología</option>
+              <option value="EXAMEN_ESPECIAL">Examen Especial</option>
+              <option value="CONSULTORIA">Consultoría</option>
+              <option value="FORENSE">Investigación Forense</option>
+              <option value="FRAUDE">Fraude</option>
+              <option value="CALIDAD">Revisión de Calidad</option>
+              <option value="OTROS">Otros</option>
             </select>
           </div>
           <div className="flex items-center gap-3 py-1">
@@ -1577,8 +1612,9 @@ function EditUnitModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => 
 
 function AuditableUnitsTab() {
   const { data: units = [], isLoading } = useAuditableUnits();
-  const { data: entities } = useAuditUniverse();
+  const { data: entityTree = [] } = useEntityTree();
   const { data: processes = [] } = useAuditProcesses();
+  const { data: processCats = [] } = useProcessCategoryConfigs();
   const createUnit = useCreateAuditableUnit();
   const deleteUnit = useDeleteAuditableUnit();
   const [scoringUnit, setScoringUnit] = useState<AuditableUnit | null>(null);
@@ -1586,9 +1622,24 @@ function AuditableUnitsTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [showScoreInfo, setShowScoreInfo] = useState(false);
   const [form, setForm] = useState({
-    auditEntityId: '', auditProcessId: '', auditType: 'OPERATIONAL',
+    auditEntityId: '', auditProcessId: '', auditType: 'OPERACIONAL',
     isMandatory: false, mandatoryBasis: '',
   });
+
+  // Flat list with hierarchy indentation for entity <select>
+  const flatEntities = flattenTree(entityTree);
+
+  // Build a map: apqcCode → category type (STRATEGIC | OPERATING | SUPPORT)
+  const codeTypeMap = new Map<string, string>(
+    processCats.map(c => [c.code, c.type]),
+  );
+  // Group processes by their parent category type via apqcCode
+  const strategicProcs = processes.filter(p => codeTypeMap.get(p.apqcCode ?? '') === 'STRATEGIC');
+  const operatingProcs = processes.filter(p => codeTypeMap.get(p.apqcCode ?? '') === 'OPERATING');
+  const supportProcs   = processes.filter(p => codeTypeMap.get(p.apqcCode ?? '') === 'SUPPORT');
+  const uncategorized  = processes.filter(
+    p => !p.apqcCode || !codeTypeMap.has(p.apqcCode),
+  );
 
   return (
     <div className="space-y-4">
@@ -1656,33 +1707,70 @@ function AuditableUnitsTab() {
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-blue-900">Nueva Unidad Auditable</h3>
           <div className="grid grid-cols-2 gap-3">
+            {/* Entidad — árbol jerárquico completo */}
             <div>
               <label className="text-xs font-medium text-slate-700">Entidad</label>
               <select value={form.auditEntityId} onChange={(e) => setForm((f) => ({ ...f, auditEntityId: e.target.value }))}
                 className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-                <option value="">Seleccionar…</option>
-                {(entities?.data ?? []).map((e: any) => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
+                <option value="">Seleccionar entidad del organigrama…</option>
+                {flatEntities.map((e) => (
+                  <option key={e.id} value={e.id}>{e.label}</option>
                 ))}
               </select>
             </div>
+
+            {/* Proceso — agrupado por tipo */}
             <div>
               <label className="text-xs font-medium text-slate-700">Proceso</label>
               <select value={form.auditProcessId} onChange={(e) => setForm((f) => ({ ...f, auditProcessId: e.target.value }))}
                 className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-                <option value="">Seleccionar…</option>
-                {processes.map((p) => (
-                  <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>
-                ))}
+                <option value="">Seleccionar proceso del mapa…</option>
+                {strategicProcs.length > 0 && (
+                  <optgroup label="── Estratégicos ──">
+                    {strategicProcs.map((p) => (
+                      <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {operatingProcs.length > 0 && (
+                  <optgroup label="── Misionales / Operativos ──">
+                    {operatingProcs.map((p) => (
+                      <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {supportProcs.length > 0 && (
+                  <optgroup label="── Soporte / Gestión ──">
+                    {supportProcs.map((p) => (
+                      <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {uncategorized.length > 0 && (
+                  <optgroup label="── Sin categoría ──">
+                    {uncategorized.map((p) => (
+                      <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
+
+            {/* Tipo de Auditoría */}
             <div>
               <label className="text-xs font-medium text-slate-700">Tipo de Auditoría</label>
               <select value={form.auditType} onChange={(e) => setForm((f) => ({ ...f, auditType: e.target.value }))}
                 className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-                {Object.entries(AUDIT_TYPE_LABELS).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
+                <option value="FINANCIERA">Auditoría Financiera</option>
+                <option value="OPERACIONAL">Auditoría Operacional</option>
+                <option value="GESTION">Auditoría de Gestión</option>
+                <option value="TECNOLOGIA">Auditoría de Tecnología</option>
+                <option value="EXAMEN_ESPECIAL">Examen Especial</option>
+                <option value="CONSULTORIA">Consultoría</option>
+                <option value="FORENSE">Investigación Forense</option>
+                <option value="FRAUDE">Fraude</option>
+                <option value="CALIDAD">Revisión de Calidad</option>
+                <option value="OTROS">Otros</option>
               </select>
             </div>
             <div className="flex items-start gap-2 pt-5">
@@ -1703,7 +1791,7 @@ function AuditableUnitsTab() {
             <button onClick={() => setShowCreate(false)} className="rounded px-3 py-1.5 text-xs border border-slate-300 hover:bg-white">Cancelar</button>
             <button
               disabled={!form.auditEntityId || !form.auditProcessId || createUnit.isPending}
-              onClick={() => createUnit.mutate(form as any, { onSuccess: () => { setShowCreate(false); setForm({ auditEntityId: '', auditProcessId: '', auditType: 'OPERATIONAL', isMandatory: false, mandatoryBasis: '' }); } })}
+              onClick={() => createUnit.mutate(form as any, { onSuccess: () => { setShowCreate(false); setForm({ auditEntityId: '', auditProcessId: '', auditType: 'OPERACIONAL', isMandatory: false, mandatoryBasis: '' }); } })}
               className="rounded px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
               Crear
             </button>

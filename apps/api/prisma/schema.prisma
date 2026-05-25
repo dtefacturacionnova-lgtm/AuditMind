@@ -376,6 +376,8 @@ model Organization {
   aiInteractions         AIInteraction[]
   dataSources            DataSource[]
   indexTemplates         IndexTemplate[]
+  entityTypeConfigs      EntityTypeConfig[]
+  processCategoryConfigs ProcessCategoryConfig[]
 
   @@map("organizations")
 }
@@ -467,28 +469,35 @@ model CpeRecord {
 // ─── MÓDULO 02: UNIVERSO DE AUDITORÍA ─────────────────────────────────────────
 
 model AuditEntity {
-  id                          String          @id @default(cuid())
+  id                          String   @id @default(cuid())
   organizationId              String
   name                        String
   description                 String?
-  entityType                  AuditEntityType @default(AREA)
-  category                    String?         // campo libre legado / sub-categoría
+  entityType                  String   @default("AREA")
+  category                    String?
   parentEntityId              String?
   // Dueño del proceso (negocio)
   ownerId                     String?
-  responsible                 String?         // legado — texto libre
+  responsible                 String?
   location                    String?
   sector                      String?
-  relatedSystems              Json            @default("[]")
-  applicableRegulations       Json            @default("[]") // ["SOX","GDPR","DORA",...]
-  inherentRiskScore           Int             @default(50)   // 1-100 (legado — scoring simple)
+  relatedSystems              Json     @default("[]")
+  applicableRegulations       Json     @default("[]")
+  inherentRiskScore           Int      @default(50)
   lastAuditDate               DateTime?
-  recommendedFrequencyMonths  Int             @default(12)
-  active                      Boolean         @default(true)
-  excluded                    Boolean         @default(false)
+  recommendedFrequencyMonths  Int      @default(12)
+  active                      Boolean  @default(true)
+  excluded                    Boolean  @default(false)
   exclusionJustification      String?
-  createdAt                   DateTime        @default(now())
-  updatedAt                   DateTime        @updatedAt
+  // Campos de documentación del área
+  objective                   String?
+  status                      String   @default("ACTIVE")
+  employeeCount               Int?
+  contactEmail                String?
+  contactPhone                String?
+  budget                      String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
 
   organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner           User?           @relation("EntityOwner", fields: [ownerId], references: [id])
@@ -504,6 +513,45 @@ model AuditEntity {
   @@index([organizationId, inherentRiskScore])
   @@index([organizationId, active])
   @@map("audit_entities")
+}
+
+// ─── CATÁLOGOS GENERALES ──────────────────────────────────────────────────────
+
+model EntityTypeConfig {
+  id             String   @id @default(cuid())
+  organizationId String
+  value          String
+  label          String
+  icon           String   @default("🏢")
+  color          String   @default("bg-slate-100 text-slate-700")
+  sortOrder      Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, value])
+  @@index([organizationId])
+  @@map("entity_type_configs")
+}
+
+model ProcessCategoryConfig {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  type           String   @default("OPERATING")
+  sortOrder      Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("process_category_configs")
 }
 
 // ─── CATÁLOGO DE PROCESOS ─────────────────────────────────────────────────────

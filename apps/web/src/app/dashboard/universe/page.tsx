@@ -3,6 +3,7 @@ import { useState } from 'react';
 import {
   Plus, Trash2, ChevronRight, ChevronDown, Edit2,
   Layers, FlaskConical, X, Save, Target, Building2, Info,
+  Users, MapPin, Mail, Phone, DollarSign,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAuditUniverse, useRiskSummary } from '@/hooks/useAuditUniverse';
@@ -13,9 +14,44 @@ import {
   useUpsertAssessment, usePlanCandidates,
   ENTITY_TYPE_CONFIG, ORG_ENTITY_TYPES, RISK_LEVEL_CONFIG,
   type AuditEntityNode, type AuditProcess, type AuditableUnit,
-  type AuditEntityType,
 } from '@/hooks/useAuditUniverse2';
+import { useEntityTypeConfigs, type EntityTypeConfig } from '@/hooks/useCatalogs';
 import { cn } from '@/lib/utils';
+
+// Derive accent color class from catalog color string (e.g. "bg-blue-100 text-blue-800" → "blue")
+function getAccentBorder(entityType: string): string {
+  const map: Record<string, string> = {
+    CORPORATE:  'border-l-slate-500',
+    COMPANY:    'border-l-blue-500',
+    DIVISION:   'border-l-indigo-500',
+    DEPARTMENT: 'border-l-sky-500',
+    AREA:       'border-l-teal-500',
+    TEAM:       'border-l-green-500',
+    BRANCH:     'border-l-amber-500',
+    SUBSIDIARY: 'border-l-purple-500',
+  };
+  return map[entityType] ?? 'border-l-slate-400';
+}
+
+function getAccentDot(entityType: string): string {
+  const map: Record<string, string> = {
+    CORPORATE:  'bg-slate-500',
+    COMPANY:    'bg-blue-500',
+    DIVISION:   'bg-indigo-500',
+    DEPARTMENT: 'bg-sky-500',
+    AREA:       'bg-teal-500',
+    TEAM:       'bg-green-500',
+    BRANCH:     'bg-amber-500',
+    SUBSIDIARY: 'bg-purple-500',
+  };
+  return map[entityType] ?? 'bg-slate-400';
+}
+
+function resolveTypeConfig(entityType: string, catalog?: EntityTypeConfig[]) {
+  const cat = catalog?.find(t => t.value === entityType && t.active);
+  if (cat) return { label: cat.label, icon: cat.icon, color: cat.color };
+  return ENTITY_TYPE_CONFIG[entityType] ?? { label: entityType, icon: '🏢', color: 'bg-slate-100 text-slate-700' };
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -277,15 +313,17 @@ function PlanCandidatesView() {
 // ─── EntityModal (crear y editar) ─────────────────────────────────────────────
 
 function EntityModal({ node, parentId, parentName, onClose }: {
-  node?: AuditEntityNode;       // presente = edición; ausente = creación
+  node?: AuditEntityNode;
   parentId?: string;
   parentName?: string;
   onClose: () => void;
 }) {
   const createEntity = useCreateAuditEntity();
   const updateEntity = useUpdateAuditEntity();
+  const { data: catalogTypes = [] } = useEntityTypeConfigs();
   const isPending = createEntity.isPending || updateEntity.isPending;
   const isEdit = !!node;
+  const [activeTab, setActiveTab] = useState<'basic' | 'details' | 'governance'>('basic');
 
   const [form, setForm] = useState({
     name:                   node?.name ?? '',
@@ -293,6 +331,15 @@ function EntityModal({ node, parentId, parentName, onClose }: {
     description:            node?.description ?? '',
     applicableRegulations:  (node?.applicableRegulations ?? []).join(', '),
     riskScore:              node?.inherentRiskScore ?? 0,
+    objective:              node?.objective ?? '',
+    status:                 node?.status ?? 'ACTIVE',
+    responsible:            node?.responsible ?? '',
+    employeeCount:          node?.employeeCount?.toString() ?? '',
+    contactEmail:           node?.contactEmail ?? '',
+    contactPhone:           node?.contactPhone ?? '',
+    budget:                 node?.budget ?? '',
+    location:               node?.location ?? '',
+    sector:                 node?.sector ?? '',
   });
   const set = (k: string, v: string | number) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -304,82 +351,192 @@ function EntityModal({ node, parentId, parentName, onClose }: {
     { score: 80, label: 'Crítico (80)' },
   ];
 
+  const entityTypeOptions = catalogTypes.length > 0
+    ? catalogTypes.filter(t => t.active)
+    : ORG_ENTITY_TYPES.map(t => ({ value: t.value, label: t.label, icon: '', color: '' }));
+
   const save = () => {
     const regs = form.applicableRegulations
       ? form.applicableRegulations.split(',').map((r) => r.trim()).filter(Boolean)
       : [];
-    const payload = {
+    const payload: any = {
       name:                  form.name,
       entityType:            form.entityType,
       description:           form.description || undefined,
       applicableRegulations: regs,
       riskScore:             form.riskScore,
+      objective:             form.objective || undefined,
+      status:                form.status,
+      responsible:           form.responsible || undefined,
+      employeeCount:         form.employeeCount ? Number(form.employeeCount) : undefined,
+      contactEmail:          form.contactEmail || undefined,
+      contactPhone:          form.contactPhone || undefined,
+      budget:                form.budget || undefined,
+      location:              form.location || undefined,
+      sector:                form.sector || undefined,
     };
     if (isEdit) {
       updateEntity.mutate({ id: node!.id, data: payload }, { onSuccess: onClose });
     } else {
-      createEntity.mutate(
-        { ...payload, parentEntityId: parentId },
-        { onSuccess: onClose },
-      );
+      createEntity.mutate({ ...payload, parentEntityId: parentId }, { onSuccess: onClose });
     }
   };
 
+  const tabs = [
+    { id: 'basic',      label: 'Información' },
+    { id: 'details',    label: 'Detalles' },
+    { id: 'governance', label: 'Gobernanza' },
+  ] as const;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b px-6 py-4">
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between border-b px-6 py-4 shrink-0">
           <div>
             <h2 className="font-semibold text-slate-900">
-              {isEdit ? 'Editar Entidad' : parentId ? 'Agregar Subentidad' : 'Nueva Entidad Raíz'}
+              {isEdit ? 'Editar Entidad' : parentId ? 'Agregar Sub-entidad' : 'Nueva Entidad Raíz'}
             </h2>
-            {!isEdit && parentName && <p className="text-xs text-slate-500">Bajo: {parentName}</p>}
+            {!isEdit && parentName && <p className="text-xs text-slate-500">Dependiente de: {parentName}</p>}
             {isEdit && <p className="text-xs text-slate-500">{node!.name}</p>}
           </div>
           <button onClick={onClose} className="rounded p-1 hover:bg-slate-100"><X className="h-4 w-4" /></button>
         </div>
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <label className="text-xs font-medium text-slate-700">Nombre *</label>
-            <input value={form.name} onChange={(e) => set('name', e.target.value)}
-              placeholder="Ej: Gerencia de Finanzas"
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-700">Nivel jerárquico *</label>
-            <select value={form.entityType} onChange={(e) => set('entityType', e.target.value)}
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
-              {ORG_ENTITY_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-700">Descripción</label>
-            <input value={form.description} onChange={(e) => set('description', e.target.value)}
-              placeholder="Breve descripción (opcional)"
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-700">Nivel de Riesgo Inherente</label>
-            <select value={form.riskScore} onChange={(e) => set('riskScore', Number(e.target.value))}
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
-              {RISK_LEVELS.map((r) => (
-                <option key={r.score} value={r.score}>{r.label}</option>
-              ))}
-            </select>
-            <p className="mt-1 text-[10px] text-slate-400">
-              Este valor se usa como indicador inicial; el score definitivo lo calcula la evaluación multi-factor de la Unidad Auditable.
-            </p>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-700">Regulaciones aplicables</label>
-            <input value={form.applicableRegulations} onChange={(e) => set('applicableRegulations', e.target.value)}
-              placeholder="SOX, GDPR, UAF, CMF (separados por coma)"
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
-          </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-6 pt-3 border-b shrink-0">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={cn('px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors',
+                activeTab === t.id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700',
+              )}>{t.label}</button>
+          ))}
         </div>
-        <div className="border-t px-6 py-4 flex justify-end gap-3">
+
+        <div className="overflow-y-auto flex-1 px-6 py-4">
+          {activeTab === 'basic' && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-700">Nombre *</label>
+                <input value={form.name} onChange={(e) => set('name', e.target.value)}
+                  placeholder="Ej: Gerencia de Finanzas"
+                  className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-700">Nivel jerárquico *</label>
+                <select value={form.entityType} onChange={(e) => set('entityType', e.target.value)}
+                  className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                  {entityTypeOptions.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-700">Descripción corta</label>
+                <input value={form.description} onChange={(e) => set('description', e.target.value)}
+                  placeholder="Breve descripción del área"
+                  className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-700">Objetivo General</label>
+                <textarea rows={2} value={form.objective} onChange={(e) => set('objective', e.target.value)}
+                  placeholder="Propósito y misión del área dentro de la organización"
+                  className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm resize-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-700">Estado</label>
+                  <select value={form.status} onChange={(e) => set('status', e.target.value)}
+                    className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                    <option value="ACTIVE">Activo</option>
+                    <option value="INACTIVE">Inactivo</option>
+                    <option value="RESTRUCTURING">En restructuración</option>
+                    <option value="MERGED">Fusionado</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700">Riesgo Inherente</label>
+                  <select value={form.riskScore} onChange={(e) => set('riskScore', Number(e.target.value))}
+                    className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                    {RISK_LEVELS.map((r) => (
+                      <option key={r.score} value={r.score}>{r.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'details' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-700">Responsable</label>
+                  <input value={form.responsible} onChange={(e) => set('responsible', e.target.value)}
+                    placeholder="Nombre del titular"
+                    className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700">N.° de Empleados</label>
+                  <input type="number" value={form.employeeCount} onChange={(e) => set('employeeCount', e.target.value)}
+                    placeholder="0"
+                    className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-700">Email de contacto</label>
+                  <input type="email" value={form.contactEmail} onChange={(e) => set('contactEmail', e.target.value)}
+                    placeholder="area@empresa.com"
+                    className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700">Teléfono</label>
+                  <input value={form.contactPhone} onChange={(e) => set('contactPhone', e.target.value)}
+                    placeholder="+1 (555) 000-0000"
+                    className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-700">Ubicación / Sede</label>
+                  <input value={form.location} onChange={(e) => set('location', e.target.value)}
+                    placeholder="Ciudad, País"
+                    className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700">Sector / Industria</label>
+                  <input value={form.sector} onChange={(e) => set('sector', e.target.value)}
+                    placeholder="Financiero, Tecnología…"
+                    className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-700">Presupuesto anual</label>
+                <input value={form.budget} onChange={(e) => set('budget', e.target.value)}
+                  placeholder="USD 1,200,000 / Referencial"
+                  className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'governance' && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-700">Regulaciones aplicables</label>
+                <input value={form.applicableRegulations} onChange={(e) => set('applicableRegulations', e.target.value)}
+                  placeholder="SOX, GDPR, UAF, CMF (separados por coma)"
+                  className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+                <p className="mt-1 text-[10px] text-slate-400">Ingresa los marcos regulatorios separados por coma</p>
+              </div>
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-800">
+                <strong>Nota:</strong> El score de riesgo definitivo se calcula mediante la evaluación multi-factor
+                en la pestaña <em>Unidades Auditables</em>. El riesgo inherente aquí es solo un indicador inicial.
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t px-6 py-4 flex justify-end gap-3 shrink-0">
           <button onClick={onClose} className="rounded px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50">Cancelar</button>
           <button onClick={save} disabled={!form.name || isPending}
             className="rounded px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1.5">
@@ -392,10 +549,19 @@ function EntityModal({ node, parentId, parentName, onClose }: {
   );
 }
 
-// ─── EntityTreeNode ───────────────────────────────────────────────────────────
+// ─── EntityCard ───────────────────────────────────────────────────────────────
 
-function EntityTreeNode({
-  node, depth, isLast, ancestorIsLast, onAddChild, onEdit, onDelete,
+const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
+  ACTIVE:         { label: 'Activo',           dot: 'bg-green-500'  },
+  INACTIVE:       { label: 'Inactivo',          dot: 'bg-gray-400'   },
+  RESTRUCTURING:  { label: 'Restructuración',   dot: 'bg-amber-500'  },
+  MERGED:         { label: 'Fusionado',          dot: 'bg-purple-500' },
+};
+
+function EntityCard({
+  node, depth, isLast, ancestorIsLast,
+  onAddChild, onEdit, onDelete, onSelect, isSelected,
+  catalog,
 }: {
   node: AuditEntityNode;
   depth: number;
@@ -404,102 +570,343 @@ function EntityTreeNode({
   onAddChild: (id: string, name: string) => void;
   onEdit: (node: AuditEntityNode) => void;
   onDelete: (id: string) => void;
+  onSelect: (node: AuditEntityNode) => void;
+  isSelected: boolean;
+  catalog: EntityTypeConfig[];
 }) {
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children.length > 0;
-  const etConfig = ENTITY_TYPE_CONFIG[node.entityType] ?? ENTITY_TYPE_CONFIG['AREA'];
+  const etConfig = resolveTypeConfig(node.entityType, catalog);
+  const accentBorder = getAccentBorder(node.entityType);
+  const accentDot = getAccentDot(node.entityType);
   const rs = node.inherentRiskScore;
   const riskLevel = rs >= 75 ? 'CRITICAL' : rs >= 55 ? 'HIGH' : rs >= 35 ? 'MEDIUM' : 'LOW';
-  const rl = RISK_LEVEL_CONFIG[riskLevel as keyof typeof RISK_LEVEL_CONFIG];
+  const rl = rs > 0 ? RISK_LEVEL_CONFIG[riskLevel as keyof typeof RISK_LEVEL_CONFIG] : null;
+  const statusCfg = STATUS_CONFIG[node.status ?? 'ACTIVE'] ?? STATUS_CONFIG['ACTIVE'];
 
   return (
     <div>
-      <div className="flex items-center min-h-[34px] group hover:bg-slate-50/80 rounded-md pr-2">
-
+      <div className="flex items-stretch gap-0 group">
         {/* Ancestor continuation lines */}
         {ancestorIsLast.map((wasLast, i) => (
-          <div key={i} className="w-5 shrink-0 self-stretch relative">
-            {!wasLast && <div className="absolute left-2.5 inset-y-0 w-px bg-slate-200" />}
+          <div key={i} className="w-6 shrink-0 relative">
+            {!wasLast && <div className="absolute left-3 inset-y-0 w-px bg-slate-200" />}
           </div>
         ))}
 
         {/* Current level connector */}
         {depth > 0 && (
-          <div className="w-5 shrink-0 self-stretch relative">
-            <div className="absolute left-2.5 top-0 bottom-1/2 w-px bg-slate-200" />
-            {!isLast && <div className="absolute left-2.5 top-1/2 bottom-0 w-px bg-slate-200" />}
-            <div className="absolute left-2.5 top-1/2 w-2.5 h-px bg-slate-200 -translate-y-px" />
+          <div className="w-6 shrink-0 relative">
+            <div className="absolute left-3 top-0 bottom-1/2 w-px bg-slate-200" />
+            {!isLast && <div className="absolute left-3 top-1/2 bottom-0 w-px bg-slate-200" />}
+            <div className="absolute left-3 top-1/2 w-3 h-px bg-slate-200" />
           </div>
         )}
 
-        {/* Expand/collapse */}
-        <button onClick={() => hasChildren && setExpanded(!expanded)}
-          className={cn('w-5 h-5 shrink-0 flex items-center justify-center rounded',
-            hasChildren ? 'hover:bg-slate-200 cursor-pointer' : 'cursor-default')}>
-          {hasChildren
-            ? expanded ? <ChevronDown className="h-3 w-3 text-slate-500" /> : <ChevronRight className="h-3 w-3 text-slate-500" />
-            : <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />}
-        </button>
+        {/* Expand toggle */}
+        <div className="w-5 shrink-0 flex items-center justify-center">
+          {hasChildren ? (
+            <button onClick={() => setExpanded(!expanded)}
+              className="w-4 h-4 rounded flex items-center justify-center hover:bg-slate-200 transition-colors">
+              {expanded
+                ? <ChevronDown className="h-3 w-3 text-slate-500" />
+                : <ChevronRight className="h-3 w-3 text-slate-500" />}
+            </button>
+          ) : (
+            <div className={cn('w-2 h-2 rounded-full', accentDot, 'opacity-50')} />
+          )}
+        </div>
 
-        {/* Icon + name */}
-        <span className="ml-1.5 text-sm shrink-0">{etConfig.icon}</span>
-        <span className="ml-2 text-sm font-medium text-slate-800 flex-1 min-w-0 truncate">{node.name}</span>
-
-        {/* Type badge */}
-        <span className={cn('shrink-0 text-[11px] px-1.5 py-0.5 rounded font-medium', etConfig.color)}>
-          {etConfig.label}
-        </span>
-
-        {/* Risk badge */}
-        {rs > 0 && (
-          <span className={cn('shrink-0 ml-1.5 text-[10px] px-1.5 py-0.5 rounded border', rl.bg, rl.color, rl.border)}>
-            {rl.label} ({rs})
-          </span>
+        {/* The card itself */}
+        <div className={cn(
+          'flex-1 mb-1.5 rounded-lg border border-slate-200 border-l-[3px] bg-white shadow-sm',
+          'hover:shadow-md transition-shadow cursor-pointer',
+          accentBorder,
+          isSelected && 'ring-2 ring-blue-400 ring-offset-1 shadow-md',
         )}
+          onClick={() => onSelect(node)}
+        >
+          <div className="px-3 py-2.5 flex items-start gap-2.5">
+            {/* Icon */}
+            <span className="text-base mt-0.5 shrink-0">{etConfig.icon}</span>
 
-        {/* Regulations */}
-        {(node.applicableRegulations?.length ?? 0) > 0 && (
-          <span className="shrink-0 ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
-            {node.applicableRegulations!.slice(0, 2).join(', ')}
-            {node.applicableRegulations!.length > 2 && ` +${node.applicableRegulations!.length - 2}`}
-          </span>
-        )}
+            {/* Main content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-slate-900 truncate">{node.name}</span>
+                <span className={cn('shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium', etConfig.color)}>
+                  {etConfig.label}
+                </span>
+                {/* Status dot */}
+                <span className="flex items-center gap-1 shrink-0">
+                  <span className={cn('w-1.5 h-1.5 rounded-full', statusCfg.dot)} />
+                  <span className="text-[10px] text-slate-400">{statusCfg.label}</span>
+                </span>
+              </div>
 
-        {/* Units count */}
-        <span className="shrink-0 ml-2 text-[11px] text-slate-400 w-12 text-right">
-          {node._count?.auditableUnits ?? 0} uds
-        </span>
+              {/* Responsible + objective */}
+              {(node.responsible || node.objective) && (
+                <div className="mt-0.5 space-y-0.5">
+                  {node.responsible && (
+                    <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                      <Users className="h-2.5 w-2.5" />{node.responsible}
+                    </p>
+                  )}
+                  {node.objective && (
+                    <p className="text-[11px] text-slate-400 line-clamp-1">{node.objective}</p>
+                  )}
+                </div>
+              )}
 
-        {/* Hover actions */}
-        <div className="shrink-0 ml-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => onAddChild(node.id, node.name)}
-            className="p-1 rounded hover:bg-blue-50 text-blue-500" title="Agregar subentidad">
-            <Plus className="h-3 w-3" />
-          </button>
-          <button onClick={() => onEdit(node)}
-            className="p-1 rounded hover:bg-amber-50 text-slate-400 hover:text-amber-600" title="Editar">
-            <Edit2 className="h-3 w-3" />
-          </button>
-          <button onClick={() => onDelete(node.id)}
-            className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500" title="Eliminar">
-            <Trash2 className="h-3 w-3" />
-          </button>
+              {/* Stats row */}
+              <div className="mt-1.5 flex items-center gap-3 flex-wrap">
+                {(node.employeeCount ?? 0) > 0 && (
+                  <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                    <Users className="h-2.5 w-2.5" />{node.employeeCount} emp.
+                  </span>
+                )}
+                <span className="text-[10px] text-slate-400">
+                  {node._count?.auditableUnits ?? 0} unidades auditables
+                </span>
+                {rl && rs > 0 && (
+                  <span className={cn('text-[10px] px-1 py-0.5 rounded border font-medium shrink-0', rl.bg, rl.color, rl.border)}>
+                    {rl.label}
+                  </span>
+                )}
+                {(node.applicableRegulations?.length ?? 0) > 0 && (
+                  <span className="text-[10px] text-rose-600 bg-rose-50 px-1 rounded border border-rose-200">
+                    {node.applicableRegulations!.slice(0, 2).join(', ')}
+                    {node.applicableRegulations!.length > 2 && ` +${node.applicableRegulations!.length - 2}`}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Hover actions */}
+            <div className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={e => e.stopPropagation()}>
+              <button onClick={() => onAddChild(node.id, node.name)}
+                className="p-1.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors" title="Agregar sub-entidad">
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={() => onEdit(node)}
+                className="p-1.5 rounded hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-colors" title="Editar">
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={() => onDelete(node.id)}
+                className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Eliminar">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Children */}
-      {hasChildren && expanded && node.children.map((child, idx) => (
-        <EntityTreeNode
-          key={child.id}
-          node={child}
-          depth={depth + 1}
-          isLast={idx === node.children.length - 1}
-          ancestorIsLast={[...ancestorIsLast, isLast]}
-          onAddChild={onAddChild}
-          onEdit={onEdit}
-          onDelete={onDelete}
-        />
-      ))}
+      {hasChildren && expanded && (
+        <div className="ml-0">
+          {node.children.map((child, idx) => (
+            <EntityCard
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              isLast={idx === node.children.length - 1}
+              ancestorIsLast={[...ancestorIsLast, isLast]}
+              onAddChild={onAddChild}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onSelect={onSelect}
+              isSelected={isSelected}
+              catalog={catalog}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── EntityDetailPanel ────────────────────────────────────────────────────────
+
+function EntityDetailPanel({
+  node, catalog, onEdit, onAddChild, onClose,
+}: {
+  node: AuditEntityNode;
+  catalog: EntityTypeConfig[];
+  onEdit: (node: AuditEntityNode) => void;
+  onAddChild: (id: string, name: string) => void;
+  onClose: () => void;
+}) {
+  const etConfig = resolveTypeConfig(node.entityType, catalog);
+  const accentBorder = getAccentBorder(node.entityType);
+  const accentDot = getAccentDot(node.entityType);
+  const rs = node.inherentRiskScore;
+  const riskLevel = rs >= 75 ? 'CRITICAL' : rs >= 55 ? 'HIGH' : rs >= 35 ? 'MEDIUM' : 'LOW';
+  const rl = rs > 0 ? RISK_LEVEL_CONFIG[riskLevel as keyof typeof RISK_LEVEL_CONFIG] : null;
+  const statusCfg = STATUS_CONFIG[node.status ?? 'ACTIVE'] ?? STATUS_CONFIG['ACTIVE'];
+
+  return (
+    <div className="w-80 shrink-0 flex flex-col border-l border-slate-200 bg-white overflow-hidden">
+      {/* Header */}
+      <div className={cn('px-4 py-3 border-b border-slate-200 border-l-4', accentBorder)}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-lg">{etConfig.icon}</span>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm text-slate-900 truncate">{node.name}</h3>
+              <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium inline-block mt-0.5', etConfig.color)}>
+                {etConfig.label}
+              </span>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 shrink-0">
+            <X className="h-3.5 w-3.5 text-slate-400" />
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+        {/* Status + Risk */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-slate-50 border border-slate-200 text-xs">
+            <span className={cn('w-2 h-2 rounded-full', statusCfg.dot)} />
+            {statusCfg.label}
+          </span>
+          {rl && rs > 0 && (
+            <span className={cn('px-2 py-1 rounded-full text-xs font-medium border', rl.bg, rl.color, rl.border)}>
+              Riesgo {rl.label}
+            </span>
+          )}
+        </div>
+
+        {/* Objective */}
+        {node.objective && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Objetivo General</p>
+            <p className="text-xs text-slate-700 leading-relaxed">{node.objective}</p>
+          </div>
+        )}
+
+        {/* Description */}
+        {node.description && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Descripción</p>
+            <p className="text-xs text-slate-700 leading-relaxed">{node.description}</p>
+          </div>
+        )}
+
+        {/* Contact info */}
+        <div className="space-y-1.5">
+          {node.responsible && (
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <Users className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span>{node.responsible}</span>
+            </div>
+          )}
+          {node.contactEmail && (
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <a href={`mailto:${node.contactEmail}`} className="hover:text-blue-600 hover:underline truncate">
+                {node.contactEmail}
+              </a>
+            </div>
+          )}
+          {node.contactPhone && (
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span>{node.contactPhone}</span>
+            </div>
+          )}
+          {node.location && (
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span>{node.location}{node.sector ? ` · ${node.sector}` : ''}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-2">
+          {(node.employeeCount ?? 0) > 0 && (
+            <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-center">
+              <p className="text-base font-bold text-slate-900">{node.employeeCount}</p>
+              <p className="text-[10px] text-slate-500">Empleados</p>
+            </div>
+          )}
+          <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-center">
+            <p className="text-base font-bold text-slate-900">{node._count?.auditableUnits ?? 0}</p>
+            <p className="text-[10px] text-slate-500">Unidades audit.</p>
+          </div>
+          {(node._count?.audits ?? 0) > 0 && (
+            <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-center">
+              <p className="text-base font-bold text-slate-900">{node._count?.audits ?? 0}</p>
+              <p className="text-[10px] text-slate-500">Auditorías</p>
+            </div>
+          )}
+          {node.budget && (
+            <div className="col-span-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+              <div className="flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5 text-slate-400" />
+                <div>
+                  <p className="text-xs font-medium text-slate-700">{node.budget}</p>
+                  <p className="text-[10px] text-slate-400">Presupuesto anual</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Regulations */}
+        {(node.applicableRegulations?.length ?? 0) > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Regulaciones</p>
+            <div className="flex flex-wrap gap-1">
+              {node.applicableRegulations!.map((r, i) => (
+                <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                  {r}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Children summary */}
+        {node.children.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+              Sub-entidades ({node.children.length})
+            </p>
+            <div className="space-y-1">
+              {node.children.slice(0, 5).map(child => {
+                const childCfg = resolveTypeConfig(child.entityType, catalog);
+                return (
+                  <div key={child.id} className="flex items-center gap-2 text-xs text-slate-600">
+                    <span>{childCfg.icon}</span>
+                    <span className="flex-1 truncate">{child.name}</span>
+                    <span className={cn('text-[9px] px-1 rounded', childCfg.color)}>{childCfg.label}</span>
+                  </div>
+                );
+              })}
+              {node.children.length > 5 && (
+                <p className="text-[10px] text-slate-400">+{node.children.length - 5} más</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="shrink-0 border-t border-slate-200 p-3 flex gap-2">
+        <button onClick={() => onAddChild(node.id, node.name)}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 transition-colors">
+          <Plus className="h-3.5 w-3.5" /> Sub-entidad
+        </button>
+        <button onClick={() => onEdit(node)}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs hover:bg-blue-700 transition-colors">
+          <Edit2 className="h-3.5 w-3.5" /> Editar
+        </button>
+      </div>
     </div>
   );
 }
@@ -508,60 +915,76 @@ function EntityTreeNode({
 
 function EntityTreeView() {
   const { data: tree = [], isLoading } = useEntityTree();
+  const { data: catalog = [] } = useEntityTypeConfigs();
   const deleteEntity = useDeleteAuditEntity();
+  const [selectedNode, setSelectedNode] = useState<AuditEntityNode | null>(null);
+
   type ModalState =
     | { mode: 'add'; parentId?: string; parentName?: string }
     | { mode: 'edit'; node: AuditEntityNode }
     | null;
   const [modal, setModal] = useState<ModalState>(null);
 
-  if (isLoading) return <div className="py-8 text-center text-slate-400 text-sm">Cargando árbol…</div>;
+  if (isLoading) return <div className="py-8 text-center text-slate-400 text-sm">Cargando organigrama…</div>;
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">Estructura jerárquica de la organización auditada</p>
+        <p className="text-sm text-slate-500">
+          Estructura jerárquica de la organización auditada · {tree.length} entidades raíz
+        </p>
         <button onClick={() => setModal({ mode: 'add' })}
-          className="flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700">
+          className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 transition-colors">
           <Plus className="h-3.5 w-3.5" /> Nueva Entidad Raíz
         </button>
       </div>
 
       {tree.length === 0 ? (
-        <div className="rounded-lg border-2 border-dashed border-slate-200 py-12 text-center">
-          <Building2 className="mx-auto h-8 w-8 text-slate-300 mb-3" />
+        <div className="rounded-xl border-2 border-dashed border-slate-200 py-16 text-center">
+          <Building2 className="mx-auto h-10 w-10 text-slate-300 mb-3" />
           <p className="text-sm font-medium text-slate-500">Sin entidades registradas</p>
           <p className="text-xs text-slate-400 mt-1">Crea la primera entidad raíz de tu organigrama</p>
           <button onClick={() => setModal({ mode: 'add' })}
-            className="mt-4 rounded bg-blue-600 px-4 py-2 text-xs text-white hover:bg-blue-700">
+            className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-xs text-white hover:bg-blue-700">
             Crear Primera Entidad
           </button>
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white p-3">
-          {/* Legend — solo tipos org-chart */}
-          <div className="mb-3 pb-3 border-b border-slate-100 flex items-center gap-2 flex-wrap">
-            {ORG_ENTITY_TYPES.map((t) => {
-              const cfg = ENTITY_TYPE_CONFIG[t.value];
-              return (
-                <span key={t.value} className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', cfg?.color)}>
-                  {cfg?.icon} {t.label}
-                </span>
-              );
-            })}
+        <div className="flex gap-0 rounded-xl border border-slate-200 overflow-hidden bg-white">
+          {/* Tree panel */}
+          <div className={cn('flex-1 p-3 overflow-auto', selectedNode ? 'min-w-0' : '')}>
+            {tree.map((root, idx) => (
+              <EntityCard
+                key={root.id}
+                node={root}
+                depth={0}
+                isLast={idx === tree.length - 1}
+                ancestorIsLast={[]}
+                onAddChild={(id, name) => setModal({ mode: 'add', parentId: id, parentName: name })}
+                onEdit={(node) => setModal({ mode: 'edit', node })}
+                onDelete={(id) => { deleteEntity.mutate(id); if (selectedNode?.id === id) setSelectedNode(null); }}
+                onSelect={(node) => setSelectedNode(prev => prev?.id === node.id ? null : node)}
+                isSelected={selectedNode?.id === root.id}
+                catalog={catalog}
+              />
+            ))}
+            {selectedNode === null && (
+              <p className="mt-3 text-center text-[11px] text-slate-300">
+                Haz clic en una entidad para ver sus detalles
+              </p>
+            )}
           </div>
-          {tree.map((root, idx) => (
-            <EntityTreeNode
-              key={root.id}
-              node={root}
-              depth={0}
-              isLast={idx === tree.length - 1}
-              ancestorIsLast={[]}
-              onAddChild={(id, name) => setModal({ mode: 'add', parentId: id, parentName: name })}
+
+          {/* Detail panel */}
+          {selectedNode && (
+            <EntityDetailPanel
+              node={selectedNode}
+              catalog={catalog}
               onEdit={(node) => setModal({ mode: 'edit', node })}
-              onDelete={(id) => deleteEntity.mutate(id)}
+              onAddChild={(id, name) => setModal({ mode: 'add', parentId: id, parentName: name })}
+              onClose={() => setSelectedNode(null)}
             />
-          ))}
+          )}
         </div>
       )}
 

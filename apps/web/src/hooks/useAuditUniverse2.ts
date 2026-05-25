@@ -50,7 +50,7 @@ export interface AuditEntityNode {
   id: string;
   name: string;
   description?: string;
-  entityType: AuditEntityType;
+  entityType: string;
   parentEntityId?: string;
   inherentRiskScore: number;
   applicableRegulations: string[];
@@ -58,6 +58,16 @@ export interface AuditEntityNode {
   owner?: { id: string; name: string } | null;
   _count?: { auditableUnits: number; audits: number };
   children: AuditEntityNode[];
+  // Documentation fields
+  objective?: string;
+  status?: string;
+  employeeCount?: number;
+  contactEmail?: string;
+  contactPhone?: string;
+  budget?: string;
+  responsible?: string;
+  location?: string;
+  sector?: string;
 }
 
 export interface AuditProcess {

@@ -15,7 +15,7 @@ import {
   ENTITY_TYPE_CONFIG, ORG_ENTITY_TYPES, RISK_LEVEL_CONFIG,
   type AuditEntityNode, type AuditProcess, type AuditableUnit,
 } from '@/hooks/useAuditUniverse2';
-import { useEntityTypeConfigs, type EntityTypeConfig } from '@/hooks/useCatalogs';
+import { useEntityTypeConfigs, useProcessCategoryConfigs, type EntityTypeConfig, type ProcessCategoryConfig } from '@/hooks/useCatalogs';
 import { cn } from '@/lib/utils';
 
 // Derive accent color class from catalog color string (e.g. "bg-blue-100 text-blue-800" → "blue")
@@ -1041,37 +1041,34 @@ function EntityTreeView() {
 
 // ─── ProcessCreateModal ───────────────────────────────────────────────────────
 
-function ProcessCreateModal({ defaultApqcCode, onClose }: {
-  defaultApqcCode?: string; onClose: () => void;
+function ProcessCreateModal({ defaultApqcCode, catalogCats, onClose }: {
+  defaultApqcCode?: string;
+  catalogCats: ProcessCategoryConfig[];
+  onClose: () => void;
 }) {
   const createProcess = useCreateAuditProcess();
-  const defaultCat = APQC_CATEGORIES.find((c) => c.code === defaultApqcCode);
+  const defaultCat = catalogCats.find(c => c.code === defaultApqcCode);
   const [form, setForm] = useState({
-    code: '',
-    name: '',
-    description: '',
+    code: '', name: '', description: '',
     apqcCode: defaultApqcCode ?? '',
     category: defaultCat?.name ?? '',
   });
-  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
-  const handleApqcChange = (code: string) => {
-    const cat = APQC_CATEGORIES.find((c) => c.code === code);
-    setForm((f) => ({ ...f, apqcCode: code, category: cat?.name ?? '' }));
+  const handleCatChange = (code: string) => {
+    const cat = catalogCats.find(c => c.code === code);
+    setForm(f => ({ ...f, apqcCode: code, category: cat?.name ?? '' }));
   };
 
-  const save = () => {
-    createProcess.mutate(
-      {
-        code: form.code,
-        name: form.name,
-        description: form.description || undefined,
-        apqcCode: form.apqcCode || undefined,
-        category: form.category || undefined,
-      },
-      { onSuccess: onClose },
-    );
-  };
+  const save = () => createProcess.mutate(
+    { code: form.code, name: form.name, description: form.description || undefined,
+      apqcCode: form.apqcCode || undefined, category: form.category || undefined },
+    { onSuccess: onClose },
+  );
+
+  const strategicCats = catalogCats.filter(c => c.type === 'STRATEGIC');
+  const operatingCats = catalogCats.filter(c => c.type === 'OPERATING');
+  const supportCats   = catalogCats.filter(c => c.type === 'SUPPORT');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1084,45 +1081,51 @@ function ProcessCreateModal({ defaultApqcCode, onClose }: {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-slate-700">Código *</label>
-              <input value={form.code} onChange={(e) => set('code', e.target.value)}
+              <input value={form.code} onChange={e => set('code', e.target.value)}
                 placeholder="PROC-FIN-01"
-                className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+                className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-700">Categoría APQC PCF</label>
-              <select value={form.apqcCode} onChange={(e) => handleApqcChange(e.target.value)}
-                className="mt-1 block w-full rounded border border-slate-300 px-2 py-2 text-sm">
+              <label className="text-xs font-medium text-slate-700">Categoría</label>
+              <select value={form.apqcCode} onChange={e => handleCatChange(e.target.value)}
+                className="mt-1 block w-full rounded border border-slate-300 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">— Sin categoría —</option>
-                <optgroup label="Operativos (1.0–6.0)">
-                  {APQC_CATEGORIES.filter((c) => c.type === 'operating').map((c) => (
-                    <option key={c.code} value={c.code}>{c.code} {c.short}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Soporte y Gestión (7.0–13.0)">
-                  {APQC_CATEGORIES.filter((c) => c.type === 'support').map((c) => (
-                    <option key={c.code} value={c.code}>{c.code} {c.short}</option>
-                  ))}
-                </optgroup>
+                {strategicCats.length > 0 && (
+                  <optgroup label="Estratégicos">
+                    {strategicCats.map(c => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}
+                  </optgroup>
+                )}
+                {operatingCats.length > 0 && (
+                  <optgroup label="Misionales / Operativos">
+                    {operatingCats.map(c => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}
+                  </optgroup>
+                )}
+                {supportCats.length > 0 && (
+                  <optgroup label="Soporte / Gestión">
+                    {supportCats.map(c => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}
+                  </optgroup>
+                )}
               </select>
             </div>
           </div>
           <div>
             <label className="text-xs font-medium text-slate-700">Nombre *</label>
-            <input value={form.name} onChange={(e) => set('name', e.target.value)}
+            <input value={form.name} onChange={e => set('name', e.target.value)}
               placeholder="Gestión de Compras y Pagos"
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="text-xs font-medium text-slate-700">Descripción</label>
-            <input value={form.description} onChange={(e) => set('description', e.target.value)}
+            <input value={form.description} onChange={e => set('description', e.target.value)}
               placeholder="Descripción breve (opcional)"
-              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
         <div className="border-t px-6 py-4 flex justify-end gap-3">
           <button onClick={onClose} className="rounded px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50">Cancelar</button>
           <button onClick={save} disabled={!form.code || !form.name || createProcess.isPending}
-            className="rounded px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
+            className="rounded px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1.5">
+            <Save className="h-3.5 w-3.5" />
             {createProcess.isPending ? 'Creando…' : 'Crear Proceso'}
           </button>
         </div>
@@ -1131,149 +1134,326 @@ function ProcessCreateModal({ defaultApqcCode, onClose }: {
   );
 }
 
-// ─── APQC Category Card ───────────────────────────────────────────────────────
+// ─── Process Map sub-components ───────────────────────────────────────────────
 
-function ApqcCategoryCard({
-  category, processes, onAdd, onDelete,
+/** Rectangular card — used for Strategic and Support bands */
+function ProcessCategoryCard({
+  cat, processes, theme, onAdd, onDelete,
 }: {
-  category: typeof APQC_CATEGORIES[number];
+  cat: ProcessCategoryConfig;
   processes: AuditProcess[];
-  onAdd: (apqcCode: string) => void;
+  theme: 'strategic' | 'support';
+  onAdd: () => void;
   onDelete: (id: string) => void;
 }) {
-  const isOperating = category.type === 'operating';
+  const t = theme === 'strategic' ? {
+    card:  'border-[#1d3f62] bg-[#1a3a5c]',
+    code:  'bg-[#234f7a] text-blue-200 border-[#2d5f8a]',
+    title: 'text-blue-50',
+    add:   'text-blue-300 hover:bg-white/10 hover:text-white',
+    proc:  'bg-[#234f7a]/70 border-[#2d5f8a] text-blue-100',
+    pcode: 'text-blue-300',
+    del:   'text-blue-400 hover:text-red-300 hover:bg-red-900/20',
+    empty: 'border-blue-500/30 text-blue-400/60',
+    count: 'text-blue-400/60',
+  } : {
+    card:  'border-purple-200 bg-white',
+    code:  'bg-purple-100 text-purple-700 border-purple-200',
+    title: 'text-slate-800',
+    add:   'text-purple-500 hover:bg-purple-50',
+    proc:  'bg-purple-50 border-purple-200 text-slate-700',
+    pcode: 'text-purple-500',
+    del:   'text-slate-300 hover:text-red-500 hover:bg-red-50',
+    empty: 'border-purple-200 text-purple-400',
+    count: 'text-slate-400',
+  };
+
   return (
-    <div className="shrink-0 w-56 rounded-lg border border-slate-200 bg-white flex flex-col shadow-sm">
-      {/* Card header */}
-      <div className={cn(
-        'px-3 py-2.5 rounded-t-lg border-b flex items-start gap-2',
-        isOperating ? 'bg-blue-50 border-blue-100' : 'bg-purple-50 border-purple-100',
-      )}>
-        <span className={cn('shrink-0 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded mt-0.5',
-          isOperating ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800')}>
-          {category.code}
-        </span>
-        <span className="text-xs font-semibold text-slate-700 leading-tight flex-1">{category.short}</span>
-        <button onClick={() => onAdd(category.code)}
-          className={cn('shrink-0 p-0.5 rounded hover:bg-white/60 transition-colors',
-            isOperating ? 'text-blue-600' : 'text-purple-600')}
-          title={`Agregar proceso a ${category.short}`}>
+    <div className={cn('rounded-xl border p-3 flex flex-col gap-2 shrink-0', t.card)} style={{ width: '172px' }}>
+      <div className="flex items-start justify-between gap-1">
+        <div className="flex-1 min-w-0">
+          <span className={cn('inline-block text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border mb-1', t.code)}>
+            {cat.code}
+          </span>
+          <p className={cn('text-[11px] font-semibold leading-snug', t.title)}>{cat.name}</p>
+        </div>
+        <button onClick={onAdd} className={cn('p-1 rounded transition-colors shrink-0', t.add)} title="Agregar proceso">
           <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
-
-      {/* Processes list */}
-      <div className="flex-1 px-2 py-2 space-y-1 min-h-[80px]">
+      <div className="flex flex-col gap-1 flex-1">
         {processes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-16 text-center">
-            <p className="text-[10px] text-slate-400">Sin procesos</p>
-            <button onClick={() => onAdd(category.code)}
-              className="mt-1 text-[10px] text-blue-500 hover:underline">
-              + Agregar
-            </button>
-          </div>
+          <button onClick={onAdd}
+            className={cn('text-[10px] py-2 rounded-lg border border-dashed text-center opacity-60 hover:opacity-100 transition-opacity', t.empty)}>
+            + Agregar proceso
+          </button>
         ) : (
-          processes.map((p) => (
-            <div key={p.id} className="flex items-start gap-1.5 group/proc py-0.5">
-              <span className="shrink-0 text-[9px] font-mono bg-slate-100 text-slate-600 px-1 py-0.5 rounded mt-0.5">
-                {p.code}
-              </span>
-              <span className="flex-1 text-[11px] text-slate-700 leading-tight">{p.name}</span>
+          processes.map(p => (
+            <div key={p.id} className={cn('flex items-center gap-1 rounded-lg border px-1.5 py-1 group/p', t.proc)}>
+              <span className={cn('text-[9px] font-mono shrink-0', t.pcode)}>{p.code}</span>
+              <span className="flex-1 text-[10px] font-medium leading-tight truncate">{p.name}</span>
               <button onClick={() => onDelete(p.id)}
-                className="shrink-0 p-0.5 rounded text-slate-300 hover:text-red-400 hover:bg-red-50 opacity-0 group-hover/proc:opacity-100 transition-opacity">
+                className={cn('opacity-0 group-hover/p:opacity-100 p-0.5 rounded shrink-0 transition-all', t.del)}>
                 <Trash2 className="h-2.5 w-2.5" />
               </button>
             </div>
           ))
         )}
       </div>
-
-      {/* Footer count */}
-      <div className="px-3 py-1.5 border-t border-slate-100 text-[10px] text-slate-400">
+      <div className={cn('text-[10px]', t.count)}>
         {processes.length} proceso{processes.length !== 1 ? 's' : ''}
       </div>
     </div>
   );
 }
 
-// ─── ProcessesTab (APQC PCF) ──────────────────────────────────────────────────
-
-function ProcessesTab() {
-  const { data: processes = [], isLoading } = useAuditProcesses();
-  const deleteProcess = useDeleteAuditProcess();
-  const [createModal, setCreateModal] = useState<string | null>(null); // null = closed, '' = no preset, '1.0' = preset
-
-  const byCode = (code: string) => processes.filter((p) => p.apqcCode === code);
-  const uncategorized = processes.filter((p) => !p.apqcCode || !APQC_CATEGORIES.find((c) => c.code === p.apqcCode));
-  const operating = APQC_CATEGORIES.filter((c) => c.type === 'operating');
-  const support = APQC_CATEGORIES.filter((c) => c.type === 'support');
-
-  if (isLoading) return <div className="py-8 text-center text-slate-400 text-sm">Cargando catálogo…</div>;
+/** Chevron/arrow-shaped card — used for Operating band value-chain */
+function OperatingChevronCard({
+  cat, processes, onAdd, onDelete, isFirst, isLast,
+}: {
+  cat: ProcessCategoryConfig;
+  processes: AuditProcess[];
+  onAdd: () => void;
+  onDelete: (id: string) => void;
+  isFirst: boolean;
+  isLast: boolean;
+}) {
+  const N = 14; // notch size in px
+  const clipPath =
+    isFirst && isLast ? 'none'
+    : isFirst  ? `polygon(0 0, calc(100% - ${N}px) 0, 100% 50%, calc(100% - ${N}px) 100%, 0 100%)`
+    : isLast   ? `polygon(${N}px 0, 100% 0, 100% 100%, ${N}px 100%, 0 50%)`
+    : `polygon(${N}px 0, calc(100% - ${N}px) 0, 100% 50%, calc(100% - ${N}px) 100%, ${N}px 100%, 0 50%)`;
 
   return (
-    <div className="space-y-5">
+    <div
+      className="bg-[#dbeafe] flex flex-col gap-2 relative"
+      style={{
+        clipPath,
+        width: '176px',
+        minWidth: '176px',
+        paddingTop: '10px',
+        paddingBottom: '10px',
+        paddingLeft: isFirst ? '10px' : `${N + 6}px`,
+        paddingRight: isLast ? '10px' : `${N + 6}px`,
+        filter: 'drop-shadow(1px 0 0 #bfdbfe) drop-shadow(-1px 0 0 #bfdbfe) drop-shadow(0 1px 0 #bfdbfe) drop-shadow(0 -1px 0 #bfdbfe)',
+      }}
+    >
+      <div className="flex items-start justify-between gap-1">
+        <div className="flex-1 min-w-0">
+          <span className="inline-block text-[9px] font-mono font-bold bg-blue-200 text-blue-700 px-1.5 py-0.5 rounded mb-1">
+            {cat.code}
+          </span>
+          <p className="text-[11px] font-semibold text-slate-800 leading-snug">{cat.name}</p>
+        </div>
+        <button onClick={onAdd}
+          className="p-0.5 rounded text-blue-500 hover:bg-blue-200 transition-colors shrink-0" title="Agregar proceso">
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="flex flex-col gap-1 flex-1">
+        {processes.length === 0 ? (
+          <button onClick={onAdd}
+            className="text-[10px] py-1.5 rounded border border-dashed border-blue-300 text-blue-400 text-center opacity-70 hover:opacity-100 transition-opacity">
+            + Agregar
+          </button>
+        ) : (
+          <>
+            {processes.slice(0, 4).map(p => (
+              <div key={p.id} className="flex items-center gap-1 bg-white/70 rounded px-1.5 py-0.5 group/p border border-blue-200/60">
+                <span className="text-[9px] font-mono text-blue-500 shrink-0">{p.code}</span>
+                <span className="flex-1 text-[10px] font-medium text-slate-700 truncate">{p.name}</span>
+                <button onClick={() => onDelete(p.id)}
+                  className="opacity-0 group-hover/p:opacity-100 text-red-400 shrink-0 transition-opacity">
+                  <Trash2 className="h-2.5 w-2.5" />
+                </button>
+              </div>
+            ))}
+            {processes.length > 4 && (
+              <span className="text-[9px] text-blue-500/70 text-center">+{processes.length - 4} más</span>
+            )}
+          </>
+        )}
+      </div>
+      <div className="text-[10px] text-blue-500/60">
+        {processes.length} proceso{processes.length !== 1 ? 's' : ''}
+      </div>
+    </div>
+  );
+}
+
+/** Thin connector row between bands with directional arrows */
+function BandConnector({ label, arrowUp = false }: { label: string; arrowUp?: boolean }) {
+  const arrow = arrowUp ? '↑' : '↓';
+  return (
+    <div className="flex items-center justify-center gap-6 py-2.5 bg-slate-50 border-y border-slate-100">
+      <span className="text-lg text-slate-300 select-none">{arrow}</span>
+      <span className="text-[10px] text-slate-400 italic">{label}</span>
+      <span className="text-lg text-slate-300 select-none">{arrow}</span>
+    </div>
+  );
+}
+
+// ─── ProcessesTab — Visual Process Map ───────────────────────────────────────
+
+function ProcessesTab() {
+  const { data: processes = [], isLoading: loadingProcs } = useAuditProcesses();
+  const { data: catalogCats = [], isLoading: loadingCats } = useProcessCategoryConfigs();
+  const deleteProcess = useDeleteAuditProcess();
+  const [createModal, setCreateModal] = useState<string | null>(null);
+
+  const strategicCats = catalogCats.filter(c => c.type === 'STRATEGIC');
+  const operatingCats = catalogCats.filter(c => c.type === 'OPERATING');
+  const supportCats   = catalogCats.filter(c => c.type === 'SUPPORT');
+
+  const byCategory = (code: string) => processes.filter(p => p.apqcCode === code);
+  const uncategorized = processes.filter(p => !p.apqcCode || !catalogCats.some(c => c.code === p.apqcCode));
+
+  const stratCount = strategicCats.reduce((s, c) => s + byCategory(c.code).length, 0);
+  const operCount  = operatingCats.reduce((s, c)  => s + byCategory(c.code).length, 0);
+  const suppCount  = supportCats.reduce((s, c)   => s + byCategory(c.code).length, 0);
+
+  if (loadingProcs || loadingCats) {
+    return <div className="py-8 text-center text-slate-400 text-sm">Cargando mapa de procesos…</div>;
+  }
+
+  return (
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-700">Catálogo de Procesos · APQC PCF v8.0</p>
-          <p className="text-xs text-slate-400">Marco de clasificación de procesos compatible con estándares internacionales</p>
+          <p className="text-sm font-medium text-slate-700">Mapa de Procesos</p>
+          <p className="text-xs text-slate-400">
+            {processes.length} proceso{processes.length !== 1 ? 's' : ''} distribuidos en {catalogCats.length} categorías
+          </p>
         </div>
         <button onClick={() => setCreateModal('')}
-          className="flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700">
+          className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700 transition-colors">
           <Plus className="h-3.5 w-3.5" /> Nuevo Proceso
         </button>
       </div>
 
-      {/* Operating swimlane */}
-      <div className="rounded-lg border border-blue-200 bg-blue-50/30 overflow-hidden">
-        <div className="px-4 py-2.5 bg-blue-600 flex items-center gap-2">
-          <span className="text-xs font-bold text-white uppercase tracking-wide">Procesos Operativos</span>
-          <span className="text-[10px] text-blue-200">APQC PCF 1.0 – 6.0</span>
-        </div>
-        <div className="px-3 py-3 overflow-x-auto">
-          <div className="flex gap-3 pb-1" style={{ minWidth: 'max-content' }}>
-            {operating.map((cat) => (
-              <ApqcCategoryCard
-                key={cat.code}
-                category={cat}
-                processes={byCode(cat.code)}
-                onAdd={(code) => setCreateModal(code)}
-                onDelete={(id) => deleteProcess.mutate(id)}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* ── CANVAS ── */}
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #cbd5e1', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
 
-      {/* Support swimlane */}
-      <div className="rounded-lg border border-purple-200 bg-purple-50/30 overflow-hidden">
-        <div className="px-4 py-2.5 bg-purple-700 flex items-center gap-2">
-          <span className="text-xs font-bold text-white uppercase tracking-wide">Procesos de Soporte y Gestión</span>
-          <span className="text-[10px] text-purple-200">APQC PCF 7.0 – 13.0</span>
-        </div>
-        <div className="px-3 py-3 overflow-x-auto">
-          <div className="flex gap-3 pb-1" style={{ minWidth: 'max-content' }}>
-            {support.map((cat) => (
-              <ApqcCategoryCard
-                key={cat.code}
-                category={cat}
-                processes={byCode(cat.code)}
-                onAdd={(code) => setCreateModal(code)}
-                onDelete={(id) => deleteProcess.mutate(id)}
-              />
-            ))}
+        {/* ══════════ STRATEGIC BAND ══════════ */}
+        <div className="bg-[#0f2d4a]">
+          <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-7 rounded-full bg-blue-400" />
+              <div>
+                <p className="text-white text-xs font-bold uppercase tracking-widest">Procesos Estratégicos</p>
+                <p className="text-blue-300/80 text-[10px]">Gobierno corporativo · Dirección · Planeación</p>
+              </div>
+            </div>
+            <span className="text-[10px] text-blue-300 bg-[#1a3f5f] px-2.5 py-1 rounded-full border border-blue-700/40">
+              {stratCount} proceso{stratCount !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="px-5 py-4 overflow-x-auto">
+            {strategicCats.length === 0 ? (
+              <div className="flex items-center gap-2 text-blue-400/50 text-xs py-2">
+                <Target className="h-4 w-4" />
+                <span>Sin categorías estratégicas · </span>
+                <a href="/dashboard/admin/catalogs" className="underline hover:text-blue-300 transition-colors">
+                  Configurar en Catálogos →
+                </a>
+              </div>
+            ) : (
+              <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
+                {strategicCats.map(cat => (
+                  <ProcessCategoryCard
+                    key={cat.id} cat={cat} theme="strategic"
+                    processes={byCategory(cat.code)}
+                    onAdd={() => setCreateModal(cat.code)}
+                    onDelete={id => deleteProcess.mutate(id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
-      </div>
+
+        <BandConnector label="Dirección estratégica hacia procesos misionales" />
+
+        {/* ══════════ OPERATING BAND ══════════ */}
+        <div style={{ background: 'linear-gradient(180deg, rgba(255,237,213,0.35) 0%, rgba(255,251,235,0.45) 100%)' }}>
+          <div className="px-5 pt-4 pb-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(249,115,22,0.12)' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-7 rounded-full bg-orange-400" />
+              <div>
+                <p className="text-orange-800 text-xs font-bold uppercase tracking-widest">Procesos Misionales / Operativos</p>
+                <p className="text-orange-500/80 text-[10px]">Cadena de valor principal · flujo de izquierda a derecha →</p>
+              </div>
+            </div>
+            <span className="text-[10px] text-orange-700 bg-orange-100 px-2.5 py-1 rounded-full border border-orange-200">
+              {operCount} proceso{operCount !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="px-5 py-4 overflow-x-auto">
+            {operatingCats.length === 0 ? (
+              <div className="py-3 text-orange-400/60 text-xs text-center">Sin categorías operativas configuradas</div>
+            ) : (
+              <div className="flex items-stretch gap-0.5" style={{ minWidth: 'max-content' }}>
+                {operatingCats.map((cat, i) => (
+                  <OperatingChevronCard
+                    key={cat.id} cat={cat}
+                    processes={byCategory(cat.code)}
+                    onAdd={() => setCreateModal(cat.code)}
+                    onDelete={id => deleteProcess.mutate(id)}
+                    isFirst={i === 0}
+                    isLast={i === operatingCats.length - 1}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <BandConnector label="Procesos de soporte habilitan los procesos misionales" arrowUp />
+
+        {/* ══════════ SUPPORT BAND ══════════ */}
+        <div style={{ background: 'rgba(245,243,255,0.5)' }}>
+          <div className="px-5 pt-4 pb-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(147,51,234,0.08)' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-7 rounded-full bg-purple-400" />
+              <div>
+                <p className="text-purple-800 text-xs font-bold uppercase tracking-widest">Procesos de Soporte / Gestión</p>
+                <p className="text-purple-400/80 text-[10px]">Habilitan, dan soporte y gestionan los recursos de la organización</p>
+              </div>
+            </div>
+            <span className="text-[10px] text-purple-700 bg-purple-100 px-2.5 py-1 rounded-full border border-purple-200">
+              {suppCount} proceso{suppCount !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="px-5 py-4">
+            {supportCats.length === 0 ? (
+              <div className="py-3 text-purple-400/60 text-xs text-center">Sin categorías de soporte configuradas</div>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {supportCats.map(cat => (
+                  <ProcessCategoryCard
+                    key={cat.id} cat={cat} theme="support"
+                    processes={byCategory(cat.code)}
+                    onAdd={() => setCreateModal(cat.code)}
+                    onDelete={id => deleteProcess.mutate(id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>{/* end canvas */}
 
       {/* Uncategorized */}
       {uncategorized.length > 0 && (
         <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-          <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-200">
-            <span className="text-xs font-semibold text-slate-600">Sin Categoría APQC</span>
+          <div className="px-4 py-2.5 bg-slate-50 border-b">
+            <span className="text-xs font-semibold text-slate-600">Sin Categoría</span>
           </div>
           <div className="divide-y divide-slate-100">
-            {uncategorized.map((p) => (
+            {uncategorized.map(p => (
               <div key={p.id} className="flex items-center gap-3 px-4 py-2.5 group hover:bg-slate-50">
                 <span className="text-xs font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{p.code}</span>
                 <span className="flex-1 text-sm text-slate-700">{p.name}</span>
@@ -1292,6 +1472,7 @@ function ProcessesTab() {
       {createModal !== null && (
         <ProcessCreateModal
           defaultApqcCode={createModal || undefined}
+          catalogCats={catalogCats}
           onClose={() => setCreateModal(null)}
         />
       )}

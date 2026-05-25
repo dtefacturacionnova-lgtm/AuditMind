@@ -61,6 +61,17 @@ export class AuditUniverseController {
     return this.service.getEntityTree(user);
   }
 
+  @Get('plan-candidates')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Candidatas al Plan Anual rankeadas por score' })
+  @ApiQuery({ name: 'year', required: false, type: Number })
+  getPlanCandidates(
+    @CurrentUser() user: AuthUser,
+    @Query('year', new DefaultValuePipe(0), ParseIntPipe) year?: number,
+  ) {
+    return this.service.getPlanCandidates(user, year || undefined);
+  }
+
   @Get(':id')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Obtener entidad con unidades auditables' })
@@ -157,16 +168,4 @@ export class AuditUniverseController {
     return this.service.upsertAssessment(id, dto, user);
   }
 
-  // ─── Plan Builder ─────────────────────────────────────────────────────────
-
-  @Get('plan-candidates')
-  @Roles(UserRole.AUDIT_MANAGER)
-  @ApiOperation({ summary: 'Candidatas al Plan Anual rankeadas por score' })
-  @ApiQuery({ name: 'year', required: false, type: Number })
-  getPlanCandidates(
-    @CurrentUser() user: AuthUser,
-    @Query('year', new DefaultValuePipe(0), ParseIntPipe) year?: number,
-  ) {
-    return this.service.getPlanCandidates(user, year || undefined);
-  }
 }

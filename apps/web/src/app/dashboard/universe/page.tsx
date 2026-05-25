@@ -239,9 +239,14 @@ function ScoringModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => v
 
 function PlanCandidatesView() {
   const currentYear = new Date().getFullYear();
-  const { data, isLoading } = usePlanCandidates(currentYear);
+  const { data, isLoading, isError } = usePlanCandidates(currentYear);
   if (isLoading) return <div className="p-8 text-center text-slate-400 text-sm">Cargando candidatas…</div>;
-  if (!data) return null;
+  if (isError || !data) return (
+    <div className="p-10 text-center text-slate-400 text-sm space-y-1">
+      <p className="font-medium text-slate-500">No se pudo cargar las candidatas.</p>
+      <p className="text-xs">Verifica que existan unidades auditables creadas.</p>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -264,6 +269,12 @@ function PlanCandidatesView() {
           <span className="text-xs text-slate-400">Mandatorias primero · luego por riesgo residual ↓</span>
         </div>
         <div className="divide-y divide-slate-100">
+          {data.candidates.length === 0 && (
+            <div className="px-4 py-10 text-center">
+              <p className="text-sm text-slate-400">Sin candidatas para {currentYear}.</p>
+              <p className="text-xs text-slate-300 mt-1">Crea unidades auditables en la pestaña anterior.</p>
+            </div>
+          )}
           {data.candidates.map((u, i) => {
             const rl = RISK_LEVEL_CONFIG[(u.riskLevel ?? 'MEDIUM') as keyof typeof RISK_LEVEL_CONFIG];
             return (

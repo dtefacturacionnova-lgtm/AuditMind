@@ -21,12 +21,27 @@ export const ENTITY_TYPE_CONFIG: Record<AuditEntityType, { label: string; icon: 
   STRATEGIC:      { label: 'Obj. Estratégico',   icon: '🎯', color: 'bg-indigo-100 text-indigo-700' },
 };
 
+export interface AuditEntityNode {
+  id: string;
+  name: string;
+  description?: string;
+  entityType: AuditEntityType;
+  parentEntityId?: string;
+  inherentRiskScore: number;
+  applicableRegulations: string[];
+  active: boolean;
+  owner?: { id: string; name: string } | null;
+  _count?: { auditableUnits: number; audits: number };
+  children: AuditEntityNode[];
+}
+
 export interface AuditProcess {
   id: string;
   code: string;
   name: string;
   description?: string;
   category?: string;
+  apqcCode?: string;
   active: boolean;
   sortOrder: number;
   _count?: { auditableUnits: number };
@@ -99,6 +114,15 @@ export const RISK_LEVEL_CONFIG = {
   LOW:      { label: 'Bajo',     color: 'text-green-700',  bg: 'bg-green-100',  border: 'border-green-300' },
 } as const;
 
+// ─── Hook: Entity Tree ────────────────────────────────────────────────────────
+
+export function useEntityTree() {
+  return useQuery<AuditEntityNode[]>({
+    queryKey: ['entity-tree'],
+    queryFn: () => apiClient.get('/audit-universe/tree'),
+  });
+}
+
 // ─── Hooks: AuditProcess ─────────────────────────────────────────────────────
 
 export function useAuditProcesses() {
@@ -108,10 +132,35 @@ export function useAuditProcesses() {
   });
 }
 
+export function useCreateAuditEntity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      name: string; entityType?: string; parentEntityId?: string;
+      description?: string; applicableRegulations?: string[];
+    }) => apiClient.post('/audit-universe', data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['entity-tree'] });
+      qc.invalidateQueries({ queryKey: ['audit-universe'] });
+    },
+  });
+}
+
+export function useDeleteAuditEntity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/audit-universe/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['entity-tree'] });
+      qc.invalidateQueries({ queryKey: ['audit-universe'] });
+    },
+  });
+}
+
 export function useCreateAuditProcess() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { code: string; name: string; description?: string; category?: string }) =>
+    mutationFn: (data: { code: string; name: string; description?: string; category?: string; apqcCode?: string }) =>
       apiClient.post('/audit-universe/processes', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['audit-processes'] }),
   });

@@ -7,6 +7,7 @@ export class CreateAuditProcessDto {
   @IsString() name: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() apqcCode?: string;  // "1.0"…"13.0"
   @IsOptional() @IsInt() sortOrder?: number;
 }
 
@@ -15,6 +16,7 @@ export class UpdateAuditProcessDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() apqcCode?: string;
   @IsOptional() @IsBoolean() active?: boolean;
   @IsOptional() @IsInt() sortOrder?: number;
 }

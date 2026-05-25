@@ -61,4 +61,25 @@ export class CreateAuditableUnitDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ example: 'BUSINESS_UNIT' })
+  @IsOptional()
+  @IsString()
+  entityType?: string;
+
+  @ApiPropertyOptional({ example: 'clxyz123' })
+  @IsOptional()
+  @IsString()
+  parentEntityId?: string;
+
+  @ApiPropertyOptional({ example: ['SOX', 'GDPR'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  applicableRegulations?: string[];
+
+  @ApiPropertyOptional({ example: 'ceo@empresa.com' })
+  @IsOptional()
+  @IsString()
+  ownerId?: string;
 }

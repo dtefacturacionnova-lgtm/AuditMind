@@ -504,7 +504,8 @@ model AuditProcess {
   code           String   // "PROC-FIN-01"
   name           String   // "Gestión de Compras"
   description    String?
-  category       String?  // Financiero | Operacional | TI | RR.HH. | Compliance
+  category       String?  // Etiqueta libre del cliente
+  apqcCode       String?  // Código APQC PCF: "1.0"…"13.0"
   active         Boolean  @default(true)
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())

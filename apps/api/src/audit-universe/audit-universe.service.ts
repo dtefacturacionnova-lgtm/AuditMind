@@ -154,6 +154,35 @@ export class AuditUniverseService {
     return { CRITICAL: critical, HIGH: high, MEDIUM: medium, LOW: low };
   }
 
+  // ─── Entity Tree ──────────────────────────────────────────────────────────
+  // Retorna TODAS las entidades de la org con jerarquía para el árbol.
+
+  async getEntityTree(user: AuthUser) {
+    const all = await this.prisma.auditEntity.findMany({
+      where: { organizationId: user.organizationId, active: true },
+      orderBy: { name: 'asc' },
+      include: {
+        owner: { select: { id: true, name: true } },
+        _count: { select: { auditableUnits: true, audits: true } },
+      },
+    });
+
+    // Construir árbol en memoria
+    type NodeType = typeof all[0] & { children: NodeType[] };
+    const map = new Map<string, NodeType>(
+      all.map((e) => [e.id, { ...e, children: [] }]),
+    );
+    const roots: NodeType[] = [];
+    for (const node of map.values()) {
+      if (node.parentEntityId && map.has(node.parentEntityId)) {
+        map.get(node.parentEntityId)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    return roots;
+  }
+
   // ─── AuditProcess ─────────────────────────────────────────────────────────
 
   async createProcess(dto: CreateAuditProcessDto, user: AuthUser) {
@@ -164,6 +193,7 @@ export class AuditUniverseService {
         name: dto.name,
         description: dto.description,
         category: dto.category,
+        apqcCode: dto.apqcCode,
         sortOrder: dto.sortOrder ?? 0,
       },
     });

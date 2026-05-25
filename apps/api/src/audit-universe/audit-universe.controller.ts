@@ -74,6 +74,13 @@ export class AuditUniverseController {
     return this.service.remove(id, user);
   }
 
+  @Get('tree')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Árbol jerárquico de entidades (organigrama)' })
+  getEntityTree(@CurrentUser() user: AuthUser) {
+    return this.service.getEntityTree(user);
+  }
+
   // ─── AuditProcess ─────────────────────────────────────────────────────────
 
   @Post('processes')

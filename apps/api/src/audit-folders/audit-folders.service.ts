@@ -62,7 +62,7 @@ export class AuditFoldersService {
       const phase = await this.prisma.auditPhase.create({
         data: {
           auditId,
-          phaseType: tplPhase.phaseType,
+          phaseType: tplPhase.phaseType as PhaseType,
           name: tplPhase.name,
           order: tplPhase.order,
         },

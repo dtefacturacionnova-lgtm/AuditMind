@@ -2,14 +2,14 @@
 import { useState } from 'react';
 import {
   Plus, Trash2, ChevronRight, ChevronDown, Edit2,
-  Layers, FlaskConical, X, Save, Target, Building2,
+  Layers, FlaskConical, X, Save, Target, Building2, Info,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAuditUniverse, useRiskSummary } from '@/hooks/useAuditUniverse';
 import {
   useEntityTree, useCreateAuditEntity, useUpdateAuditEntity, useDeleteAuditEntity,
   useAuditProcesses, useCreateAuditProcess, useDeleteAuditProcess,
-  useAuditableUnits, useCreateAuditableUnit, useDeleteAuditableUnit,
+  useAuditableUnits, useCreateAuditableUnit, useUpdateAuditableUnit, useDeleteAuditableUnit,
   useUpsertAssessment, usePlanCandidates,
   ENTITY_TYPE_CONFIG, ORG_ENTITY_TYPES, RISK_LEVEL_CONFIG,
   type AuditEntityNode, type AuditProcess, type AuditableUnit,
@@ -842,6 +842,99 @@ function ProcessesTab() {
   );
 }
 
+// ─── EditUnitModal ────────────────────────────────────────────────────────────
+
+const AUDIT_TYPE_LABELS: Record<string, string> = {
+  OPERATIONAL: 'Operacional',
+  FINANCIAL:   'Financiero',
+  IT:          'Tecnología (TI)',
+  COMPLIANCE:  'Cumplimiento',
+  FORENSIC:    'Forense',
+  ADVISORY:    'Consultoría',
+};
+
+function EditUnitModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => void }) {
+  const updateUnit = useUpdateAuditableUnit();
+  const [form, setForm] = useState({
+    name:          unit.name ?? '',
+    auditType:     unit.auditType ?? 'OPERATIONAL',
+    isMandatory:   unit.isMandatory ?? false,
+    mandatoryBasis: unit.mandatoryBasis ?? '',
+    notes:         unit.notes ?? '',
+  });
+  const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
+
+  const save = () => {
+    updateUnit.mutate(
+      { id: unit.id, data: { ...form, name: form.name || undefined } },
+      { onSuccess: onClose },
+    );
+  };
+
+  const unitLabel = unit.name ?? `${unit.auditEntity?.name} — ${unit.auditProcess?.name}`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h2 className="font-semibold text-slate-900">Editar Unidad Auditable</h2>
+            <p className="text-xs text-slate-500 truncate max-w-xs">{unitLabel}</p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 hover:bg-slate-100"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-slate-700">Nombre personalizado</label>
+            <input value={form.name} onChange={(e) => set('name', e.target.value)}
+              placeholder="Dejar vacío para usar 'Entidad — Proceso'"
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-700">Tipo de Auditoría</label>
+            <select value={form.auditType} onChange={(e) => set('auditType', e.target.value)}
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
+              {Object.entries(AUDIT_TYPE_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-3 py-1">
+            <input type="checkbox" id="edit-mandatory" checked={form.isMandatory}
+              onChange={(e) => set('isMandatory', e.target.checked)}
+              className="h-4 w-4 rounded accent-rose-600" />
+            <label htmlFor="edit-mandatory" className="text-sm text-slate-700 cursor-pointer">
+              Auditoría Mandatoria (ley / norma regulatoria)
+            </label>
+          </div>
+          {form.isMandatory && (
+            <div>
+              <label className="text-xs font-medium text-slate-700">Base legal / regulatoria</label>
+              <input value={form.mandatoryBasis} onChange={(e) => set('mandatoryBasis', e.target.value)}
+                placeholder="Ej: Ley UAF Art. 12 / Norma CMF N°2024-01"
+                className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-medium text-slate-700">Notas internas</label>
+            <textarea rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)}
+              className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm resize-none"
+              placeholder="Observaciones, contexto o justificación…" />
+          </div>
+        </div>
+        <div className="border-t px-6 py-4 flex justify-end gap-3">
+          <button onClick={onClose} className="rounded px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50">Cancelar</button>
+          <button onClick={save} disabled={updateUnit.isPending}
+            className="rounded px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1.5">
+            <Save className="h-3.5 w-3.5" />
+            {updateUnit.isPending ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── AuditableUnitsTab ────────────────────────────────────────────────────────
 
 function AuditableUnitsTab() {
@@ -851,20 +944,76 @@ function AuditableUnitsTab() {
   const createUnit = useCreateAuditableUnit();
   const deleteUnit = useDeleteAuditableUnit();
   const [scoringUnit, setScoringUnit] = useState<AuditableUnit | null>(null);
+  const [editUnit, setEditUnit] = useState<AuditableUnit | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ auditEntityId: '', auditProcessId: '', auditType: 'OPERATIONAL', isMandatory: false, mandatoryBasis: '' });
-  const AUDIT_TYPES = ['OPERATIONAL', 'FINANCIAL', 'IT', 'COMPLIANCE', 'FORENSIC', 'ADVISORY'];
+  const [showScoreInfo, setShowScoreInfo] = useState(false);
+  const [form, setForm] = useState({
+    auditEntityId: '', auditProcessId: '', auditType: 'OPERATIONAL',
+    isMandatory: false, mandatoryBasis: '',
+  });
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">Intersección Entidad × Proceso — objeto real de planificación</p>
+        <div>
+          <p className="text-sm font-medium text-slate-700">Unidades Auditables</p>
+          <p className="text-xs text-slate-400">Combinación Entidad × Proceso — el objeto que entra al Plan Anual</p>
+        </div>
         <button onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700">
           <Plus className="h-3.5 w-3.5" /> Nueva Unidad
         </button>
       </div>
 
+      {/* Scoring explanation panel */}
+      <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+        <button onClick={() => setShowScoreInfo(!showScoreInfo)}
+          className="flex items-center gap-2 w-full text-left">
+          <Info className="h-4 w-4 text-blue-500 shrink-0" />
+          <span className="text-xs font-semibold text-blue-800">¿Cómo funciona el puntaje de riesgo?</span>
+          <ChevronDown className={cn('h-3.5 w-3.5 text-blue-400 ml-auto transition-transform', showScoreInfo && 'rotate-180')} />
+        </button>
+        {showScoreInfo && (
+          <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-blue-900">
+            <div className="rounded bg-white/70 p-3 space-y-1.5">
+              <p className="font-bold text-blue-700">Grupo A — Riesgo Residual (70%)</p>
+              <p>El <strong>auditor define</strong> 3 factores con sliders 1–5:</p>
+              <ul className="space-y-0.5 pl-3 list-disc text-blue-800">
+                <li><strong>Impacto</strong> — magnitud del daño si el riesgo ocurre</li>
+                <li><strong>Probabilidad</strong> — frecuencia estimada de ocurrencia</li>
+                <li><strong>Madurez de Controles</strong> — calidad de controles existentes</li>
+              </ul>
+              <p className="text-[10px] text-blue-600 font-mono bg-blue-100 rounded px-2 py-1">
+                Inherente = Impacto × Probabilidad (1–25)<br />
+                Residual = Inherente × (1 − Madurez/5)<br />
+                Normalizado = (Residual / 25) × 100
+              </p>
+            </div>
+            <div className="rounded bg-white/70 p-3 space-y-1.5">
+              <p className="font-bold text-blue-700">Grupo B — Factores Contextuales (30%)</p>
+              <p>El <strong>auditor define</strong> 6 factores adicionales:</p>
+              <ul className="space-y-0.5 pl-3 list-disc text-blue-800">
+                <li>Materialidad financiera del área</li>
+                <li>Alineación al Plan Estratégico</li>
+                <li>Alineación al Plan Operativo</li>
+                <li>Antecedentes de fraude / denuncias</li>
+                <li>Solicitud de la dirección / junta</li>
+                <li>Velocidad de cambio (M&A, TI, etc.)</li>
+              </ul>
+              <p className="text-[10px] text-blue-600 font-mono bg-blue-100 rounded px-2 py-1">
+                Score Final = A×0.70 + B×0.30<br />
+                CRÍTICO ≥75 · ALTO ≥55 · MEDIO ≥35 · BAJO &lt;35
+              </p>
+            </div>
+            <div className="col-span-2 rounded bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800">
+              <strong>¿Es automático o manual?</strong> — El <em>usuario define los 9 factores</em> mediante sliders y el <em>sistema calcula el score final</em> automáticamente. Usa el botón <FlaskConical className="inline h-3.5 w-3.5 mx-0.5" /><strong>Evaluar Riesgo</strong> en cada unidad para abrir el formulario de evaluación.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Create form */}
       {showCreate && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-blue-900">Nueva Unidad Auditable</h3>
@@ -893,7 +1042,9 @@ function AuditableUnitsTab() {
               <label className="text-xs font-medium text-slate-700">Tipo de Auditoría</label>
               <select value={form.auditType} onChange={(e) => setForm((f) => ({ ...f, auditType: e.target.value }))}
                 className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-                {AUDIT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {Object.entries(AUDIT_TYPE_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
               </select>
             </div>
             <div className="flex items-start gap-2 pt-5">
@@ -905,7 +1056,7 @@ function AuditableUnitsTab() {
               <div className="col-span-2">
                 <label className="text-xs font-medium text-slate-700">Base legal / regulatoria</label>
                 <input value={form.mandatoryBasis} onChange={(e) => setForm((f) => ({ ...f, mandatoryBasis: e.target.value }))}
-                  placeholder="Ej: Ley 29720 Art. 5 / Norma SBS N°2024-001"
+                  placeholder="Ej: Ley UAF Art. 12 / Norma CMF N°2024-01"
                   className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm" />
               </div>
             )}
@@ -922,6 +1073,7 @@ function AuditableUnitsTab() {
         </div>
       )}
 
+      {/* Table */}
       {isLoading ? (
         <div className="py-8 text-center text-slate-400 text-sm">Cargando…</div>
       ) : (
@@ -932,15 +1084,16 @@ function AuditableUnitsTab() {
                 <th className="px-4 py-3 text-left">Entidad</th>
                 <th className="px-4 py-3 text-left">Proceso</th>
                 <th className="px-4 py-3 text-left">Tipo</th>
-                <th className="px-4 py-3 text-center">Score</th>
+                <th className="px-4 py-3 text-center">Score / Riesgo</th>
                 <th className="px-4 py-3 text-center">Cobertura</th>
                 <th className="px-4 py-3 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {units.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                  No hay unidades auditables. Crea la primera combinación Entidad × Proceso.
+                <tr><td colSpan={6} className="px-4 py-10 text-center">
+                  <p className="text-sm text-slate-400">Sin unidades auditables.</p>
+                  <p className="text-xs text-slate-300 mt-1">Crea la primera combinación Entidad × Proceso.</p>
                 </td></tr>
               )}
               {units.map((u) => {
@@ -950,26 +1103,50 @@ function AuditableUnitsTab() {
                 return (
                   <tr key={u.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-slate-900">{u.auditEntity?.name}</p>
+                      <p className="font-medium text-slate-900">
+                        {u.name ? (
+                          <>{u.name}<span className="ml-1.5 text-[10px] text-slate-400 font-normal">{u.auditEntity?.name}</span></>
+                        ) : u.auditEntity?.name}
+                      </p>
                       {u.isMandatory && (
-                        <span className="text-[10px] px-1 py-0.5 rounded bg-rose-100 text-rose-700 font-semibold">MANDATORIO</span>
+                        <span className="inline-block mt-0.5 text-[10px] px-1 py-0.5 rounded bg-rose-100 text-rose-700 font-semibold">
+                          MANDATORIO
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-slate-700">{u.auditProcess?.name}</p>
-                      <p className="text-[11px] text-slate-400">{u.auditProcess?.code}</p>
+                      <p className="text-[11px] text-slate-400">{u.auditProcess?.code}
+                        {u.auditProcess?.category && <> · {u.auditProcess.category}</>}
+                      </p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">{u.auditType}</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                        {AUDIT_TYPE_LABELS[u.auditType] ?? u.auditType}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       {a ? (
-                        <div>
-                          <span className={cn('text-sm font-bold', rl?.color)}>{a.totalScore.toFixed(1)}</span>
-                          <span className={cn('ml-1 text-[10px] px-1 rounded', rl?.bg, rl?.color)}>{rl?.label}</span>
+                        <div className="space-y-0.5">
+                          <div className="flex items-center justify-center gap-1">
+                            <span className={cn('text-sm font-bold', rl?.color)}>{a.totalScore.toFixed(1)}</span>
+                            <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-semibold', rl?.bg, rl?.color)}>
+                              {rl?.label}
+                            </span>
+                          </div>
+                          <div className="h-1 rounded-full bg-slate-200 w-20 mx-auto">
+                            <div className={cn('h-1 rounded-full',
+                              a.totalScore >= 75 ? 'bg-red-500' :
+                              a.totalScore >= 55 ? 'bg-orange-400' :
+                              a.totalScore >= 35 ? 'bg-amber-400' : 'bg-green-400'
+                            )} style={{ width: `${Math.min(a.totalScore, 100)}%` }} />
+                          </div>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400">Sin evaluar</span>
+                        <button onClick={() => setScoringUnit(u)}
+                          className="text-xs text-blue-500 hover:underline">
+                          + Evaluar riesgo
+                        </button>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -979,15 +1156,25 @@ function AuditableUnitsTab() {
                           ? <span className="text-xs text-green-600">✓ Al día</span>
                           : <span className="text-xs text-slate-400">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <button onClick={() => setScoringUnit(u)}
-                        className="rounded p-1.5 hover:bg-blue-50 text-blue-600" title="Evaluar riesgo">
-                        <FlaskConical className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => deleteUnit.mutate(u.id)}
-                        className="rounded p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => setScoringUnit(u)}
+                          className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          title="Evaluar / actualizar score de riesgo">
+                          <FlaskConical className="h-3 w-3" />
+                          {a ? 'Riesgo' : 'Evaluar'}
+                        </button>
+                        <button onClick={() => setEditUnit(u)}
+                          className="rounded p-1.5 hover:bg-amber-50 text-slate-400 hover:text-amber-600"
+                          title="Editar unidad">
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => deleteUnit.mutate(u.id)}
+                          className="rounded p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                          title="Eliminar">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -998,6 +1185,7 @@ function AuditableUnitsTab() {
       )}
 
       {scoringUnit && <ScoringModal unit={scoringUnit} onClose={() => setScoringUnit(null)} />}
+      {editUnit    && <EditUnitModal unit={editUnit}   onClose={() => setEditUnit(null)} />}
     </div>
   );
 }

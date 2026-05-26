@@ -154,7 +154,7 @@ function ScoringModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => v
     fraudHistoryScore: 0.15, managementReqScore: 0.10, staffTurnoverScore: 0.10, coverageHistoryScore: 0.10,
   };
   const secondaryWeighted = Object.entries(GROUP_B_WEIGHTS).reduce((sum, [key, w]) => {
-    const score = (form as Record<string, number>)[key] ?? 1;
+    const score = (form as unknown as Record<string, number>)[key] ?? 1;
     return sum + ((score - 1) / 4) * 100 * w;
   }, 0);
   const totalScore = residualNorm * 0.30 + secondaryWeighted * 0.70;

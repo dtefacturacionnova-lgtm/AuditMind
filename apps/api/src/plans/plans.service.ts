@@ -4,12 +4,20 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import {
-  CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto,
+  CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
 } from './dto/plan.dto';
 
 const ITEM_INCLUDE = {
   auditEntity: {
     select: { id: true, name: true, category: true, inherentRiskScore: true, responsible: true },
+  },
+  auditProject: {
+    select: {
+      id: true, correlative: true, name: true,
+      finalRiskScore: true, finalRiskLevel: true,
+      totalBudget: true, plannedHours: true,
+      riskCategory: true,
+    },
   },
 } as const;
 
@@ -195,5 +203,83 @@ export class PlansService {
 
     await this.prisma.auditPlanItem.delete({ where: { id: itemId } });
     return this.findOne(planId, user);
+  }
+
+  // ── Import from Banco de Proyectos ─────────────────────────────────────────
+  async importFromProjects(planId: string, dto: ImportFromProjectsDto, user: AuthUser) {
+    const plan = await this.getPlanOrThrow(planId, user);
+    if (plan.status === 'CLOSED') throw new ForbiddenException('No se puede modificar un plan cerrado');
+
+    // Fetch the requested projects, verifying org ownership
+    const projects = await this.prisma.auditProject.findMany({
+      where: {
+        id:             { in: dto.projectIds },
+        organizationId: user.organizationId,
+        active:         true,
+      },
+    });
+
+    const alreadyImported = new Set(
+      plan.items
+        .map(i => (i as any).auditProjectId as string | undefined)
+        .filter((v): v is string => !!v),
+    );
+
+    let imported = 0;
+    let skipped  = 0;
+
+    for (const project of projects) {
+      if (alreadyImported.has(project.id)) { skipped++; continue; }
+
+      // Map risk level → priority (CRITICO/ALTO → 1, MEDIO → 2, BAJO → 3)
+      const priority =
+        project.finalRiskLevel === 'CRITICO' || project.finalRiskLevel === 'ALTO' ? 1
+        : project.finalRiskLevel === 'MEDIO' ? 2
+        : 3;
+
+      await this.prisma.auditPlanItem.create({
+        data: {
+          planId,
+          auditProjectId: project.id,
+          estimatedHours: project.plannedHours ?? 80,
+          priority,
+          originScore:    project.finalRiskScore ?? undefined,
+          isMandatory:    false,
+        },
+      });
+      imported++;
+    }
+
+    const updated = await this.findOne(planId, user);
+    return { ...updated, importResult: { imported, skipped, notFound: dto.projectIds.length - projects.length } };
+  }
+
+  // ── Get project candidates for a plan year ─────────────────────────────────
+  async getProjectCandidates(planId: string, user: AuthUser) {
+    const plan = await this.getPlanOrThrow(planId, user);
+
+    const projects = await this.prisma.auditProject.findMany({
+      where: {
+        organizationId: user.organizationId,
+        includeInPlan:  true,
+        targetPlanYear: plan.year,
+        active:         true,
+      },
+      include: {
+        strategicObjective: { select: { id: true, code: true, name: true, color: true } },
+        strategicLine:      { select: { id: true, code: true, name: true } },
+        responsibleEntity:  { select: { id: true, name: true } },
+      },
+      orderBy: [{ finalRiskScore: 'desc' }, { name: 'asc' }],
+    });
+
+    // Tag which are already in the plan
+    const importedIds = new Set(
+      plan.items
+        .map(i => (i as any).auditProjectId as string | undefined)
+        .filter((v): v is string => !!v),
+    );
+
+    return projects.map(p => ({ ...p, alreadyInPlan: importedIds.has(p.id) }));
   }
 }

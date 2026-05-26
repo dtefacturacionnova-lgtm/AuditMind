@@ -34,11 +34,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Planificación Anual',
     icon: CalendarDays,
     children: [
-      { label: 'Plan Estratégico',          href: '/dashboard/strategic', icon: Target },
-      { label: 'Banco de Proyectos',        href: '/dashboard/projects',  icon: ClipboardList },
-      { label: 'Universo de Auditoría',     href: '/dashboard/universe',  icon: Globe },
-      { label: 'Plan Anual',                href: '/dashboard/plans',     icon: CalendarDays },
-      { label: 'Auditorías Planificadas',   href: '/dashboard/audits',    icon: ClipboardList },
+      { label: 'Plan Estratégico',          href: '/dashboard/strategic',   icon: Target },
+      { label: 'Banco de Proyectos',        href: '/dashboard/projects',    icon: ClipboardList },
+      { label: 'Catálogo de Riesgos',       href: '/dashboard/plan-risks',  icon: ShieldAlert },
+      { label: 'Universo de Auditoría',     href: '/dashboard/universe',    icon: Globe },
+      { label: 'Plan Anual',                href: '/dashboard/plans',       icon: CalendarDays },
+      { label: 'Auditorías Planificadas',   href: '/dashboard/audits',      icon: ClipboardList },
     ],
   },
   // ── Ejecución del Plan Anual ──────────────────────────────────────────────

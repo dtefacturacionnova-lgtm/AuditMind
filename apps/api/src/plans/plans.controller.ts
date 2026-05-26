@@ -4,7 +4,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PlansService } from './plans.service';
 import {
-  CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto,
+  CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
 } from './dto/plan.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -64,6 +64,27 @@ export class PlansController {
   @ApiOperation({ summary: 'Cerrar plan (ACTIVE → CLOSED)' })
   close(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.close(id, user);
+  }
+
+  // ── Banco de Proyectos integration ────────────────────────────────────────
+  // Static sub-routes MUST come before :id/items to avoid NestJS param collision
+
+  @Get(':id/project-candidates')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Proyectos del Banco candidatos para este plan (includeInPlan + targetPlanYear)' })
+  getProjectCandidates(@Param('id') planId: string, @CurrentUser() user: AuthUser) {
+    return this.service.getProjectCandidates(planId, user);
+  }
+
+  @Post(':id/import-from-projects')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Importar proyectos del Banco de Proyectos al plan' })
+  importFromProjects(
+    @Param('id') planId: string,
+    @Body() dto: ImportFromProjectsDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.importFromProjects(planId, dto, user);
   }
 
   @Post(':id/items')

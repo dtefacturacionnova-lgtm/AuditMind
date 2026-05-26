@@ -649,6 +649,7 @@ model AuditProject {
   strategicLine      StrategicLine?      @relation(fields: [strategicLineId],      references: [id])
   responsibleEntity  AuditEntity?        @relation("ProjectResponsible", fields: [responsibleEntityId], references: [id])
   supportEntity      AuditEntity?        @relation("ProjectSupport",      fields: [supportEntityId],      references: [id])
+  planItems          AuditPlanItem[]
 
   @@index([organizationId])
   @@index([organizationId, planYear])
@@ -795,6 +796,7 @@ model AuditPlanItem {
   // Referencia a entidad (legado) O a unidad auditable (nuevo)
   auditEntityId       String?
   auditableUnitId     String?  // FK a AuditableUnit (nuevo modelo)
+  auditProjectId      String?  // FK a AuditProject  (P.4 — Banco de Proyectos)
   estimatedHours      Float    @default(0)
   tentativeStartDate  DateTime?
   tentativeEndDate    DateTime?
@@ -810,10 +812,12 @@ model AuditPlanItem {
   plan           AuditPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
   auditEntity    AuditEntity?   @relation(fields: [auditEntityId], references: [id])
   auditableUnit  AuditableUnit? @relation(fields: [auditableUnitId], references: [id])
+  auditProject   AuditProject?  @relation(fields: [auditProjectId], references: [id])
   audit          Audit?         @relation("PlanItemAudit", fields: [auditId], references: [id])
 
   @@index([planId])
   @@index([auditableUnitId])
+  @@index([auditProjectId])
   @@map("audit_plan_items")
 }
 

@@ -1,5 +1,5 @@
 import {
-  IsString, IsInt, IsOptional, IsNumber, IsDateString, IsArray, Min, Max,
+  IsString, IsInt, IsOptional, IsNumber, IsDateString, IsArray, Min, Max, ArrayNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -101,4 +101,16 @@ export class UpdatePlanItemDto {
   @IsOptional()
   @IsString()
   notes?: string;
+}
+
+export class ImportFromProjectsDto {
+  @ApiProperty({
+    type: [String],
+    description: 'IDs de los proyectos del Banco a importar al plan',
+    example: ['clxyz1', 'clxyz2'],
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  projectIds: string[];
 }

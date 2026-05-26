@@ -117,7 +117,8 @@ export function computeRiskScore(p: {
   const vals = [areaVal, p.strategicImpact, p.operationalImpact, p.legalRequirement, p.lastAuditAge, p.riskPerception];
   if (vals.some(v => v == null)) return null;
   const weights = [0.25, 0.20, 0.15, 0.20, 0.10, 0.10];
-  const score = vals.reduce((s, v, i) => s + (v! * weights[i]), 0);
+  const numVals = vals as number[];
+  const score = numVals.reduce((s, v, i) => s + v * weights[i], 0);
   const level = score >= 3.25 ? 'CRITICO' : score >= 2.5 ? 'ALTO' : score >= 1.75 ? 'MEDIO' : 'BAJO';
   return { score: Math.round(score * 100) / 100, level };
 }

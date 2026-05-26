@@ -5,13 +5,15 @@ import { useParams } from 'next/navigation';
 import {
   CalendarDays, Plus, Trash2, Clock, CheckCircle2, Zap, Lock,
   TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Edit2, Save, X,
+  Download, ClipboardList, DollarSign, ShieldAlert,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
   usePlan, useApprovePlan, useActivatePlan, useClosePlan,
   useAddPlanItem, useUpdatePlanItem, useRemovePlanItem, useUpdatePlan,
-  PLAN_STATUS_CONFIG, PRIORITY_CONFIG,
-  CreatePlanItemData, PlanItem,
+  useImportFromProjects, usePlanProjectCandidates,
+  PLAN_STATUS_CONFIG, PRIORITY_CONFIG, RISK_LEVEL_CONFIG,
+  CreatePlanItemData, PlanItem, ProjectCandidate,
 } from '@/hooks/usePlans';
 import { useAuditUniverse } from '@/hooks/useAuditUniverse';
 
@@ -19,6 +21,11 @@ import { useAuditUniverse } from '@/hooks/useAuditUniverse';
 function formatDate(d?: string | null) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function fmtCurrency(v?: number | null) {
+  if (!v) return '—';
+  return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 }
 
 function CapacityBar({ pct, allocated, remaining, total }: {
@@ -44,7 +51,199 @@ function CapacityBar({ pct, allocated, remaining, total }: {
   );
 }
 
-// ─── Add item form ────────────────────────────────────────────────────────────
+// ─── Import from Banco de Proyectos panel ─────────────────────────────────────
+function ImportFromBancoPanel({ planId, onClose }: { planId: string; onClose: () => void }) {
+  const { data: candidates = [], isLoading } = usePlanProjectCandidates(planId);
+  const importMut = useImportFromProjects(planId);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggle = (id: string) => setSelected(prev => {
+    const s = new Set(prev);
+    s.has(id) ? s.delete(id) : s.add(id);
+    return s;
+  });
+
+  const pending = candidates.filter(c => !c.alreadyInPlan);
+  const already = candidates.filter(c => c.alreadyInPlan);
+  const totalBudget = [...selected].reduce((sum, id) => {
+    const p = candidates.find(c => c.id === id);
+    return sum + (p?.totalBudget ?? 0);
+  }, 0);
+  const totalHours = [...selected].reduce((sum, id) => {
+    const p = candidates.find(c => c.id === id);
+    return sum + (p?.plannedHours ?? 0);
+  }, 0);
+
+  const handleImport = async () => {
+    if (selected.size === 0) return;
+    await importMut.mutateAsync([...selected]);
+    onClose();
+  };
+
+  const rlCfg = (level?: string) => RISK_LEVEL_CONFIG[level ?? ''] ?? { label: level ?? '—', color: 'text-gray-500', bg: 'bg-gray-100' };
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      {/* backdrop */}
+      <div className="flex-1 bg-black/30" onClick={onClose} />
+
+      {/* panel */}
+      <div className="w-[520px] bg-white shadow-2xl flex flex-col overflow-hidden">
+        {/* header */}
+        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-5 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <ClipboardList className="w-5 h-5" />
+              <div>
+                <p className="font-bold text-base">Importar del Banco de Proyectos</p>
+                <p className="text-xs text-indigo-200 mt-0.5">Proyectos marcados para este plan anual</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-indigo-500 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* selection summary */}
+        {selected.size > 0 && (
+          <div className="bg-indigo-50 border-b border-indigo-100 px-5 py-3 flex items-center gap-4 text-xs">
+            <span className="font-semibold text-indigo-700">{selected.size} seleccionado{selected.size > 1 ? 's' : ''}</span>
+            {totalHours > 0 && (
+              <span className="text-indigo-600 flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {totalHours.toLocaleString('es-CL')} h
+              </span>
+            )}
+            {totalBudget > 0 && (
+              <span className="text-indigo-600 flex items-center gap-1">
+                <DollarSign className="w-3 h-3" /> {fmtCurrency(totalBudget)}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* list */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : pending.length === 0 && already.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-medium">Sin candidatos para este plan</p>
+              <p className="text-xs mt-1">Marca proyectos como "Incluir en Plan" en el Banco de Proyectos</p>
+            </div>
+          ) : (
+            <>
+              {pending.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">
+                    Disponibles — {pending.length}
+                  </p>
+                  {pending.map(p => {
+                    const rl = rlCfg(p.finalRiskLevel);
+                    const isSelected = selected.has(p.id);
+                    return (
+                      <label key={p.id}
+                        className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-indigo-400 bg-indigo-50'
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}>
+                        <input
+                          type="checkbox" checked={isSelected}
+                          onChange={() => toggle(p.id)}
+                          className="mt-0.5 accent-indigo-600 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono text-gray-400">{p.correlative}</span>
+                            {p.finalRiskLevel && (
+                              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${rl.bg} ${rl.color}`}>
+                                {rl.label}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm font-medium text-gray-800 mt-0.5 truncate">{p.name}</p>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                            {p.riskCategory && <span>{p.riskCategory}</span>}
+                            {p.plannedHours ? <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" />{p.plannedHours} h</span> : null}
+                            {p.totalBudget ? <span className="flex items-center gap-0.5"><DollarSign className="w-3 h-3" />{fmtCurrency(p.totalBudget)}</span> : null}
+                          </div>
+                          {p.strategicObjective && (
+                            <p className="text-xs text-indigo-500 mt-0.5 truncate">
+                              OE: {p.strategicObjective.name}
+                            </p>
+                          )}
+                        </div>
+                        {p.finalRiskScore && (
+                          <span className="text-xs font-bold text-gray-400 flex-shrink-0 mt-1">
+                            {p.finalRiskScore.toFixed(2)}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </>
+              )}
+
+              {already.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1 mt-4">
+                    Ya importados — {already.length}
+                  </p>
+                  {already.map(p => {
+                    const rl = rlCfg(p.finalRiskLevel);
+                    return (
+                      <div key={p.id}
+                        className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50 opacity-60">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono text-gray-400">{p.correlative}</span>
+                            {p.finalRiskLevel && (
+                              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${rl.bg} ${rl.color}`}>
+                                {rl.label}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm font-medium text-gray-700 mt-0.5 truncate">{p.name}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* footer */}
+        <div className="border-t border-gray-200 p-4 flex gap-3">
+          <button
+            onClick={handleImport}
+            disabled={selected.size === 0 || importMut.isPending}
+            className="flex-1 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl
+              hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors
+              flex items-center justify-center gap-2">
+            <Download className="w-4 h-4" />
+            {importMut.isPending
+              ? 'Importando...'
+              : selected.size > 0
+                ? `Importar ${selected.size} proyecto${selected.size > 1 ? 's' : ''}`
+                : 'Selecciona proyectos'}
+          </button>
+          <button onClick={onClose}
+            className="px-4 py-2.5 border border-gray-200 text-sm text-gray-600 rounded-xl hover:bg-gray-50">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add item form (manual entity) ────────────────────────────────────────────
 function AddItemForm({ planId, existingEntityIds, onAdded }: {
   planId: string;
   existingEntityIds: string[];
@@ -74,14 +273,14 @@ function AddItemForm({ planId, existingEntityIds, onAdded }: {
     return (
       <button onClick={() => setOpen(true)}
         className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs rounded-xl hover:border-blue-400 hover:text-blue-600 w-full justify-center transition-colors">
-        <Plus className="w-3.5 h-3.5" /> Agregar entidad al plan
+        <Plus className="w-3.5 h-3.5" /> Agregar entidad manualmente
       </button>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="bg-blue-50 rounded-xl border border-blue-200 p-4 space-y-3">
-      <p className="text-xs font-semibold text-blue-700">Agregar entidad</p>
+      <p className="text-xs font-semibold text-blue-700">Agregar entidad del universo</p>
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
           <select required value={form.auditEntityId}
@@ -147,6 +346,21 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
   const removeItem = useRemovePlanItem(planId);
   const pr = PRIORITY_CONFIG[item.priority] ?? PRIORITY_CONFIG[2];
 
+  // Item can come from entity (legacy) or from AuditProject (P.4)
+  const isFromProject = !!item.auditProjectId;
+  const displayName  = isFromProject ? (item.auditProject?.name ?? '—') : (item.auditEntity?.name ?? '—');
+  const displaySub   = isFromProject
+    ? item.auditProject?.riskCategory ?? ''
+    : item.auditEntity?.category ?? '';
+
+  const rl = isFromProject && item.auditProject?.finalRiskLevel
+    ? RISK_LEVEL_CONFIG[item.auditProject.finalRiskLevel]
+    : null;
+
+  const riskNum = isFromProject
+    ? item.auditProject?.finalRiskScore
+    : item.auditEntity?.inherentRiskScore;
+
   const handleSave = async () => {
     await updateItem.mutateAsync({
       itemId: item.id,
@@ -157,25 +371,46 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
 
   return (
     <div className="flex items-center gap-3 py-3 border-b border-gray-50 last:border-0">
-      {/* Risk score */}
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-        item.auditEntity.inherentRiskScore >= 80 ? 'bg-red-50 text-red-700' :
-        item.auditEntity.inherentRiskScore >= 60 ? 'bg-amber-50 text-amber-700' :
-        'bg-green-50 text-green-700'
-      }`}>
-        {item.auditEntity.inherentRiskScore}
-      </div>
+      {/* Risk indicator */}
+      {isFromProject && rl ? (
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${rl.bg} ${rl.color}`}>
+          <ShieldAlert className="w-4 h-4" />
+        </div>
+      ) : (
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+          (riskNum ?? 0) >= 80 ? 'bg-red-50 text-red-700' :
+          (riskNum ?? 0) >= 60 ? 'bg-amber-50 text-amber-700' :
+          'bg-green-50 text-green-700'
+        }`}>
+          {riskNum ?? '—'}
+        </div>
+      )}
 
-      {/* Entity info */}
+      {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 truncate">{item.auditEntity.name}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs text-gray-400">{item.auditEntity.category}</span>
+        <div className="flex items-center gap-1.5">
+          {isFromProject && (
+            <span className="text-xs font-mono text-gray-400">{item.auditProject?.correlative}</span>
+          )}
+          <p className="text-sm font-medium text-gray-900 truncate">{displayName}</p>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          {displaySub && <span className="text-xs text-gray-400">{displaySub}</span>}
+          {isFromProject && rl && (
+            <span className={`text-xs px-1.5 py-0 rounded-full font-medium ${rl.bg} ${rl.color}`}>
+              {rl.label}
+            </span>
+          )}
           {item.tentativeStartDate && (
             <span className="text-xs text-gray-400">
               · {formatDate(item.tentativeStartDate)} → {formatDate(item.tentativeEndDate)}
             </span>
           )}
+          {isFromProject && item.auditProject?.totalBudget ? (
+            <span className="text-xs text-gray-400 flex items-center gap-0.5">
+              <DollarSign className="w-3 h-3" />{fmtCurrency(item.auditProject.totalBudget)}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -213,7 +448,7 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
               </button>
               <button
                 onClick={async () => {
-                  if (confirm(`¿Quitar "${item.auditEntity.name}" del plan?`)) {
+                  if (confirm(`¿Quitar "${displayName}" del plan?`)) {
                     await removeItem.mutateAsync(item.id);
                   }
                 }}
@@ -236,6 +471,7 @@ export default function PlanDetailPage() {
   const [editingObjectives, setEditObj] = useState(false);
   const [objText, setObjText] = useState('');
   const [showAllItems, setShowAll] = useState(false);
+  const [showImportPanel, setShowImportPanel] = useState(false);
 
   const approve  = useApprovePlan();
   const activate = useActivatePlan();
@@ -256,16 +492,22 @@ export default function PlanDetailPage() {
   const st       = PLAN_STATUS_CONFIG[plan.status];
   const canEdit  = plan.status !== 'CLOSED';
   const sortedItems = [...plan.items].sort((a, b) => a.priority - b.priority);
-  const displayItems = showAllItems ? sortedItems : sortedItems.slice(0, 8);
+  const displayItems = showAllItems ? sortedItems : sortedItems.slice(0, 10);
 
   const StatusIcon = { DRAFT: Clock, APPROVED: CheckCircle2, ACTIVE: Zap, CLOSED: Lock }[plan.status] ?? Clock;
 
-  // By category
-  const byCategory = sortedItems.reduce<Record<string, typeof sortedItems>>((acc, item) => {
-    const cat = item.auditEntity.category;
-    acc[cat] = [...(acc[cat] ?? []), item];
-    return acc;
-  }, {});
+  // Project-sourced items budget summary
+  const projectItems = sortedItems.filter(i => i.auditProject);
+  const totalProjectBudget = projectItems.reduce((s, i) => s + (i.auditProject?.totalBudget ?? 0), 0);
+
+  // By category (for entity-sourced items)
+  const byCategory = sortedItems
+    .filter(i => i.auditEntity)
+    .reduce<Record<string, typeof sortedItems>>((acc, item) => {
+      const cat = item.auditEntity!.category;
+      acc[cat] = [...(acc[cat] ?? []), item];
+      return acc;
+    }, {});
 
   const handleSaveObjectives = async () => {
     const objectives = objText.split('\n').map(s => s.trim()).filter(Boolean);
@@ -279,6 +521,10 @@ export default function PlanDetailPage() {
         { label: 'Planificación', href: '/dashboard/plans' },
         { label: `Plan ${plan.year}` },
       ]} />
+
+      {showImportPanel && (
+        <ImportFromBancoPanel planId={plan.id} onClose={() => setShowImportPanel(false)} />
+      )}
 
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-5xl mx-auto space-y-4">
@@ -303,8 +549,16 @@ export default function PlanDetailPage() {
                 )}
               </div>
 
-              {/* Workflow buttons */}
-              <div className="flex gap-2">
+              {/* Workflow + Import buttons */}
+              <div className="flex gap-2 flex-wrap justify-end">
+                {canEdit && (
+                  <button
+                    onClick={() => setShowImportPanel(true)}
+                    className="px-3 py-2 border border-indigo-300 text-indigo-700 bg-indigo-50 text-xs font-semibold rounded-xl hover:bg-indigo-100 transition-colors flex items-center gap-1.5">
+                    <ClipboardList className="w-3.5 h-3.5" />
+                    Importar del Banco
+                  </button>
+                )}
                 {plan.status === 'DRAFT' && (
                   <button onClick={() => approve.mutateAsync(plan.id)} disabled={approve.isPending}
                     className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1.5">
@@ -348,7 +602,7 @@ export default function PlanDetailPage() {
 
           <div className="grid grid-cols-3 gap-4">
 
-            {/* ── Left: Objectives + Summary ── */}
+            {/* ── Left: Stats + Budget + Objectives + By category ── */}
             <div className="col-span-1 space-y-4">
 
               {/* Stats */}
@@ -356,10 +610,11 @@ export default function PlanDetailPage() {
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Resumen</p>
                 <div className="space-y-2 text-sm">
                   {[
-                    { label: 'Entidades',      value: plan.items.length },
-                    { label: 'Horas asignadas',value: `${plan.allocatedHours.toLocaleString('es-CL')} h` },
-                    { label: 'Horas restantes',value: `${Math.max(0, plan.remainingHours).toLocaleString('es-CL')} h` },
-                    { label: 'Prioridad alta', value: sortedItems.filter(i => i.priority === 1).length },
+                    { label: 'Proyectos importados', value: projectItems.length },
+                    { label: 'Entidades manuales',   value: sortedItems.filter(i => i.auditEntity).length },
+                    { label: 'Horas asignadas',      value: `${plan.allocatedHours.toLocaleString('es-CL')} h` },
+                    { label: 'Horas restantes',      value: `${Math.max(0, plan.remainingHours).toLocaleString('es-CL')} h` },
+                    { label: 'Prioridad alta',       value: sortedItems.filter(i => i.priority === 1).length },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex justify-between">
                       <span className="text-gray-500 text-xs">{label}</span>
@@ -368,6 +623,19 @@ export default function PlanDetailPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Budget from Banco */}
+              {totalProjectBudget > 0 && (
+                <div className="bg-indigo-50 rounded-2xl border border-indigo-200 p-4">
+                  <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5" /> Presupuesto del plan
+                  </p>
+                  <p className="text-xl font-black text-indigo-800">{fmtCurrency(totalProjectBudget)}</p>
+                  <p className="text-xs text-indigo-500 mt-0.5">
+                    De {projectItems.length} proyecto{projectItems.length > 1 ? 's' : ''} importado{projectItems.length > 1 ? 's' : ''}
+                  </p>
+                </div>
+              )}
 
               {/* Objectives */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
@@ -440,34 +708,35 @@ export default function PlanDetailPage() {
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-sm font-semibold text-gray-800">
-                    Entidades planificadas
+                    Proyectos y entidades planificadas
                     <span className="ml-2 text-xs font-normal text-gray-400">{sortedItems.length} total</span>
                   </p>
                   <div className="flex items-center gap-1.5 text-xs text-gray-400">
                     <TrendingUp className="w-3.5 h-3.5" />
-                    Ordenado por prioridad y riesgo
+                    Ordenado por prioridad
                   </div>
                 </div>
 
                 {sortedItems.length === 0 ? (
                   <div className="py-8 flex flex-col items-center text-gray-400">
                     <AlertTriangle className="w-8 h-8 mb-2 opacity-30" />
-                    <p className="text-sm">Sin entidades en el plan</p>
-                    <p className="text-xs mt-1">Agrega entidades del universo de auditoría</p>
+                    <p className="text-sm">Sin proyectos en el plan</p>
+                    <p className="text-xs mt-1 text-center">
+                      Importa desde el Banco de Proyectos o agrega entidades manualmente
+                    </p>
                   </div>
                 ) : (
                   <>
                     {displayItems.map(item => (
                       <PlanItemRow key={item.id} item={item} planId={plan.id} canEdit={canEdit} />
                     ))}
-                    {sortedItems.length > 8 && (
+                    {sortedItems.length > 10 && (
                       <button
                         onClick={() => setShowAll(!showAllItems)}
-                        className="flex items-center gap-1 text-xs text-blue-600 hover:underline mt-2"
-                      >
+                        className="flex items-center gap-1 text-xs text-blue-600 hover:underline mt-2">
                         {showAllItems
                           ? <><ChevronUp className="w-3.5 h-3.5" /> Ver menos</>
-                          : <><ChevronDown className="w-3.5 h-3.5" /> Ver {sortedItems.length - 8} más</>
+                          : <><ChevronDown className="w-3.5 h-3.5" /> Ver {sortedItems.length - 10} más</>
                         }
                       </button>
                     )}
@@ -475,10 +744,16 @@ export default function PlanDetailPage() {
                 )}
 
                 {canEdit && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                    <button
+                      onClick={() => setShowImportPanel(true)}
+                      className="flex items-center gap-2 px-3 py-2 border border-dashed border-indigo-300 text-indigo-600 text-xs rounded-xl hover:border-indigo-400 hover:bg-indigo-50 w-full justify-center transition-colors">
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      Importar del Banco de Proyectos
+                    </button>
                     <AddItemForm
                       planId={plan.id}
-                      existingEntityIds={sortedItems.map(i => i.auditEntityId)}
+                      existingEntityIds={sortedItems.map(i => i.auditEntityId ?? '').filter(Boolean)}
                       onAdded={() => {}}
                     />
                   </div>

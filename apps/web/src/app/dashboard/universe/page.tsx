@@ -1691,6 +1691,7 @@ function AuditableUnitsTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [showScoreInfo, setShowScoreInfo] = useState(false);
   const [form, setForm] = useState({
+    name: '',
     auditEntityId: '', auditProcessId: '', auditType: 'OPERACIONAL',
     isMandatory: false, mandatoryBasis: '',
     riskType: '', strategicLineId: '',
@@ -1778,6 +1779,16 @@ function AuditableUnitsTab() {
       {showCreate && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
           <h3 className="text-sm font-semibold text-blue-900">Nueva Auditoría</h3>
+          {/* Nombre */}
+          <div>
+            <label className="text-xs font-medium text-slate-700">Nombre de la Auditoría <span className="text-slate-400 font-normal">(opcional — se genera automáticamente si se deja vacío)</span></label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Ej: Auditoría de Tesorería 2026"
+              className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {/* Auditoría — árbol jerárquico completo */}
             <div>
@@ -1892,10 +1903,13 @@ function AuditableUnitsTab() {
             <button onClick={() => setShowCreate(false)} className="rounded px-3 py-1.5 text-xs border border-slate-300 hover:bg-white">Cancelar</button>
             <button
               disabled={!form.auditEntityId || !form.auditProcessId || createUnit.isPending}
-              onClick={() => createUnit.mutate(form as any, { onSuccess: () => {
-                setShowCreate(false);
-                setForm({ auditEntityId: '', auditProcessId: '', auditType: 'OPERACIONAL', isMandatory: false, mandatoryBasis: '', riskType: '', strategicLineId: '' });
-              }})}
+              onClick={() => createUnit.mutate(
+                { ...form, name: form.name.trim() || undefined } as any,
+                { onSuccess: () => {
+                  setShowCreate(false);
+                  setForm({ name: '', auditEntityId: '', auditProcessId: '', auditType: 'OPERACIONAL', isMandatory: false, mandatoryBasis: '', riskType: '', strategicLineId: '' });
+                }}
+              )}
               className="rounded px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
               Crear
             </button>

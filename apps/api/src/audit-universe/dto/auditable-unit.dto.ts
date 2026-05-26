@@ -30,6 +30,8 @@ export class CreateAuditableUnitDto {
   @IsOptional() @IsString() auditType?: string;
   @IsOptional() @IsBoolean() isMandatory?: boolean;
   @IsOptional() @IsString() mandatoryBasis?: string;
+  @IsOptional() @IsString() strategicLineId?: string;
+  @IsOptional() @IsString() riskType?: string;
   @IsOptional() @IsString() notes?: string;
 }
 
@@ -38,6 +40,8 @@ export class UpdateAuditableUnitDto {
   @IsOptional() @IsString() auditType?: string;
   @IsOptional() @IsBoolean() isMandatory?: boolean;
   @IsOptional() @IsString() mandatoryBasis?: string;
+  @IsOptional() @IsString() strategicLineId?: string;
+  @IsOptional() @IsString() riskType?: string;
   @IsOptional() @IsBoolean() active?: boolean;
   @IsOptional() @IsString() notes?: string;
 }
@@ -52,13 +56,14 @@ export class UpsertAssessmentDto {
   @IsOptional() @IsInt() @Min(1) @Max(5) likelihoodScore?: number;
   @IsOptional() @IsInt() @Min(1) @Max(5) controlMaturityScore?: number;
 
-  // Grupo B — Factores Secundarios
+  // Grupo B — Factores Contextuales
   @IsOptional() @IsInt() @Min(1) @Max(5) materialityScore?: number;
   @IsOptional() @IsInt() @Min(1) @Max(5) strategicAlignScore?: number;
   @IsOptional() @IsInt() @Min(1) @Max(5) operationalAlignScore?: number;
   @IsOptional() @IsInt() @Min(1) @Max(5) fraudHistoryScore?: number;
   @IsOptional() @IsInt() @Min(1) @Max(5) managementReqScore?: number;
-  @IsOptional() @IsInt() @Min(1) @Max(5) changeVelocityScore?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(5) staffTurnoverScore?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(5) coverageHistoryScore?: number;
 
   // Historial
   @IsOptional() @IsString() lastAuditDate?: string;

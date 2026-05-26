@@ -16,7 +16,20 @@ import {
   type AuditEntityNode, type AuditProcess, type AuditableUnit,
 } from '@/hooks/useAuditUniverse2';
 import { useEntityTypeConfigs, useProcessCategoryConfigs, type EntityTypeConfig, type ProcessCategoryConfig } from '@/hooks/useCatalogs';
+import { useStrategicObjectives } from '@/hooks/useStrategic';
 import { cn } from '@/lib/utils';
+
+// ─── Tipos de Riesgo ──────────────────────────────────────────────────────────
+const RISK_TYPE_OPTIONS = [
+  { value: 'FINANCIERO',    label: 'Riesgo Financiero' },
+  { value: 'OPERACIONAL',   label: 'Riesgo Operacional' },
+  { value: 'TECNOLOGIA',    label: 'Riesgo de Tecnología' },
+  { value: 'CUMPLIMIENTO',  label: 'Riesgo de Cumplimiento' },
+  { value: 'FRAUDE',        label: 'Riesgo de Fraude' },
+  { value: 'ESTRATEGICO',   label: 'Riesgo Estratégico' },
+  { value: 'LEGAL',         label: 'Riesgo Legal' },
+  { value: 'ESG',           label: 'Riesgo ESG / Medioambiental' },
+];
 
 // Derive accent color class from catalog color string (e.g. "bg-blue-100 text-blue-800" → "blue")
 function getAccentBorder(entityType: string): string {
@@ -122,7 +135,8 @@ function ScoringModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => v
     operationalAlignScore: existing?.operationalAlignScore ?? 1,
     fraudHistoryScore:     existing?.fraudHistoryScore     ?? 1,
     managementReqScore:    existing?.managementReqScore    ?? 1,
-    changeVelocityScore:   existing?.changeVelocityScore   ?? 1,
+    staffTurnoverScore:    existing?.staffTurnoverScore    ?? 1,
+    coverageHistoryScore:  existing?.coverageHistoryScore  ?? 1,
     lastAuditDate:         existing?.lastAuditDate?.slice(0, 10) ?? '',
     lastAuditOpinion:      existing?.lastAuditOpinion ?? '',
     recommendedFreqMonths: existing?.recommendedFreqMonths ?? 12,
@@ -133,10 +147,17 @@ function ScoringModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => v
   const inherent = form.impactScore * form.likelihoodScore;
   const residual = inherent * (1 - form.controlMaturityScore / 5);
   const residualNorm = (residual / 25) * 100;
-  const secondaryAvg = (form.materialityScore + form.strategicAlignScore + form.operationalAlignScore +
-    form.fraudHistoryScore + form.managementReqScore + form.changeVelocityScore) / 6;
-  const secondaryNorm = ((secondaryAvg - 1) / 4) * 100;
-  const totalScore = residualNorm * 0.7 + secondaryNorm * 0.3;
+
+  // Grupo B: suma ponderada (pesos IIA/Big 4: materialidad 20%, alin. PE 20%, alin. PO 15%, fraude 15%, dirección 10%, rotación 10%, cobertura 10%)
+  const GROUP_B_WEIGHTS: Record<string, number> = {
+    materialityScore: 0.20, strategicAlignScore: 0.20, operationalAlignScore: 0.15,
+    fraudHistoryScore: 0.15, managementReqScore: 0.10, staffTurnoverScore: 0.10, coverageHistoryScore: 0.10,
+  };
+  const secondaryWeighted = Object.entries(GROUP_B_WEIGHTS).reduce((sum, [key, w]) => {
+    const score = (form as Record<string, number>)[key] ?? 1;
+    return sum + ((score - 1) / 4) * 100 * w;
+  }, 0);
+  const totalScore = residualNorm * 0.30 + secondaryWeighted * 0.70;
   const riskLevel = totalScore >= 75 ? 'CRITICAL' : totalScore >= 55 ? 'HIGH' : totalScore >= 35 ? 'MEDIUM' : 'LOW';
   const rl = RISK_LEVEL_CONFIG[riskLevel as keyof typeof RISK_LEVEL_CONFIG];
 
@@ -168,7 +189,7 @@ function ScoringModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => v
             </span>
           </div>
           <div>
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Grupo A — Riesgo Residual (peso 70%)</h3>
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Grupo A — Riesgo Residual (peso 30%)</h3>
             <div className="space-y-4">
               <ScoreSlider label="Impacto" hint="Magnitud del daño si ocurre el riesgo" value={form.impactScore} onChange={(v) => set('impactScore', v)} />
               <ScoreSlider label="Probabilidad" hint="Frecuencia estimada de ocurrencia" value={form.likelihoodScore} onChange={(v) => set('likelihoodScore', v)} />
@@ -181,14 +202,16 @@ function ScoringModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => v
             </div>
           </div>
           <div>
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Grupo B — Factores Secundarios (peso 30%)</h3>
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Grupo B — Factores Contextuales (peso 70%)</h3>
+            <p className="text-[10px] text-slate-400 mb-3">Suma ponderada: Materialidad 20% · Alin.PE 20% · Alin.PO 15% · Fraude 15% · Dirección 10% · Rotación 10% · Cobertura 10%</p>
             <div className="space-y-4">
-              <ScoreSlider label="Materialidad Financiera" hint="Tamaño del presupuesto / volumen de transacciones del área" value={form.materialityScore} onChange={(v) => set('materialityScore', v)} />
-              <ScoreSlider label="Alineación al Plan Estratégico" hint="¿Esta área es crítica para los objetivos estratégicos?" value={form.strategicAlignScore} onChange={(v) => set('strategicAlignScore', v)} />
-              <ScoreSlider label="Alineación al Plan Operativo" hint="¿Qué tan relevante es para la operación diaria?" value={form.operationalAlignScore} onChange={(v) => set('operationalAlignScore', v)} />
-              <ScoreSlider label="Antecedentes de Fraude / Denuncias" hint="Historial de fraudes, investigaciones o alertas de ética" value={form.fraudHistoryScore} onChange={(v) => set('fraudHistoryScore', v)} />
-              <ScoreSlider label="Solicitud de la Dirección" hint="¿La gerencia o junta ha pedido expresamente esta auditoría?" value={form.managementReqScore} onChange={(v) => set('managementReqScore', v)} />
-              <ScoreSlider label="Velocidad de Cambio" hint="Cambios recientes: nuevo sistema, M&A, nueva gerencia, restructuración" value={form.changeVelocityScore} onChange={(v) => set('changeVelocityScore', v)} />
+              <ScoreSlider label="Materialidad Financiera (20%)" hint="Tamaño del presupuesto / volumen de transacciones del área" value={form.materialityScore} onChange={(v) => set('materialityScore', v)} />
+              <ScoreSlider label="Alineación al Plan Estratégico (20%)" hint="¿Esta área es crítica para los objetivos estratégicos?" value={form.strategicAlignScore} onChange={(v) => set('strategicAlignScore', v)} />
+              <ScoreSlider label="Alineación al Plan Operativo (15%)" hint="¿Qué tan relevante es para la operación diaria?" value={form.operationalAlignScore} onChange={(v) => set('operationalAlignScore', v)} />
+              <ScoreSlider label="Antecedentes de Fraude / Denuncias (15%)" hint="Historial de fraudes, investigaciones o alertas de ética" value={form.fraudHistoryScore} onChange={(v) => set('fraudHistoryScore', v)} />
+              <ScoreSlider label="Solicitud de la Dirección (10%)" hint="¿La gerencia o junta ha pedido expresamente esta auditoría?" value={form.managementReqScore} onChange={(v) => set('managementReqScore', v)} />
+              <ScoreSlider label="Rotación de Personal (10%)" hint="Cambios recientes de personal clave, nueva gerencia, M&A, restructuración" value={form.staffTurnoverScore} onChange={(v) => set('staffTurnoverScore', v)} />
+              <ScoreSlider label="Historial de Cobertura (10%)" hint="Tiempo transcurrido desde la última auditoría respecto a la frecuencia recomendada" value={form.coverageHistoryScore} onChange={(v) => set('coverageHistoryScore', v)} />
             </div>
           </div>
           <div>
@@ -1532,18 +1555,26 @@ function flattenTree(
 
 function EditUnitModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => void }) {
   const updateUnit = useUpdateAuditableUnit();
+  const { data: objectives = [] } = useStrategicObjectives();
   const [form, setForm] = useState({
-    name:          unit.name ?? '',
-    auditType:     unit.auditType ?? 'OPERACIONAL',
-    isMandatory:   unit.isMandatory ?? false,
+    name:           unit.name ?? '',
+    auditType:      unit.auditType ?? 'OPERACIONAL',
+    isMandatory:    unit.isMandatory ?? false,
     mandatoryBasis: unit.mandatoryBasis ?? '',
-    notes:         unit.notes ?? '',
+    riskType:       unit.riskType ?? '',
+    strategicLineId: unit.strategicLineId ?? '',
+    notes:          unit.notes ?? '',
   });
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
   const save = () => {
     updateUnit.mutate(
-      { id: unit.id, data: { ...form, name: form.name || undefined } },
+      { id: unit.id, data: {
+        ...form,
+        name: form.name || undefined,
+        strategicLineId: form.strategicLineId || undefined,
+        riskType: form.riskType || undefined,
+      }},
       { onSuccess: onClose },
     );
   };
@@ -1555,7 +1586,7 @@ function EditUnitModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => 
       <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
-            <h2 className="font-semibold text-slate-900">Editar Unidad Auditable</h2>
+            <h2 className="font-semibold text-slate-900">Editar Auditoría</h2>
             <p className="text-xs text-slate-500 truncate max-w-xs">{unitLabel}</p>
           </div>
           <button onClick={onClose} className="rounded p-1 hover:bg-slate-100"><X className="h-4 w-4" /></button>
@@ -1564,23 +1595,49 @@ function EditUnitModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => 
           <div>
             <label className="text-xs font-medium text-slate-700">Nombre personalizado</label>
             <input value={form.name} onChange={(e) => set('name', e.target.value)}
-              placeholder="Dejar vacío para usar 'Entidad — Proceso'"
+              placeholder="Dejar vacío para usar 'Área — Proceso'"
               className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm" />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-700">Tipo de Auditoría</label>
+              <select value={form.auditType} onChange={(e) => set('auditType', e.target.value)}
+                className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                <option value="FINANCIERA">Auditoría Financiera</option>
+                <option value="OPERACIONAL">Auditoría Operacional</option>
+                <option value="GESTION">Auditoría de Gestión</option>
+                <option value="TECNOLOGIA">Auditoría de Tecnología</option>
+                <option value="EXAMEN_ESPECIAL">Examen Especial</option>
+                <option value="CONSULTORIA">Consultoría</option>
+                <option value="FORENSE">Investigación Forense</option>
+                <option value="FRAUDE">Fraude</option>
+                <option value="CALIDAD">Revisión de Calidad</option>
+                <option value="OTROS">Otros</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-700">Tipo de Riesgo</label>
+              <select value={form.riskType} onChange={(e) => set('riskType', e.target.value)}
+                className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                <option value="">— Sin clasificar —</option>
+                {RISK_TYPE_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div>
-            <label className="text-xs font-medium text-slate-700">Tipo de Auditoría</label>
-            <select value={form.auditType} onChange={(e) => set('auditType', e.target.value)}
+            <label className="text-xs font-medium text-slate-700">Línea Estratégica</label>
+            <select value={form.strategicLineId} onChange={(e) => set('strategicLineId', e.target.value)}
               className="mt-1 block w-full rounded border border-slate-300 px-3 py-2 text-sm">
-              <option value="FINANCIERA">Auditoría Financiera</option>
-              <option value="OPERACIONAL">Auditoría Operacional</option>
-              <option value="GESTION">Auditoría de Gestión</option>
-              <option value="TECNOLOGIA">Auditoría de Tecnología</option>
-              <option value="EXAMEN_ESPECIAL">Examen Especial</option>
-              <option value="CONSULTORIA">Consultoría</option>
-              <option value="FORENSE">Investigación Forense</option>
-              <option value="FRAUDE">Fraude</option>
-              <option value="CALIDAD">Revisión de Calidad</option>
-              <option value="OTROS">Otros</option>
+              <option value="">— Sin línea estratégica —</option>
+              {objectives.map((o) => (
+                <optgroup key={o.id} label={`${o.code} · ${o.name}`}>
+                  {(o.lines ?? []).map((l) => (
+                    <option key={l.id} value={l.id}>{l.code} · {l.name}</option>
+                  ))}
+                </optgroup>
+              ))}
             </select>
           </div>
           <div className="flex items-center gap-3 py-1">
@@ -1626,6 +1683,7 @@ function AuditableUnitsTab() {
   const { data: entityTree = [] } = useEntityTree();
   const { data: processes = [] } = useAuditProcesses();
   const { data: processCats = [] } = useProcessCategoryConfigs();
+  const { data: objectives = [] } = useStrategicObjectives();
   const createUnit = useCreateAuditableUnit();
   const deleteUnit = useDeleteAuditableUnit();
   const [scoringUnit, setScoringUnit] = useState<AuditableUnit | null>(null);
@@ -1635,7 +1693,9 @@ function AuditableUnitsTab() {
   const [form, setForm] = useState({
     auditEntityId: '', auditProcessId: '', auditType: 'OPERACIONAL',
     isMandatory: false, mandatoryBasis: '',
+    riskType: '', strategicLineId: '',
   });
+
 
   // Flat list with hierarchy indentation for entity <select>
   const flatEntities = flattenTree(entityTree);
@@ -1657,12 +1717,12 @@ function AuditableUnitsTab() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-700">Unidades Auditables</p>
-          <p className="text-xs text-slate-400">Combinación Entidad × Proceso — el objeto que entra al Plan Anual</p>
+          <p className="text-sm font-medium text-slate-700">Universo de Auditorías</p>
+          <p className="text-xs text-slate-400">Combinación Auditoría × Proceso — objeto evaluado y candidato al Plan Anual</p>
         </div>
         <button onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700">
-          <Plus className="h-3.5 w-3.5" /> Nueva Unidad
+          <Plus className="h-3.5 w-3.5" /> Nueva Auditoría
         </button>
       </div>
 
@@ -1677,7 +1737,7 @@ function AuditableUnitsTab() {
         {showScoreInfo && (
           <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-blue-900">
             <div className="rounded bg-white/70 p-3 space-y-1.5">
-              <p className="font-bold text-blue-700">Grupo A — Riesgo Residual (70%)</p>
+              <p className="font-bold text-blue-700">Grupo A — Riesgo Residual (30%)</p>
               <p>El <strong>auditor define</strong> 3 factores con sliders 1–5:</p>
               <ul className="space-y-0.5 pl-3 list-disc text-blue-800">
                 <li><strong>Impacto</strong> — magnitud del daño si el riesgo ocurre</li>
@@ -1691,23 +1751,24 @@ function AuditableUnitsTab() {
               </p>
             </div>
             <div className="rounded bg-white/70 p-3 space-y-1.5">
-              <p className="font-bold text-blue-700">Grupo B — Factores Contextuales (30%)</p>
-              <p>El <strong>auditor define</strong> 6 factores adicionales:</p>
+              <p className="font-bold text-blue-700">Grupo B — Factores Contextuales (70%)</p>
+              <p>El <strong>auditor define</strong> 7 factores con pesos diferenciados:</p>
               <ul className="space-y-0.5 pl-3 list-disc text-blue-800">
-                <li>Materialidad financiera del área</li>
-                <li>Alineación al Plan Estratégico</li>
-                <li>Alineación al Plan Operativo</li>
-                <li>Antecedentes de fraude / denuncias</li>
-                <li>Solicitud de la dirección / junta</li>
-                <li>Velocidad de cambio (M&A, TI, etc.)</li>
+                <li>Materialidad financiera del área <em>(20%)</em></li>
+                <li>Alineación al Plan Estratégico <em>(20%)</em></li>
+                <li>Alineación al Plan Operativo <em>(15%)</em></li>
+                <li>Antecedentes de fraude / denuncias <em>(15%)</em></li>
+                <li>Solicitud de la dirección / junta <em>(10%)</em></li>
+                <li>Rotación de personal / cambios gestión <em>(10%)</em></li>
+                <li>Historial de cobertura de auditoría <em>(10%)</em></li>
               </ul>
               <p className="text-[10px] text-blue-600 font-mono bg-blue-100 rounded px-2 py-1">
-                Score Final = A×0.70 + B×0.30<br />
+                Score Final = A×0.30 + B×0.70<br />
                 CRÍTICO ≥75 · ALTO ≥55 · MEDIO ≥35 · BAJO &lt;35
               </p>
             </div>
             <div className="col-span-2 rounded bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800">
-              <strong>¿Es automático o manual?</strong> — El <em>usuario define los 9 factores</em> mediante sliders y el <em>sistema calcula el score final</em> automáticamente. Usa el botón <FlaskConical className="inline h-3.5 w-3.5 mx-0.5" /><strong>Evaluar Riesgo</strong> en cada unidad para abrir el formulario de evaluación.
+              <strong>¿Es automático o manual?</strong> — El <em>usuario define los 10 factores</em> mediante sliders y el <em>sistema calcula el score final</em> automáticamente. Usa el botón <FlaskConical className="inline h-3.5 w-3.5 mx-0.5" /><strong>Evaluar Riesgo</strong> en cada auditoría para abrir el formulario de evaluación. La metodología sigue los lineamientos IIA / Big 4 donde los factores contextuales pesan más que el riesgo inherente.
             </div>
           </div>
         )}
@@ -1716,14 +1777,14 @@ function AuditableUnitsTab() {
       {/* Create form */}
       {showCreate && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-blue-900">Nueva Unidad Auditable</h3>
+          <h3 className="text-sm font-semibold text-blue-900">Nueva Auditoría</h3>
           <div className="grid grid-cols-2 gap-3">
-            {/* Entidad — árbol jerárquico completo */}
+            {/* Auditoría — árbol jerárquico completo */}
             <div>
-              <label className="text-xs font-medium text-slate-700">Entidad</label>
+              <label className="text-xs font-medium text-slate-700">Auditoría (Área / Entidad)</label>
               <select value={form.auditEntityId} onChange={(e) => setForm((f) => ({ ...f, auditEntityId: e.target.value }))}
                 className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-                <option value="">Seleccionar entidad del organigrama…</option>
+                <option value="">Seleccionar área del organigrama…</option>
                 {flatEntities.map((e) => (
                   <option key={e.id} value={e.id}>{e.label}</option>
                 ))}
@@ -1784,14 +1845,43 @@ function AuditableUnitsTab() {
                 <option value="OTROS">Otros</option>
               </select>
             </div>
-            <div className="flex items-start gap-2 pt-5">
+
+            {/* Tipo de Riesgo */}
+            <div>
+              <label className="text-xs font-medium text-slate-700">Tipo de Riesgo</label>
+              <select value={form.riskType} onChange={(e) => setForm((f) => ({ ...f, riskType: e.target.value }))}
+                className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
+                <option value="">— Sin clasificar —</option>
+                {RISK_TYPE_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Línea Estratégica */}
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-slate-700">Línea Estratégica</label>
+              <select value={form.strategicLineId} onChange={(e) => setForm((f) => ({ ...f, strategicLineId: e.target.value }))}
+                className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
+                <option value="">— Sin línea estratégica —</option>
+                {objectives.map((o) => (
+                  <optgroup key={o.id} label={`${o.code} · ${o.name}`}>
+                    {(o.lines ?? []).map((l) => (
+                      <option key={l.id} value={l.id}>{l.code} · {l.name}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-start gap-2 pt-2">
               <input type="checkbox" id="mandatory" checked={form.isMandatory}
                 onChange={(e) => setForm((f) => ({ ...f, isMandatory: e.target.checked }))} className="mt-0.5" />
-              <label htmlFor="mandatory" className="text-xs text-slate-700 cursor-pointer">Mandatorio (ley/norma)</label>
+              <label htmlFor="mandatory" className="text-xs text-slate-700 cursor-pointer">Mandatorio (ley/norma regulatoria)</label>
             </div>
             {form.isMandatory && (
-              <div className="col-span-2">
-                <label className="text-xs font-medium text-slate-700">Base legal / regulatoria</label>
+              <div>
+                <label className="text-xs font-medium text-slate-700">Base legal</label>
                 <input value={form.mandatoryBasis} onChange={(e) => setForm((f) => ({ ...f, mandatoryBasis: e.target.value }))}
                   placeholder="Ej: Ley UAF Art. 12 / Norma CMF N°2024-01"
                   className="mt-1 block w-full rounded border border-slate-300 px-2 py-1.5 text-sm" />
@@ -1802,7 +1892,10 @@ function AuditableUnitsTab() {
             <button onClick={() => setShowCreate(false)} className="rounded px-3 py-1.5 text-xs border border-slate-300 hover:bg-white">Cancelar</button>
             <button
               disabled={!form.auditEntityId || !form.auditProcessId || createUnit.isPending}
-              onClick={() => createUnit.mutate(form as any, { onSuccess: () => { setShowCreate(false); setForm({ auditEntityId: '', auditProcessId: '', auditType: 'OPERACIONAL', isMandatory: false, mandatoryBasis: '' }); } })}
+              onClick={() => createUnit.mutate(form as any, { onSuccess: () => {
+                setShowCreate(false);
+                setForm({ auditEntityId: '', auditProcessId: '', auditType: 'OPERACIONAL', isMandatory: false, mandatoryBasis: '', riskType: '', strategicLineId: '' });
+              }})}
               className="rounded px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
               Crear
             </button>
@@ -1818,7 +1911,7 @@ function AuditableUnitsTab() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500">
               <tr>
-                <th className="px-4 py-3 text-left">Entidad</th>
+                <th className="px-4 py-3 text-left">Auditoría</th>
                 <th className="px-4 py-3 text-left">Proceso</th>
                 <th className="px-4 py-3 text-left">Tipo</th>
                 <th className="px-4 py-3 text-center">Score / Riesgo</th>
@@ -1829,8 +1922,8 @@ function AuditableUnitsTab() {
             <tbody className="divide-y divide-slate-100">
               {units.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-10 text-center">
-                  <p className="text-sm text-slate-400">Sin unidades auditables.</p>
-                  <p className="text-xs text-slate-300 mt-1">Crea la primera combinación Entidad × Proceso.</p>
+                  <p className="text-sm text-slate-400">Sin auditorías registradas.</p>
+                  <p className="text-xs text-slate-300 mt-1">Crea la primera combinación Área × Proceso.</p>
                 </td></tr>
               )}
               {units.map((u) => {
@@ -1936,10 +2029,10 @@ export default function UniversePage() {
   const { data: riskSummary } = useRiskSummary();
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
-    { id: 'entities',   label: 'Organigrama',          icon: Building2 },
-    { id: 'processes',  label: 'Catálogo de Procesos', icon: Layers },
-    { id: 'units',      label: 'Unidades Auditables',  icon: FlaskConical },
-    { id: 'candidates', label: 'Candidatas al Plan',   icon: Target },
+    { id: 'entities',   label: 'Organigrama',            icon: Building2 },
+    { id: 'processes',  label: 'Catálogo de Procesos',   icon: Layers },
+    { id: 'units',      label: 'Universo de Auditorías', icon: FlaskConical },
+    { id: 'candidates', label: 'Candidatas al Plan',     icon: Target },
   ];
 
   return (

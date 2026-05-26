@@ -98,7 +98,8 @@ export interface AuditableUnitAssessment {
   operationalAlignScore: number;
   fraudHistoryScore: number;
   managementReqScore: number;
-  changeVelocityScore: number;
+  staffTurnoverScore: number;
+  coverageHistoryScore: number;
   // Score final
   totalScore: number;
   riskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
@@ -120,6 +121,8 @@ export interface AuditableUnit {
   auditType: string;
   isMandatory: boolean;
   mandatoryBasis?: string;
+  strategicLineId?: string;
+  riskType?: string;
   active: boolean;
   notes?: string;
   auditEntity?: { id: string; name: string; entityType: AuditEntityType };
@@ -256,7 +259,8 @@ export function useCreateAuditableUnit() {
     mutationFn: (data: {
       auditEntityId: string; auditProcessId: string;
       name?: string; auditType?: string;
-      isMandatory?: boolean; mandatoryBasis?: string; notes?: string;
+      isMandatory?: boolean; mandatoryBasis?: string;
+      strategicLineId?: string; riskType?: string; notes?: string;
     }) => apiClient.post('/audit-universe/units', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['auditable-units'] });

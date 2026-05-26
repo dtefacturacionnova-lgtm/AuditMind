@@ -273,14 +273,14 @@ function AddItemForm({ planId, existingEntityIds, onAdded }: {
     return (
       <button onClick={() => setOpen(true)}
         className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs rounded-xl hover:border-blue-400 hover:text-blue-600 w-full justify-center transition-colors">
-        <Plus className="w-3.5 h-3.5" /> Agregar entidad manualmente
+        <Plus className="w-3.5 h-3.5" /> Agregar auditoría al plan
       </button>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="bg-blue-50 rounded-xl border border-blue-200 p-4 space-y-3">
-      <p className="text-xs font-semibold text-blue-700">Agregar entidad del universo</p>
+      <p className="text-xs font-semibold text-blue-700">Agregar auditoría del universo</p>
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2">
           <select required value={form.auditEntityId}
@@ -494,6 +494,16 @@ export default function PlanDetailPage() {
   const sortedItems = [...plan.items].sort((a, b) => a.priority - b.priority);
   const displayItems = showAllItems ? sortedItems : sortedItems.slice(0, 10);
 
+  // Grouping: Legales (mandatorias) vs Por Riesgo
+  const legalItems = sortedItems.filter(i => i.isMandatory || (i.auditProject as any)?.legalBasis);
+  const riskItems  = sortedItems.filter(i => !i.isMandatory && !(i.auditProject as any)?.legalBasis);
+  // Sub-group riskItems by riskCategory
+  const riskByCategory = riskItems.reduce<Record<string, typeof riskItems>>((acc, item) => {
+    const cat = (item.auditProject?.riskCategory) ?? 'Sin categoría';
+    acc[cat] = [...(acc[cat] ?? []), item];
+    return acc;
+  }, {});
+
   const StatusIcon = { DRAFT: Clock, APPROVED: CheckCircle2, ACTIVE: Zap, CLOSED: Lock }[plan.status] ?? Clock;
 
   // Project-sourced items budget summary
@@ -706,39 +716,64 @@ export default function PlanDetailPage() {
             {/* ── Right: Items list ── */}
             <div className="col-span-2 space-y-4">
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-3">
                   <p className="text-sm font-semibold text-gray-800">
-                    Proyectos y entidades planificadas
+                    Auditorías planificadas
                     <span className="ml-2 text-xs font-normal text-gray-400">{sortedItems.length} total</span>
                   </p>
                   <div className="flex items-center gap-1.5 text-xs text-gray-400">
                     <TrendingUp className="w-3.5 h-3.5" />
-                    Ordenado por prioridad
+                    Agrupado por tipo
                   </div>
                 </div>
 
                 {sortedItems.length === 0 ? (
                   <div className="py-8 flex flex-col items-center text-gray-400">
                     <AlertTriangle className="w-8 h-8 mb-2 opacity-30" />
-                    <p className="text-sm">Sin proyectos en el plan</p>
+                    <p className="text-sm">Sin auditorías en el plan</p>
                     <p className="text-xs mt-1 text-center">
-                      Importa desde el Banco de Proyectos o agrega entidades manualmente
+                      Importa desde el Banco de Proyectos o agrega auditorías manualmente
                     </p>
                   </div>
                 ) : (
                   <>
-                    {displayItems.map(item => (
-                      <PlanItemRow key={item.id} item={item} planId={plan.id} canEdit={canEdit} />
-                    ))}
-                    {sortedItems.length > 10 && (
-                      <button
-                        onClick={() => setShowAll(!showAllItems)}
-                        className="flex items-center gap-1 text-xs text-blue-600 hover:underline mt-2">
-                        {showAllItems
-                          ? <><ChevronUp className="w-3.5 h-3.5" /> Ver menos</>
-                          : <><ChevronDown className="w-3.5 h-3.5" /> Ver {sortedItems.length - 10} más</>
-                        }
-                      </button>
+                    {/* ── Grupo Legales ── */}
+                    {legalItems.length > 0 && (
+                      <div className="mb-3">
+                        <div className="flex items-center gap-2 px-2 py-1.5 bg-rose-50 rounded-lg mb-1 border border-rose-100">
+                          <ShieldAlert className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+                          <span className="text-xs font-bold text-rose-700 uppercase tracking-wide">
+                            Legales — Obligatorias por ley o norma ({legalItems.length})
+                          </span>
+                        </div>
+                        {legalItems.map(item => (
+                          <PlanItemRow key={item.id} item={item} planId={plan.id} canEdit={canEdit} />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* ── Grupo Por Riesgo — sub-agrupado por Tipo de Riesgo ── */}
+                    {riskItems.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg mb-1 border border-blue-100">
+                          <TrendingUp className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                          <span className="text-xs font-bold text-blue-700 uppercase tracking-wide">
+                            Por Riesgo — Evaluación periódica ({riskItems.length})
+                          </span>
+                        </div>
+                        {Object.entries(riskByCategory).map(([cat, catItems]) => (
+                          <div key={cat} className="mb-2">
+                            {Object.keys(riskByCategory).length > 1 && (
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest px-2 py-1">
+                                {cat}
+                              </p>
+                            )}
+                            {catItems.map(item => (
+                              <PlanItemRow key={item.id} item={item} planId={plan.id} canEdit={canEdit} />
+                            ))}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </>
                 )}

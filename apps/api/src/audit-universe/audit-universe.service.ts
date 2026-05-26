@@ -10,24 +10,40 @@ import {
 } from './dto/auditable-unit.dto';
 
 // ─── Weights para el scoring engine ───────────────────────────────────────────
-const WEIGHT_A = 0.70; // Riesgo Residual
-const WEIGHT_B = 0.30; // Factores Secundarios
-const SECONDARY_FACTORS = ['materialityScore', 'strategicAlignScore', 'operationalAlignScore',
-  'fraudHistoryScore', 'managementReqScore', 'changeVelocityScore'] as const;
+// Metodología IIA/Big 4: Group A = Riesgo Residual (30%), Group B = Factores Contextuales (70%)
+const WEIGHT_A = 0.30; // Riesgo Residual
+const WEIGHT_B = 0.70; // Factores Contextuales
+
+// Pesos internos de Grupo B (suman 1.0)
+const GROUP_B_WEIGHTS: Record<string, number> = {
+  materialityScore:      0.20, // Materialidad Financiera
+  strategicAlignScore:   0.20, // Alineación Plan Estratégico
+  operationalAlignScore: 0.15, // Alineación Plan Operativo
+  fraudHistoryScore:     0.15, // Antecedentes de Fraude / Denuncias
+  managementReqScore:    0.10, // Solicitud de la Dirección
+  staffTurnoverScore:    0.10, // Rotación de Personal / Cambios de Gestión
+  coverageHistoryScore:  0.10, // Historial de Cobertura
+};
 
 function computeScores(data: {
   impactScore: number; likelihoodScore: number; controlMaturityScore: number;
   materialityScore: number; strategicAlignScore: number; operationalAlignScore: number;
-  fraudHistoryScore: number; managementReqScore: number; changeVelocityScore: number;
+  fraudHistoryScore: number; managementReqScore: number;
+  staffTurnoverScore: number; coverageHistoryScore: number;
 }) {
   const inherent = data.impactScore * data.likelihoodScore; // 1–25
   const residual = inherent * (1 - data.controlMaturityScore / 5);
   const residualNorm = (residual / 25) * 100; // 0–100
 
-  const secondaryAvg = SECONDARY_FACTORS.reduce((s, k) => s + data[k], 0) / SECONDARY_FACTORS.length;
-  const secondaryNorm = ((secondaryAvg - 1) / 4) * 100; // 0–100
+  // Grupo B: suma ponderada de 7 factores normalizados a 0–100
+  let secondaryWeighted = 0;
+  for (const [key, weight] of Object.entries(GROUP_B_WEIGHTS)) {
+    const score = (data as Record<string, number>)[key] ?? 1;
+    const norm = ((score - 1) / 4) * 100; // 0–100
+    secondaryWeighted += norm * weight;
+  }
 
-  const total = residualNorm * WEIGHT_A + secondaryNorm * WEIGHT_B;
+  const total = residualNorm * WEIGHT_A + secondaryWeighted * WEIGHT_B;
 
   const riskLevel =
     total >= 75 ? 'CRITICAL' :
@@ -266,6 +282,8 @@ export class AuditUniverseService {
         auditType: dto.auditType ?? 'OPERATIONAL',
         isMandatory: dto.isMandatory ?? false,
         mandatoryBasis: dto.mandatoryBasis,
+        strategicLineId: dto.strategicLineId ?? null,
+        riskType: dto.riskType ?? null,
         notes: dto.notes,
       },
       include: {
@@ -329,7 +347,8 @@ export class AuditUniverseService {
       operationalAlignScore: dto.operationalAlignScore ?? existing?.operationalAlignScore ?? 1,
       fraudHistoryScore:     dto.fraudHistoryScore     ?? existing?.fraudHistoryScore     ?? 1,
       managementReqScore:    dto.managementReqScore    ?? existing?.managementReqScore    ?? 1,
-      changeVelocityScore:   dto.changeVelocityScore   ?? existing?.changeVelocityScore   ?? 1,
+      staffTurnoverScore:    dto.staffTurnoverScore    ?? (existing as any)?.staffTurnoverScore    ?? 1,
+      coverageHistoryScore:  dto.coverageHistoryScore  ?? (existing as any)?.coverageHistoryScore  ?? 1,
     };
 
     const { inherentRiskScore, residualRiskScore, totalScore, riskLevel } = computeScores(merged);

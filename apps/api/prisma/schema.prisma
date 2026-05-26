@@ -594,9 +594,10 @@ model StrategicLine {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  objective     StrategicObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
-  auditProjects AuditProject[]
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  objective      StrategicObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  auditProjects  AuditProject[]
+  auditableUnits AuditableUnit[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -683,28 +684,33 @@ model AuditProcess {
 // Intersección AuditEntity × AuditProcess = objeto real de planificación.
 // Equivale al EntityProcess de Pentana / Auditable Item de SAP.
 model AuditableUnit {
-  id             String   @id @default(cuid())
-  organizationId String
-  auditEntityId  String
-  auditProcessId String
-  name           String?  // nombre display override (si null: "Entity — Process")
-  auditType      String   @default("OPERATIONAL") // FINANCIAL|OPERATIONAL|IT|COMPLIANCE|FORENSIC|ADVISORY
-  isMandatory    Boolean  @default(false)  // mandato legal/regulatorio → entrada directa al plan
-  mandatoryBasis String?  // "Ley 29720 Art. 5", "Norma SBS N°2024-001", etc.
-  active         Boolean  @default(true)
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  organizationId  String
+  auditEntityId   String
+  auditProcessId  String
+  name            String?  // nombre display override (si null: "Entity — Process")
+  auditType       String   @default("OPERATIONAL") // FINANCIAL|OPERATIONAL|IT|COMPLIANCE|FORENSIC|ADVISORY
+  isMandatory     Boolean  @default(false)  // mandato legal/regulatorio → entrada directa al plan
+  mandatoryBasis  String?  // "Ley 29720 Art. 5", "Norma SBS N°2024-001", etc.
+  // Clasificación estratégica y de riesgo
+  strategicLineId String?  // FK opcional a línea estratégica del Plan Estratégico
+  riskType        String?  // FINANCIERO|OPERACIONAL|TECNOLOGIA|CUMPLIMIENTO|FRAUDE|ESTRATEGICO|LEGAL|ESG
+  active          Boolean  @default(true)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  organization  Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  auditEntity   AuditEntity               @relation(fields: [auditEntityId], references: [id])
-  auditProcess  AuditProcess              @relation(fields: [auditProcessId], references: [id])
-  assessments   AuditableUnitAssessment[]
-  planItems     AuditPlanItem[]
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  auditEntity    AuditEntity               @relation(fields: [auditEntityId], references: [id])
+  auditProcess   AuditProcess              @relation(fields: [auditProcessId], references: [id])
+  strategicLine  StrategicLine?            @relation(fields: [strategicLineId], references: [id])
+  assessments    AuditableUnitAssessment[]
+  planItems      AuditPlanItem[]
 
   @@unique([organizationId, auditEntityId, auditProcessId, auditType])
   @@index([organizationId])
   @@index([auditEntityId])
+  @@index([strategicLineId])
   @@index([organizationId, isMandatory])
   @@map("auditable_units")
 }
@@ -725,16 +731,18 @@ model AuditableUnitAssessment {
   inherentRiskScore     Float @default(9) // calculado: impact × likelihood (1-25)
   residualRiskScore     Float @default(6) // calculado: inherent × (1 - maturity/5)
 
-  // ── Grupo B — Factores Secundarios (peso 30%) ─────────────────────────────
-  materialityScore      Int @default(3) // 1-5: tamaño financiero/presupuesto del área
-  strategicAlignScore   Int @default(1) // 1-5: impacto en objetivos del Plan Estratégico
-  operationalAlignScore Int @default(1) // 1-5: criticidad en el Plan Operativo
-  fraudHistoryScore     Int @default(1) // 1-5: antecedentes de fraude o denuncias
-  managementReqScore    Int @default(1) // 1-5: solicitud expresa de dirección / junta
-  changeVelocityScore   Int @default(1) // 1-5: cambios recientes (sistema, gestión, M&A)
+  // ── Grupo B — Factores Contextuales (peso 70%) ───────────────────────────
+  materialityScore      Int @default(3) // 1-5: tamaño financiero/presupuesto del área  (20%)
+  strategicAlignScore   Int @default(1) // 1-5: impacto en objetivos del Plan Estratégico (20%)
+  operationalAlignScore Int @default(1) // 1-5: criticidad en el Plan Operativo          (15%)
+  fraudHistoryScore     Int @default(1) // 1-5: antecedentes de fraude o denuncias       (15%)
+  managementReqScore    Int @default(1) // 1-5: solicitud expresa de dirección / junta   (10%)
+  changeVelocityScore   Int @default(1) // DEPRECADO — reemplazado por staffTurnoverScore
+  staffTurnoverScore    Int @default(1) // 1-5: rotación de personal, nueva gerencia, M&A (10%)
+  coverageHistoryScore  Int @default(1) // 1-5: historial de cobertura (frecuencia real)   (10%)
 
   // ── Score Ponderado Final ─────────────────────────────────────────────────
-  totalScore   Float  @default(0) // calculado: (residual×0.70) + (secundarios×0.30)
+  totalScore   Float  @default(0) // calculado: (residual×0.30) + (contextuales×0.70)
   riskLevel    String @default("MEDIUM") // CRITICAL|HIGH|MEDIUM|LOW — del totalScore
 
   // ── Historial de cobertura ────────────────────────────────────────────────

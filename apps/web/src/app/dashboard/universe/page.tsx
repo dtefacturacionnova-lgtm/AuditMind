@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Plus, Trash2, ChevronRight, ChevronDown, Edit2,
   Layers, FlaskConical, X, Save, Target, Building2, Info,
-  Users, MapPin, Mail, Phone, DollarSign,
+  Users, MapPin, Mail, Phone, DollarSign, Clock, ShieldCheck,
+  TrendingUp, Filter, ShieldAlert as ShieldAlertIcon,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useRiskSummary } from '@/hooks/useAuditUniverse';
@@ -13,7 +14,7 @@ import {
   useAuditableUnits, useCreateAuditableUnit, useUpdateAuditableUnit, useDeleteAuditableUnit,
   useUpsertAssessment, usePlanCandidates,
   ENTITY_TYPE_CONFIG, ORG_ENTITY_TYPES, RISK_LEVEL_CONFIG,
-  type AuditEntityNode, type AuditProcess, type AuditableUnit,
+  type AuditEntityNode, type AuditProcess, type AuditableUnit, type AuditableUnitAssessment,
 } from '@/hooks/useAuditUniverse2';
 import { useEntityTypeConfigs, useProcessCategoryConfigs, type EntityTypeConfig, type ProcessCategoryConfig } from '@/hooks/useCatalogs';
 import { useStrategicObjectives } from '@/hooks/useStrategic';
@@ -258,11 +259,274 @@ function ScoringModal({ unit, onClose }: { unit: AuditableUnit; onClose: () => v
   );
 }
 
+// ─── PlanCandidatesView helpers ──────────────────────────────────────────────
+
+const RISKTYPE_BADGE: Record<string, { label: string; cls: string }> = {
+  FINANCIERO:   { label: 'Financiero',   cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  OPERACIONAL:  { label: 'Operacional',  cls: 'bg-blue-100 text-blue-800 border-blue-200' },
+  TECNOLOGIA:   { label: 'Tecnología',   cls: 'bg-purple-100 text-purple-800 border-purple-200' },
+  CUMPLIMIENTO: { label: 'Cumplimiento', cls: 'bg-rose-100 text-rose-800 border-rose-200' },
+  FRAUDE:       { label: 'Fraude',       cls: 'bg-red-100 text-red-800 border-red-200' },
+  ESTRATEGICO:  { label: 'Estratégico',  cls: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  LEGAL:        { label: 'Legal',        cls: 'bg-pink-100 text-pink-800 border-pink-200' },
+  ESG:          { label: 'ESG',          cls: 'bg-teal-100 text-teal-800 border-teal-200' },
+};
+
+const AUDIT_TYPE_SHORT: Record<string, string> = {
+  FINANCIERA: 'Financiera', OPERACIONAL: 'Operacional', GESTION: 'Gestión',
+  TECNOLOGIA: 'TI', EXAMEN_ESPECIAL: 'Especial', CONSULTORIA: 'Consultoría',
+  FORENSE: 'Forense', FRAUDE: 'Fraude', CALIDAD: 'Calidad', OTROS: 'Otros',
+};
+
+function coverageLabel(days: number | null | undefined): string | null {
+  if (!days || days <= 0) return null;
+  if (days < 365) return `${days}d sin auditar`;
+  const years = (days / 365).toFixed(1);
+  return `${years} años sin auditar`;
+}
+
+function computeBreakdown(assessment: AuditableUnitAssessment | null | undefined) {
+  if (!assessment) return { groupA: 0, groupB: 0 };
+  const inherent = assessment.impactScore * assessment.likelihoodScore;
+  const residual = inherent * (1 - assessment.controlMaturityScore / 5);
+  const groupA = (residual / 25) * 100;
+  const weights: Record<string, number> = {
+    materialityScore: 0.20, strategicAlignScore: 0.20, operationalAlignScore: 0.15,
+    fraudHistoryScore: 0.15, managementReqScore: 0.10, staffTurnoverScore: 0.10, coverageHistoryScore: 0.10,
+  };
+  let groupB = 0;
+  for (const [key, w] of Object.entries(weights)) {
+    const v = (assessment as unknown as Record<string, number>)[key] ?? 1;
+    groupB += ((v - 1) / 4) * 100 * w;
+  }
+  return { groupA, groupB };
+}
+
+// ─── CandidateCard ────────────────────────────────────────────────────────────
+
+function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear }: {
+  rank: number;
+  unit: AuditableUnit;
+  expanded: boolean;
+  onToggle: () => void;
+  currentYear: number;
+}) {
+  const rl = RISK_LEVEL_CONFIG[(u.riskLevel ?? 'MEDIUM') as keyof typeof RISK_LEVEL_CONFIG];
+  const { groupA, groupB } = computeBreakdown(u.assessment);
+  const score = u.totalScore ?? 0;
+  const covLabel = coverageLabel(u.coverageGapDays);
+  const rtBadge = u.riskType ? RISKTYPE_BADGE[u.riskType] : null;
+  const planItems = (u as any).planItems as Array<{ plan: { year: number; status: string } }> | undefined;
+  const lastPlanYear = planItems?.[0]?.plan?.year;
+  const yearsGap = lastPlanYear ? currentYear - lastPlanYear : null;
+  const strategicLine = (u as any).strategicLine as { code: string; name: string } | null;
+
+  const scoreColor = score >= 75 ? 'text-red-600' : score >= 55 ? 'text-orange-600' : score >= 35 ? 'text-amber-600' : 'text-green-600';
+  const barColor   = score >= 75 ? 'bg-red-500' : score >= 55 ? 'bg-orange-400' : score >= 35 ? 'bg-amber-400' : 'bg-green-400';
+
+  return (
+    <div className="px-4 py-3 hover:bg-slate-50/60 transition-colors">
+      {/* Main row — clickable to expand */}
+      <div className="flex items-start gap-3 cursor-pointer" onClick={onToggle}>
+        {/* Rank pill */}
+        <span className={cn('text-xs font-mono font-bold w-6 shrink-0 mt-0.5 text-center', scoreColor)}>
+          {rank}
+        </span>
+
+        {/* Body */}
+        <div className="flex-1 min-w-0">
+          {/* Name + badges */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-semibold text-slate-900 leading-tight">
+              {u.name ?? `${u.auditEntity?.name} — ${u.auditProcess?.name}`}
+            </span>
+            {u.isMandatory && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                MANDATORIO
+              </span>
+            )}
+            {u.alreadyInCurrentPlan && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
+                ✓ En plan {currentYear}
+              </span>
+            )}
+            {rtBadge && (
+              <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-medium border', rtBadge.cls)}>
+                {rtBadge.label}
+              </span>
+            )}
+            {u.auditType && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-600 border border-slate-200">
+                {AUDIT_TYPE_SHORT[u.auditType] ?? u.auditType}
+              </span>
+            )}
+          </div>
+
+          {/* Entity → Process + strategic line */}
+          <p className="text-xs text-slate-400 mt-0.5">
+            {u.auditEntity?.name}
+            {u.auditProcess && <> <span className="text-slate-300">›</span> {u.auditProcess.name}</>}
+            {strategicLine && (
+              <> · <span className="text-indigo-500 font-medium">{strategicLine.code} — {strategicLine.name}</span></>
+            )}
+          </p>
+
+          {/* Legal basis */}
+          {u.isMandatory && u.mandatoryBasis && (
+            <p className="text-[11px] text-rose-600 italic mt-0.5">Base legal: {u.mandatoryBasis}</p>
+          )}
+
+          {/* Coverage + last plan */}
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            {covLabel && (
+              <span className="flex items-center gap-0.5 text-[11px] text-orange-600 font-medium">
+                <Clock className="w-3 h-3" /> {covLabel}
+              </span>
+            )}
+            {yearsGap !== null && yearsGap > 0 ? (
+              <span className="text-[11px] text-slate-400">
+                Último plan: {lastPlanYear} ({yearsGap} año{yearsGap !== 1 ? 's' : ''} atrás)
+              </span>
+            ) : lastPlanYear ? (
+              <span className="text-[11px] text-green-600 font-medium">Incluida en plan actual</span>
+            ) : (
+              <span className="text-[11px] text-slate-300 italic">Sin historial de planes</span>
+            )}
+          </div>
+        </div>
+
+        {/* Score widget */}
+        <div className="w-32 shrink-0 text-right space-y-1.5">
+          <div className="flex items-center justify-end gap-1.5">
+            <span className={cn('text-xl font-bold leading-none', scoreColor)}>{score.toFixed(0)}</span>
+            <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-semibold', rl.bg, rl.color)}>{rl.label}</span>
+          </div>
+          {/* Total bar */}
+          <div className="h-2 rounded-full bg-slate-100">
+            <div className={cn('h-2 rounded-full transition-all', barColor)} style={{ width: `${Math.min(score, 100)}%` }} />
+          </div>
+          {/* Group A / B mini bars */}
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] text-slate-400 w-9 text-right shrink-0">A 30%</span>
+              <div className="flex-1 h-1 rounded-full bg-slate-100">
+                <div className="h-1 rounded-full bg-blue-400" style={{ width: `${Math.min(groupA, 100)}%` }} />
+              </div>
+              <span className="text-[9px] text-blue-500 w-5 text-right">{groupA.toFixed(0)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[9px] text-slate-400 w-9 text-right shrink-0">B 70%</span>
+              <div className="flex-1 h-1 rounded-full bg-slate-100">
+                <div className="h-1 rounded-full bg-indigo-400" style={{ width: `${Math.min(groupB, 100)}%` }} />
+              </div>
+              <span className="text-[9px] text-indigo-500 w-5 text-right">{groupB.toFixed(0)}</span>
+            </div>
+          </div>
+        </div>
+
+        <ChevronDown className={cn('w-3.5 h-3.5 text-slate-400 shrink-0 mt-1.5 transition-transform', expanded && 'rotate-180')} />
+      </div>
+
+      {/* Expanded: 10-factor breakdown */}
+      {expanded && u.assessment && (
+        <div className="mt-3 ml-9 rounded-lg border border-slate-100 bg-slate-50 p-3 grid grid-cols-3 gap-x-4 gap-y-0.5 text-xs">
+          <div className="col-span-3 mb-1.5 flex gap-4">
+            <span className="font-semibold text-blue-700 text-[11px] uppercase tracking-wide">Grupo A — Riesgo Residual (30%)</span>
+            <span className="font-semibold text-indigo-700 text-[11px] uppercase tracking-wide ml-auto">Grupo B — Factores Contextuales (70%)</span>
+          </div>
+          {/* Col 1: Group A */}
+          <div className="space-y-1">
+            {([['Impacto', u.assessment.impactScore], ['Probabilidad', u.assessment.likelihoodScore], ['Madurez controles', u.assessment.controlMaturityScore]] as [string,number][]).map(([l,v]) => (
+              <div key={l} className="flex justify-between items-center">
+                <span className="text-slate-500">{l}</span>
+                <div className="flex items-center gap-1">
+                  <div className="w-12 h-1 rounded-full bg-slate-200"><div className="h-1 rounded-full bg-blue-400" style={{ width: `${v/5*100}%` }} /></div>
+                  <span className="font-semibold text-blue-700 w-4 text-right">{v}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Col 2: Group B part 1 */}
+          <div className="space-y-1">
+            {([['Materialidad (20%)', u.assessment.materialityScore], ['Alin. Estratégico (20%)', u.assessment.strategicAlignScore], ['Alin. Operativo (15%)', u.assessment.operationalAlignScore], ['Fraude (15%)', u.assessment.fraudHistoryScore]] as [string,number][]).map(([l,v]) => (
+              <div key={l} className="flex justify-between items-center">
+                <span className="text-slate-500 truncate">{l}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <div className="w-12 h-1 rounded-full bg-slate-200"><div className="h-1 rounded-full bg-indigo-400" style={{ width: `${v/5*100}%` }} /></div>
+                  <span className="font-semibold text-indigo-700 w-4 text-right">{v}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Col 3: Group B part 2 */}
+          <div className="space-y-1">
+            {([['Dirección (10%)', u.assessment.managementReqScore], ['Rotación personal (10%)', u.assessment.staffTurnoverScore], ['Cobertura histórica (10%)', u.assessment.coverageHistoryScore]] as [string,number][]).map(([l,v]) => (
+              <div key={l} className="flex justify-between items-center">
+                <span className="text-slate-500 truncate">{l}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <div className="w-12 h-1 rounded-full bg-slate-200"><div className="h-1 rounded-full bg-indigo-400" style={{ width: `${v/5*100}%` }} /></div>
+                  <span className="font-semibold text-indigo-700 w-4 text-right">{v}</span>
+                </div>
+              </div>
+            ))}
+            {u.assessment.lastAuditOpinion && (
+              <div className="mt-1 pt-1 border-t border-slate-200 flex justify-between">
+                <span className="text-slate-500">Última opinión</span>
+                <span className="font-semibold text-slate-700">{u.assessment.lastAuditOpinion}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TierSection ──────────────────────────────────────────────────────────────
+
+function TierSection({ icon, title, count, headerCls, candidates, expandedId, onToggle, currentYear }: {
+  icon: React.ReactNode;
+  title: string;
+  count: number;
+  headerCls: string;
+  candidates: AuditableUnit[];
+  expandedId: string | null;
+  onToggle: (id: string | null) => void;
+  currentYear: number;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
+      <div className={cn('flex items-center gap-2 px-4 py-2.5 text-white text-sm font-semibold', headerCls)}>
+        {icon}
+        <span>{title}</span>
+        <span className="ml-auto bg-white/25 px-2 py-0.5 rounded-full text-xs font-bold">{count}</span>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {candidates.map((u, i) => (
+          <CandidateCard
+            key={u.id}
+            rank={i + 1}
+            unit={u}
+            expanded={expandedId === u.id}
+            onToggle={() => onToggle(expandedId === u.id ? null : u.id)}
+            currentYear={currentYear}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── PlanCandidatesView ───────────────────────────────────────────────────────
 
 function PlanCandidatesView() {
   const currentYear = new Date().getFullYear();
   const { data, isLoading, isError } = usePlanCandidates(currentYear);
+  const [filterLevel, setFilterLevel] = useState<string>('ALL');
+  const [filterRiskType, setFilterRiskType] = useState<string>('ALL');
+  const [hideInPlan, setHideInPlan] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   if (isLoading) return <div className="p-8 text-center text-slate-400 text-sm">Cargando candidatas…</div>;
   if (isError || !data) return (
     <div className="p-10 text-center text-slate-400 text-sm space-y-1">
@@ -271,75 +535,145 @@ function PlanCandidatesView() {
     </div>
   );
 
+  const all = data.candidates;
+  const criticoCount = all.filter(u => u.riskLevel === 'CRITICAL').length;
+  const altoCount    = all.filter(u => u.riskLevel === 'HIGH').length;
+  const inPlanCount  = all.filter(u => u.alreadyInCurrentPlan).length;
+  const riskTypes    = [...new Set(all.map(u => u.riskType).filter(Boolean))] as string[];
+
+  const filtered = all.filter(u => {
+    if (hideInPlan && u.alreadyInCurrentPlan) return false;
+    if (filterLevel !== 'ALL' && (u.riskLevel ?? 'MEDIUM') !== filterLevel) return false;
+    if (filterRiskType !== 'ALL' && (u.riskType ?? '') !== filterRiskType) return false;
+    return true;
+  });
+
+  // Tier 1: obligatorias (law / regulatory)
+  const obligatorias = filtered.filter(u => u.isMandatory);
+  // Tier 2: not mandatory but high risk or overdue > 1 year
+  const altoRiesgo   = filtered.filter(u => !u.isMandatory && ((u.totalScore ?? 0) >= 55 || (u.coverageGapDays ?? 0) > 365));
+  // Tier 3: rest
+  const otras        = filtered.filter(u => !u.isMandatory && (u.totalScore ?? 0) < 55 && (u.coverageGapDays ?? 0) <= 365);
+
+  const LEVEL_BTNS = [
+    { id: 'ALL',      label: 'Todos',    cls: 'bg-slate-100 text-slate-700 border-slate-200' },
+    { id: 'CRITICAL', label: 'Crítico',  cls: 'bg-red-50 text-red-700 border-red-200' },
+    { id: 'HIGH',     label: 'Alto',     cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+    { id: 'MEDIUM',   label: 'Medio',    cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { id: 'LOW',      label: 'Bajo',     cls: 'bg-green-50 text-green-700 border-green-200' },
+  ];
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-3">
+
+      {/* ── KPI chips ── */}
+      <div className="grid grid-cols-6 gap-2">
         {[
-          { label: 'Total candidatas', value: data.total,     color: 'text-slate-900' },
-          { label: 'Mandatorias',      value: data.mandatory, color: 'text-rose-600'  },
-          { label: 'Vencidas',         value: data.overdue,   color: 'text-orange-600'},
-          { label: 'Año',              value: data.year,      color: 'text-blue-700'  },
-        ].map((s) => (
-          <div key={s.label} className="rounded-lg border border-slate-200 bg-white p-4 text-center">
-            <p className={cn('text-2xl font-bold', s.color)}>{s.value}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{s.label}</p>
+          { label: 'Total candidatas', value: data.total,    cls: 'text-slate-800 border-slate-200 bg-white' },
+          { label: 'Obligatorias',     value: data.mandatory,cls: 'text-rose-700 border-rose-200 bg-rose-50' },
+          { label: 'Riesgo Crítico',   value: criticoCount,  cls: 'text-red-700 border-red-200 bg-red-50' },
+          { label: 'Riesgo Alto',      value: altoCount,     cls: 'text-orange-700 border-orange-200 bg-orange-50' },
+          { label: 'Cobertura vencida',value: data.overdue,  cls: 'text-amber-700 border-amber-200 bg-amber-50' },
+          { label: 'Ya en plan',       value: inPlanCount,   cls: 'text-green-700 border-green-200 bg-green-50' },
+        ].map(s => (
+          <div key={s.label} className={cn('rounded-lg border px-3 py-2.5 text-center', s.cls)}>
+            <p className="text-2xl font-bold leading-none">{s.value}</p>
+            <p className="text-[11px] mt-1.5 font-medium leading-tight">{s.label}</p>
           </div>
         ))}
       </div>
-      <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-        <div className="px-4 py-3 bg-slate-50 border-b flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-700">Candidatas Rankeadas por Score</h3>
-          <span className="text-xs text-slate-400">Mandatorias primero · luego por riesgo residual ↓</span>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {data.candidates.length === 0 && (
-            <div className="px-4 py-10 text-center">
-              <p className="text-sm text-slate-400">Sin candidatas para {currentYear}.</p>
-              <p className="text-xs text-slate-300 mt-1">Crea unidades auditables en la pestaña anterior.</p>
-            </div>
-          )}
-          {data.candidates.map((u, i) => {
-            const rl = RISK_LEVEL_CONFIG[(u.riskLevel ?? 'MEDIUM') as keyof typeof RISK_LEVEL_CONFIG];
-            return (
-              <div key={u.id} className={cn('flex items-center gap-4 px-4 py-3', u.isMandatory && 'bg-rose-50/40')}>
-                <span className="text-xs font-mono text-slate-400 w-6 shrink-0">{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-slate-900 truncate">
-                      {u.name ?? `${u.auditEntity?.name} — ${u.auditProcess?.name}`}
-                    </span>
-                    {u.isMandatory && (
-                      <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">MANDATORIO</span>
-                    )}
-                    {u.alreadyInCurrentPlan && (
-                      <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-green-100 text-green-700">En plan {data.year}</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {u.auditProcess?.category} · {u.auditType}
-                    {(u.coverageGapDays ?? 0) > 0 && (
-                      <span className="ml-2 text-orange-600 font-medium">⚠ Vencida hace {u.coverageGapDays}d</span>
-                    )}
-                  </p>
-                </div>
-                <div className="w-32 shrink-0">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className={cn('text-xs font-bold', rl.color)}>{(u.totalScore ?? 0).toFixed(1)}</span>
-                    <span className={cn('text-[10px] px-1 rounded', rl.bg, rl.color)}>{rl.label}</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-slate-200">
-                    <div className={cn('h-1.5 rounded-full',
-                      (u.totalScore ?? 0) >= 75 ? 'bg-red-500' :
-                      (u.totalScore ?? 0) >= 55 ? 'bg-orange-400' :
-                      (u.totalScore ?? 0) >= 35 ? 'bg-amber-400' : 'bg-green-400'
-                    )} style={{ width: `${Math.min(u.totalScore ?? 0, 100)}%` }} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+
+      {/* ── Legend ── */}
+      <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 flex items-start gap-3">
+        <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+        <div className="text-xs text-blue-800 space-y-0.5">
+          <p><strong>Prioridad de planificación:</strong> <span className="text-rose-700 font-semibold">① Obligatorias</span> — incluir siempre (mandato legal/regulatorio) · <span className="text-orange-700 font-semibold">② Alta Prioridad</span> — score ≥ 55 o cobertura vencida &gt;1 año · <span className="text-slate-600 font-semibold">③ Otras Evaluadas</span> — riesgo medio/bajo, planificar según capacidad</p>
+          <p className="text-blue-600">Haz clic en cualquier auditoría para ver el desglose completo de los 10 factores de riesgo (Grupo A + Grupo B).</p>
         </div>
       </div>
+
+      {/* ── Filters ── */}
+      <div className="flex items-center gap-3 flex-wrap rounded-lg border border-slate-200 bg-white px-4 py-2.5">
+        <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <div className="flex items-center gap-1">
+          {LEVEL_BTNS.map(btn => (
+            <button key={btn.id}
+              onClick={() => setFilterLevel(btn.id)}
+              className={cn('px-2.5 py-1 rounded-md text-xs font-medium border transition-all',
+                btn.cls,
+                filterLevel === btn.id ? 'ring-2 ring-blue-400 ring-offset-1' : 'opacity-70 hover:opacity-100')}>
+              {btn.label}
+            </button>
+          ))}
+        </div>
+        {riskTypes.length > 0 && (
+          <select value={filterRiskType} onChange={e => setFilterRiskType(e.target.value)}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
+            <option value="ALL">Todos los tipos de riesgo</option>
+            {riskTypes.map(rt => (
+              <option key={rt} value={rt}>{RISKTYPE_BADGE[rt]?.label ?? rt}</option>
+            ))}
+          </select>
+        )}
+        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer ml-auto select-none">
+          <input type="checkbox" checked={hideInPlan} onChange={e => setHideInPlan(e.target.checked)} className="rounded" />
+          Ocultar auditorías ya en el plan {currentYear}
+        </label>
+      </div>
+
+      {/* ── Tier 1: Obligatorias ── */}
+      {obligatorias.length > 0 && (
+        <TierSection
+          icon={<ShieldAlertIcon className="w-4 h-4 text-white" />}
+          title={`Obligatorias — Requeridas por Ley o Norma Regulatoria`}
+          count={obligatorias.length}
+          headerCls="bg-rose-600"
+          expandedId={expandedId}
+          onToggle={setExpandedId}
+          candidates={obligatorias}
+          currentYear={currentYear}
+        />
+      )}
+
+      {/* ── Tier 2: Alta Prioridad ── */}
+      {altoRiesgo.length > 0 && (
+        <TierSection
+          icon={<TrendingUp className="w-4 h-4 text-white" />}
+          title="Alta Prioridad — Score ≥ 55 o Cobertura Vencida > 1 Año"
+          count={altoRiesgo.length}
+          headerCls="bg-orange-500"
+          expandedId={expandedId}
+          onToggle={setExpandedId}
+          candidates={altoRiesgo}
+          currentYear={currentYear}
+        />
+      )}
+
+      {/* ── Tier 3: Otras Evaluadas ── */}
+      {otras.length > 0 && (
+        <TierSection
+          icon={<Layers className="w-4 h-4 text-white" />}
+          title="Otras Evaluadas — Riesgo Medio / Bajo"
+          count={otras.length}
+          headerCls="bg-slate-500"
+          expandedId={expandedId}
+          onToggle={setExpandedId}
+          candidates={otras}
+          currentYear={currentYear}
+        />
+      )}
+
+      {filtered.length === 0 && all.length > 0 && (
+        <div className="py-10 text-center text-sm text-slate-400 rounded-xl border border-dashed border-slate-200 bg-white">
+          Sin candidatas que coincidan con los filtros seleccionados.
+        </div>
+      )}
+      {all.length === 0 && (
+        <div className="py-12 text-center text-slate-400 text-sm rounded-xl border border-dashed border-slate-200 bg-white space-y-1">
+          <p className="font-medium text-slate-500">Sin candidatas para {currentYear}.</p>
+          <p className="text-xs">Crea unidades auditables en la pestaña "Universo de Auditorías".</p>
+        </div>
+      )}
     </div>
   );
 }

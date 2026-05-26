@@ -405,6 +405,7 @@ export class AuditUniverseService {
       include: {
         auditEntity: { select: { id: true, name: true, entityType: true } },
         auditProcess: { select: { id: true, code: true, name: true, category: true } },
+        strategicLine: { select: { id: true, code: true, name: true } },
         assessments: {
           where: { assessmentYear: currentYear },
           take: 1,

@@ -151,34 +151,16 @@ export function useUploadFileToFolder(auditId: string) {
 
   return useMutation({
     mutationFn: async ({ folderId, file, title, ref }: UploadFileArgs) => {
-      const supabase = createClient();
+      // Upload via backend — service-role key bypasses Supabase Storage RLS
+      const formData = new FormData();
+      formData.append('file', file);
 
-      // Path: audit-files/{auditId}/{timestamp}_{sanitizedName}
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `${auditId}/${Date.now()}_${safeName}`;
+      const params = new URLSearchParams({ title });
+      if (ref) params.set('ref', ref);
 
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('audit-files')
-        .upload(path, file, { cacheControl: '3600', upsert: false });
-
-      if (uploadError) throw new Error(`Error al subir: ${uploadError.message}`);
-
-      // Get public URL
-      const { data: urlData } = supabase.storage.from('audit-files').getPublicUrl(path);
-      const fileUrl = urlData.publicUrl;
-
-      // Register in API
-      return apiClient.post(
-        `/audits/${auditId}/expediente/folders/${folderId}/files`,
-        {
-          title,
-          ref: ref || undefined,
-          fileUrl,
-          originalFilename: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          fileSize: file.size,
-        },
+      return apiClient.postForm(
+        `/audits/${auditId}/expediente/folders/${folderId}/upload?${params}`,
+        formData,
       );
     },
     onSuccess: () => {

@@ -10,6 +10,7 @@ import {
   CreateFilePaperDto,
 } from './dto/folder.dto';
 import { IndexTemplatesService } from '../index-templates/index-templates.service';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // ─── Selección mínima de papel para el árbol del expediente ──────────────────
 const PAPER_STUB_SELECT = {
@@ -23,10 +24,17 @@ const PAPER_STUB_SELECT = {
 
 @Injectable()
 export class AuditFoldersService {
+  private readonly supabaseAdmin: SupabaseClient;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly indexTemplates: IndexTemplatesService,
-  ) {}
+  ) {
+    this.supabaseAdmin = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+  }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -323,6 +331,63 @@ export class AuditFoldersService {
         originalFilename: dto.originalFilename,
         mimeType: dto.mimeType,
         fileSize: dto.fileSize ?? null,
+        preparedById: user.id,
+      },
+      select: PAPER_STUB_SELECT,
+    });
+  }
+
+  // ─── Upload via backend (bypasses Storage RLS) ──────────────────────────────
+
+  async uploadAndRegisterFile(
+    auditId: string,
+    folderId: string,
+    file: Express.Multer.File,
+    title: string,
+    ref: string | undefined,
+    user: AuthUser,
+  ) {
+    await this.verifyAuditAccess(auditId, user);
+
+    const folder = await this.prisma.auditFolder.findUnique({ where: { id: folderId } });
+    if (!folder) throw new NotFoundException('Carpeta no encontrada');
+    if (folder.auditId !== auditId) throw new BadRequestException('La carpeta pertenece a otra auditoría');
+
+    // Upload to Supabase Storage using service-role key (bypasses RLS)
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${auditId}/${Date.now()}_${safeName}`;
+
+    const { error: uploadError } = await this.supabaseAdmin.storage
+      .from('audit-files')
+      .upload(path, file.buffer, {
+        contentType: file.mimetype || 'application/octet-stream',
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (uploadError) throw new BadRequestException(`Error al subir archivo: ${uploadError.message}`);
+
+    const { data: urlData } = this.supabaseAdmin.storage.from('audit-files').getPublicUrl(path);
+
+    // Register in DB
+    const count = await this.prisma.workingPaper.count({ where: { auditId } });
+    const code = `FILE-${String(count + 1).padStart(3, '0')}`;
+
+    return this.prisma.workingPaper.create({
+      data: {
+        auditId,
+        folderId,
+        ref: ref ?? null,
+        code,
+        indexSection: folder.ref ?? 'FILE',
+        title,
+        type: this.mimeToWpType(file.mimetype),
+        wpKind: WpKind.FILE,
+        status: WorkingPaperStatus.IN_PROGRESS,
+        fileUrl: urlData.publicUrl,
+        originalFilename: file.originalname,
+        mimeType: file.mimetype || 'application/octet-stream',
+        fileSize: file.size ?? null,
         preparedById: user.id,
       },
       select: PAPER_STUB_SELECT,

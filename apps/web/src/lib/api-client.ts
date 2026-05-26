@@ -12,6 +12,12 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   };
 }
 
+async function getAuthToken(): Promise<string | undefined> {
+  const supabase = createClient();
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -38,4 +44,19 @@ export const apiClient = {
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  // Multipart/form-data upload — does NOT set Content-Type (browser sets boundary automatically)
+  postForm: async <T>(path: string, formData: FormData): Promise<T> => {
+    const token = await getAuthToken();
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(error.message ?? `API error ${res.status}`);
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json();
+  },
 };

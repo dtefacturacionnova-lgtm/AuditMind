@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import {
@@ -631,12 +631,15 @@ export default function WpDetailPage() {
   const [reviewAlert,     setReviewAlert] = useState(false);
   const [agentAutoMsg,    setAgentAutoMsg] = useState('');
 
+  // Initialize content from server data — use useEffect to avoid setState-during-render
   const [initialized, setInit] = useState(false);
-  if (wp && !initialized) {
-    setContent((wp.content ?? {}) as Record<string, string>);
-    setConclusion(wp.conclusion ?? '');
-    setInit(true);
-  }
+  useEffect(() => {
+    if (wp && !initialized) {
+      setContent((wp.content ?? {}) as Record<string, string>);
+      setConclusion(wp.conclusion ?? '');
+      setInit(true);
+    }
+  }, [wp, initialized]);
 
   const setField = useCallback((key: string) => (value: string) => {
     setContent(prev => ({ ...prev, [key]: value }));

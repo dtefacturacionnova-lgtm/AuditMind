@@ -179,10 +179,12 @@ export function useWorkingPaper(id: string) {
     queryFn:   () => apiClient.get(`/working-papers/${id}`),
     enabled:   !!id,
     staleTime: 15_000,
-    // Poll every 3 s while the AI is regenerating, stop once SYNCED / STALE
+    // Poll every 3 s while AI is regenerating — stop after 40 attempts (~2 min) to avoid infinite loop
     refetchInterval: (query) => {
       const status = (query.state.data as WorkingPaper | undefined)?.syncStatus;
-      return status === 'REGENERATING' ? 3_000 : false;
+      if (status !== 'REGENERATING') return false;
+      const fetchCount = query.state.dataUpdateCount ?? 0;
+      return fetchCount < 40 ? 3_000 : false;
     },
   });
 }

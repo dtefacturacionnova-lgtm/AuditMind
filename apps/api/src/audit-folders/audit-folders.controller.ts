@@ -1,6 +1,8 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param, HttpCode, HttpStatus,
+  UploadedFile, UseInterceptors, Query,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuditFoldersService } from './audit-folders.service';
 import {
@@ -116,11 +118,29 @@ export class AuditFoldersController {
     return this.service.reorderFolders(dto, user);
   }
 
-  // ─── Registrar archivo adjunto como papel de trabajo ────────────────────
+  // ─── Upload + registro (backend sube a Storage con service-role, bypasea RLS)
+
+  @Post('folders/:folderId/upload')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Subir archivo al expediente (backend gestiona Storage)' })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  @HttpCode(HttpStatus.CREATED)
+  uploadFile(
+    @Param('auditId') auditId: string,
+    @Param('folderId') folderId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('title') title: string,
+    @Query('ref') ref: string | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.uploadAndRegisterFile(auditId, folderId, file, title, ref, user);
+  }
+
+  // ─── Registrar archivo adjunto como papel de trabajo (legacy) ──────────────
 
   @Post('folders/:folderId/files')
   @Roles(UserRole.AUDITOR)
-  @ApiOperation({ summary: 'Registrar archivo subido a Supabase Storage como papel de trabajo' })
+  @ApiOperation({ summary: 'Registrar archivo ya subido a Supabase Storage como papel de trabajo' })
   @HttpCode(HttpStatus.CREATED)
   createFilePaper(
     @Param('auditId') auditId: string,

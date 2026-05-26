@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, X, Save, Target, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Save, Target, ChevronDown, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
   useStrategicObjectives, useCreateObjective, useUpdateObjective, useDeleteObjective,
@@ -45,7 +45,6 @@ function theme(color: string) {
 function ObjectiveModal({ obj, onClose }: { obj?: StrategicObjective; onClose: () => void }) {
   const create = useCreateObjective();
   const update = useUpdateObjective();
-  const isPending = create.isPending || update.isPending;
   const isEdit = !!obj;
 
   const [form, setForm] = useState({
@@ -55,19 +54,32 @@ function ObjectiveModal({ obj, onClose }: { obj?: StrategicObjective; onClose: (
     color:       obj?.color       ?? 'blue',
     icon:        obj?.icon        ?? '🎯',
   });
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const [saving, setSaving]   = useState(false);
+  const [error,  setError]    = useState<string | null>(null);
 
-  const save = () => {
-    const payload = { ...form, description: form.description || undefined };
-    if (isEdit) {
-      const { code: _c, ...rest } = payload;
-      update.mutate({ id: obj!.id, data: rest }, { onSuccess: onClose });
-    } else {
-      create.mutate(payload, { onSuccess: onClose });
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const t = theme(form.color);
+
+  const save = async () => {
+    if (!form.code.trim() || !form.name.trim()) return;
+    setError(null);
+    setSaving(true);
+    try {
+      const payload = { ...form, description: form.description.trim() || undefined };
+      if (isEdit) {
+        const { code: _c, ...rest } = payload;
+        await update.mutateAsync({ id: obj!.id, data: rest });
+      } else {
+        await create.mutateAsync(payload);
+      }
+      onClose();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Error al guardar. Intenta de nuevo.';
+      setError(Array.isArray(msg) ? msg.join(' · ') : String(msg));
+    } finally {
+      setSaving(false);
     }
   };
-
-  const t = theme(form.color);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -91,59 +103,103 @@ function ObjectiveModal({ obj, onClose }: { obj?: StrategicObjective; onClose: (
         <div className="px-6 py-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-slate-700">Código</label>
-              <input value={form.code} onChange={e => set('code', e.target.value)}
+              <label className="text-xs font-medium text-slate-700">Código *</label>
+              <input
+                value={form.code}
+                onChange={e => set('code', e.target.value)}
                 disabled={isEdit}
                 placeholder="OE-1"
-                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400" />
+                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-slate-700">Ícono</label>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {ICON_OPTIONS.map(ic => (
-                  <button key={ic} onClick={() => set('icon', ic)}
-                    className={cn('text-xl rounded-lg p-1 transition-all',
-                      form.icon === ic ? 'ring-2 ring-blue-500 scale-110' : 'hover:bg-slate-100')}>
+                  <button
+                    key={ic}
+                    type="button"
+                    onClick={() => set('icon', ic)}
+                    className={cn(
+                      'text-xl rounded-lg p-1 transition-all',
+                      form.icon === ic ? 'ring-2 ring-blue-500 scale-110' : 'hover:bg-slate-100',
+                    )}
+                  >
                     {ic}
                   </button>
                 ))}
               </div>
             </div>
           </div>
+
           <div>
-            <label className="text-xs font-medium text-slate-700">Nombre del Objetivo</label>
-            <input value={form.name} onChange={e => set('name', e.target.value)}
+            <label className="text-xs font-medium text-slate-700">Nombre del Objetivo *</label>
+            <input
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
               placeholder="Ej: Rentabilidad y Solidez Financiera"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
+
           <div>
             <label className="text-xs font-medium text-slate-700">Descripción (opcional)</label>
-            <textarea rows={2} value={form.description} onChange={e => set('description', e.target.value)}
+            <textarea
+              rows={2}
+              value={form.description}
+              onChange={e => set('description', e.target.value)}
               placeholder="Describe el alcance de este objetivo estratégico…"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm resize-none" />
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
+
           <div>
             <label className="text-xs font-medium text-slate-700">Color del pilar</label>
             <div className="mt-1.5 flex flex-wrap gap-2">
               {COLOR_OPTIONS.map(c => (
-                <button key={c.value} onClick={() => set('color', c.value)}
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => set('color', c.value)}
                   title={c.label}
-                  className={cn('h-7 w-7 rounded-full transition-all', c.swatch,
-                    form.color === c.value ? 'ring-2 ring-offset-2 ring-slate-500 scale-110' : 'hover:scale-110')}>
-                </button>
+                  className={cn(
+                    'h-7 w-7 rounded-full transition-all',
+                    c.swatch,
+                    form.color === c.value ? 'ring-2 ring-offset-2 ring-slate-500 scale-110' : 'hover:scale-110',
+                  )}
+                />
               ))}
             </div>
           </div>
+
+          {/* Error banner */}
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
         </div>
 
         <div className="border-t px-6 py-4 flex justify-end gap-3">
-          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50"
+          >
             Cancelar
           </button>
-          <button onClick={save} disabled={!form.code || !form.name || isPending}
-            className={cn('rounded-lg px-4 py-2 text-sm text-white font-medium flex items-center gap-1.5 disabled:opacity-60', t.header)}>
-            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            {isPending ? 'Guardando…' : isEdit ? 'Actualizar' : 'Crear Objetivo'}
+          <button
+            type="button"
+            onClick={save}
+            disabled={!form.code.trim() || !form.name.trim() || saving}
+            className={cn(
+              'rounded-lg px-4 py-2 text-sm text-white font-medium flex items-center gap-1.5 disabled:opacity-60 transition-opacity',
+              t.header,
+            )}
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {saving ? 'Guardando…' : isEdit ? 'Actualizar' : 'Crear Objetivo'}
           </button>
         </div>
       </div>
@@ -157,7 +213,6 @@ function LineModal({ line, objectiveId, objectiveColor, onClose }: {
 }) {
   const create = useCreateLine();
   const update = useUpdateLine();
-  const isPending = create.isPending || update.isPending;
   const isEdit = !!line;
 
   const [form, setForm] = useState({
@@ -165,15 +220,30 @@ function LineModal({ line, objectiveId, objectiveColor, onClose }: {
     name:        line?.name        ?? '',
     description: line?.description ?? '',
   });
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState<string | null>(null);
+
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
   const t = theme(objectiveColor);
 
-  const save = () => {
-    if (isEdit) {
-      const { code: _c, ...rest } = form;
-      update.mutate({ id: line!.id, data: { ...rest, description: rest.description || undefined } }, { onSuccess: onClose });
-    } else {
-      create.mutate({ objectiveId, ...form, description: form.description || undefined }, { onSuccess: onClose });
+  const save = async () => {
+    if (!form.code.trim() || !form.name.trim()) return;
+    setError(null);
+    setSaving(true);
+    try {
+      const payload = { ...form, description: form.description.trim() || undefined };
+      if (isEdit) {
+        const { code: _c, ...rest } = payload;
+        await update.mutateAsync({ id: line!.id, data: { ...rest } });
+      } else {
+        await create.mutateAsync({ objectiveId, ...payload });
+      }
+      onClose();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Error al guardar. Intenta de nuevo.';
+      setError(Array.isArray(msg) ? msg.join(' · ') : String(msg));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -185,36 +255,68 @@ function LineModal({ line, objectiveId, objectiveColor, onClose }: {
             <p className="text-xs font-mono text-white/70">{isEdit ? 'Editar Línea' : 'Nueva Línea Estratégica'}</p>
             <p className="text-base font-bold text-white">{form.code || 'LE-?.?'} — {form.name || '…'}</p>
           </div>
-          <button onClick={onClose} className="rounded-full p-1.5 hover:bg-white/20">
+          <button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-white/20">
             <X className="h-4 w-4 text-white" />
           </button>
         </div>
+
         <div className="px-6 py-5 space-y-4">
           <div>
-            <label className="text-xs font-medium text-slate-700">Código</label>
-            <input value={form.code} onChange={e => set('code', e.target.value)}
+            <label className="text-xs font-medium text-slate-700">Código *</label>
+            <input
+              value={form.code}
+              onChange={e => set('code', e.target.value)}
               disabled={isEdit}
               placeholder="LE-1.1"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50" />
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-700">Nombre de la Línea</label>
-            <input value={form.name} onChange={e => set('name', e.target.value)}
+            <label className="text-xs font-medium text-slate-700">Nombre de la Línea *</label>
+            <input
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
               placeholder="Ej: Gestión eficiente del capital de trabajo"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm" />
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
             <label className="text-xs font-medium text-slate-700">Descripción (opcional)</label>
-            <textarea rows={2} value={form.description} onChange={e => set('description', e.target.value)}
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm resize-none" />
+            <textarea
+              rows={2}
+              value={form.description}
+              onChange={e => set('description', e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
+
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
+              <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
         </div>
+
         <div className="border-t px-6 py-4 flex justify-end gap-3">
-          <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50">Cancelar</button>
-          <button onClick={save} disabled={!form.code || !form.name || isPending}
-            className={cn('rounded-lg px-4 py-2 text-sm text-white font-medium flex items-center gap-1.5 disabled:opacity-60', t.header)}>
-            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            {isPending ? 'Guardando…' : isEdit ? 'Actualizar' : 'Crear Línea'}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-4 py-2 text-sm border border-slate-300 hover:bg-slate-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={!form.code.trim() || !form.name.trim() || saving}
+            className={cn(
+              'rounded-lg px-4 py-2 text-sm text-white font-medium flex items-center gap-1.5 disabled:opacity-60',
+              t.header,
+            )}
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {saving ? 'Guardando…' : isEdit ? 'Actualizar' : 'Crear Línea'}
           </button>
         </div>
       </div>
@@ -224,39 +326,30 @@ function LineModal({ line, objectiveId, objectiveColor, onClose }: {
 
 // ─── ObjectivePillar ──────────────────────────────────────────────────────────
 function ObjectivePillar({ obj }: { obj: StrategicObjective }) {
-  const deleteObj = useDeleteObjective();
+  const deleteObj  = useDeleteObjective();
   const deleteLine = useDeleteLine();
-  const [editObj, setEditObj] = useState(false);
-  const [addLine, setAddLine] = useState(false);
+  const [editObj,  setEditObj]  = useState(false);
+  const [addLine,  setAddLine]  = useState(false);
   const [editLine, setEditLine] = useState<StrategicLine | null>(null);
   const [expanded, setExpanded] = useState(true);
   const t = theme(obj.color);
 
-  const handleDeleteObj = () => {
-    if (confirm(`¿Eliminar objetivo "${obj.name}" y todas sus líneas?`))
-      deleteObj.mutate(obj.id);
+  const handleDeleteObj = async () => {
+    if (!confirm(`¿Eliminar objetivo "${obj.name}" y todas sus líneas?`)) return;
+    await deleteObj.mutateAsync(obj.id);
   };
-  const handleDeleteLine = (line: StrategicLine) => {
-    if (confirm(`¿Eliminar línea "${line.name}"?`))
-      deleteLine.mutate(line.id);
+
+  const handleDeleteLine = async (line: StrategicLine) => {
+    if (!confirm(`¿Eliminar línea "${line.name}"?`)) return;
+    await deleteLine.mutateAsync(line.id);
   };
 
   return (
     <>
-      <div className="flex flex-col rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white min-w-[220px] max-w-[260px] flex-shrink-0">
+      <div className="flex flex-col rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white min-w-[230px] max-w-[260px] flex-shrink-0">
+
         {/* ── Colored header ── */}
         <div className={cn('relative px-4 pt-5 pb-4', t.header)}>
-          {/* Actions top-right */}
-          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={() => setEditObj(true)}
-              className="rounded p-1 hover:bg-white/20 text-white/70 hover:text-white">
-              <Pencil className="h-3 w-3" />
-            </button>
-            <button onClick={handleDeleteObj}
-              className="rounded p-1 hover:bg-white/20 text-white/70 hover:text-white">
-              <Trash2 className="h-3 w-3" />
-            </button>
-          </div>
           <div className="flex flex-col items-center text-center gap-1">
             <span className="text-3xl mb-1">{obj.icon}</span>
             <span className={cn('text-xs font-mono font-bold px-2 py-0.5 rounded-full', t.badge)}>
@@ -269,26 +362,37 @@ function ObjectivePillar({ obj }: { obj: StrategicObjective }) {
               <p className="text-xs text-white/60 mt-0.5 line-clamp-2">{obj.description}</p>
             )}
           </div>
-          {/* Edit/delete visible buttons */}
-          <div className="flex justify-center gap-2 mt-3">
-            <button onClick={() => setEditObj(true)}
-              className="text-[10px] text-white/70 hover:text-white flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10">
-              <Pencil className="h-2.5 w-2.5" /> Editar
-            </button>
-            <button onClick={handleDeleteObj}
-              className="text-[10px] text-white/70 hover:text-white flex items-center gap-1 px-2 py-0.5 rounded hover:bg-white/10">
-              <Trash2 className="h-2.5 w-2.5" /> Eliminar
-            </button>
-          </div>
         </div>
 
-        {/* ── Divider connector ── */}
-        <div className="flex items-center px-4 py-2 bg-slate-50 border-b border-slate-100">
-          <button onClick={() => setExpanded(e => !e)}
-            className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700">
+        {/* ── Action bar (always visible) ── */}
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+          <button
+            type="button"
+            onClick={() => setExpanded(e => !e)}
+            className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+          >
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            {obj.lines.length} línea{obj.lines.length !== 1 ? 's' : ''} estratégica{obj.lines.length !== 1 ? 's' : ''}
+            {obj.lines.length} línea{obj.lines.length !== 1 ? 's' : ''}
           </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setEditObj(true)}
+              className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+            >
+              <Pencil className="h-3 w-3" />
+              Editar
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteObj}
+              disabled={deleteObj.isPending}
+              className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50"
+            >
+              {deleteObj.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Eliminar
+            </button>
+          </div>
         </div>
 
         {/* ── Strategic lines ── */}
@@ -298,8 +402,13 @@ function ObjectivePillar({ obj }: { obj: StrategicObjective }) {
               <p className="px-4 py-4 text-xs text-slate-400 text-center italic">Sin líneas aún</p>
             )}
             {obj.lines.map(line => (
-              <div key={line.id}
-                className={cn('group flex items-start gap-2 px-3 py-2.5 border-l-[3px] transition-colors', t.lineBorder, t.lineHover)}>
+              <div
+                key={line.id}
+                className={cn(
+                  'group flex items-start gap-2 px-3 py-2.5 border-l-[3px] transition-colors',
+                  t.lineBorder, t.lineHover,
+                )}
+              >
                 <div className={cn('mt-1 h-1.5 w-1.5 rounded-full shrink-0', t.dot)} />
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-mono font-semibold text-slate-500">{line.code}</p>
@@ -308,22 +417,38 @@ function ObjectivePillar({ obj }: { obj: StrategicObjective }) {
                     <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{line.description}</p>
                   )}
                 </div>
+                {/* Line actions — visible on hover */}
                 <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                  <button onClick={() => setEditLine(line)}
-                    className="rounded p-1 hover:bg-slate-200 text-slate-400 hover:text-slate-600">
-                    <Pencil className="h-2.5 w-2.5" />
+                  <button
+                    type="button"
+                    onClick={() => setEditLine(line)}
+                    className="rounded p-1 hover:bg-slate-200 text-slate-400 hover:text-slate-600"
+                    title="Editar línea"
+                  >
+                    <Pencil className="h-3 w-3" />
                   </button>
-                  <button onClick={() => handleDeleteLine(line)}
-                    className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500">
-                    <Trash2 className="h-2.5 w-2.5" />
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteLine(line)}
+                    className="rounded p-1 hover:bg-red-50 text-slate-400 hover:text-red-500"
+                    title="Eliminar línea"
+                    disabled={deleteLine.isPending}
+                  >
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
               </div>
             ))}
+
             {/* Add line button */}
-            <button onClick={() => setAddLine(true)}
-              className={cn('flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-l-[3px] border-l-transparent',
-                'text-slate-400 hover:text-slate-600 hover:bg-slate-50')}>
+            <button
+              type="button"
+              onClick={() => setAddLine(true)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-l-[3px] border-l-transparent',
+                'text-slate-400 hover:text-slate-600 hover:bg-slate-50',
+              )}
+            >
               <Plus className="h-3 w-3" />
               Agregar línea
             </button>
@@ -331,8 +456,8 @@ function ObjectivePillar({ obj }: { obj: StrategicObjective }) {
         )}
       </div>
 
-      {editObj && <ObjectiveModal obj={obj} onClose={() => setEditObj(false)} />}
-      {addLine && <LineModal objectiveId={obj.id} objectiveColor={obj.color} onClose={() => setAddLine(false)} />}
+      {editObj  && <ObjectiveModal obj={obj} onClose={() => setEditObj(false)} />}
+      {addLine  && <LineModal objectiveId={obj.id} objectiveColor={obj.color} onClose={() => setAddLine(false)} />}
       {editLine && <LineModal line={editLine} objectiveId={obj.id} objectiveColor={obj.color} onClose={() => setEditLine(null)} />}
     </>
   );
@@ -376,8 +501,11 @@ export default function StrategicPage() {
                 </div>
               </div>
             </div>
-            <button onClick={() => setShowNewObj(true)}
-              className="flex items-center gap-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 px-4 py-2.5 text-sm font-semibold text-white transition-all shadow">
+            <button
+              type="button"
+              onClick={() => setShowNewObj(true)}
+              className="flex items-center gap-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 px-4 py-2.5 text-sm font-semibold text-white transition-all shadow"
+            >
               <Plus className="h-4 w-4" />
               Agregar Objetivo
             </button>
@@ -399,8 +527,11 @@ export default function StrategicPage() {
               <p className="text-sm text-slate-400 mt-1 max-w-sm">
                 Agrega los objetivos del plan estratégico de tu organización. Cada objetivo contendrá líneas que se vincularán al universo de auditoría.
               </p>
-              <button onClick={() => setShowNewObj(true)}
-                className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 shadow-lg">
+              <button
+                type="button"
+                onClick={() => setShowNewObj(true)}
+                className="mt-5 flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 shadow-lg"
+              >
                 <Plus className="h-4 w-4" /> Crear primer objetivo
               </button>
             </div>
@@ -409,9 +540,12 @@ export default function StrategicPage() {
               {objectives.map(obj => (
                 <ObjectivePillar key={obj.id} obj={obj} />
               ))}
-              {/* Add new objective ghost card */}
-              <button onClick={() => setShowNewObj(true)}
-                className="flex flex-col items-center justify-center min-w-[180px] max-w-[180px] rounded-2xl border-2 border-dashed border-slate-300 hover:border-slate-400 hover:bg-white/60 text-slate-400 hover:text-slate-600 transition-all gap-2 py-10 flex-shrink-0">
+              {/* Ghost card */}
+              <button
+                type="button"
+                onClick={() => setShowNewObj(true)}
+                className="flex flex-col items-center justify-center min-w-[180px] max-w-[180px] rounded-2xl border-2 border-dashed border-slate-300 hover:border-slate-400 hover:bg-white/60 text-slate-400 hover:text-slate-600 transition-all gap-2 py-10 flex-shrink-0"
+              >
                 <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center">
                   <Plus className="h-5 w-5" />
                 </div>

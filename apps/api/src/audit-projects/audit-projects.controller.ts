@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Body, Param, Query, ParseIntPipe, DefaultValuePipe,
+  Body, Param, Query, ParseIntPipe, DefaultValuePipe, HttpCode,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { AuditProjectsService } from './audit-projects.service';
@@ -36,6 +36,14 @@ export class AuditProjectsController {
     @Query('search')    search?: string,
   ) {
     return this.service.findAll(user, year || undefined, riskLevel, search);
+  }
+
+  @Post('sync-coverage')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Sync lastAuditAge from real closed audit history' })
+  syncCoverage(@CurrentUser() user: AuthUser) {
+    return this.service.syncCoverage(user);
   }
 
   @Get(':id')

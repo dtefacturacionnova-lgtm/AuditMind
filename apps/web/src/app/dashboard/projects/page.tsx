@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, Search,
   ChevronDown, ClipboardList, BarChart3, CheckCircle2,
-  Circle, DollarSign, Users,
+  Circle, DollarSign, Users, Clock, RefreshCw, Zap,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { cn } from '@/lib/utils';
@@ -14,7 +14,9 @@ import {
   useCreateProject,
   useUpdateProject,
   useDeleteProject,
+  useSyncCoverage,
   computeRiskScore,
+  formatCoverageGap,
   AuditProject,
   AuditProjectTeamMember,
 } from '@/hooks/useAuditProjects';
@@ -108,6 +110,26 @@ const RISK_PERCEPTION_OPTS = [
   { value: 3, label: 'Alto' },
   { value: 4, label: 'Crítico' },
 ];
+
+// ─── Coverage Gap Badge ───────────────────────────────────────────────────────
+
+function CoverageGapBadge({ days }: { days?: number | null }) {
+  const { label, color, urgency } = formatCoverageGap(days);
+  if (urgency === 'none') {
+    return <span className="text-[11px] text-slate-400 italic">Sin historial</span>;
+  }
+  const icon = urgency === 'ok'
+    ? <CheckCircle2 className="h-3 w-3" />
+    : urgency === 'warn'
+    ? <Clock className="h-3 w-3" />
+    : <Clock className="h-3 w-3" />;
+  return (
+    <span className={cn('flex items-center gap-1 text-[11px] font-medium', color)}>
+      {icon}
+      {label}
+    </span>
+  );
+}
 
 // ─── Blank form ───────────────────────────────────────────────────────────────
 
@@ -250,12 +272,14 @@ export default function ProjectsPage() {
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
+  const syncCoverage  = useSyncCoverage();
 
-  const [showModal, setShowModal]   = useState(false);
-  const [editing, setEditing]       = useState<AuditProject | null>(null);
-  const [form, setForm]             = useState<Partial<AuditProject>>(blankForm());
-  const [activeTab, setActiveTab]   = useState<0 | 1 | 2>(0);
-  const [saving, setSaving]         = useState(false);
+  const [showModal, setShowModal]       = useState(false);
+  const [editing, setEditing]           = useState<AuditProject | null>(null);
+  const [form, setForm]                 = useState<Partial<AuditProject>>(blankForm());
+  const [activeTab, setActiveTab]       = useState<0 | 1 | 2>(0);
+  const [saving, setSaving]             = useState(false);
+  const [syncResult, setSyncResult]     = useState<{ updated: number } | null>(null);
 
   // Flattened entity list for dropdowns
   const entityList = useMemo(() => flattenTree(entityTree), [entityTree]);
@@ -267,15 +291,16 @@ export default function ProjectsPage() {
     return obj?.lines ?? [];
   }, [form.strategicObjectiveId, objectives]);
 
-  // Live risk computation
+  // Live risk computation — uses lastAuditAgeDynamic from editing project as fallback
   const liveRisk = useMemo(() => computeRiskScore({
-    areaScore:         form.areaScore,
-    strategicImpact:   form.strategicImpact,
-    operationalImpact: form.operationalImpact,
-    legalRequirement:  form.legalRequirement,
-    lastAuditAge:      form.lastAuditAge,
-    riskPerception:    form.riskPerception,
-  }), [form.areaScore, form.strategicImpact, form.operationalImpact, form.legalRequirement, form.lastAuditAge, form.riskPerception]);
+    areaScore:           form.areaScore,
+    strategicImpact:     form.strategicImpact,
+    operationalImpact:   form.operationalImpact,
+    legalRequirement:    form.legalRequirement,
+    lastAuditAge:        form.lastAuditAge,
+    lastAuditAgeDynamic: editing?.lastAuditAgeDynamic,
+    riskPerception:      form.riskPerception,
+  }), [form.areaScore, form.strategicImpact, form.operationalImpact, form.legalRequirement, form.lastAuditAge, editing?.lastAuditAgeDynamic, form.riskPerception]);
 
   // Budget calculation from teamJson
   const teamJson = (form.teamJson ?? DEFAULT_TEAM.map(r => ({ ...r }))) as AuditProjectTeamMember[];
@@ -336,6 +361,12 @@ export default function ProjectsPage() {
     await deleteProject.mutateAsync(id);
   }
 
+  async function handleSyncCoverage() {
+    const result = await syncCoverage.mutateAsync();
+    setSyncResult({ updated: result.updated });
+    setTimeout(() => setSyncResult(null), 4000);
+  }
+
   async function handleTogglePlan(p: AuditProject) {
     await updateProject.mutateAsync({ id: p.id, data: { includeInPlan: !p.includeInPlan } });
   }
@@ -379,6 +410,12 @@ export default function ProjectsPage() {
             value={`$${((stats?.totalBudget ?? 0) / 1000).toFixed(1)}K`}
             icon={DollarSign}
             color="bg-violet-500"
+          />
+          <StatCard
+            label="Con Entidad Asignada"
+            value={stats?.withEntity ?? 0}
+            icon={Zap}
+            color="bg-teal-500"
           />
         </div>
       </div>
@@ -441,7 +478,24 @@ export default function ProjectsPage() {
             <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
           </div>
 
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            {syncResult && (
+              <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
+                ✓ {syncResult.updated} proyecto{syncResult.updated !== 1 ? 's' : ''} actualizados
+              </span>
+            )}
+            <button
+              onClick={handleSyncCoverage}
+              disabled={syncCoverage.isPending}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              title="Actualiza la variable 'Antigüedad última auditoría' en todos los proyectos usando el historial real de auditorías cerradas"
+            >
+              {syncCoverage.isPending
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <RefreshCw className="h-3.5 w-3.5" />
+              }
+              Sincronizar Cobertura
+            </button>
             <button
               onClick={openNew}
               className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
@@ -503,7 +557,10 @@ export default function ProjectsPage() {
                         {!p.strategicObjective && !p.strategicLine && <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
-                        {p.responsibleEntity?.name ?? <span className="text-slate-300">—</span>}
+                        <p className="font-medium">{p.responsibleEntity?.name ?? <span className="text-slate-300">—</span>}</p>
+                        {p.responsibleEntity && (
+                          <CoverageGapBadge days={p.coverageGapDays} />
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {cat ? (
@@ -770,13 +827,61 @@ export default function ProjectsPage() {
                       options={LEGAL_REQUIREMENT_OPTS}
                       onChange={v => setField('legalRequirement', v)}
                     />
-                    <RiskRow
-                      label="Antigüedad Última Auditoría"
-                      weight="10%"
-                      value={form.lastAuditAge}
-                      options={LAST_AUDIT_AGE_OPTS}
-                      onChange={v => setField('lastAuditAge', v)}
-                    />
+                    {/* Antigüedad — enhanced with dynamic coverage hint */}
+                    <div className="py-2 border-b border-slate-100">
+                      <div className="grid grid-cols-12 items-center gap-3">
+                        <div className="col-span-6">
+                          <p className="text-sm font-medium text-slate-700">Antigüedad Última Auditoría</p>
+                          <p className="text-[11px] text-slate-400">Peso: 10%</p>
+                        </div>
+                        <div className="col-span-4">
+                          <select
+                            value={form.lastAuditAge ?? ''}
+                            onChange={e => setField('lastAuditAge', Number(e.target.value) || undefined)}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">— Manual —</option>
+                            {LAST_AUDIT_AGE_OPTS.map(o => (
+                              <option key={o.value} value={o.value}>{o.value} — {o.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-2 text-center">
+                          {(form.lastAuditAge ?? editing?.lastAuditAgeDynamic) ? (
+                            <span className={cn('text-lg font-bold', ['', 'text-green-600', 'text-yellow-600', 'text-orange-600', 'text-red-600'][form.lastAuditAge ?? editing?.lastAuditAgeDynamic ?? 0] ?? '')}>
+                              {form.lastAuditAge ?? editing?.lastAuditAgeDynamic}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </div>
+                      </div>
+                      {editing?.lastAuditAgeDynamic != null && (
+                        <div className="mt-2 flex items-center justify-between rounded-lg bg-teal-50 border border-teal-200 px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <Zap className="h-3.5 w-3.5 text-teal-600" />
+                            <span className="text-xs text-teal-700 font-medium">
+                              Historial real: nivel {editing.lastAuditAgeDynamic}
+                              {' '}({LAST_AUDIT_AGE_OPTS.find(o => o.value === editing.lastAuditAgeDynamic)?.label})
+                            </span>
+                            {editing.coverageGapDays != null && (
+                              <span className={cn('text-[11px]', formatCoverageGap(editing.coverageGapDays).color)}>
+                                · {formatCoverageGap(editing.coverageGapDays).label}
+                              </span>
+                            )}
+                          </div>
+                          {form.lastAuditAge !== editing.lastAuditAgeDynamic && (
+                            <button
+                              type="button"
+                              onClick={() => setField('lastAuditAge', editing.lastAuditAgeDynamic!)}
+                              className="text-[11px] font-semibold text-teal-700 hover:underline"
+                            >
+                              Usar este valor →
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <RiskRow
                       label="Percepción del Riesgo Auditor"
                       weight="10%"

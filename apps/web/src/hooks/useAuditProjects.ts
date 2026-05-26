@@ -43,6 +43,10 @@ export interface AuditProject {
   strategicLine?: { id: string; code: string; name: string };
   responsibleEntity?: { id: string; name: string; entityType: string };
   supportEntity?: { id: string; name: string; entityType: string };
+  // P.5 — Coverage (virtual, computed by API from real audit history)
+  coverageGapDays?: number | null;
+  lastAuditDate?: string | null;
+  lastAuditAgeDynamic?: number | null;
 }
 
 export interface ProjectStats {
@@ -52,8 +56,20 @@ export interface ProjectStats {
   alto: number;
   medio: number;
   bajo: number;
+  withEntity: number;
   years: number[];
   totalBudget: number;
+}
+
+export interface SyncCoverageResult {
+  updated: number;
+  changes: Array<{
+    id: string;
+    correlative: string;
+    name: string;
+    oldValue: number | null;
+    newValue: number;
+  }>;
 }
 
 const QK = 'audit-projects';
@@ -102,19 +118,54 @@ export function useDeleteProject() {
   });
 }
 
-// Pure function: compute final risk score from 6 variables
+export function useSyncCoverage() {
+  const qc = useQueryClient();
+  return useMutation<SyncCoverageResult>({
+    mutationFn: () => apiClient.post('/audit-projects/sync-coverage', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [QK] }),
+  });
+}
+
+// ─── Coverage helpers ─────────────────────────────────────────────────────────
+
+export function formatCoverageGap(days: number | null | undefined): {
+  label: string;
+  color: string;
+  urgency: 'ok' | 'warn' | 'danger' | 'none';
+} {
+  if (days == null) return { label: 'Sin auditoría registrada', color: 'text-slate-400', urgency: 'none' };
+  if (days < 365) {
+    const months = Math.floor(days / 30) || 1;
+    return { label: `hace ${months} mes${months !== 1 ? 'es' : ''}`, color: 'text-emerald-600', urgency: 'ok' };
+  }
+  if (days < 730) {
+    const months = Math.floor(days / 30);
+    return { label: `hace ${months} meses`, color: 'text-amber-600', urgency: 'warn' };
+  }
+  const years = (days / 365).toFixed(1);
+  return { label: `hace ${years} años`, color: 'text-red-600', urgency: 'danger' };
+}
+
+// ─── Risk scoring ─────────────────────────────────────────────────────────────
+
 export function computeRiskScore(p: {
   areaScore?: number;
   strategicImpact?: number;
   operationalImpact?: number;
   legalRequirement?: number;
   lastAuditAge?: number;
+  lastAuditAgeDynamic?: number | null;
   riskPerception?: number;
 }): { score: number; level: string } | null {
   const areaVal = p.areaScore != null
     ? p.areaScore >= 75 ? 4 : p.areaScore >= 55 ? 3 : p.areaScore >= 35 ? 2 : 1
     : null;
-  const vals = [areaVal, p.strategicImpact, p.operationalImpact, p.legalRequirement, p.lastAuditAge, p.riskPerception];
+  // Dynamic value (from real audit history) takes precedence over manual
+  const effectiveLastAuditAge = p.lastAuditAgeDynamic ?? p.lastAuditAge ?? null;
+  const vals = [
+    areaVal, p.strategicImpact, p.operationalImpact,
+    p.legalRequirement, effectiveLastAuditAge, p.riskPerception,
+  ];
   if (vals.some(v => v == null)) return null;
   const weights = [0.25, 0.20, 0.15, 0.20, 0.10, 0.10];
   const numVals = vals as number[];

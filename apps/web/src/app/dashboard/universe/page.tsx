@@ -1,10 +1,11 @@
 'use client';
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Plus, Trash2, ChevronRight, ChevronDown, Edit2,
   Layers, FlaskConical, X, Save, Target, Building2, Info,
   Users, MapPin, Mail, Phone, DollarSign, Clock, ShieldCheck,
-  TrendingUp, Filter, ShieldAlert as ShieldAlertIcon,
+  TrendingUp, Filter, ShieldAlert as ShieldAlertIcon, ArrowRight,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useRiskSummary } from '@/hooks/useAuditUniverse';
@@ -311,6 +312,7 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear }: {
   onToggle: () => void;
   currentYear: number;
 }) {
+  const router = useRouter();
   const rl = RISK_LEVEL_CONFIG[(u.riskLevel ?? 'MEDIUM') as keyof typeof RISK_LEVEL_CONFIG];
   const { groupA, groupB } = computeBreakdown(u.assessment);
   const score = u.totalScore ?? 0;
@@ -323,6 +325,20 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear }: {
 
   const scoreColor = score >= 75 ? 'text-red-600' : score >= 55 ? 'text-orange-600' : score >= 35 ? 'text-amber-600' : 'text-green-600';
   const barColor   = score >= 75 ? 'bg-red-500' : score >= 55 ? 'bg-orange-400' : score >= 35 ? 'bg-amber-400' : 'bg-green-400';
+
+  const handlePromote = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const params = new URLSearchParams();
+    params.set('fromUnit', u.id);
+    params.set('name', u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`);
+    if (u.riskType)        params.set('riskCategory', u.riskType);
+    if (u.auditType)       params.set('auditType', u.auditType);
+    if (u.isMandatory)     params.set('isMandatory', 'true');
+    if (u.mandatoryBasis)  params.set('legalBasis', u.mandatoryBasis);
+    if (u.strategicLineId) params.set('strategicLineId', u.strategicLineId);
+    if (score > 0)         params.set('score', score.toFixed(0));
+    router.push(`/dashboard/projects?${params.toString()}`);
+  };
 
   return (
     <div className="px-4 py-3 hover:bg-slate-50/60 transition-colors">
@@ -425,6 +441,17 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear }: {
         </div>
 
         <ChevronDown className={cn('w-3.5 h-3.5 text-slate-400 shrink-0 mt-1.5 transition-transform', expanded && 'rotate-180')} />
+      </div>
+
+      {/* Promote button — always visible */}
+      <div className="ml-9 mt-2">
+        <button
+          onClick={handlePromote}
+          className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors"
+        >
+          <ArrowRight className="w-3.5 h-3.5" />
+          Promover a Proyecto
+        </button>
       </div>
 
       {/* Expanded: 10-factor breakdown */}

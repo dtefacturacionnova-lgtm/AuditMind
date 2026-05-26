@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, Search,
   ChevronDown, ClipboardList, BarChart3, CheckCircle2,
@@ -280,6 +281,36 @@ export default function ProjectsPage() {
   const [activeTab, setActiveTab]       = useState<0 | 1 | 2>(0);
   const [saving, setSaving]             = useState(false);
   const [syncResult, setSyncResult]     = useState<{ updated: number } | null>(null);
+
+  // ── Pre-fill from "Promover a Proyecto" (Candidatas al Plan) ──────────────
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const fromUnit = searchParams.get('fromUnit');
+    if (!fromUnit) return;
+    const prefilled: Partial<AuditProject> = {
+      ...blankForm(),
+      name:             searchParams.get('name')         ?? '',
+      riskCategory:     searchParams.get('riskCategory') ?? '',
+      legalBasis:       searchParams.get('legalBasis')   ?? '',
+      strategicLineId:  searchParams.get('strategicLineId') ?? '',
+      notes: `Promovido desde el Universo de Auditorías (score: ${searchParams.get('score') ?? '—'})`,
+    };
+    // Map riskCategory to legalRequirement hint for the risk tab
+    const scoreRaw = parseFloat(searchParams.get('score') ?? '0');
+    if (!isNaN(scoreRaw) && scoreRaw > 0) {
+      // Normalize 0-100 → 1-5 scale for riskPerception seed
+      prefilled.riskPerception = Math.max(1, Math.min(5, Math.round(scoreRaw / 20)));
+    }
+    if (searchParams.get('isMandatory') === 'true') {
+      prefilled.legalRequirement = 5; // máximo — requerido por ley
+    }
+    setForm(prefilled);
+    setEditing(null);
+    setShowModal(true);
+    // Clean URL without re-render
+    window.history.replaceState({}, '', '/dashboard/projects');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Flattened entity list for dropdowns
   const entityList = useMemo(() => flattenTree(entityTree), [entityTree]);
@@ -623,6 +654,14 @@ export default function ProjectsPage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
+
+            {/* Banner: promovido desde Universo */}
+            {!editing && form.notes?.startsWith('Promovido desde el Universo') && (
+              <div className="mx-6 mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-800">
+                <Zap className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+                <span><strong>Pre-llenado desde Candidatas al Plan.</strong> Revisa y completa los campos restantes — especialmente el equipo en la pestaña "Planificación".</span>
+              </div>
+            )}
 
             {/* Tabs */}
             <div className="flex border-b border-slate-200 px-6">

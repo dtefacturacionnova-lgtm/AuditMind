@@ -1,11 +1,11 @@
 'use client';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import {
   FolderOpen, FolderPlus, Folder, FileText, Plus, ChevronRight, ChevronDown,
   MoreHorizontal, Pencil, Trash2, CheckCircle2, Lock, AlertCircle, Clock,
   Loader2, FilePlus, Upload, X, Music, Image as ImageIcon, FileSpreadsheet,
-  Presentation, File, Star, Settings2,
+  Presentation, File, Star, Settings2, Download, ExternalLink,
 } from 'lucide-react';
 import {
   useExpediente, useInitializeExpediente, useCreateFolder,
@@ -13,7 +13,7 @@ import {
   AuditPhase, AuditFolder, WpStub, PHASE_CONFIG, PHASE_STATUS_CONFIG,
 } from '@/hooks/useExpediente';
 import { WP_STATUS_CONFIG, type WpStatus } from '@/hooks/useWorkingPapers';
-import { useIndexTemplates, type IndexTemplate } from '@/hooks/useIndexTemplates';
+import { useIndexTemplates } from '@/hooks/useIndexTemplates';
 import { cn } from '@/lib/utils';
 
 // ─── Helpers de archivo ───────────────────────────────────────────────────────
@@ -46,181 +46,178 @@ function formatBytes(b?: number) {
   return `${(b / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ─── Fila de papel/archivo dentro de una carpeta ─────────────────────────────
-
-function PaperRow({ paper, depth }: { paper: WpStub; depth: number }) {
-  const mimeInfo  = getMimeInfo(paper.mimeType);
-  const IconComp  = paper.wpKind === 'FILE' ? mimeInfo.icon : FileText;
-  const iconColor = paper.wpKind === 'FILE' ? mimeInfo.color : 'text-blue-400';
-  const st        = WP_STATUS_CONFIG[paper.status as WpStatus];
-
-  return (
-    <Link
-      href={`/dashboard/working-papers/${paper.id}`}
-      className="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-blue-50 transition-colors"
-      style={{ paddingLeft: `${8 + (depth + 1) * 20}px` }}
-    >
-      <IconComp className={cn('h-3.5 w-3.5 shrink-0', iconColor)} />
-      {paper.ref && (
-        <span className="shrink-0 rounded bg-slate-100 px-1 py-0.5 font-mono text-[10px] text-slate-500">
-          {paper.ref}
-        </span>
-      )}
-      <span className="flex-1 truncate text-xs text-slate-600 group-hover:text-blue-700">
-        {paper.title}
-      </span>
-      {paper.wpKind === 'FILE' && paper.mimeType && (
-        <span className={cn('shrink-0 text-[10px] font-medium', mimeInfo.color)}>
-          {mimeInfo.label}
-        </span>
-      )}
-      {st && (
-        <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium', st.bg, st.color)}>
-          {st.label}
-        </span>
-      )}
-    </Link>
-  );
+function formatDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return '';
+  }
 }
 
-// ─── Fila de carpeta ──────────────────────────────────────────────────────────
+// Badge config por tipo de papel
+const WP_KIND_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+  FILE:     { label: 'Archivo',     bg: 'bg-slate-100',   color: 'text-slate-600' },
+  SMART:    { label: 'Inteligente', bg: 'bg-blue-100',    color: 'text-blue-700' },
+  STANDARD: { label: 'Estándar',    bg: 'bg-indigo-50',   color: 'text-indigo-700' },
+  MASTER:   { label: 'Maestro',     bg: 'bg-purple-100',  color: 'text-purple-700' },
+  LIVE:     { label: 'En Vivo',     bg: 'bg-emerald-100', color: 'text-emerald-700' },
+};
 
-function FolderRow({
+// ─── Helpers árbol ────────────────────────────────────────────────────────────
+
+function findFolderInTree(folders: AuditFolder[], id: string): AuditFolder | null {
+  for (const f of folders) {
+    if (f.id === id) return f;
+    const found = findFolderInTree(f.children ?? [], id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findFolderById(phases: AuditPhase[], id: string): AuditFolder | null {
+  for (const phase of phases) {
+    const found = findFolderInTree(phase.folders, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findPhaseForFolder(phases: AuditPhase[], folderId: string): AuditPhase | null {
+  for (const phase of phases) {
+    if (findFolderInTree(phase.folders, folderId)) return phase;
+  }
+  return null;
+}
+
+// ─── Phase status icon ────────────────────────────────────────────────────────
+
+function PhaseStatusIcon({ status }: { status: AuditPhase['status'] }) {
+  if (status === 'COMPLETE')    return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+  if (status === 'LOCKED')      return <Lock         className="h-3.5 w-3.5 text-gray-400" />;
+  if (status === 'IN_PROGRESS') return <Clock        className="h-3.5 w-3.5 text-amber-500" />;
+  return <AlertCircle className="h-3.5 w-3.5 text-gray-400" />;
+}
+
+// ─── TreeFolderRow — panel izquierdo (sin papeles inline) ────────────────────
+
+function TreeFolderRow({
   folder,
-  depth = 0,
-  auditId,
+  depth,
+  selectedFolderId,
+  onSelect,
   onAddChild,
   onEdit,
   onDelete,
-  onAddPaper,
-  onUploadFile,
 }: {
   folder: AuditFolder;
-  depth?: number;
-  auditId: string;
+  depth: number;
+  selectedFolderId: string | null;
+  onSelect: (id: string) => void;
   onAddChild: (parentId: string, phaseId?: string) => void;
   onEdit: (folder: AuditFolder) => void;
   onDelete: (folder: AuditFolder) => void;
-  onAddPaper: (folderId: string) => void;
-  onUploadFile: (folderId: string) => void;
 }) {
   const [open, setOpen]         = useState(depth === 0);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [addMenu, setAddMenu]   = useState(false);
-
-  const hasChildren = folder.children && folder.children.length > 0;
-  const papers      = folder.papers ?? [];
-  const hasPapers   = papers.length > 0;
-  const paperCount  = papers.length;
-  const isExpanded  = open && (hasChildren || hasPapers);
+  const hasChildren = (folder.children?.length ?? 0) > 0;
+  const isSelected  = selectedFolderId === folder.id;
+  const paperCount  = folder.papers?.length ?? 0;
 
   return (
     <div>
       <div
         className={cn(
-          'group flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-slate-50 transition-colors',
-          depth === 0 && 'font-medium',
+          'group flex cursor-pointer items-center gap-1 rounded-md transition-colors',
+          isSelected ? 'bg-blue-100' : 'hover:bg-slate-100',
         )}
-        style={{ paddingLeft: `${8 + depth * 20}px` }}
+        style={{
+          paddingLeft: `${8 + depth * 16}px`,
+          paddingRight: '6px',
+          paddingTop: '5px',
+          paddingBottom: '5px',
+        }}
+        onClick={() => onSelect(folder.id)}
       >
-        {/* Expand toggle */}
+        {/* Chevron para expandir/colapsar */}
         <button
-          onClick={() => setOpen(!open)}
-          className="shrink-0 text-slate-400 hover:text-slate-600"
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+          className="shrink-0 rounded p-0.5 text-slate-400 hover:text-slate-600"
         >
-          {hasChildren || hasPapers ? (
-            open
-              ? <ChevronDown className="h-3.5 w-3.5" />
-              : <ChevronRight className="h-3.5 w-3.5" />
-          ) : (
-            <span className="inline-block w-3.5" />
-          )}
+          {hasChildren
+            ? (open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />)
+            : <span className="inline-block w-3" />
+          }
         </button>
 
-        {/* Folder icon */}
-        {isExpanded
-          ? <FolderOpen className="h-4 w-4 shrink-0 text-amber-500" />
-          : <Folder    className="h-4 w-4 shrink-0 text-amber-400" />
+        {/* Icono de carpeta */}
+        {open && hasChildren
+          ? <FolderOpen className={cn('h-3.5 w-3.5 shrink-0', isSelected ? 'text-blue-600' : 'text-amber-500')} />
+          : <Folder     className={cn('h-3.5 w-3.5 shrink-0', isSelected ? 'text-blue-500' : 'text-amber-400')} />
         }
 
-        {/* Ref */}
-        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600">
+        {/* Referencia */}
+        <span className={cn(
+          'shrink-0 rounded px-1 py-0.5 font-mono text-[10px]',
+          isSelected ? 'bg-blue-200 text-blue-800' : 'bg-slate-100 text-slate-500',
+        )}>
           {folder.ref}
         </span>
 
-        {/* Name */}
-        <span className="flex-1 truncate text-sm text-slate-700">{folder.name}</span>
+        {/* Nombre */}
+        <span className={cn(
+          'flex-1 truncate text-xs',
+          isSelected ? 'font-semibold text-blue-700' : 'text-slate-600',
+        )}>
+          {folder.name}
+        </span>
 
-        {/* Paper count badge */}
+        {/* Badge de cantidad de papeles */}
         {paperCount > 0 && (
-          <span className="shrink-0 rounded-full bg-blue-100 px-1.5 text-[11px] font-medium text-blue-700">
+          <span className={cn(
+            'shrink-0 rounded-full px-1.5 text-[10px] font-medium',
+            isSelected ? 'bg-blue-200 text-blue-700' : 'bg-blue-100 text-blue-600',
+          )}>
             {paperCount}
           </span>
         )}
 
-        {/* Actions (on hover) */}
-        <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
-          {/* Sub-carpeta */}
+        {/* Acciones al pasar el cursor */}
+        <div
+          className="hidden items-center gap-0.5 group-hover:flex"
+          onClick={(e) => e.stopPropagation()}
+        >
           {depth < 2 && (
             <button
+              type="button"
               onClick={() => onAddChild(folder.id, folder.phaseId)}
-              title="Sub-carpeta"
+              title="Agregar sub-carpeta"
               className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
             >
-              <FolderPlus className="h-3.5 w-3.5" />
+              <FolderPlus className="h-3 w-3" />
             </button>
           )}
-
-          {/* Agregar papel/archivo — mini menú */}
           <div className="relative">
             <button
-              onClick={() => setAddMenu(!addMenu)}
-              title="Agregar papel o archivo"
-              className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-            {addMenu && (
-              <div className="absolute right-0 top-6 z-50 min-w-[170px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-                <button
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-                  onClick={() => { onAddPaper(folder.id); setAddMenu(false); }}
-                >
-                  <FilePlus className="h-3.5 w-3.5 text-blue-500" />
-                  Papel inteligente
-                </button>
-                <button
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-                  onClick={() => { onUploadFile(folder.id); setAddMenu(false); }}
-                >
-                  <Upload className="h-3.5 w-3.5 text-emerald-500" />
-                  Subir archivo
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Menú carpeta (renombrar / eliminar) */}
-          <div className="relative">
-            <button
+              type="button"
               onClick={() => setMenuOpen(!menuOpen)}
               className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
             >
-              <MoreHorizontal className="h-3.5 w-3.5" />
+              <MoreHorizontal className="h-3 w-3" />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-6 z-50 min-w-[130px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+              <div className="absolute right-0 top-5 z-50 min-w-[130px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
                 <button
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
                   onClick={() => { onEdit(folder); setMenuOpen(false); }}
                 >
-                  <Pencil className="h-3.5 w-3.5" /> Renombrar
+                  <Pencil className="h-3 w-3" /> Renombrar
                 </button>
                 <button
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
                   onClick={() => { onDelete(folder); setMenuOpen(false); }}
                 >
-                  <Trash2 className="h-3.5 w-3.5" /> Eliminar
+                  <Trash2 className="h-3 w-3" /> Eliminar
                 </button>
               </div>
             )}
@@ -228,34 +225,119 @@ function FolderRow({
         </div>
       </div>
 
-      {/* Children (sub-carpetas) */}
+      {/* Sub-carpetas */}
       {open && hasChildren && (
         <div>
           {folder.children.map((child) => (
-            <FolderRow
+            <TreeFolderRow
               key={child.id}
               folder={child}
               depth={depth + 1}
-              auditId={auditId}
+              selectedFolderId={selectedFolderId}
+              onSelect={onSelect}
               onAddChild={onAddChild}
               onEdit={onEdit}
               onDelete={onDelete}
-              onAddPaper={onAddPaper}
-              onUploadFile={onUploadFile}
             />
           ))}
         </div>
       )}
-
-      {/* Papers en esta carpeta */}
-      {open && hasPapers && (
-        <div>
-          {papers.map((p) => (
-            <PaperRow key={p.id} paper={p} depth={depth} />
-          ))}
-        </div>
-      )}
     </div>
+  );
+}
+
+// ─── PaperTableRow — fila de la tabla del panel derecho ──────────────────────
+
+function PaperTableRow({ paper }: { paper: WpStub }) {
+  const mimeInfo  = getMimeInfo(paper.mimeType);
+  const IconComp  = paper.wpKind === 'FILE' ? mimeInfo.icon : FileText;
+  const iconColor = paper.wpKind === 'FILE' ? mimeInfo.color : 'text-blue-500';
+  const st        = WP_STATUS_CONFIG[paper.status as WpStatus];
+  const kindCfg   = WP_KIND_CONFIG[paper.wpKind] ?? WP_KIND_CONFIG.STANDARD;
+
+  return (
+    <tr className="group border-b border-slate-100 hover:bg-slate-50/70 transition-colors">
+      {/* Icono de tipo */}
+      <td className="w-9 py-3 pl-5 pr-2">
+        <IconComp className={cn('h-4 w-4', iconColor)} />
+      </td>
+
+      {/* Referencia */}
+      <td className="w-20 px-2 py-3">
+        {paper.ref && (
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
+            {paper.ref}
+          </span>
+        )}
+      </td>
+
+      {/* Título + nombre original */}
+      <td className="min-w-0 px-2 py-3">
+        <div className="min-w-0">
+          <Link
+            href={`/dashboard/working-papers/${paper.id}`}
+            className="block truncate text-sm font-medium text-slate-700 hover:text-blue-600 transition-colors"
+          >
+            {paper.title}
+          </Link>
+          {paper.originalFilename && (
+            <span className="block truncate text-[10px] text-slate-400 mt-0.5">
+              {paper.originalFilename}
+            </span>
+          )}
+        </div>
+      </td>
+
+      {/* Tipo de papel */}
+      <td className="w-28 px-2 py-3">
+        <span className={cn(
+          'whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium',
+          kindCfg.bg, kindCfg.color,
+        )}>
+          {kindCfg.label}
+        </span>
+      </td>
+
+      {/* Estado */}
+      <td className="w-28 px-2 py-3">
+        {st && (
+          <span className={cn(
+            'whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium',
+            st.bg, st.color,
+          )}>
+            {st.label}
+          </span>
+        )}
+      </td>
+
+      {/* Fecha */}
+      <td className="w-28 whitespace-nowrap px-2 py-3 text-xs text-slate-400">
+        {formatDate(paper.createdAt)}
+      </td>
+
+      {/* Acciones */}
+      <td className="w-16 py-3 pl-2 pr-5">
+        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <Link
+            href={`/dashboard/working-papers/${paper.id}`}
+            title="Abrir"
+            className="rounded p-1 text-slate-400 transition-colors hover:bg-blue-100 hover:text-blue-600"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+          {paper.fileUrl && (
+            <a
+              href={paper.fileUrl}
+              download
+              title="Descargar"
+              className="rounded p-1 text-slate-400 transition-colors hover:bg-emerald-100 hover:text-emerald-600"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </a>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -335,11 +417,11 @@ function UploadModal({
   auditId: string;
   onClose: () => void;
 }) {
-  const [file, setFile]           = useState<File | null>(null);
-  const [title, setTitle]         = useState('');
-  const [ref, setRef]             = useState('');
+  const [file, setFile]             = useState<File | null>(null);
+  const [title, setTitle]           = useState('');
+  const [ref, setRef]               = useState('');
   const [isDragging, setIsDragging] = useState(false);
-  const inputRef                  = useRef<HTMLInputElement>(null);
+  const inputRef                    = useRef<HTMLInputElement>(null);
   const upload = useUploadFileToFolder(auditId);
 
   const handleFile = useCallback((f: File) => {
@@ -376,7 +458,7 @@ function UploadModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="space-y-4 p-6">
           {/* Drop zone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -402,13 +484,13 @@ function UploadModal({
                 <IconComp className={cn('h-10 w-10', mimeInfo.color)} />
                 <div className="text-center">
                   <p className="text-sm font-medium text-slate-700">{file.name}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="mt-0.5 text-xs text-slate-400">
                     {mimeInfo.label} · {formatBytes(file.size)}
                   </p>
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); setFile(null); setTitle(''); }}
-                  className="text-xs text-slate-400 hover:text-red-500 underline"
+                  className="text-xs text-slate-400 underline hover:text-red-500"
                 >
                   Cambiar archivo
                 </button>
@@ -420,7 +502,7 @@ function UploadModal({
                   <p className="text-sm font-medium text-slate-600">
                     Arrastra un archivo o haz clic aquí
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="mt-0.5 text-xs text-slate-400">
                     Word, Excel, PowerPoint, PDF, Imagen, Audio
                   </p>
                 </div>
@@ -454,13 +536,13 @@ function UploadModal({
             />
           </div>
 
-          {/* Progress */}
+          {/* Progreso */}
           {upload.isPending && (
             <div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full animate-pulse bg-blue-500 rounded-full" style={{ width: '70%' }} />
+                <div className="h-full animate-pulse rounded-full bg-blue-500" style={{ width: '70%' }} />
               </div>
-              <p className="mt-1 text-center text-xs text-slate-500">Subiendo a Supabase Storage…</p>
+              <p className="mt-1 text-center text-xs text-slate-500">Subiendo archivo al servidor…</p>
             </div>
           )}
 
@@ -498,15 +580,6 @@ function UploadModal({
   );
 }
 
-// ─── Phase status icon ────────────────────────────────────────────────────────
-
-function PhaseStatusIcon({ status }: { status: AuditPhase['status'] }) {
-  if (status === 'COMPLETE')    return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-  if (status === 'LOCKED')      return <Lock         className="h-4 w-4 text-gray-400" />;
-  if (status === 'IN_PROGRESS') return <Clock        className="h-4 w-4 text-amber-500" />;
-  return <AlertCircle className="h-4 w-4 text-gray-400" />;
-}
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 interface ExpedienteTabProps {
@@ -525,6 +598,9 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
   const signOff      = useSignOffPhase(auditId);
   const { data: templates } = useIndexTemplates();
 
+  // Panel split
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+
   // Modal state
   const [folderModal, setFolderModal] = useState<{
     mode: 'create' | 'edit';
@@ -535,6 +611,18 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
 
   const [uploadFolderId, setUploadFolderId]       = useState<string | null>(null);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+
+  // Auto-seleccionar la primera carpeta disponible
+  useEffect(() => {
+    if (!selectedFolderId && phases && phases.length > 0) {
+      for (const phase of phases) {
+        if (phase.folders.length > 0) {
+          setSelectedFolderId(phase.folders[0].id);
+          break;
+        }
+      }
+    }
+  }, [phases, selectedFolderId]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -596,22 +684,22 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
 
         {showTemplatePicker && hasMultiple ? (
           <div className="w-full max-w-sm space-y-2 text-left">
-            <p className="text-xs font-medium text-slate-600 text-center">Selecciona una plantilla:</p>
+            <p className="text-center text-xs font-medium text-slate-600">Selecciona una plantilla:</p>
             {templates!.map((tpl) => (
               <button
                 key={tpl.id}
                 onClick={() => { initMutation.mutate(tpl.id); setShowTemplatePicker(false); }}
                 disabled={initMutation.isPending}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-xl border px-4 py-3 hover:bg-blue-50 disabled:opacity-60 transition-colors',
+                  'flex w-full items-center gap-3 rounded-xl border px-4 py-3 transition-colors hover:bg-blue-50 disabled:opacity-60',
                   tpl.isDefault ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200 bg-white',
                 )}
               >
                 <Settings2 className="h-5 w-5 shrink-0 text-blue-400" />
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-medium text-slate-800">{tpl.name}</span>
-                    {tpl.isDefault && <Star className="h-3 w-3 text-amber-400 fill-amber-400" />}
+                    {tpl.isDefault && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
                   </div>
                   {tpl.description && (
                     <p className="truncate text-xs text-slate-500">{tpl.description}</p>
@@ -621,7 +709,7 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
             ))}
             <button
               onClick={() => setShowTemplatePicker(false)}
-              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 py-1"
+              className="w-full py-1 text-center text-xs text-slate-400 hover:text-slate-600"
             >
               Cancelar
             </button>
@@ -643,89 +731,248 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
     );
   }
 
-  // ── Árbol del expediente ──────────────────────────────────────────────────
+  // ── Carpeta seleccionada ──────────────────────────────────────────────────
+
+  const selectedFolder = selectedFolderId ? findFolderById(phases, selectedFolderId) : null;
+  const selectedPhase  = selectedFolderId ? findPhaseForFolder(phases, selectedFolderId) : null;
+
+  // ── Layout split-screen ───────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4">
-      {phases.map((phase) => {
-        const cfg    = PHASE_CONFIG[phase.phaseType];
-        const stCfg  = PHASE_STATUS_CONFIG[phase.status];
+    <div
+      className="flex overflow-hidden rounded-xl border border-slate-200"
+      style={{ height: 'calc(100vh - 280px)', minHeight: '520px' }}
+    >
+      {/* ─── PANEL IZQUIERDO: árbol de carpetas ─────────────────────────── */}
+      <div className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-50/40">
+        {/* Cabecera */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Árbol del expediente
+          </span>
+        </div>
 
-        // Contar carpetas y papeles (recursivo hasta nivel 2)
-        const totalFolders = phase.folders.reduce(
-          (acc, f) => acc + 1 + (f.children?.length ?? 0),
-          0,
-        );
-        const countPapers = (f: AuditFolder): number => {
-          const own = f.papers?.length ?? 0;
-          const ch  = (f.children ?? []).reduce((s, c) => s + countPapers(c), 0);
-          return own + ch;
-        };
-        const totalPapers = phase.folders.reduce((acc, f) => acc + countPapers(f), 0);
+        {/* Fases y carpetas */}
+        <div className="flex-1 overflow-y-auto py-1.5">
+          {phases.map((phase) => {
+            const cfg   = PHASE_CONFIG[phase.phaseType];
+            const stCfg = PHASE_STATUS_CONFIG[phase.status];
 
-        return (
-          <div key={phase.id} className={cn('rounded-xl border', cfg.border, cfg.bg)}>
-            {/* Phase header */}
-            <div className="flex items-center justify-between px-4 py-3">
-              <div className="flex items-center gap-2">
-                <PhaseStatusIcon status={phase.status} />
-                <span className={cn('text-sm font-semibold', cfg.color)}>{phase.name}</span>
-                <span className={cn('text-xs', stCfg.color)}>— {stCfg.label}</span>
-                <span className="rounded bg-white/70 px-1.5 py-0.5 text-[11px] text-slate-500">
-                  {totalFolders} carpetas · {totalPapers} papeles
-                </span>
+            return (
+              <div key={phase.id} className="mb-2.5">
+                {/* Cabecera de fase */}
+                <div className={cn(
+                  'mx-1.5 mb-1 flex items-center justify-between rounded-lg border px-2 py-1.5',
+                  cfg.bg, cfg.border,
+                )}>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <PhaseStatusIcon status={phase.status} />
+                    <span className={cn('truncate text-[11px] font-semibold', cfg.color)}>
+                      {phase.name}
+                    </span>
+                    <span className={cn('shrink-0 text-[10px]', stCfg.color)}>
+                      · {stCfg.label}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    {phase.status !== 'COMPLETE' && phase.status !== 'LOCKED' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleAddRootFolder(phase.id)}
+                          title="Nueva carpeta raíz"
+                          className="rounded p-0.5 text-slate-500 hover:bg-white/70 hover:text-slate-700"
+                        >
+                          <FolderPlus className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => signOff.mutate(phase.id)}
+                          disabled={signOff.isPending}
+                          title="Cerrar fase"
+                          className={cn('rounded p-0.5 opacity-60 hover:bg-white/70 hover:opacity-100', cfg.color)}
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
+                    {phase.status === 'COMPLETE' && (
+                      <CheckCircle2
+                        className="h-3.5 w-3.5 text-emerald-500"
+                        title={phase.signedOffBy ? `Firmado por ${phase.signedOffBy.name}` : 'Fase completada'}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Carpetas de la fase */}
+                {phase.folders.length > 0 ? (
+                  <div className="px-1">
+                    {phase.folders.map((folder) => (
+                      <TreeFolderRow
+                        key={folder.id}
+                        folder={folder}
+                        depth={0}
+                        selectedFolderId={selectedFolderId}
+                        onSelect={setSelectedFolderId}
+                        onAddChild={handleAddChild}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="px-4 py-1 text-[11px] italic text-slate-400">
+                    Sin carpetas — usa <FolderPlus className="inline h-3 w-3" /> para agregar
+                  </p>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                {phase.status !== 'COMPLETE' && phase.status !== 'LOCKED' && (
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ─── PANEL DERECHO: contenido de la carpeta seleccionada ────────── */}
+      <div className="flex min-w-0 flex-1 flex-col bg-white">
+        {selectedFolder ? (
+          <>
+            {/* Cabecera del panel derecho */}
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                {selectedPhase && (
                   <>
-                    <button
-                      onClick={() => handleAddRootFolder(phase.id)}
-                      className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-slate-600 hover:bg-white/70"
-                    >
-                      <FolderPlus className="h-3.5 w-3.5" /> Carpeta
-                    </button>
-                    <button
-                      onClick={() => signOff.mutate(phase.id)}
-                      disabled={signOff.isPending}
-                      className="flex items-center gap-1 rounded-lg border border-current px-2.5 py-1 text-xs text-emerald-700 hover:bg-white/70"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Cerrar fase
-                    </button>
+                    <span className={cn(
+                      'shrink-0 text-xs font-medium',
+                      PHASE_CONFIG[selectedPhase.phaseType].color,
+                    )}>
+                      {selectedPhase.name}
+                    </span>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300" />
                   </>
                 )}
-                {phase.status === 'COMPLETE' && phase.signedOffBy && (
-                  <span className="text-xs text-slate-500">✓ {phase.signedOffBy.name}</span>
+                <FolderOpen className="h-4 w-4 shrink-0 text-amber-500" />
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600 shrink-0">
+                  {selectedFolder.ref}
+                </span>
+                <span className="truncate text-sm font-semibold text-slate-800">
+                  {selectedFolder.name}
+                </span>
+                {(selectedFolder.papers?.length ?? 0) > 0 && (
+                  <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                    {selectedFolder.papers.length}{' '}
+                    {selectedFolder.papers.length === 1 ? 'documento' : 'documentos'}
+                  </span>
                 )}
+              </div>
+
+              {/* Botones de acción */}
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onCreatePaper?.(selectedFolder.id)}
+                  className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                >
+                  <FilePlus className="h-3.5 w-3.5" />
+                  Papel inteligente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUploadFolderId(selectedFolder.id)}
+                  className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Subir archivo
+                </button>
               </div>
             </div>
 
-            {/* Folder tree */}
-            {phase.folders.length > 0 ? (
-              <div className="border-t border-white/60 bg-white/50 py-1">
-                {phase.folders.map((folder) => (
-                  <FolderRow
-                    key={folder.id}
-                    folder={folder}
-                    depth={0}
-                    auditId={auditId}
-                    onAddChild={handleAddChild}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onAddPaper={(folderId) => onCreatePaper?.(folderId)}
-                    onUploadFile={(folderId) => setUploadFolderId(folderId)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="border-t border-white/60 py-4 text-center text-sm text-slate-400">
-                Sin carpetas — usa el botón "Carpeta" para agregar
+            {/* Descripción de carpeta */}
+            {selectedFolder.description && (
+              <div className="border-b border-slate-100 bg-amber-50/40 px-5 py-2">
+                <p className="text-xs text-slate-500">{selectedFolder.description}</p>
               </div>
             )}
-          </div>
-        );
-      })}
 
-      {/* Modal crear/editar carpeta */}
+            {/* Tabla de papeles */}
+            {(selectedFolder.papers?.length ?? 0) > 0 ? (
+              <div className="flex-1 overflow-y-auto">
+                <table className="w-full border-collapse">
+                  <thead className="sticky top-0 z-10 bg-slate-50">
+                    <tr className="border-b border-slate-200">
+                      <th className="w-9 py-2.5 pl-5 pr-2" />
+                      <th className="w-20 px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        Ref.
+                      </th>
+                      <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        Documento
+                      </th>
+                      <th className="w-28 px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        Tipo
+                      </th>
+                      <th className="w-28 px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        Estado
+                      </th>
+                      <th className="w-28 px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        Fecha
+                      </th>
+                      <th className="w-16 py-2.5 pl-2 pr-5" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedFolder.papers.map((paper) => (
+                      <PaperTableRow key={paper.id} paper={paper} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* Carpeta vacía */
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+                  <FileText className="h-7 w-7 text-slate-300" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-600">Carpeta vacía</p>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Agrega papeles de trabajo o sube archivos de evidencia
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onCreatePaper?.(selectedFolder.id)}
+                    className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700"
+                  >
+                    <FilePlus className="h-3.5 w-3.5" /> Papel inteligente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadFolderId(selectedFolder.id)}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    <Upload className="h-3.5 w-3.5" /> Subir archivo
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          /* Ninguna carpeta seleccionada */
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
+              <FolderOpen className="h-8 w-8 text-blue-300" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-600">Selecciona una carpeta</p>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Haz clic en cualquier carpeta del árbol para ver su contenido
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modals */}
       {folderModal && (
         <FolderModal
           title={folderModal.mode === 'create' ? 'Nueva carpeta' : 'Renombrar carpeta'}
@@ -735,8 +982,6 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
           onClose={() => setFolderModal(null)}
         />
       )}
-
-      {/* Modal subir archivo */}
       {uploadFolderId && (
         <UploadModal
           folderId={uploadFolderId}

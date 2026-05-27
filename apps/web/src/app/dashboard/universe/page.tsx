@@ -340,6 +340,21 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear, isSelec
     if (u.mandatoryBasis)  params.set('legalBasis', u.mandatoryBasis);
     if (u.strategicLineId) params.set('strategicLineId', u.strategicLineId);
     if (score > 0)         params.set('score', score.toFixed(0));
+    // Copia directa de todos los campos de scoring del Universo (sin conversión)
+    const assess = u.assessment ?? u.assessments?.[0];
+    if (assess) {
+      if (assess.impactScore)           params.set('impactScore',           String(assess.impactScore));
+      if (assess.likelihoodScore)       params.set('likelihoodScore',       String(assess.likelihoodScore));
+      if (assess.controlMaturityScore)  params.set('controlMaturityScore',  String(assess.controlMaturityScore));
+      if (assess.materialityScore)      params.set('materialityScore',      String(assess.materialityScore));
+      if (assess.strategicAlignScore)   params.set('strategicAlignScore',   String(assess.strategicAlignScore));
+      if (assess.operationalAlignScore) params.set('operationalAlignScore', String(assess.operationalAlignScore));
+      if (assess.fraudHistoryScore)     params.set('fraudHistoryScore',     String(assess.fraudHistoryScore));
+      if (assess.managementReqScore)    params.set('managementReqScore',    String(assess.managementReqScore));
+      if (assess.staffTurnoverScore)    params.set('staffTurnoverScore',    String(assess.staffTurnoverScore));
+      if (assess.coverageHistoryScore)  params.set('coverageHistoryScore',  String(assess.coverageHistoryScore));
+      if (assess.lastAuditOpinion)      params.set('lastAuditOpinion',      assess.lastAuditOpinion);
+    }
     router.push(`/dashboard/projects?${params.toString()}`);
   };
 
@@ -618,17 +633,28 @@ function PlanCandidatesView() {
       const name = u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`;
       const suffix = String(Date.now()).slice(-4);
       try {
+        const assess = u.assessment ?? u.assessments?.[0];
         await createProject.mutateAsync({
           name,
           correlative: `BAP-${currentYear}-${suffix}`,
           planYear: currentYear,
           targetPlanYear: currentYear,
-          riskCategory: mapRiskTypeToCategory(u.riskType),
-          legalBasis: u.mandatoryBasis ?? '',
+          riskCategory:    mapRiskTypeToCategory(u.riskType),
+          legalBasis:      u.mandatoryBasis ?? '',
           strategicLineId: u.strategicLineId ?? '',
-          areaScore: Math.round(score),
           legalRequirement: u.isMandatory ? 4 : undefined,
-          riskPerception: Math.max(1, Math.min(4, Math.ceil(score / 25))) as 1 | 2 | 3 | 4,
+          // Copia directa de todos los campos de scoring del Universo (sin conversión)
+          impactScore:           assess?.impactScore,
+          likelihoodScore:       assess?.likelihoodScore,
+          controlMaturityScore:  assess?.controlMaturityScore,
+          materialityScore:      assess?.materialityScore,
+          strategicAlignScore:   assess?.strategicAlignScore,
+          operationalAlignScore: assess?.operationalAlignScore,
+          fraudHistoryScore:     assess?.fraudHistoryScore,
+          managementReqScore:    assess?.managementReqScore,
+          staffTurnoverScore:    assess?.staffTurnoverScore,
+          coverageHistoryScore:  assess?.coverageHistoryScore,
+          lastAuditOpinion:      assess?.lastAuditOpinion,
           notes: `Promovido desde Candidatas al Plan — score ${score.toFixed(0)}${u.isMandatory ? ' · OBLIGATORIA' : ''}`,
           status: 'DRAFT',
           includeInPlan: u.isMandatory || score >= 55,

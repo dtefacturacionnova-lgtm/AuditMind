@@ -621,15 +621,24 @@ model AuditProject {
   riskCategory         String?  // 8 categorías predefinidas
   notes                String?
 
-  // Tab 2 — Evaluación de Riesgo (escala 1–4)
-  areaScore         Float?  // score 0–100 del área (se mapea a 1-4)
-  strategicImpact   Int?    // 1=Nulo 2=Bajo 3=Directo 4=Crítico
-  operationalImpact Int?    // 1=Nulo 2=Menor 3=Moderado 4=Paralizante
-  legalRequirement  Int?    // 1=No aplica 2=Recomendación 3=Norma 4=Ley
-  lastAuditAge      Int?    // 1=<12m 2=12-24m 3=24-36m 4=>36m/Nunca
-  riskPerception    Int?    // 1=Bajo 2=Moderado 3=Alto 4=Crítico
-  finalRiskScore    Float?  // 1.0–4.0 calculado automáticamente
-  finalRiskLevel    String? // BAJO|MEDIO|ALTO|CRITICO
+  // Tab 2 — Evaluación de Riesgo (campos unificados con AuditableUnitAssessment, escala 1-5)
+  // Grupo A — Riesgo Residual (peso 30%)
+  impactScore           Int?    // 1-5 Impacto si ocurre el riesgo
+  likelihoodScore       Int?    // 1-5 Probabilidad de ocurrencia
+  controlMaturityScore  Int?    // 1-5 Madurez de controles existentes
+  // Grupo B — Factores Contextuales (peso 70%)
+  materialityScore      Int?    // 1-5 Materialidad financiera (20%)
+  strategicAlignScore   Int?    // 1-5 Alineación al Plan Estratégico (20%)
+  operationalAlignScore Int?    // 1-5 Alineación al Plan Operativo (15%)
+  fraudHistoryScore     Int?    // 1-5 Antecedentes de fraude/denuncias (15%)
+  managementReqScore    Int?    // 1-5 Solicitud de la dirección (10%)
+  staffTurnoverScore    Int?    // 1-5 Rotación de personal (10%)
+  coverageHistoryScore  Int?    // 1-5 Historial de cobertura (10%)
+  // Campos adicionales del proyecto
+  legalRequirement      Int?    // 1-4 Requerimiento legal/normativo (proyecto-específico)
+  lastAuditOpinion      String? // Opinión/resultado de la última auditoría heredada del Universo
+  finalRiskScore        Float?  // 0–100 calculado automáticamente (misma escala que Universo)
+  finalRiskLevel        String? // BAJO|MEDIO|ALTO|CRITICO
   includeInPlan     Boolean @default(false)
   targetPlanYear    Int?    // año del plan anual donde se incluirá
 

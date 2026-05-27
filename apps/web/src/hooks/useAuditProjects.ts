@@ -20,13 +20,21 @@ export interface AuditProject {
   supportEntityId?: string;
   riskCategory?: string;
   notes?: string;
-  // Risk
-  areaScore?: number;
-  strategicImpact?: number;
-  operationalImpact?: number;
+  // Risk — Grupo A (escala 1-5)
+  impactScore?: number;
+  likelihoodScore?: number;
+  controlMaturityScore?: number;
+  // Risk — Grupo B (escala 1-5)
+  materialityScore?: number;
+  strategicAlignScore?: number;
+  operationalAlignScore?: number;
+  fraudHistoryScore?: number;
+  managementReqScore?: number;
+  staffTurnoverScore?: number;
+  coverageHistoryScore?: number;
+  // Risk — campos adicionales del proyecto
   legalRequirement?: number;
-  lastAuditAge?: number;
-  riskPerception?: number;
+  lastAuditOpinion?: string;
   finalRiskScore?: number;
   finalRiskLevel?: string;
   includeInPlan: boolean;
@@ -43,7 +51,7 @@ export interface AuditProject {
   strategicLine?: { id: string; code: string; name: string };
   responsibleEntity?: { id: string; name: string; entityType: string };
   supportEntity?: { id: string; name: string; entityType: string };
-  // P.5 — Coverage (virtual, computed by API from real audit history)
+  // Coverage (virtual, computed by API from real audit history)
   coverageGapDays?: number | null;
   lastAuditDate?: string | null;
   lastAuditAgeDynamic?: number | null;
@@ -146,30 +154,50 @@ export function formatCoverageGap(days: number | null | undefined): {
   return { label: `hace ${years} años`, color: 'text-red-600', urgency: 'danger' };
 }
 
-// ─── Risk scoring ─────────────────────────────────────────────────────────────
+// ─── Risk scoring (misma fórmula que AuditableUnitAssessment en Universe) ─────
+// Score final: 0–100. Mismo umbral: ≥75 CRITICO, ≥55 ALTO, ≥35 MEDIO, else BAJO
 
 export function computeRiskScore(p: {
-  areaScore?: number;
-  strategicImpact?: number;
-  operationalImpact?: number;
-  legalRequirement?: number;
-  lastAuditAge?: number;
-  lastAuditAgeDynamic?: number | null;
-  riskPerception?: number;
+  impactScore?: number;
+  likelihoodScore?: number;
+  controlMaturityScore?: number;
+  materialityScore?: number;
+  strategicAlignScore?: number;
+  operationalAlignScore?: number;
+  fraudHistoryScore?: number;
+  managementReqScore?: number;
+  staffTurnoverScore?: number;
+  coverageHistoryScore?: number;
 }): { score: number; level: string } | null {
-  const areaVal = p.areaScore != null
-    ? p.areaScore >= 75 ? 4 : p.areaScore >= 55 ? 3 : p.areaScore >= 35 ? 2 : 1
-    : null;
-  // Dynamic value (from real audit history) takes precedence over manual
-  const effectiveLastAuditAge = p.lastAuditAgeDynamic ?? p.lastAuditAge ?? null;
-  const vals = [
-    areaVal, p.strategicImpact, p.operationalImpact,
-    p.legalRequirement, effectiveLastAuditAge, p.riskPerception,
-  ];
-  if (vals.some(v => v == null)) return null;
-  const weights = [0.25, 0.20, 0.15, 0.20, 0.10, 0.10];
-  const numVals = vals as number[];
-  const score = numVals.reduce((s, v, i) => s + v * weights[i], 0);
-  const level = score >= 3.25 ? 'CRITICO' : score >= 2.5 ? 'ALTO' : score >= 1.75 ? 'MEDIO' : 'BAJO';
-  return { score: Math.round(score * 100) / 100, level };
+  const {
+    impactScore, likelihoodScore, controlMaturityScore,
+    materialityScore, strategicAlignScore, operationalAlignScore,
+    fraudHistoryScore, managementReqScore, staffTurnoverScore, coverageHistoryScore,
+  } = p;
+
+  // Require all 10 factors to compute
+  if (
+    !impactScore || !likelihoodScore || !controlMaturityScore ||
+    !materialityScore || !strategicAlignScore || !operationalAlignScore ||
+    !fraudHistoryScore || !managementReqScore || !staffTurnoverScore || !coverageHistoryScore
+  ) return null;
+
+  // Grupo A — Riesgo Residual (30%)
+  const inherent = impactScore * likelihoodScore;
+  const residual = inherent * (1 - controlMaturityScore / 5);
+  const groupA = (residual / 25) * 100;
+
+  // Grupo B — Factores Contextuales (70%)
+  const bWeights: Record<string, number> = {
+    materialityScore: 0.20, strategicAlignScore: 0.20, operationalAlignScore: 0.15,
+    fraudHistoryScore: 0.15, managementReqScore: 0.10, staffTurnoverScore: 0.10, coverageHistoryScore: 0.10,
+  };
+  const groupB = Object.entries(bWeights).reduce((sum, [key, w]) => {
+    const v = (p as Record<string, number>)[key] ?? 1;
+    return sum + ((v - 1) / 4) * 100 * w;
+  }, 0);
+
+  const totalScore = groupA * 0.30 + groupB * 0.70;
+  const level = totalScore >= 75 ? 'CRITICO' : totalScore >= 55 ? 'ALTO' : totalScore >= 35 ? 'MEDIO' : 'BAJO';
+  return { score: Math.round(totalScore * 10) / 10, level };
 }

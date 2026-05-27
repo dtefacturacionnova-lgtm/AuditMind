@@ -78,8 +78,9 @@ export class AuditProjectsService {
     };
   }
 
-  // Updates lastAuditAge in the DB for all projects that have a real closed audit.
-  // Returns a summary of what changed.
+  // Actualiza coverageHistoryScore (1-5) en todos los proyectos usando el historial real
+  // de auditorías cerradas. Mayor score = más tiempo sin auditar = mayor riesgo.
+  // Banda → score: <365d→1, 365-730d→2, 730-1095d→3, 1095-1460d→4, >1460d/nunca→5
   async syncCoverage(user: AuthUser) {
     const projects = await this.prisma.auditProject.findMany({
       where: {
@@ -87,7 +88,7 @@ export class AuditProjectsService {
         active: true,
         responsibleEntityId: { not: null },
       },
-      select: { id: true, name: true, correlative: true, responsibleEntityId: true, lastAuditAge: true },
+      select: { id: true, name: true, correlative: true, responsibleEntityId: true, coverageHistoryScore: true },
     });
 
     const entityIds = [...new Set(projects.map(p => p.responsibleEntityId!))];
@@ -114,11 +115,17 @@ export class AuditProjectsService {
 
     for (const p of projects) {
       const lastDate = lastAuditMap.get(p.responsibleEntityId!);
-      if (!lastDate) continue;
-      const days = Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-      const newBand = days < 365 ? 1 : days < 730 ? 2 : days < 1095 ? 3 : 4;
-      if (p.lastAuditAge !== newBand) {
-        updates.push({ id: p.id, correlative: p.correlative, name: p.name, oldValue: p.lastAuditAge, newValue: newBand });
+      // No audit found: maximum risk score (5)
+      const newScore = !lastDate ? 5 : (() => {
+        const days = Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (days < 365)  return 1;
+        if (days < 730)  return 2;
+        if (days < 1095) return 3;
+        if (days < 1460) return 4;
+        return 5;
+      })();
+      if (p.coverageHistoryScore !== newScore) {
+        updates.push({ id: p.id, correlative: p.correlative, name: p.name, oldValue: p.coverageHistoryScore, newValue: newScore });
       }
     }
 
@@ -126,7 +133,7 @@ export class AuditProjectsService {
       await Promise.all(
         updates.map(u => this.prisma.auditProject.update({
           where: { id: u.id },
-          data: { lastAuditAge: u.newValue },
+          data: { coverageHistoryScore: u.newValue },
         }))
       );
     }

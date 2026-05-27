@@ -37,7 +37,6 @@ const RISK_CATEGORIES = [
   { value: 'OTROS',               label: '8. Otros Riesgos',                       color: 'bg-gray-600'   },
 ];
 
-
 const DEFAULT_TEAM: AuditProjectTeamMember[] = [
   { role: 'Gerente de Auditoría', count: 1, costPerHour: 0, hours: 0 },
   { role: 'Supervisor',           count: 1, costPerHour: 0, hours: 0 },
@@ -60,12 +59,22 @@ const RISK_LEVEL_BAR: Record<string, string> = {
   BAJO:    'bg-green-500',
 };
 
-const RISK_LEVEL_PCT: Record<string, number> = {
-  CRITICO: 100,
-  ALTO:    75,
-  MEDIO:   50,
-  BAJO:    25,
-};
+const LEGAL_REQUIREMENT_OPTS = [
+  { value: 1, label: 'No aplica' },
+  { value: 2, label: 'Recomendación' },
+  { value: 3, label: 'Norma sectorial' },
+  { value: 4, label: 'Ley obligatoria' },
+];
+
+const OPINION_OPTIONS = [
+  { value: 'SATISFACTORY',      label: 'Satisfactorio' },
+  { value: 'NEEDS_IMPROVEMENT', label: 'Necesita mejoras' },
+  { value: 'UNSATISFACTORY',    label: 'Insatisfactorio' },
+  { value: 'CRITICAL',          label: 'Crítico' },
+];
+
+const SCORE_LABELS: Record<number, string> = { 1: 'Muy bajo', 2: 'Bajo', 3: 'Medio', 4: 'Alto', 5: 'Muy alto' };
+const MATURITY_LABELS: Record<number, string> = { 1: 'Ad-hoc', 2: 'Inicial', 3: 'Definido', 4: 'Gestionado', 5: 'Optimizado' };
 
 // ─── Helper: flatten entity tree ──────────────────────────────────────────────
 
@@ -80,39 +89,6 @@ function flattenTree(nodes: AuditEntityNode[], depth = 0): Array<{ id: string; l
   return result;
 }
 
-// ─── Risk score select options ────────────────────────────────────────────────
-
-const STRATEGIC_IMPACT_OPTS = [
-  { value: 1, label: 'Nulo' },
-  { value: 2, label: 'Bajo' },
-  { value: 3, label: 'Directo' },
-  { value: 4, label: 'Crítico' },
-];
-const OPERATIONAL_IMPACT_OPTS = [
-  { value: 1, label: 'Nulo' },
-  { value: 2, label: 'Menor' },
-  { value: 3, label: 'Moderado' },
-  { value: 4, label: 'Paralizante' },
-];
-const LEGAL_REQUIREMENT_OPTS = [
-  { value: 1, label: 'No aplica' },
-  { value: 2, label: 'Recomendación' },
-  { value: 3, label: 'Norma sectorial' },
-  { value: 4, label: 'Ley obligatoria' },
-];
-const LAST_AUDIT_AGE_OPTS = [
-  { value: 1, label: '< 12 meses' },
-  { value: 2, label: '12–24 meses' },
-  { value: 3, label: '24–36 meses' },
-  { value: 4, label: '+36 meses o nunca' },
-];
-const RISK_PERCEPTION_OPTS = [
-  { value: 1, label: 'Bajo' },
-  { value: 2, label: 'Moderado' },
-  { value: 3, label: 'Alto' },
-  { value: 4, label: 'Crítico' },
-];
-
 // ─── Coverage Gap Badge ───────────────────────────────────────────────────────
 
 function CoverageGapBadge({ days }: { days?: number | null }) {
@@ -122,14 +98,43 @@ function CoverageGapBadge({ days }: { days?: number | null }) {
   }
   const icon = urgency === 'ok'
     ? <CheckCircle2 className="h-3 w-3" />
-    : urgency === 'warn'
-    ? <Clock className="h-3 w-3" />
     : <Clock className="h-3 w-3" />;
   return (
     <span className={cn('flex items-center gap-1 text-[11px] font-medium', color)}>
       {icon}
       {label}
     </span>
+  );
+}
+
+// ─── ScoreSlider (mismo componente que Universe) ───────────────────────────────
+
+function ScoreSlider({ label, hint, value, onChange, labelMap = SCORE_LABELS }: {
+  label: string; hint?: string; value?: number;
+  onChange: (v: number) => void; labelMap?: Record<number, string>;
+}) {
+  const colors = ['', 'bg-green-400', 'bg-lime-400', 'bg-amber-400', 'bg-orange-400', 'bg-red-500'];
+  const val = value ?? 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-slate-700">{label}</span>
+        {val > 0 ? (
+          <span className={cn('text-xs font-bold px-1.5 py-0.5 rounded text-white', colors[val])}>
+            {val} — {labelMap[val]}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-400 italic">Sin evaluar</span>
+        )}
+      </div>
+      {hint && <p className="text-[10px] text-slate-400">{hint}</p>}
+      <input type="range" min={1} max={5} value={val || 1}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-1.5 rounded accent-blue-600" />
+      <div className="flex justify-between text-[9px] text-slate-400">
+        <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+      </div>
+    </div>
   );
 }
 
@@ -146,12 +151,19 @@ function blankForm(): Partial<AuditProject> {
     supportEntityId: '',
     riskCategory: '',
     notes: '',
-    areaScore: undefined,
-    strategicImpact: undefined,
-    operationalImpact: undefined,
+    // Risk fields — left undefined so user must fill them in
+    impactScore: undefined,
+    likelihoodScore: undefined,
+    controlMaturityScore: undefined,
+    materialityScore: undefined,
+    strategicAlignScore: undefined,
+    operationalAlignScore: undefined,
+    fraudHistoryScore: undefined,
+    managementReqScore: undefined,
+    staffTurnoverScore: undefined,
+    coverageHistoryScore: undefined,
     legalRequirement: undefined,
-    lastAuditAge: undefined,
-    riskPerception: undefined,
+    lastAuditOpinion: undefined,
     finalRiskScore: undefined,
     finalRiskLevel: undefined,
     includeInPlan: false,
@@ -192,62 +204,19 @@ function StatCard({
 
 function RiskScoreDisplay({ score, level }: { score?: number; level?: string }) {
   if (!score || !level) return <span className="text-slate-400 text-xs">—</span>;
-  const pct = ((score - 1) / 3) * 100;
+  const pct = Math.min(100, score); // score is now 0-100
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-16 rounded-full bg-slate-200 overflow-hidden">
         <div
           className={cn('h-full rounded-full transition-all', RISK_LEVEL_BAR[level] ?? 'bg-slate-400')}
-          style={{ width: `${Math.min(100, pct)}%` }}
+          style={{ width: `${pct}%` }}
         />
       </div>
       <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_LEVEL_BADGE[level] ?? 'bg-gray-100 text-gray-600')}>
         {level}
       </span>
-      <span className="text-xs text-slate-500">{score.toFixed(2)}</span>
-    </div>
-  );
-}
-
-// ─── RiskRow helper ───────────────────────────────────────────────────────────
-
-function RiskRow({
-  label, weight, value, options, onChange,
-}: {
-  label: string;
-  weight: string;
-  value?: number;
-  options: { value: number; label: string }[];
-  onChange: (v: number) => void;
-}) {
-  const levelColors = ['', 'text-green-600', 'text-yellow-600', 'text-orange-600', 'text-red-600'];
-  return (
-    <div className="grid grid-cols-12 items-center gap-3 py-2 border-b border-slate-100 last:border-0">
-      <div className="col-span-6">
-        <p className="text-sm font-medium text-slate-700">{label}</p>
-        <p className="text-[11px] text-slate-400">Peso: {weight}</p>
-      </div>
-      <div className="col-span-4">
-        <select
-          value={value ?? ''}
-          onChange={e => onChange(Number(e.target.value))}
-          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">— Seleccionar —</option>
-          {options.map(o => (
-            <option key={o.value} value={o.value}>{o.value} — {o.label}</option>
-          ))}
-        </select>
-      </div>
-      <div className="col-span-2 text-center">
-        {value ? (
-          <span className={cn('text-lg font-bold', levelColors[value] ?? '')}>
-            {value}
-          </span>
-        ) : (
-          <span className="text-slate-300">—</span>
-        )}
-      </div>
+      <span className="text-xs text-slate-500">{score.toFixed(1)}</span>
     </div>
   );
 }
@@ -260,7 +229,6 @@ function ProjectsPageContent() {
   const [search, setSearch]             = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350);
     return () => clearTimeout(t);
@@ -283,10 +251,9 @@ function ProjectsPageContent() {
   const [activeTab, setActiveTab]       = useState<0 | 1 | 2>(0);
   const [saving, setSaving]             = useState(false);
   const [syncResult, setSyncResult]     = useState<{ updated: number } | null>(null);
-  // Resolución diferida de strategicObjectiveId cuando llega strategicLineId por URL
   const [pendingLineId, setPendingLineId] = useState<string | null>(null);
 
-  // ── Pre-fill from "Completar en Banco" (Candidatas al Plan) ───────────────
+  // ── Pre-fill from URL params (coming from Universe "Completar en Banco") ─────
   const searchParams = useSearchParams();
   useEffect(() => {
     const fromUnit = searchParams.get('fromUnit');
@@ -298,18 +265,22 @@ function ProjectsPageContent() {
       name:         searchParams.get('name')         ?? '',
       riskCategory: mapRiskTypeToCategory(searchParams.get('riskCategory')),
       legalBasis:   searchParams.get('legalBasis')   ?? '',
-      // riskPerception: 0-100 → 1-4 (ceil(score/25), clamped)
-      riskPerception: !isNaN(scoreRaw) && scoreRaw > 0
-        ? (Math.max(1, Math.min(4, Math.ceil(scoreRaw / 25))) as 1 | 2 | 3 | 4)
-        : undefined,
-      // legalRequirement: obligatoria → 4 (Ley obligatoria), el máximo válido
       legalRequirement: searchParams.get('isMandatory') === 'true' ? 4 : undefined,
-      // areaScore: score del universo es 0-100, mismo rango que areaScore
-      areaScore: !isNaN(scoreRaw) && scoreRaw > 0 ? Math.round(scoreRaw) : undefined,
+      // Copy all 10 scoring fields directly from URL params (passed as-is from Universe)
+      impactScore:           Number(searchParams.get('impactScore'))           || undefined,
+      likelihoodScore:       Number(searchParams.get('likelihoodScore'))       || undefined,
+      controlMaturityScore:  Number(searchParams.get('controlMaturityScore'))  || undefined,
+      materialityScore:      Number(searchParams.get('materialityScore'))      || undefined,
+      strategicAlignScore:   Number(searchParams.get('strategicAlignScore'))   || undefined,
+      operationalAlignScore: Number(searchParams.get('operationalAlignScore')) || undefined,
+      fraudHistoryScore:     Number(searchParams.get('fraudHistoryScore'))     || undefined,
+      managementReqScore:    Number(searchParams.get('managementReqScore'))    || undefined,
+      staffTurnoverScore:    Number(searchParams.get('staffTurnoverScore'))    || undefined,
+      coverageHistoryScore:  Number(searchParams.get('coverageHistoryScore'))  || undefined,
+      lastAuditOpinion:      searchParams.get('lastAuditOpinion')              ?? undefined,
       notes: `Promovido desde el Universo de Auditorías (score: ${scoreRaw > 0 ? scoreRaw.toFixed(0) : '—'})`,
     };
     setForm(prefilled);
-    // strategicLineId se resuelve en segundo efecto cuando cargan los objectives
     if (lineId) setPendingLineId(lineId);
     setEditing(null);
     setShowModal(true);
@@ -317,55 +288,54 @@ function ProjectsPageContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Resolver strategicObjectiveId desde pendingLineId cuando objectives carga ──
+  // ── Resolve strategicObjectiveId when objectives load ─────────────────────
   useEffect(() => {
     if (!pendingLineId || !objectives.length) return;
     for (const obj of objectives) {
       const line = (obj as any).lines?.find((l: { id: string }) => l.id === pendingLineId);
       if (line) {
-        setForm(prev => ({
-          ...prev,
-          strategicObjectiveId: obj.id,
-          strategicLineId: pendingLineId,
-        }));
+        setForm(prev => ({ ...prev, strategicObjectiveId: obj.id, strategicLineId: pendingLineId }));
         setPendingLineId(null);
         break;
       }
     }
   }, [pendingLineId, objectives]);
 
-  // Flattened entity list for dropdowns
   const entityList = useMemo(() => flattenTree(entityTree), [entityTree]);
 
-  // Filtered lines based on selected objective
   const filteredLines = useMemo(() => {
     if (!form.strategicObjectiveId) return [];
     const obj = objectives.find(o => o.id === form.strategicObjectiveId);
     return obj?.lines ?? [];
   }, [form.strategicObjectiveId, objectives]);
 
-  // Live risk computation — uses lastAuditAgeDynamic from editing project as fallback
+  // Live risk score — same formula as Universe
   const liveRisk = useMemo(() => computeRiskScore({
-    areaScore:           form.areaScore,
-    strategicImpact:     form.strategicImpact,
-    operationalImpact:   form.operationalImpact,
-    legalRequirement:    form.legalRequirement,
-    lastAuditAge:        form.lastAuditAge,
-    lastAuditAgeDynamic: editing?.lastAuditAgeDynamic,
-    riskPerception:      form.riskPerception,
-  }), [form.areaScore, form.strategicImpact, form.operationalImpact, form.legalRequirement, form.lastAuditAge, editing?.lastAuditAgeDynamic, form.riskPerception]);
+    impactScore:           form.impactScore,
+    likelihoodScore:       form.likelihoodScore,
+    controlMaturityScore:  form.controlMaturityScore,
+    materialityScore:      form.materialityScore,
+    strategicAlignScore:   form.strategicAlignScore,
+    operationalAlignScore: form.operationalAlignScore,
+    fraudHistoryScore:     form.fraudHistoryScore,
+    managementReqScore:    form.managementReqScore,
+    staffTurnoverScore:    form.staffTurnoverScore,
+    coverageHistoryScore:  form.coverageHistoryScore,
+  }), [
+    form.impactScore, form.likelihoodScore, form.controlMaturityScore,
+    form.materialityScore, form.strategicAlignScore, form.operationalAlignScore,
+    form.fraudHistoryScore, form.managementReqScore, form.staffTurnoverScore,
+    form.coverageHistoryScore,
+  ]);
 
-  // Budget calculation from teamJson
   const teamJson = (form.teamJson ?? DEFAULT_TEAM.map(r => ({ ...r }))) as AuditProjectTeamMember[];
   const totalBudget = teamJson.reduce((s, r) => s + r.count * r.costPerHour * r.hours, 0);
 
-  // ── Cargar datos desde una candidata del Universo ─────────────────────────
+  // ── Load from Universe candidate (dropdown in the modal) ─────────────────
   function handleLoadFromCandidate(unitId: string) {
     const u = candidatesResult?.candidates.find(c => c.id === unitId);
     if (!u) return;
     const score = u.totalScore ?? 0;
-
-    // Resolver strategic objective
     let resolvedObjectiveId = '';
     if (u.strategicLineId) {
       for (const obj of objectives) {
@@ -375,7 +345,7 @@ function ProjectsPageContent() {
         }
       }
     }
-
+    const assess = u.assessment ?? u.assessments?.[0];
     setForm(prev => ({
       ...prev,
       name:                 u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`,
@@ -383,9 +353,19 @@ function ProjectsPageContent() {
       legalBasis:           u.mandatoryBasis ?? prev.legalBasis ?? '',
       strategicObjectiveId: resolvedObjectiveId,
       strategicLineId:      u.strategicLineId ?? '',
-      areaScore:            Math.round(score),
       legalRequirement:     u.isMandatory ? 4 : prev.legalRequirement,
-      riskPerception:       Math.max(1, Math.min(4, Math.ceil(score / 25))) as 1 | 2 | 3 | 4,
+      // Direct copy of all 10 scoring fields from Universe assessment
+      impactScore:           assess?.impactScore           ?? prev.impactScore,
+      likelihoodScore:       assess?.likelihoodScore       ?? prev.likelihoodScore,
+      controlMaturityScore:  assess?.controlMaturityScore  ?? prev.controlMaturityScore,
+      materialityScore:      assess?.materialityScore      ?? prev.materialityScore,
+      strategicAlignScore:   assess?.strategicAlignScore   ?? prev.strategicAlignScore,
+      operationalAlignScore: assess?.operationalAlignScore ?? prev.operationalAlignScore,
+      fraudHistoryScore:     assess?.fraudHistoryScore     ?? prev.fraudHistoryScore,
+      managementReqScore:    assess?.managementReqScore    ?? prev.managementReqScore,
+      staffTurnoverScore:    assess?.staffTurnoverScore    ?? prev.staffTurnoverScore,
+      coverageHistoryScore:  assess?.coverageHistoryScore  ?? prev.coverageHistoryScore,
+      lastAuditOpinion:      assess?.lastAuditOpinion      ?? prev.lastAuditOpinion,
       notes: `Promovido desde el Universo de Auditorías (score: ${score.toFixed(0)})${u.isMandatory ? ' · OBLIGATORIA' : ''}`,
     }));
   }
@@ -455,8 +435,13 @@ function ProjectsPageContent() {
     await updateProject.mutateAsync({ id: p.id, data: { includeInPlan: !p.includeInPlan } });
   }
 
-  // Year tabs from stats
   const years = stats?.years ?? [];
+
+  // Grupo A inherent/residual preview
+  const inherent = (form.impactScore ?? 0) * (form.likelihoodScore ?? 0);
+  const residual  = form.controlMaturityScore
+    ? inherent * (1 - form.controlMaturityScore / 5)
+    : 0;
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">
@@ -465,92 +450,42 @@ function ProjectsPageContent() {
       {/* ── Banner ── */}
       <div className="bg-gradient-to-r from-[#0F2D4A] to-[#1a4a7a] px-6 py-5">
         <div className="flex flex-wrap gap-3">
-          <StatCard
-            label="Total Proyectos"
-            value={stats?.total ?? 0}
-            icon={ClipboardList}
-            color="bg-blue-500"
-          />
-          <StatCard
-            label="En Plan Anual"
-            value={stats?.inPlan ?? 0}
-            icon={CheckCircle2}
-            color="bg-emerald-500"
-          />
-          <StatCard
-            label="Riesgo Crítico"
-            value={stats?.critico ?? 0}
-            icon={BarChart3}
-            color="bg-red-500"
-          />
-          <StatCard
-            label="Riesgo Alto"
-            value={stats?.alto ?? 0}
-            icon={BarChart3}
-            color="bg-orange-500"
-          />
-          <StatCard
-            label="Presupuesto Total"
-            value={`$${((stats?.totalBudget ?? 0) / 1000).toFixed(1)}K`}
-            icon={DollarSign}
-            color="bg-violet-500"
-          />
-          <StatCard
-            label="Con Entidad Asignada"
-            value={stats?.withEntity ?? 0}
-            icon={Zap}
-            color="bg-teal-500"
-          />
+          <StatCard label="Total Proyectos"      value={stats?.total ?? 0}       icon={ClipboardList}  color="bg-blue-500"   />
+          <StatCard label="En Plan Anual"        value={stats?.inPlan ?? 0}      icon={CheckCircle2}   color="bg-emerald-500"/>
+          <StatCard label="Riesgo Crítico"       value={stats?.critico ?? 0}     icon={BarChart3}      color="bg-red-500"    />
+          <StatCard label="Riesgo Alto"          value={stats?.alto ?? 0}        icon={BarChart3}      color="bg-orange-500" />
+          <StatCard label="Presupuesto Total"    value={`$${((stats?.totalBudget ?? 0) / 1000).toFixed(1)}K`} icon={DollarSign} color="bg-violet-500"/>
+          <StatCard label="Con Entidad Asignada" value={stats?.withEntity ?? 0}  icon={Zap}            color="bg-teal-500"   />
         </div>
       </div>
 
       {/* ── Toolbar ── */}
       <div className="border-b border-slate-200 bg-white px-6 py-3">
         <div className="flex flex-wrap items-center gap-3">
-          {/* Year tabs */}
           <div className="flex items-center gap-1">
             <button
               onClick={() => setYearFilter(undefined)}
-              className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                !yearFilter ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-              )}
-            >
-              Todos
-            </button>
+              className={cn('rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                !yearFilter ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}
+            >Todos</button>
             {years.map(y => (
-              <button
-                key={y}
-                onClick={() => setYearFilter(y)}
-                className={cn(
-                  'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                  yearFilter === y ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-                )}
-              >
-                {y}
-              </button>
+              <button key={y} onClick={() => setYearFilter(y)}
+                className={cn('rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                  yearFilter === y ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}
+              >{y}</button>
             ))}
           </div>
-
           <div className="h-5 w-px bg-slate-200" />
-
-          {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
-              type="text"
-              placeholder="Buscar proyecto..."
-              value={search}
+              type="text" placeholder="Buscar proyecto..." value={search}
               onChange={e => setSearch(e.target.value)}
               className="h-8 rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
             />
           </div>
-
-          {/* Risk filter */}
           <div className="relative">
-            <select
-              value={riskFilter}
-              onChange={e => setRiskFilter(e.target.value)}
+            <select value={riskFilter} onChange={e => setRiskFilter(e.target.value)}
               className="h-8 appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-3 pr-7 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Todos los niveles</option>
@@ -561,7 +496,6 @@ function ProjectsPageContent() {
             </select>
             <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
           </div>
-
           <div className="ml-auto flex items-center gap-2">
             {syncResult && (
               <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
@@ -572,12 +506,9 @@ function ProjectsPageContent() {
               onClick={handleSyncCoverage}
               disabled={syncCoverage.isPending}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-              title="Actualiza la variable 'Antigüedad última auditoría' en todos los proyectos usando el historial real de auditorías cerradas"
+              title="Actualiza la variable 'Historial de Cobertura' en todos los proyectos usando el historial real de auditorías cerradas"
             >
-              {syncCoverage.isPending
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : <RefreshCw className="h-3.5 w-3.5" />
-              }
+              {syncCoverage.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               Sincronizar Cobertura
             </button>
             <button
@@ -621,30 +552,20 @@ function ProjectsPageContent() {
                 {projects.map((p) => {
                   const cat = RISK_CATEGORIES.find(c => c.value === p.riskCategory);
                   return (
-                    <tr
-                      key={p.id}
-                      className="cursor-pointer hover:bg-blue-50/30 transition-colors"
-                      onClick={() => openEdit(p)}
-                    >
+                    <tr key={p.id} className="cursor-pointer hover:bg-blue-50/30 transition-colors" onClick={() => openEdit(p)}>
                       <td className="px-4 py-3 font-mono text-xs text-slate-500">{p.correlative}</td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-slate-800">{p.name}</p>
                         <p className="text-[11px] text-slate-400">Plan {p.planYear}</p>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
-                        {p.strategicObjective ? (
-                          <span>{p.strategicObjective.code}</span>
-                        ) : null}
-                        {p.strategicLine ? (
-                          <span className="block text-slate-400">{p.strategicLine.code}</span>
-                        ) : null}
+                        {p.strategicObjective ? <span>{p.strategicObjective.code}</span> : null}
+                        {p.strategicLine ? <span className="block text-slate-400">{p.strategicLine.code}</span> : null}
                         {!p.strategicObjective && !p.strategicLine && <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
                         <p className="font-medium">{p.responsibleEntity?.name ?? <span className="text-slate-300">—</span>}</p>
-                        {p.responsibleEntity && (
-                          <CoverageGapBadge days={p.coverageGapDays} />
-                        )}
+                        {p.responsibleEntity && <CoverageGapBadge days={p.coverageGapDays} />}
                       </td>
                       <td className="px-4 py-3">
                         {cat ? (
@@ -659,23 +580,14 @@ function ProjectsPageContent() {
                       <td className="px-4 py-3 text-center" onClick={e => { e.stopPropagation(); handleTogglePlan(p); }}>
                         {p.includeInPlan
                           ? <CheckCircle2 className="mx-auto h-5 w-5 text-emerald-500" />
-                          : <Circle className="mx-auto h-5 w-5 text-slate-300" />
-                        }
+                          : <Circle className="mx-auto h-5 w-5 text-slate-300" />}
                       </td>
                       <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
-                          <button
-                            onClick={() => openEdit(p)}
-                            className="rounded p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                            title="Editar"
-                          >
+                          <button onClick={() => openEdit(p)} className="rounded p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Editar">
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
-                          <button
-                            onClick={() => handleDelete(p.id)}
-                            className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                            title="Eliminar"
-                          >
+                          <button onClick={() => handleDelete(p.id)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Eliminar">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -708,11 +620,11 @@ function ProjectsPageContent() {
               </button>
             </div>
 
-            {/* Banner: promovido desde Universo */}
+            {/* Banner: promoted from Universe */}
             {!editing && form.notes?.startsWith('Promovido desde el Universo') && (
               <div className="mx-6 mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-800">
                 <Zap className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
-                <span><strong>Pre-llenado desde Candidatas al Plan.</strong> Revisa y completa los campos restantes — especialmente el equipo en la pestaña "Planificación".</span>
+                <span><strong>Pre-llenado desde Candidatas al Plan.</strong> Los campos de riesgo del Universo fueron copiados directamente. Revisa y completa el equipo en "Planificación".</span>
               </div>
             )}
 
@@ -724,24 +636,20 @@ function ProjectsPageContent() {
                   onClick={() => setActiveTab(i as 0 | 1 | 2)}
                   className={cn(
                     'border-b-2 px-4 py-3 text-sm font-medium transition-colors',
-                    activeTab === i
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-700',
+                    activeTab === i ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700',
                   )}
-                >
-                  {tab}
-                </button>
+                >{tab}</button>
               ))}
             </div>
 
             {/* Modal body */}
-            <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
+            <div className="max-h-[65vh] overflow-y-auto px-6 py-5">
 
               {/* ── Tab 0: Identificación ── */}
               {activeTab === 0 && (
                 <div className="space-y-4">
 
-                  {/* Selector desde Universo — solo en modo crear */}
+                  {/* Load from Universe */}
                   {!editing && (candidatesResult?.candidates.length ?? 0) > 0 && (
                     <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
                       <label className="mb-1.5 block text-xs font-semibold text-indigo-700">
@@ -754,38 +662,32 @@ function ProjectsPageContent() {
                       >
                         <option value="" disabled>— Selecciona una candidata para auto-llenar todos los campos —</option>
                         <optgroup label="⚖️ Obligatorias (Mandato Legal)">
-                          {candidatesResult?.candidates
-                            .filter(u => u.isMandatory)
-                            .map(u => (
-                              <option key={u.id} value={u.id}>
-                                {u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`}
-                                {u.totalScore ? ` [score ${u.totalScore.toFixed(0)}]` : ''}
-                              </option>
-                            ))}
+                          {candidatesResult?.candidates.filter(u => u.isMandatory).map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`}
+                              {u.totalScore ? ` [score ${u.totalScore.toFixed(0)}]` : ''}
+                            </option>
+                          ))}
                         </optgroup>
                         <optgroup label="🔴 Alta Prioridad (score ≥ 55)">
-                          {candidatesResult?.candidates
-                            .filter(u => !u.isMandatory && (u.totalScore ?? 0) >= 55)
-                            .map(u => (
-                              <option key={u.id} value={u.id}>
-                                {u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`}
-                                {u.totalScore ? ` [score ${u.totalScore.toFixed(0)}]` : ''}
-                              </option>
-                            ))}
+                          {candidatesResult?.candidates.filter(u => !u.isMandatory && (u.totalScore ?? 0) >= 55).map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`}
+                              {u.totalScore ? ` [score ${u.totalScore.toFixed(0)}]` : ''}
+                            </option>
+                          ))}
                         </optgroup>
                         <optgroup label="🟡 Otras evaluadas">
-                          {candidatesResult?.candidates
-                            .filter(u => !u.isMandatory && (u.totalScore ?? 0) < 55)
-                            .map(u => (
-                              <option key={u.id} value={u.id}>
-                                {u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`}
-                                {u.totalScore ? ` [score ${u.totalScore.toFixed(0)}]` : ''}
-                              </option>
-                            ))}
+                          {candidatesResult?.candidates.filter(u => !u.isMandatory && (u.totalScore ?? 0) < 55).map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`}
+                              {u.totalScore ? ` [score ${u.totalScore.toFixed(0)}]` : ''}
+                            </option>
+                          ))}
                         </optgroup>
                       </select>
                       <p className="mt-1 text-[11px] text-indigo-500">
-                        Al seleccionar se completan: nombre, categoría de riesgo, base legal, línea estratégica y score de área.
+                        Al seleccionar se copian todos los campos de riesgo evaluados en el Universo.
                       </p>
                     </div>
                   )}
@@ -793,45 +695,28 @@ function ProjectsPageContent() {
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="label-sm">Correlativo *</label>
-                      <input
-                        className="input-sm"
-                        placeholder="BAP-001"
-                        value={form.correlative ?? ''}
-                        onChange={e => setField('correlative', e.target.value)}
-                      />
+                      <input className="input-sm" placeholder="BAP-001"
+                        value={form.correlative ?? ''} onChange={e => setField('correlative', e.target.value)} />
                     </div>
                     <div className="col-span-2">
                       <label className="label-sm">Nombre del Proyecto *</label>
-                      <input
-                        className="input-sm"
-                        placeholder="Auditoría de..."
-                        value={form.name ?? ''}
-                        onChange={e => setField('name', e.target.value)}
-                      />
+                      <input className="input-sm" placeholder="Auditoría de..."
+                        value={form.name ?? ''} onChange={e => setField('name', e.target.value)} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="label-sm">Año del Plan</label>
-                      <input
-                        type="number"
-                        className="input-sm"
+                      <input type="number" className="input-sm"
                         value={form.planYear ?? new Date().getFullYear()}
-                        onChange={e => setField('planYear', Number(e.target.value))}
-                      />
+                        onChange={e => setField('planYear', Number(e.target.value))} />
                     </div>
                     <div>
                       <label className="label-sm">Categoría de Riesgo</label>
-                      <select
-                        className="input-sm"
-                        value={form.riskCategory ?? ''}
-                        onChange={e => setField('riskCategory', e.target.value)}
-                      >
+                      <select className="input-sm" value={form.riskCategory ?? ''} onChange={e => setField('riskCategory', e.target.value)}>
                         <option value="">— Seleccionar —</option>
-                        {RISK_CATEGORIES.map(c => (
-                          <option key={c.value} value={c.value}>{c.label}</option>
-                        ))}
+                        {RISK_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                       </select>
                     </div>
                   </div>
@@ -839,32 +724,19 @@ function ProjectsPageContent() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="label-sm">Objetivo Estratégico</label>
-                      <select
-                        className="input-sm"
-                        value={form.strategicObjectiveId ?? ''}
-                        onChange={e => {
-                          setField('strategicObjectiveId', e.target.value);
-                          setField('strategicLineId', '');
-                        }}
-                      >
+                      <select className="input-sm" value={form.strategicObjectiveId ?? ''}
+                        onChange={e => { setField('strategicObjectiveId', e.target.value); setField('strategicLineId', ''); }}>
                         <option value="">— Ninguno —</option>
-                        {objectives.map(o => (
-                          <option key={o.id} value={o.id}>{o.icon} {o.code} — {o.name}</option>
-                        ))}
+                        {objectives.map(o => <option key={o.id} value={o.id}>{o.icon} {o.code} — {o.name}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="label-sm">Línea Estratégica</label>
-                      <select
-                        className="input-sm"
-                        value={form.strategicLineId ?? ''}
+                      <select className="input-sm" value={form.strategicLineId ?? ''}
                         onChange={e => setField('strategicLineId', e.target.value)}
-                        disabled={!form.strategicObjectiveId}
-                      >
+                        disabled={!form.strategicObjectiveId}>
                         <option value="">— Ninguna —</option>
-                        {filteredLines.map(l => (
-                          <option key={l.id} value={l.id}>{l.code} — {l.name}</option>
-                        ))}
+                        {filteredLines.map(l => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
                       </select>
                     </div>
                   </div>
@@ -872,168 +744,173 @@ function ProjectsPageContent() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="label-sm">Área Responsable</label>
-                      <select
-                        className="input-sm"
-                        value={form.responsibleEntityId ?? ''}
-                        onChange={e => setField('responsibleEntityId', e.target.value)}
-                      >
+                      <select className="input-sm" value={form.responsibleEntityId ?? ''} onChange={e => setField('responsibleEntityId', e.target.value)}>
                         <option value="">— Ninguna —</option>
-                        {entityList.map(e => (
-                          <option key={e.id} value={e.id}>{e.label}</option>
-                        ))}
+                        {entityList.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="label-sm">Área de Apoyo</label>
-                      <select
-                        className="input-sm"
-                        value={form.supportEntityId ?? ''}
-                        onChange={e => setField('supportEntityId', e.target.value)}
-                      >
+                      <select className="input-sm" value={form.supportEntityId ?? ''} onChange={e => setField('supportEntityId', e.target.value)}>
                         <option value="">— Ninguna —</option>
-                        {entityList.map(e => (
-                          <option key={e.id} value={e.id}>{e.label}</option>
-                        ))}
+                        {entityList.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}
                       </select>
                     </div>
                   </div>
 
                   <div>
                     <label className="label-sm">Notas / Alcance</label>
-                    <textarea
-                      rows={3}
-                      className="input-sm resize-none"
+                    <textarea rows={3} className="input-sm resize-none"
                       placeholder="Descripción del alcance, antecedentes..."
-                      value={form.notes ?? ''}
-                      onChange={e => setField('notes', e.target.value)}
-                    />
+                      value={form.notes ?? ''} onChange={e => setField('notes', e.target.value)} />
                   </div>
                 </div>
               )}
 
               {/* ── Tab 1: Riesgo ── */}
               {activeTab === 1 && (
-                <div className="space-y-4">
-                  {/* Area score special input */}
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-700">Score del Área (0–100)</p>
-                        <p className="text-xs text-slate-400">Peso: 25% — Se mapea automáticamente a escala 1–4</p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-2xl font-bold text-blue-600">{form.areaScore ?? '—'}</span>
-                        {form.areaScore != null && (
-                          <span className="ml-2 text-sm text-slate-500">
-                            → {form.areaScore >= 75 ? 4 : form.areaScore >= 55 ? 3 : form.areaScore >= 35 ? 2 : 1}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={form.areaScore ?? 0}
-                      onChange={e => setField('areaScore', Number(e.target.value))}
-                      className="w-full accent-blue-600"
-                    />
-                    <div className="mt-1 flex justify-between text-[10px] text-slate-400">
-                      <span>0 → Nivel 1</span>
-                      <span>35 → Nivel 2</span>
-                      <span>55 → Nivel 3</span>
-                      <span>75 → Nivel 4</span>
+                <div className="space-y-5">
+
+                  {/* ── Grupo A ── */}
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
+                      Grupo A — Riesgo Residual (peso 30%)
+                    </h3>
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-4">
+                      <ScoreSlider
+                        label="Impacto"
+                        hint="Magnitud del daño si ocurre el riesgo"
+                        value={form.impactScore}
+                        onChange={v => setField('impactScore', v)}
+                      />
+                      <ScoreSlider
+                        label="Probabilidad"
+                        hint="Frecuencia estimada de ocurrencia"
+                        value={form.likelihoodScore}
+                        onChange={v => setField('likelihoodScore', v)}
+                      />
+                      <ScoreSlider
+                        label="Madurez de Controles"
+                        hint="Calidad de los controles existentes"
+                        value={form.controlMaturityScore}
+                        onChange={v => setField('controlMaturityScore', v)}
+                        labelMap={MATURITY_LABELS}
+                      />
+                      {/* Inherent / Residual preview */}
+                      {(form.impactScore && form.likelihoodScore) ? (
+                        <div className="grid grid-cols-3 gap-3 text-xs text-slate-600 bg-slate-50 rounded p-3">
+                          <div><span className="text-slate-400">Riesgo Inherente:</span><br /><strong>{inherent.toFixed(1)}/25</strong></div>
+                          <div><span className="text-slate-400">Riesgo Residual:</span><br /><strong>{residual.toFixed(1)}/25</strong></div>
+                          <div><span className="text-slate-400">Normalizado:</span><br /><strong>{((residual / 25) * 100).toFixed(1)}/100</strong></div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-slate-200 bg-white p-4">
-                    <RiskRow
-                      label="Impacto Plan Estratégico"
-                      weight="20%"
-                      value={form.strategicImpact}
-                      options={STRATEGIC_IMPACT_OPTS}
-                      onChange={v => setField('strategicImpact', v)}
-                    />
-                    <RiskRow
-                      label="Impacto Plan Operativo"
-                      weight="15%"
-                      value={form.operationalImpact}
-                      options={OPERATIONAL_IMPACT_OPTS}
-                      onChange={v => setField('operationalImpact', v)}
-                    />
-                    <RiskRow
-                      label="Requerimiento Legal"
-                      weight="20%"
-                      value={form.legalRequirement}
-                      options={LEGAL_REQUIREMENT_OPTS}
-                      onChange={v => setField('legalRequirement', v)}
-                    />
-                    {/* Antigüedad — enhanced with dynamic coverage hint */}
-                    <div className="py-2 border-b border-slate-100">
-                      <div className="grid grid-cols-12 items-center gap-3">
-                        <div className="col-span-6">
-                          <p className="text-sm font-medium text-slate-700">Antigüedad Última Auditoría</p>
-                          <p className="text-[11px] text-slate-400">Peso: 10%</p>
-                        </div>
-                        <div className="col-span-4">
-                          <select
-                            value={form.lastAuditAge ?? ''}
-                            onChange={e => setField('lastAuditAge', Number(e.target.value) || undefined)}
-                            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">— Manual —</option>
-                            {LAST_AUDIT_AGE_OPTS.map(o => (
+                  {/* ── Grupo B ── */}
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
+                      Grupo B — Factores Contextuales (peso 70%)
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mb-3">
+                      Materialidad 20% · Alin.PE 20% · Alin.PO 15% · Fraude 15% · Dirección 10% · Rotación 10% · Cobertura 10%
+                    </p>
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-4">
+                      <ScoreSlider
+                        label="Materialidad Financiera (20%)"
+                        hint="Tamaño del presupuesto / volumen de transacciones del área"
+                        value={form.materialityScore}
+                        onChange={v => setField('materialityScore', v)}
+                      />
+                      <ScoreSlider
+                        label="Alineación al Plan Estratégico (20%)"
+                        hint="¿Esta área es crítica para los objetivos estratégicos?"
+                        value={form.strategicAlignScore}
+                        onChange={v => setField('strategicAlignScore', v)}
+                      />
+                      <ScoreSlider
+                        label="Alineación al Plan Operativo (15%)"
+                        hint="¿Qué tan relevante es para la operación diaria?"
+                        value={form.operationalAlignScore}
+                        onChange={v => setField('operationalAlignScore', v)}
+                      />
+                      <ScoreSlider
+                        label="Antecedentes de Fraude / Denuncias (15%)"
+                        hint="Historial de fraudes, investigaciones o alertas de ética"
+                        value={form.fraudHistoryScore}
+                        onChange={v => setField('fraudHistoryScore', v)}
+                      />
+                      <ScoreSlider
+                        label="Solicitud de la Dirección (10%)"
+                        hint="¿La gerencia o junta ha pedido expresamente esta auditoría?"
+                        value={form.managementReqScore}
+                        onChange={v => setField('managementReqScore', v)}
+                      />
+                      <ScoreSlider
+                        label="Rotación de Personal (10%)"
+                        hint="Cambios recientes de personal clave, nueva gerencia, M&A, restructuración"
+                        value={form.staffTurnoverScore}
+                        onChange={v => setField('staffTurnoverScore', v)}
+                      />
+                      <div>
+                        <ScoreSlider
+                          label="Historial de Cobertura (10%)"
+                          hint="Tiempo transcurrido desde la última auditoría respecto a la frecuencia recomendada"
+                          value={form.coverageHistoryScore}
+                          onChange={v => setField('coverageHistoryScore', v)}
+                        />
+                        {/* Coverage hint from real audit history */}
+                        {editing?.lastAuditAgeDynamic != null && (
+                          <div className="mt-2 flex items-center justify-between rounded-lg bg-teal-50 border border-teal-200 px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Zap className="h-3.5 w-3.5 text-teal-600" />
+                              <span className="text-xs text-teal-700 font-medium">
+                                Historial real: banda {editing.lastAuditAgeDynamic}
+                              </span>
+                              {editing.coverageGapDays != null && (
+                                <span className={cn('text-[11px]', formatCoverageGap(editing.coverageGapDays).color)}>
+                                  · {formatCoverageGap(editing.coverageGapDays).label}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Campos adicionales del proyecto ── */}
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
+                      Campos Adicionales del Proyecto
+                    </h3>
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="label-sm">Requerimiento Legal / Normativo</label>
+                          <select className="input-sm" value={form.legalRequirement ?? ''}
+                            onChange={e => setField('legalRequirement', Number(e.target.value) || undefined)}>
+                            <option value="">— Seleccionar —</option>
+                            {LEGAL_REQUIREMENT_OPTS.map(o => (
                               <option key={o.value} value={o.value}>{o.value} — {o.label}</option>
                             ))}
                           </select>
                         </div>
-                        <div className="col-span-2 text-center">
-                          {(form.lastAuditAge ?? editing?.lastAuditAgeDynamic) ? (
-                            <span className={cn('text-lg font-bold', ['', 'text-green-600', 'text-yellow-600', 'text-orange-600', 'text-red-600'][form.lastAuditAge ?? editing?.lastAuditAgeDynamic ?? 0] ?? '')}>
-                              {form.lastAuditAge ?? editing?.lastAuditAgeDynamic}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
+                        <div>
+                          <label className="label-sm">Opinión Última Auditoría</label>
+                          <select className="input-sm" value={form.lastAuditOpinion ?? ''}
+                            onChange={e => setField('lastAuditOpinion', e.target.value || undefined)}>
+                            <option value="">— Sin calificación —</option>
+                            {OPINION_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
                         </div>
                       </div>
-                      {editing?.lastAuditAgeDynamic != null && (
-                        <div className="mt-2 flex items-center justify-between rounded-lg bg-teal-50 border border-teal-200 px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <Zap className="h-3.5 w-3.5 text-teal-600" />
-                            <span className="text-xs text-teal-700 font-medium">
-                              Historial real: nivel {editing.lastAuditAgeDynamic}
-                              {' '}({LAST_AUDIT_AGE_OPTS.find(o => o.value === editing.lastAuditAgeDynamic)?.label})
-                            </span>
-                            {editing.coverageGapDays != null && (
-                              <span className={cn('text-[11px]', formatCoverageGap(editing.coverageGapDays).color)}>
-                                · {formatCoverageGap(editing.coverageGapDays).label}
-                              </span>
-                            )}
-                          </div>
-                          {form.lastAuditAge !== editing.lastAuditAgeDynamic && (
-                            <button
-                              type="button"
-                              onClick={() => setField('lastAuditAge', editing.lastAuditAgeDynamic!)}
-                              className="text-[11px] font-semibold text-teal-700 hover:underline"
-                            >
-                              Usar este valor →
-                            </button>
-                          )}
-                        </div>
-                      )}
                     </div>
-                    <RiskRow
-                      label="Percepción del Riesgo Auditor"
-                      weight="10%"
-                      value={form.riskPerception}
-                      options={RISK_PERCEPTION_OPTS}
-                      onChange={v => setField('riskPerception', v)}
-                    />
                   </div>
 
-                  {/* Live result */}
+                  {/* ── Live Risk Score ── */}
                   <div className={cn(
                     'rounded-xl border-2 p-4 transition-all',
                     liveRisk
@@ -1048,11 +925,11 @@ function ProjectsPageContent() {
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Puntaje de Riesgo Calculado</p>
                         {liveRisk ? (
                           <>
-                            <p className="text-3xl font-bold text-slate-800">{liveRisk.score.toFixed(2)}</p>
-                            <p className="text-xs text-slate-500">escala 1.0 – 4.0</p>
+                            <p className="text-3xl font-bold text-slate-800">{liveRisk.score.toFixed(1)}</p>
+                            <p className="text-xs text-slate-500">escala 0 – 100</p>
                           </>
                         ) : (
-                          <p className="text-sm text-slate-400 mt-1">Complete todas las variables para ver el resultado</p>
+                          <p className="text-sm text-slate-400 mt-1">Complete los 10 factores para ver el resultado</p>
                         )}
                       </div>
                       {liveRisk && (
@@ -1065,7 +942,7 @@ function ProjectsPageContent() {
                       <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-white/60">
                         <div
                           className={cn('h-full rounded-full transition-all duration-500', RISK_LEVEL_BAR[liveRisk.level])}
-                          style={{ width: `${((liveRisk.score - 1) / 3) * 100}%` }}
+                          style={{ width: `${liveRisk.score}%` }}
                         />
                       </div>
                     )}
@@ -1103,22 +980,13 @@ function ProjectsPageContent() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="label-sm">Base Legal / Normativa</label>
-                      <input
-                        className="input-sm"
-                        placeholder="Ley, reglamento, norma..."
-                        value={form.legalBasis ?? ''}
-                        onChange={e => setField('legalBasis', e.target.value)}
-                      />
+                      <input className="input-sm" placeholder="Ley, reglamento, norma..."
+                        value={form.legalBasis ?? ''} onChange={e => setField('legalBasis', e.target.value)} />
                     </div>
                     <div>
                       <label className="label-sm">Horas Programadas</label>
-                      <input
-                        type="number"
-                        className="input-sm"
-                        placeholder="0"
-                        value={form.plannedHours ?? ''}
-                        onChange={e => setField('plannedHours', Number(e.target.value))}
-                      />
+                      <input type="number" className="input-sm" placeholder="0"
+                        value={form.plannedHours ?? ''} onChange={e => setField('plannedHours', Number(e.target.value))} />
                     </div>
                   </div>
 
@@ -1126,23 +994,16 @@ function ProjectsPageContent() {
                     <label className="label-sm">Frecuencia por Año</label>
                     <div className="flex gap-2 mt-1">
                       {[1, 2, 3].map(f => (
-                        <button
-                          key={f}
-                          onClick={() => setField('frequencyPerYear', f)}
-                          className={cn(
-                            'rounded-lg border px-5 py-2 text-sm font-medium transition-colors',
+                        <button key={f} onClick={() => setField('frequencyPerYear', f)}
+                          className={cn('rounded-lg border px-5 py-2 text-sm font-medium transition-colors',
                             form.frequencyPerYear === f
                               ? 'border-blue-600 bg-blue-600 text-white'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300',
-                          )}
-                        >
-                          {f}x
-                        </button>
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300')}
+                        >{f}x</button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Team table */}
                   <div>
                     <div className="mb-2 flex items-center gap-2">
                       <Users className="h-4 w-4 text-slate-500" />
@@ -1166,32 +1027,16 @@ function ProjectsPageContent() {
                               <tr key={row.role}>
                                 <td className="px-3 py-2 text-slate-700 font-medium">{row.role}</td>
                                 <td className="px-3 py-2">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    className="w-full text-center rounded border border-slate-200 px-1 py-1 text-sm"
-                                    value={row.count}
-                                    onChange={e => setTeamRow(idx, 'count', Number(e.target.value))}
-                                  />
+                                  <input type="number" min={0} className="w-full text-center rounded border border-slate-200 px-1 py-1 text-sm"
+                                    value={row.count} onChange={e => setTeamRow(idx, 'count', Number(e.target.value))} />
                                 </td>
                                 <td className="px-3 py-2">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step={0.01}
-                                    className="w-full text-center rounded border border-slate-200 px-1 py-1 text-sm"
-                                    value={row.costPerHour}
-                                    onChange={e => setTeamRow(idx, 'costPerHour', Number(e.target.value))}
-                                  />
+                                  <input type="number" min={0} step={0.01} className="w-full text-center rounded border border-slate-200 px-1 py-1 text-sm"
+                                    value={row.costPerHour} onChange={e => setTeamRow(idx, 'costPerHour', Number(e.target.value))} />
                                 </td>
                                 <td className="px-3 py-2">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    className="w-full text-center rounded border border-slate-200 px-1 py-1 text-sm"
-                                    value={row.hours}
-                                    onChange={e => setTeamRow(idx, 'hours', Number(e.target.value))}
-                                  />
+                                  <input type="number" min={0} className="w-full text-center rounded border border-slate-200 px-1 py-1 text-sm"
+                                    value={row.hours} onChange={e => setTeamRow(idx, 'hours', Number(e.target.value))} />
                                 </td>
                                 <td className="px-3 py-2 text-right font-medium text-slate-700">
                                   ${rowTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1202,9 +1047,7 @@ function ProjectsPageContent() {
                         </tbody>
                         <tfoot className="bg-slate-50">
                           <tr>
-                            <td colSpan={4} className="px-3 py-2 text-right text-sm font-semibold text-slate-700">
-                              Presupuesto Total
-                            </td>
+                            <td colSpan={4} className="px-3 py-2 text-right text-sm font-semibold text-slate-700">Presupuesto Total</td>
                             <td className="px-3 py-2 text-right text-base font-bold text-blue-700">
                               ${totalBudget.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
@@ -1212,12 +1055,9 @@ function ProjectsPageContent() {
                         </tfoot>
                       </table>
                     </div>
-                    <p className="mt-2 text-xs text-slate-400">
-                      Presupuesto = Cantidad × Costo/hora × Horas asignadas por rol
-                    </p>
+                    <p className="mt-2 text-xs text-slate-400">Presupuesto = Cantidad × Costo/hora × Horas asignadas por rol</p>
                   </div>
 
-                  {/* Budget summary */}
                   <div className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 p-4 text-white">
                     <p className="text-xs font-medium opacity-80">Presupuesto Total del Proyecto</p>
                     <p className="text-3xl font-bold mt-1">
@@ -1238,29 +1078,17 @@ function ProjectsPageContent() {
             <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
               <div className="flex gap-2">
                 {activeTab > 0 && (
-                  <button
-                    onClick={() => setActiveTab((activeTab - 1) as 0 | 1 | 2)}
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-                  >
-                    Anterior
-                  </button>
+                  <button onClick={() => setActiveTab((activeTab - 1) as 0 | 1 | 2)}
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">Anterior</button>
                 )}
                 {activeTab < 2 && (
-                  <button
-                    onClick={() => setActiveTab((activeTab + 1) as 0 | 1 | 2)}
-                    className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100"
-                  >
-                    Siguiente
-                  </button>
+                  <button onClick={() => setActiveTab((activeTab + 1) as 0 | 1 | 2)}
+                    className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100">Siguiente</button>
                 )}
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
+                <button onClick={() => setShowModal(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancelar</button>
                 <button
                   onClick={handleSave}
                   disabled={saving || !form.name || !form.correlative}
@@ -1275,35 +1103,12 @@ function ProjectsPageContent() {
         </div>
       )}
 
-      {/* ── Global styles for inputs ── */}
+      {/* ── Global styles ── */}
       <style jsx global>{`
-        .label-sm {
-          display: block;
-          margin-bottom: 4px;
-          font-size: 12px;
-          font-weight: 500;
-          color: #64748b;
-        }
-        .input-sm {
-          width: 100%;
-          border-radius: 8px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          padding: 6px 10px;
-          font-size: 13px;
-          color: #1e293b;
-          outline: none;
-          transition: box-shadow 0.15s;
-        }
-        .input-sm:focus {
-          box-shadow: 0 0 0 2px #3b82f6;
-          border-color: #3b82f6;
-          background: white;
-        }
-        .input-sm:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
+        .label-sm { display:block; margin-bottom:4px; font-size:12px; font-weight:500; color:#64748b; }
+        .input-sm { width:100%; border-radius:8px; border:1px solid #e2e8f0; background:#f8fafc; padding:6px 10px; font-size:13px; color:#1e293b; outline:none; transition:box-shadow 0.15s; }
+        .input-sm:focus { box-shadow:0 0 0 2px #3b82f6; border-color:#3b82f6; background:white; }
+        .input-sm:disabled { opacity:0.5; cursor:not-allowed; }
       `}</style>
     </div>
   );

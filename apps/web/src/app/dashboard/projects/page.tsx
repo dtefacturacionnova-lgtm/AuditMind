@@ -22,7 +22,7 @@ import {
   AuditProjectTeamMember,
 } from '@/hooks/useAuditProjects';
 import { useStrategicObjectives } from '@/hooks/useStrategic';
-import { useEntityTree, AuditEntityNode } from '@/hooks/useAuditUniverse2';
+import { useEntityTree, usePlanCandidates, AuditEntityNode, type AuditableUnit } from '@/hooks/useAuditUniverse2';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -269,6 +269,7 @@ export default function ProjectsPage() {
   const { data: stats }                    = useProjectStats();
   const { data: objectives = [] }          = useStrategicObjectives();
   const { data: entityTree = [] }          = useEntityTree();
+  const { data: candidatesResult }         = usePlanCandidates(new Date().getFullYear());
 
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
@@ -281,36 +282,56 @@ export default function ProjectsPage() {
   const [activeTab, setActiveTab]       = useState<0 | 1 | 2>(0);
   const [saving, setSaving]             = useState(false);
   const [syncResult, setSyncResult]     = useState<{ updated: number } | null>(null);
+  // Resolución diferida de strategicObjectiveId cuando llega strategicLineId por URL
+  const [pendingLineId, setPendingLineId] = useState<string | null>(null);
 
-  // ── Pre-fill from "Promover a Proyecto" (Candidatas al Plan) ──────────────
+  // ── Pre-fill from "Completar en Banco" (Candidatas al Plan) ───────────────
   const searchParams = useSearchParams();
   useEffect(() => {
     const fromUnit = searchParams.get('fromUnit');
     if (!fromUnit) return;
+    const scoreRaw = parseFloat(searchParams.get('score') ?? '0');
+    const lineId   = searchParams.get('strategicLineId') ?? '';
     const prefilled: Partial<AuditProject> = {
       ...blankForm(),
-      name:             searchParams.get('name')         ?? '',
-      riskCategory:     searchParams.get('riskCategory') ?? '',
-      legalBasis:       searchParams.get('legalBasis')   ?? '',
-      strategicLineId:  searchParams.get('strategicLineId') ?? '',
-      notes: `Promovido desde el Universo de Auditorías (score: ${searchParams.get('score') ?? '—'})`,
+      name:         searchParams.get('name')         ?? '',
+      riskCategory: searchParams.get('riskCategory') ?? '',
+      legalBasis:   searchParams.get('legalBasis')   ?? '',
+      // riskPerception: 0-100 → 1-4 (ceil(score/25), clamped)
+      riskPerception: !isNaN(scoreRaw) && scoreRaw > 0
+        ? (Math.max(1, Math.min(4, Math.ceil(scoreRaw / 25))) as 1 | 2 | 3 | 4)
+        : undefined,
+      // legalRequirement: obligatoria → 4 (Ley obligatoria), el máximo válido
+      legalRequirement: searchParams.get('isMandatory') === 'true' ? 4 : undefined,
+      // areaScore: score del universo es 0-100, mismo rango que areaScore
+      areaScore: !isNaN(scoreRaw) && scoreRaw > 0 ? Math.round(scoreRaw) : undefined,
+      notes: `Promovido desde el Universo de Auditorías (score: ${scoreRaw > 0 ? scoreRaw.toFixed(0) : '—'})`,
     };
-    // Map riskCategory to legalRequirement hint for the risk tab
-    const scoreRaw = parseFloat(searchParams.get('score') ?? '0');
-    if (!isNaN(scoreRaw) && scoreRaw > 0) {
-      // Normalize 0-100 → 1-5 scale for riskPerception seed
-      prefilled.riskPerception = Math.max(1, Math.min(5, Math.round(scoreRaw / 20)));
-    }
-    if (searchParams.get('isMandatory') === 'true') {
-      prefilled.legalRequirement = 5; // máximo — requerido por ley
-    }
     setForm(prefilled);
+    // strategicLineId se resuelve en segundo efecto cuando cargan los objectives
+    if (lineId) setPendingLineId(lineId);
     setEditing(null);
     setShowModal(true);
-    // Clean URL without re-render
     window.history.replaceState({}, '', '/dashboard/projects');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Resolver strategicObjectiveId desde pendingLineId cuando objectives carga ──
+  useEffect(() => {
+    if (!pendingLineId || !objectives.length) return;
+    for (const obj of objectives) {
+      const line = (obj as any).lines?.find((l: { id: string }) => l.id === pendingLineId);
+      if (line) {
+        setForm(prev => ({
+          ...prev,
+          strategicObjectiveId: obj.id,
+          strategicLineId: pendingLineId,
+        }));
+        setPendingLineId(null);
+        break;
+      }
+    }
+  }, [pendingLineId, objectives]);
 
   // Flattened entity list for dropdowns
   const entityList = useMemo(() => flattenTree(entityTree), [entityTree]);
@@ -336,6 +357,37 @@ export default function ProjectsPage() {
   // Budget calculation from teamJson
   const teamJson = (form.teamJson ?? DEFAULT_TEAM.map(r => ({ ...r }))) as AuditProjectTeamMember[];
   const totalBudget = teamJson.reduce((s, r) => s + r.count * r.costPerHour * r.hours, 0);
+
+  // ── Cargar datos desde una candidata del Universo ─────────────────────────
+  function handleLoadFromCandidate(unitId: string) {
+    const u = candidatesResult?.candidates.find(c => c.id === unitId);
+    if (!u) return;
+    const score = u.totalScore ?? 0;
+
+    // Resolver strategic objective
+    let resolvedObjectiveId = '';
+    if (u.strategicLineId) {
+      for (const obj of objectives) {
+        if ((obj as any).lines?.find((l: { id: string }) => l.id === u.strategicLineId)) {
+          resolvedObjectiveId = obj.id;
+          break;
+        }
+      }
+    }
+
+    setForm(prev => ({
+      ...prev,
+      name:                 u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`,
+      riskCategory:         u.riskType ?? prev.riskCategory,
+      legalBasis:           u.mandatoryBasis ?? prev.legalBasis ?? '',
+      strategicObjectiveId: resolvedObjectiveId,
+      strategicLineId:      u.strategicLineId ?? '',
+      areaScore:            Math.round(score),
+      legalRequirement:     u.isMandatory ? 4 : prev.legalRequirement,
+      riskPerception:       Math.max(1, Math.min(4, Math.ceil(score / 25))) as 1 | 2 | 3 | 4,
+      notes: `Promovido desde el Universo de Auditorías (score: ${score.toFixed(0)})${u.isMandatory ? ' · OBLIGATORIA' : ''}`,
+    }));
+  }
 
   function openNew() {
     setEditing(null);
@@ -687,6 +739,56 @@ export default function ProjectsPage() {
               {/* ── Tab 0: Identificación ── */}
               {activeTab === 0 && (
                 <div className="space-y-4">
+
+                  {/* Selector desde Universo — solo en modo crear */}
+                  {!editing && (candidatesResult?.candidates.length ?? 0) > 0 && (
+                    <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                      <label className="mb-1.5 block text-xs font-semibold text-indigo-700">
+                        Cargar desde Universo de Auditoría
+                      </label>
+                      <select
+                        defaultValue=""
+                        onChange={e => { if (e.target.value) handleLoadFromCandidate(e.target.value); }}
+                        className="w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      >
+                        <option value="" disabled>— Selecciona una candidata para auto-llenar todos los campos —</option>
+                        <optgroup label="⚖️ Obligatorias (Mandato Legal)">
+                          {candidatesResult?.candidates
+                            .filter(u => u.isMandatory)
+                            .map(u => (
+                              <option key={u.id} value={u.id}>
+                                {u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`}
+                                {u.totalScore ? ` [score ${u.totalScore.toFixed(0)}]` : ''}
+                              </option>
+                            ))}
+                        </optgroup>
+                        <optgroup label="🔴 Alta Prioridad (score ≥ 55)">
+                          {candidatesResult?.candidates
+                            .filter(u => !u.isMandatory && (u.totalScore ?? 0) >= 55)
+                            .map(u => (
+                              <option key={u.id} value={u.id}>
+                                {u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`}
+                                {u.totalScore ? ` [score ${u.totalScore.toFixed(0)}]` : ''}
+                              </option>
+                            ))}
+                        </optgroup>
+                        <optgroup label="🟡 Otras evaluadas">
+                          {candidatesResult?.candidates
+                            .filter(u => !u.isMandatory && (u.totalScore ?? 0) < 55)
+                            .map(u => (
+                              <option key={u.id} value={u.id}>
+                                {u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`}
+                                {u.totalScore ? ` [score ${u.totalScore.toFixed(0)}]` : ''}
+                              </option>
+                            ))}
+                        </optgroup>
+                      </select>
+                      <p className="mt-1 text-[11px] text-indigo-500">
+                        Al seleccionar se completan: nombre, categoría de riesgo, base legal, línea estratégica y score de área.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="label-sm">Correlativo *</label>

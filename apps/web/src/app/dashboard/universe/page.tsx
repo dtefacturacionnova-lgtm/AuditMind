@@ -5,7 +5,7 @@ import {
   Plus, Trash2, ChevronRight, ChevronDown, Edit2,
   Layers, FlaskConical, X, Save, Target, Building2, Info,
   Users, MapPin, Mail, Phone, DollarSign, Clock, ShieldCheck,
-  TrendingUp, Filter, ShieldAlert as ShieldAlertIcon, ArrowRight,
+  TrendingUp, Filter, ShieldAlert as ShieldAlertIcon, ArrowRight, Loader2,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useRiskSummary } from '@/hooks/useAuditUniverse';
@@ -17,6 +17,7 @@ import {
   ENTITY_TYPE_CONFIG, ORG_ENTITY_TYPES, RISK_LEVEL_CONFIG,
   type AuditEntityNode, type AuditProcess, type AuditableUnit, type AuditableUnitAssessment,
 } from '@/hooks/useAuditUniverse2';
+import { useCreateProject } from '@/hooks/useAuditProjects';
 import { useEntityTypeConfigs, useProcessCategoryConfigs, type EntityTypeConfig, type ProcessCategoryConfig } from '@/hooks/useCatalogs';
 import { useStrategicObjectives } from '@/hooks/useStrategic';
 import { cn } from '@/lib/utils';
@@ -305,12 +306,14 @@ function computeBreakdown(assessment: AuditableUnitAssessment | null | undefined
 
 // ─── CandidateCard ────────────────────────────────────────────────────────────
 
-function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear }: {
+function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear, isSelected, onToggleSelect }: {
   rank: number;
   unit: AuditableUnit;
   expanded: boolean;
   onToggle: () => void;
   currentYear: number;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
 }) {
   const router = useRouter();
   const rl = RISK_LEVEL_CONFIG[(u.riskLevel ?? 'MEDIUM') as keyof typeof RISK_LEVEL_CONFIG];
@@ -341,13 +344,28 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear }: {
   };
 
   return (
-    <div className="px-4 py-3 hover:bg-slate-50/60 transition-colors">
+    <div className={cn('px-4 py-3 transition-colors', isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50/60')}>
       {/* Main row — clickable to expand */}
-      <div className="flex items-start gap-3 cursor-pointer" onClick={onToggle}>
+      <div className="flex items-start gap-3">
+        {/* Checkbox de selección */}
+        <div className="shrink-0 mt-1 cursor-pointer" onClick={e => { e.stopPropagation(); onToggleSelect(u.id); }}>
+          <div className={cn(
+            'h-4 w-4 rounded border-2 flex items-center justify-center transition-colors',
+            isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 hover:border-blue-400',
+          )}>
+            {isSelected && (
+              <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </div>
+        </div>
         {/* Rank pill */}
-        <span className={cn('text-xs font-mono font-bold w-6 shrink-0 mt-0.5 text-center', scoreColor)}>
+        <span className={cn('text-xs font-mono font-bold w-6 shrink-0 mt-0.5 text-center cursor-pointer', scoreColor)} onClick={onToggle}>
           {rank}
         </span>
+        {/* Resto del contenido clickable */}
+        <div className="flex flex-1 items-start gap-3 cursor-pointer" onClick={onToggle}>
 
         {/* Body */}
         <div className="flex-1 min-w-0">
@@ -440,18 +458,21 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear }: {
           </div>
         </div>
 
-        <ChevronDown className={cn('w-3.5 h-3.5 text-slate-400 shrink-0 mt-1.5 transition-transform', expanded && 'rotate-180')} />
-      </div>
+          <ChevronDown className={cn('w-3.5 h-3.5 text-slate-400 shrink-0 mt-1.5 transition-transform', expanded && 'rotate-180')} />
+        </div>{/* end inner clickable div */}
+      </div>{/* end main row */}
 
-      {/* Promote button — always visible */}
-      <div className="ml-9 mt-2">
+      {/* Botones de acción */}
+      <div className="ml-11 mt-2 flex items-center gap-2">
         <button
           onClick={handlePromote}
+          title="Abrir formulario detallado en el Banco de Proyectos"
           className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors"
         >
           <ArrowRight className="w-3.5 h-3.5" />
-          Promover a Proyecto
+          Completar en Banco
         </button>
+        <span className="text-[10px] text-slate-400">o selecciona con el checkbox para envío masivo</span>
       </div>
 
       {/* Expanded: 10-factor breakdown */}
@@ -511,7 +532,7 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear }: {
 
 // ─── TierSection ──────────────────────────────────────────────────────────────
 
-function TierSection({ icon, title, count, headerCls, candidates, expandedId, onToggle, currentYear }: {
+function TierSection({ icon, title, count, headerCls, candidates, expandedId, onToggle, currentYear, selectedIds, onToggleSelect }: {
   icon: React.ReactNode;
   title: string;
   count: number;
@@ -520,13 +541,21 @@ function TierSection({ icon, title, count, headerCls, candidates, expandedId, on
   expandedId: string | null;
   onToggle: (id: string | null) => void;
   currentYear: number;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
 }) {
+  const tierSelected = candidates.filter(u => selectedIds.has(u.id)).length;
   return (
     <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
       <div className={cn('flex items-center gap-2 px-4 py-2.5 text-white text-sm font-semibold', headerCls)}>
         {icon}
         <span>{title}</span>
         <span className="ml-auto bg-white/25 px-2 py-0.5 rounded-full text-xs font-bold">{count}</span>
+        {tierSelected > 0 && (
+          <span className="bg-white/30 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+            ✓ {tierSelected} sel.
+          </span>
+        )}
       </div>
       <div className="divide-y divide-slate-100">
         {candidates.map((u, i) => (
@@ -537,6 +566,8 @@ function TierSection({ icon, title, count, headerCls, candidates, expandedId, on
             expanded={expandedId === u.id}
             onToggle={() => onToggle(expandedId === u.id ? null : u.id)}
             currentYear={currentYear}
+            isSelected={selectedIds.has(u.id)}
+            onToggleSelect={onToggleSelect}
           />
         ))}
       </div>
@@ -553,6 +584,65 @@ function PlanCandidatesView() {
   const [filterRiskType, setFilterRiskType] = useState<string>('ALL');
   const [hideInPlan, setHideInPlan] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // ── Selección y envío al Banco ────────────────────────────────────────────
+  const [selectedIds, setSelectedIds]     = useState<Set<string>>(new Set());
+  const [batchResult, setBatchResult]     = useState<{ created: number; errors: number } | null>(null);
+  const [creating, setCreating]           = useState(false);
+  const createProject = useCreateProject();
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const selectAll = (candidates: AuditableUnit[]) =>
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      candidates.forEach(u => next.add(u.id));
+      return next;
+    });
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBatchCreate = async (candidates: AuditableUnit[]) => {
+    const selected = candidates.filter(u => selectedIds.has(u.id));
+    if (!selected.length) return;
+    setCreating(true);
+    let created = 0, errors = 0;
+    for (let i = 0; i < selected.length; i++) {
+      const u = selected[i];
+      const score = u.totalScore ?? 0;
+      const name = u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`;
+      const suffix = String(Date.now()).slice(-4);
+      try {
+        await createProject.mutateAsync({
+          name,
+          correlative: `BAP-${currentYear}-${suffix}`,
+          planYear: currentYear,
+          targetPlanYear: currentYear,
+          riskCategory: u.riskType ?? '',
+          legalBasis: u.mandatoryBasis ?? '',
+          strategicLineId: u.strategicLineId ?? '',
+          areaScore: Math.round(score),
+          legalRequirement: u.isMandatory ? 4 : undefined,
+          riskPerception: Math.max(1, Math.min(4, Math.ceil(score / 25))) as 1 | 2 | 3 | 4,
+          notes: `Promovido desde Candidatas al Plan — score ${score.toFixed(0)}${u.isMandatory ? ' · OBLIGATORIA' : ''}`,
+          status: 'DRAFT',
+          includeInPlan: u.isMandatory || score >= 55,
+        } as Parameters<typeof createProject.mutateAsync>[0]);
+        created++;
+      } catch {
+        errors++;
+      }
+    }
+    setCreating(false);
+    clearSelection();
+    setBatchResult({ created, errors });
+    setTimeout(() => setBatchResult(null), 6000);
+  };
 
   if (isLoading) return <div className="p-8 text-center text-slate-400 text-sm">Cargando candidatas…</div>;
   if (isError || !data) return (
@@ -590,8 +680,68 @@ function PlanCandidatesView() {
     { id: 'LOW',      label: 'Bajo',     cls: 'bg-green-50 text-green-700 border-green-200' },
   ];
 
+  const allFiltered = [...obligatorias, ...altoRiesgo, ...otras];
+
   return (
     <div className="space-y-4">
+
+      {/* ── Barra de selección masiva ── */}
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => selectedIds.size === allFiltered.length ? clearSelection() : selectAll(allFiltered)}
+            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            {selectedIds.size === allFiltered.length && allFiltered.length > 0
+              ? 'Deseleccionar todo'
+              : 'Seleccionar todo'}
+          </button>
+          {selectedIds.size > 0 && (
+            <>
+              <span className="text-sm font-semibold text-blue-700">
+                {selectedIds.size} auditoría{selectedIds.size !== 1 ? 's' : ''} seleccionada{selectedIds.size !== 1 ? 's' : ''}
+              </span>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="text-xs text-slate-400 hover:text-slate-600"
+              >
+                Limpiar
+              </button>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {batchResult && (
+            <span className={cn(
+              'rounded-lg border px-3 py-1 text-xs font-medium',
+              batchResult.errors > 0
+                ? 'border-amber-200 bg-amber-50 text-amber-700'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+            )}>
+              ✓ {batchResult.created} proyecto{batchResult.created !== 1 ? 's' : ''} creado{batchResult.created !== 1 ? 's' : ''} en el Banco
+              {batchResult.errors > 0 && ` · ${batchResult.errors} error(es)`}
+            </span>
+          )}
+          <button
+            type="button"
+            disabled={selectedIds.size === 0 || creating}
+            onClick={() => handleBatchCreate(allFiltered)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+              selectedIds.size > 0 && !creating
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed',
+            )}
+          >
+            {creating
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Creando…</>
+              : <><ArrowRight className="w-3.5 h-3.5" /> Agregar {selectedIds.size > 0 ? `(${selectedIds.size}) ` : ''}al Banco de Proyectos</>
+            }
+          </button>
+        </div>
+      </div>
 
       {/* ── KPI chips ── */}
       <div className="grid grid-cols-6 gap-2">
@@ -652,13 +802,15 @@ function PlanCandidatesView() {
       {obligatorias.length > 0 && (
         <TierSection
           icon={<ShieldAlertIcon className="w-4 h-4 text-white" />}
-          title={`Obligatorias — Requeridas por Ley o Norma Regulatoria`}
+          title="Obligatorias — Requeridas por Ley o Norma Regulatoria"
           count={obligatorias.length}
           headerCls="bg-rose-600"
           expandedId={expandedId}
           onToggle={setExpandedId}
           candidates={obligatorias}
           currentYear={currentYear}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
         />
       )}
 
@@ -673,6 +825,8 @@ function PlanCandidatesView() {
           onToggle={setExpandedId}
           candidates={altoRiesgo}
           currentYear={currentYear}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
         />
       )}
 
@@ -687,6 +841,8 @@ function PlanCandidatesView() {
           onToggle={setExpandedId}
           candidates={otras}
           currentYear={currentYear}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
         />
       )}
 

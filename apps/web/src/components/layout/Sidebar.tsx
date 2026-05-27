@@ -39,7 +39,6 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Banco de Proyectos',        href: '/dashboard/projects',    icon: ClipboardList },
       { label: 'Catálogo de Riesgos',       href: '/dashboard/plan-risks',  icon: ShieldAlert },
       { label: 'Plan Anual',                href: '/dashboard/plans',       icon: CalendarDays },
-      { label: 'Auditorías Planificadas',   href: '/dashboard/audits',      icon: ClipboardList },
     ],
   },
   // ── Ejecución del Plan Anual ──────────────────────────────────────────────

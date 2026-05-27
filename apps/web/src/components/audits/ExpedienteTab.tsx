@@ -797,10 +797,11 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
                       </>
                     )}
                     {phase.status === 'COMPLETE' && (
-                      <CheckCircle2
-                        className="h-3.5 w-3.5 text-emerald-500"
+                      <span
                         title={phase.signedOffBy ? `Firmado por ${phase.signedOffBy.name}` : 'Fase completada'}
-                      />
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                      </span>
                     )}
                   </div>
                 </div>

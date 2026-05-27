@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, Search,
@@ -253,7 +253,7 @@ function RiskRow({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function ProjectsPage() {
+function ProjectsPageContent() {
   const [yearFilter, setYearFilter]     = useState<number | undefined>(undefined);
   const [riskFilter, setRiskFilter]     = useState<string>('');
   const [search, setSearch]             = useState('');
@@ -1305,5 +1305,13 @@ export default function ProjectsPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function ProjectsPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center text-slate-400">Cargando…</div>}>
+      <ProjectsPageContent />
+    </Suspense>
   );
 }

@@ -8,7 +8,7 @@ import {
   Circle, DollarSign, Users, Clock, RefreshCw, Zap,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
-import { cn } from '@/lib/utils';
+import { cn, mapRiskTypeToCategory } from '@/lib/utils';
 import {
   useAuditProjects,
   useProjectStats,
@@ -36,6 +36,7 @@ const RISK_CATEGORIES = [
   { value: 'SEGUIMIENTO',         label: '7. Riesgo de Seguimiento',               color: 'bg-purple-700' },
   { value: 'OTROS',               label: '8. Otros Riesgos',                       color: 'bg-gray-600'   },
 ];
+
 
 const DEFAULT_TEAM: AuditProjectTeamMember[] = [
   { role: 'Gerente de Auditoría', count: 1, costPerHour: 0, hours: 0 },
@@ -295,7 +296,7 @@ function ProjectsPageContent() {
     const prefilled: Partial<AuditProject> = {
       ...blankForm(),
       name:         searchParams.get('name')         ?? '',
-      riskCategory: searchParams.get('riskCategory') ?? '',
+      riskCategory: mapRiskTypeToCategory(searchParams.get('riskCategory')),
       legalBasis:   searchParams.get('legalBasis')   ?? '',
       // riskPerception: 0-100 → 1-4 (ceil(score/25), clamped)
       riskPerception: !isNaN(scoreRaw) && scoreRaw > 0
@@ -378,7 +379,7 @@ function ProjectsPageContent() {
     setForm(prev => ({
       ...prev,
       name:                 u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`,
-      riskCategory:         u.riskType ?? prev.riskCategory,
+      riskCategory:         mapRiskTypeToCategory(u.riskType) || prev.riskCategory,
       legalBasis:           u.mandatoryBasis ?? prev.legalBasis ?? '',
       strategicObjectiveId: resolvedObjectiveId,
       strategicLineId:      u.strategicLineId ?? '',

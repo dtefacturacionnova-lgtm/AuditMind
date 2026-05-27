@@ -20,7 +20,7 @@ import {
 import { useCreateProject } from '@/hooks/useAuditProjects';
 import { useEntityTypeConfigs, useProcessCategoryConfigs, type EntityTypeConfig, type ProcessCategoryConfig } from '@/hooks/useCatalogs';
 import { useStrategicObjectives } from '@/hooks/useStrategic';
-import { cn } from '@/lib/utils';
+import { cn, mapRiskTypeToCategory } from '@/lib/utils';
 
 // ─── Tipos de Riesgo ──────────────────────────────────────────────────────────
 const RISK_TYPE_OPTIONS = [
@@ -334,7 +334,7 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear, isSelec
     const params = new URLSearchParams();
     params.set('fromUnit', u.id);
     params.set('name', u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`);
-    if (u.riskType)        params.set('riskCategory', u.riskType);
+    if (u.riskType)        params.set('riskCategory', mapRiskTypeToCategory(u.riskType) || u.riskType);
     if (u.auditType)       params.set('auditType', u.auditType);
     if (u.isMandatory)     params.set('isMandatory', 'true');
     if (u.mandatoryBasis)  params.set('legalBasis', u.mandatoryBasis);
@@ -623,7 +623,7 @@ function PlanCandidatesView() {
           correlative: `BAP-${currentYear}-${suffix}`,
           planYear: currentYear,
           targetPlanYear: currentYear,
-          riskCategory: u.riskType ?? '',
+          riskCategory: mapRiskTypeToCategory(u.riskType),
           legalBasis: u.mandatoryBasis ?? '',
           strategicLineId: u.strategicLineId ?? '',
           areaScore: Math.round(score),

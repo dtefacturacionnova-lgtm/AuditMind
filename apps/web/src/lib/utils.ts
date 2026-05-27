@@ -35,3 +35,29 @@ export function formatRelativeTime(date: string | Date): string {
 export function truncate(str: string, length: number): string {
   return str.length > length ? `${str.slice(0, length)}…` : str;
 }
+
+// ─── Mapeo riskType (Universo) → riskCategory (Banco de Proyectos) ────────────
+// El Universo clasifica con tipos funcionales; el Banco usa categorías institucionales/
+// regulatorias. Este mapeo hereda el perfil de riesgo al promover una unidad auditável.
+const RISK_TYPE_TO_CATEGORY: Record<string, string> = {
+  FINANCIERO:   'CREDITO_FIDEICOMISO',   // riesgo financiero/crédito
+  OPERACIONAL:  'OPERACIONAL',           // coincide directo
+  TECNOLOGIA:   'OPERACIONAL',           // TI → riesgo operacional
+  CUMPLIMIENTO: 'SEGUIMIENTO',           // control y seguimiento regulatorio
+  FRAUDE:       'LAVADO_DINERO',         // fraude/antilavado
+  ESTRATEGICO:  'INTEGRAL_GOBIERNO',     // gobierno corporativo y estrategia
+  LEGAL:        'SEGUIMIENTO',           // riesgo legal → seguimiento
+  ESG:          'AMBIENTAL_SOCIAL',      // ambiental, social y gobernanza
+};
+
+const VALID_RISK_CATEGORIES = new Set([
+  'INTEGRAL_GOBIERNO', 'CREDITO_FIDEICOMISO', 'LIQUIDEZ_MERCADO',
+  'LAVADO_DINERO', 'OPERACIONAL', 'AMBIENTAL_SOCIAL', 'SEGUIMIENTO', 'OTROS',
+]);
+
+/** Convierte el riskType del Universo al riskCategory más cercano del Banco de Proyectos */
+export function mapRiskTypeToCategory(riskType: string | null | undefined): string {
+  if (!riskType) return '';
+  if (VALID_RISK_CATEGORIES.has(riskType)) return riskType; // ya es válido
+  return RISK_TYPE_TO_CATEGORY[riskType] ?? 'OTROS';
+}

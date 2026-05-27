@@ -35,9 +35,9 @@ const NAV_ITEMS: NavItem[] = [
     icon: CalendarDays,
     children: [
       { label: 'Plan Estratégico',          href: '/dashboard/strategic',   icon: Target },
+      { label: 'Catálogo de Riesgos',       href: '/dashboard/plan-risks',  icon: ShieldAlert },
       { label: 'Universo de Auditoría',     href: '/dashboard/universe',    icon: Globe },
       { label: 'Banco de Proyectos',        href: '/dashboard/projects',    icon: ClipboardList },
-      { label: 'Catálogo de Riesgos',       href: '/dashboard/plan-risks',  icon: ShieldAlert },
       { label: 'Plan Anual',                href: '/dashboard/plans',       icon: CalendarDays },
     ],
   },

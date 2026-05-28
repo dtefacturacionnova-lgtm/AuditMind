@@ -70,3 +70,60 @@ export function useMyWorkload() {
     staleTime: 30_000,
   });
 }
+
+export interface CommitteeOverdueAction {
+  id: string;
+  description: string;
+  dueDate: string;
+  status: string;
+  progressPct: number;
+  finding: { id: string; title: string; severity: string; status: string };
+}
+
+export interface CommitteeEscalatedFinding {
+  id: string;
+  title: string;
+  severity: string;
+  escalationLevel: string;
+  dueDate?: string;
+  audit: { id: string; title: string };
+  responsible?: { name: string };
+}
+
+export interface CommitteePlanSummary {
+  id: string;
+  name: string;
+  year: number;
+  status: string;
+  totalItems: number;
+  completedItems: number;
+  completionPct: number;
+  totalHours: number;
+  allocatedHours: number;
+  utilizationPct: number;
+}
+
+export interface CommitteeDashboard {
+  riskPosture: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+  kpis: {
+    openFindings: number;
+    criticalOpen: number;
+    materialOpen: number;
+    overdueActionsCount: number;
+    resolutionRateYtd: number;
+  };
+  openBySeverity: Record<string, number>;
+  allByStatus: Record<string, number>;
+  auditsByStatus: Record<string, number>;
+  overdueActions: CommitteeOverdueAction[];
+  escalatedFindings: CommitteeEscalatedFinding[];
+  planSummary: CommitteePlanSummary | null;
+}
+
+export function useCommitteeDashboard() {
+  return useQuery<CommitteeDashboard>({
+    queryKey:  ['dashboard', 'committee'],
+    queryFn:   () => apiClient.get('/dashboard/committee'),
+    staleTime: 120_000,
+  });
+}

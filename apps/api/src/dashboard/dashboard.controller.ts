@@ -47,6 +47,13 @@ export class DashboardController {
     return this.service.getManagerDashboard(user);
   }
 
+  @Get('committee')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Dashboard Comité de Auditoría: postura de riesgo, KPIs ejecutivos' })
+  getCommitteeDashboard(@CurrentUser() user: AuthUser) {
+    return this.service.getCommitteeDashboard(user);
+  }
+
   @Get('my-work')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Dashboard auditor: mis auditorías, hallazgos, PBC, papeles' })

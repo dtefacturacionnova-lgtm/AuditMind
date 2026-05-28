@@ -269,6 +269,121 @@ export class DashboardService {
     };
   }
 
+  // ─── VISTA COMITÉ DE AUDITORÍA ──────────────────────────────────────────────
+  async getCommitteeDashboard(user: AuthUser) {
+    const orgId = user.organizationId;
+    const now   = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+
+    const [
+      openBySeverity,
+      allByStatus,
+      overdueActions,
+      auditsByStatus,
+      activePlan,
+      escalatedFindings,
+      totalFindingsYear,
+      closedFindingsYear,
+      materialOpen,
+    ] = await Promise.all([
+      this.prisma.finding.groupBy({
+        by: ['severity'],
+        where: { organizationId: orgId, status: { notIn: ['CLOSED', 'ACCEPTED_RISK'] as any } },
+        _count: { id: true },
+      }),
+      this.prisma.finding.groupBy({
+        by: ['status'],
+        where: { organizationId: orgId },
+        _count: { id: true },
+      }),
+      this.prisma.findingAction.findMany({
+        where: { organizationId: orgId, status: { not: 'COMPLETED' }, dueDate: { lt: now } },
+        include: {
+          finding: { select: { id: true, title: true, severity: true, status: true } },
+        },
+        orderBy: { dueDate: 'asc' },
+        take: 30,
+      }),
+      this.prisma.audit.groupBy({
+        by: ['status'],
+        where: { organizationId: orgId, status: { not: AuditStatus.CANCELLED } },
+        _count: { id: true },
+      }),
+      this.prisma.auditPlan.findFirst({
+        where: { organizationId: orgId, status: { in: ['ACTIVE', 'APPROVED'] as any } },
+        orderBy: { year: 'desc' },
+        select: {
+          id: true, name: true, year: true, status: true, totalHours: true,
+          items: { select: { id: true, estimatedHours: true, audit: { select: { status: true } } } },
+        },
+      }),
+      this.prisma.finding.findMany({
+        where: {
+          organizationId: orgId,
+          status: { notIn: ['CLOSED', 'ACCEPTED_RISK'] as any },
+          escalationLevel: { not: EscalationLevel.NONE },
+        },
+        orderBy: [{ severity: 'asc' }, { createdAt: 'asc' }],
+        take: 15,
+        select: {
+          id: true, title: true, severity: true, escalationLevel: true, dueDate: true,
+          audit: { select: { id: true, title: true } },
+          responsible: { select: { name: true } },
+        },
+      }),
+      this.prisma.finding.count({ where: { organizationId: orgId, createdAt: { gte: yearStart } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, status: 'CLOSED' as any, updatedAt: { gte: yearStart } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, isMaterial: true, status: { notIn: ['CLOSED', 'ACCEPTED_RISK'] as any } } }),
+    ]);
+
+    // Postura de riesgo
+    const openSevSet = new Set(openBySeverity.map((f: any) => f.severity));
+    const riskPosture = openSevSet.has('CRITICAL') ? 'CRITICAL'
+      : openSevSet.has('HIGH')   ? 'HIGH'
+      : openSevSet.has('MEDIUM') ? 'MEDIUM'
+      : openSevSet.size > 0      ? 'LOW' : 'NONE';
+
+    // Resumen plan activo
+    let planSummary: Record<string, unknown> | null = null;
+    if (activePlan) {
+      const totalItems     = activePlan.items.length;
+      const completedItems = activePlan.items.filter((i: any) => i.audit?.status === 'CLOSED').length;
+      const allocatedHours = activePlan.items.reduce((s: number, i: any) => s + (i.estimatedHours || 0), 0);
+      planSummary = {
+        id: activePlan.id, name: activePlan.name, year: activePlan.year, status: activePlan.status,
+        totalItems, completedItems,
+        completionPct:  totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0,
+        totalHours:     activePlan.totalHours,
+        allocatedHours,
+        utilizationPct: activePlan.totalHours > 0
+          ? Math.round((allocatedHours / activePlan.totalHours) * 100) : 0,
+      };
+    }
+
+    const openFindingsTotal = allByStatus
+      .filter((f: any) => !['CLOSED', 'ACCEPTED_RISK'].includes(f.status))
+      .reduce((s: number, f: any) => s + f._count.id, 0);
+    const criticalOpen = openBySeverity.find((f: any) => f.severity === 'CRITICAL')?._count.id ?? 0;
+
+    return {
+      riskPosture,
+      kpis: {
+        openFindings: openFindingsTotal,
+        criticalOpen,
+        materialOpen,
+        overdueActionsCount: overdueActions.length,
+        resolutionRateYtd: totalFindingsYear > 0
+          ? Math.round((closedFindingsYear / totalFindingsYear) * 100) : 0,
+      },
+      openBySeverity:    Object.fromEntries(openBySeverity.map((f: any) => [f.severity, f._count.id])),
+      allByStatus:       Object.fromEntries(allByStatus.map((f: any)    => [f.status, f._count.id])),
+      auditsByStatus:    Object.fromEntries(auditsByStatus.map((a: any) => [a.status, a._count.id])),
+      overdueActions,
+      escalatedFindings,
+      planSummary,
+    };
+  }
+
   // ─── VISTA AUDITOR / SENIOR_AUDITOR ─────────────────────────────────────────
   async getMyWorkload(user: AuthUser) {
     const userId = user.id;

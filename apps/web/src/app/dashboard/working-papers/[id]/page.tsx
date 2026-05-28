@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
+import Link from 'next/link';
 import {
   Bot, CheckCircle2, Clock, AlertCircle, Lock, Plus, Trash2,
   MessageSquare, History, FileText, Network,
@@ -10,7 +11,7 @@ import {
   Brain, Star, Activity, AlertTriangle, RefreshCw, Zap,
   Folder, ChevronRight, Calendar, User, RotateCcw,
   Download, ExternalLink, FileSpreadsheet, Presentation, Music,
-  Image as ImageIcon,
+  Image as ImageIcon, ArrowLeft,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -432,20 +433,27 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
   const isImage = mime.startsWith('image/');
   const isPdf   = mime === 'application/pdf';
   const isAudio = mime.startsWith('audio/');
-  const isWord  = mime.includes('word') || mime.includes('document');
-  const isExcel = mime.includes('spreadsheet') || mime.includes('excel') || mime.endsWith('.xls');
-  const isPpt   = mime.includes('presentation') || mime.includes('powerpoint');
+  const isWord  = mime.includes('word') || mime.includes('document') ||
+                  (wp.originalFilename ?? '').toLowerCase().endsWith('.docx') ||
+                  (wp.originalFilename ?? '').toLowerCase().endsWith('.doc');
+  const isExcel = mime.includes('spreadsheet') || mime.includes('excel') ||
+                  (wp.originalFilename ?? '').toLowerCase().endsWith('.xlsx') ||
+                  (wp.originalFilename ?? '').toLowerCase().endsWith('.xls');
+  const isPpt   = mime.includes('presentation') || mime.includes('powerpoint') ||
+                  (wp.originalFilename ?? '').toLowerCase().endsWith('.pptx') ||
+                  (wp.originalFilename ?? '').toLowerCase().endsWith('.ppt');
+  const isOffice = isWord || isExcel || isPpt;
 
   // Icon + label
   let TypeIcon: React.ElementType = FileText;
   let iconCls = 'text-slate-400';
   let typeLabel = 'Archivo';
-  if (isImage)  { TypeIcon = ImageIcon;       iconCls = 'text-pink-500';    typeLabel = 'Imagen'; }
-  else if (isPdf) { TypeIcon = FileText;      iconCls = 'text-red-500';     typeLabel = 'PDF'; }
-  else if (isAudio) { TypeIcon = Music;       iconCls = 'text-purple-500';  typeLabel = 'Audio'; }
-  else if (isWord)  { TypeIcon = FileText;    iconCls = 'text-blue-600';    typeLabel = 'Word'; }
+  if (isImage)  { TypeIcon = ImageIcon;        iconCls = 'text-pink-500';    typeLabel = 'Imagen'; }
+  else if (isPdf)   { TypeIcon = FileText;     iconCls = 'text-red-500';     typeLabel = 'PDF'; }
+  else if (isAudio) { TypeIcon = Music;        iconCls = 'text-purple-500';  typeLabel = 'Audio'; }
+  else if (isWord)  { TypeIcon = FileText;     iconCls = 'text-blue-600';    typeLabel = 'Word'; }
   else if (isExcel) { TypeIcon = FileSpreadsheet; iconCls = 'text-emerald-600'; typeLabel = 'Excel'; }
-  else if (isPpt)   { TypeIcon = Presentation;    iconCls = 'text-orange-500';  typeLabel = 'PowerPoint'; }
+  else if (isPpt)   { TypeIcon = Presentation; iconCls = 'text-orange-500';  typeLabel = 'PowerPoint'; }
 
   const fmtBytes = (b?: number | null) => {
     if (!b) return '';
@@ -454,8 +462,33 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
     return `${(b / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  // Cross-origin download: fetch as blob so the browser downloads instead of navigating
+  async function handleDownload() {
+    if (!fileUrl) return;
+    try {
+      const res  = await fetch(fileUrl, { mode: 'cors' });
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = wp.originalFilename ?? 'archivo';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // CORS fallback — open in new tab
+      window.open(fileUrl, '_blank');
+    }
+  }
+
+  // Microsoft Office Online viewer for Word / Excel / PPT
+  const officeViewerUrl = isOffice && fileUrl
+    ? `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`
+    : null;
+
   return (
-    <div className="space-y-4 p-6 max-w-3xl">
+    <div className="space-y-4 p-6 max-w-4xl">
       {/* Info card */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-start gap-5">
@@ -474,15 +507,24 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {fileUrl && (
-                <a
-                  href={fileUrl}
-                  download={wp.originalFilename}
+                <button
+                  onClick={handleDownload}
                   className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                 >
-                  <Download className="h-4 w-4" /> Descargar archivo
+                  <Download className="h-4 w-4" /> Descargar
+                </button>
+              )}
+              {officeViewerUrl && (
+                <a
+                  href={officeViewerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg bg-[#D83B01] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+                >
+                  <ExternalLink className="h-4 w-4" /> Abrir en Office Online
                 </a>
               )}
-              {fileUrl && (
+              {!officeViewerUrl && fileUrl && (
                 <a
                   href={fileUrl}
                   target="_blank"
@@ -511,7 +553,7 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
 
       {isPdf && fileUrl && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Vista previa</p>
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Vista previa PDF</p>
           <iframe
             src={`${fileUrl}#toolbar=0`}
             title={wp.originalFilename ?? wp.title}
@@ -528,15 +570,20 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
         </div>
       )}
 
-      {(isWord || isExcel || isPpt) && (
-        <div className="rounded-xl border border-slate-100 bg-slate-50 px-5 py-4 text-sm text-slate-500">
-          <span className="font-medium text-slate-700">Vista previa no disponible</span> para archivos {typeLabel}.
-          Usa el botón de descarga para abrirlo en{' '}
-          {isWord ? 'Microsoft Word' : isExcel ? 'Excel' : 'PowerPoint'}.
+      {isOffice && officeViewerUrl && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Vista previa — Microsoft Office Online
+          </p>
+          <iframe
+            src={officeViewerUrl}
+            title={wp.originalFilename ?? wp.title}
+            className="h-[700px] w-full rounded-xl border border-slate-100"
+          />
         </div>
       )}
 
-      {!isImage && !isPdf && !isAudio && !isWord && !isExcel && !isPpt && (
+      {!isImage && !isPdf && !isAudio && !isOffice && (
         <div className="rounded-xl border border-slate-100 bg-slate-50 px-5 py-4 text-sm text-slate-500">
           Usa el botón de descarga para abrir el archivo.
         </div>
@@ -749,7 +796,7 @@ export default function WpDetailPage() {
   const showGraphTab    = wpKind === 'SMART' || wpKind === 'MASTER';
 
   const allTabs: { key: TabKey; label: string; icon: React.ElementType; show: boolean }[] = [
-    { key: 'content'  as TabKey, label: 'Contenido',   icon: FileText,       show: !isFilePaper && wpKind !== 'MASTER' && wpKind !== 'LIVE' },
+    { key: 'content'  as TabKey, label: 'Contenido',   icon: FileText,       show: !isFilePaper && wpKind !== 'MASTER' && wpKind !== 'LIVE' && wpKind !== 'SMART' },
     { key: 'sections' as TabKey, label: 'Secciones',   icon: Brain,          show: showSectionsTab },
     { key: 'graph'    as TabKey, label: 'Grafo',        icon: Network,        show: showGraphTab },
     { key: 'review'   as TabKey, label: `Revisión${openComments.length ? ` (${openComments.length})` : ''}`, icon: MessageSquare, show: true },
@@ -910,6 +957,15 @@ export default function WpDetailPage() {
 
             {/* Acciones de estado */}
             <div className="border-t border-gray-100 px-5 py-3 flex items-center gap-2 flex-wrap bg-gray-50/50">
+              {wp.auditId && (
+                <Link
+                  href={`/dashboard/audits/${wp.auditId}?tab=expediente`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Volver al Índice
+                </Link>
+              )}
               {nextStatus && (
                 <button
                   onClick={() => handleStatusChange(nextStatus)}

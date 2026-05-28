@@ -342,6 +342,8 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear, isSelec
     if (score > 0)         params.set('score', score.toFixed(0));
     // Copia directa de todos los campos de scoring del Universo (sin conversión)
     const assess = u.assessment ?? u.assessments?.[0];
+    // Herencia de entidad responsable y área
+    if (u.auditEntityId) params.set('responsibleEntityId', u.auditEntityId);
     if (assess) {
       if (assess.impactScore)           params.set('impactScore',           String(assess.impactScore));
       if (assess.likelihoodScore)       params.set('likelihoodScore',       String(assess.likelihoodScore));
@@ -595,6 +597,7 @@ function TierSection({ icon, title, count, headerCls, candidates, expandedId, on
 function PlanCandidatesView() {
   const currentYear = new Date().getFullYear();
   const { data, isLoading, isError } = usePlanCandidates(currentYear);
+  const { data: objectives = [] }    = useStrategicObjectives();
   const [filterLevel, setFilterLevel] = useState<string>('ALL');
   const [filterRiskType, setFilterRiskType] = useState<string>('ALL');
   const [hideInPlan, setHideInPlan] = useState(false);
@@ -633,15 +636,27 @@ function PlanCandidatesView() {
       const name = u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`;
       const suffix = String(Date.now()).slice(-4);
       try {
+        // Resolver strategicObjectiveId desde la línea estratégica
+        let resolvedObjectiveId: string | undefined;
+        if (u.strategicLineId) {
+          for (const obj of objectives) {
+            if ((obj as any).lines?.find((l: { id: string }) => l.id === u.strategicLineId)) {
+              resolvedObjectiveId = obj.id;
+              break;
+            }
+          }
+        }
         const assess = u.assessment ?? u.assessments?.[0];
         await createProject.mutateAsync({
           name,
           correlative: `BAP-${currentYear}-${suffix}`,
           planYear: currentYear,
           targetPlanYear: currentYear,
-          riskCategory:    mapRiskTypeToCategory(u.riskType),
-          legalBasis:      u.mandatoryBasis ?? '',
-          strategicLineId: u.strategicLineId ?? '',
+          riskCategory:         mapRiskTypeToCategory(u.riskType),
+          legalBasis:           u.mandatoryBasis ?? '',
+          strategicObjectiveId: resolvedObjectiveId,
+          strategicLineId:      u.strategicLineId ?? '',
+          responsibleEntityId:  u.auditEntityId,
           legalRequirement: u.isMandatory ? 4 : undefined,
           // Copia directa de todos los campos de scoring del Universo (sin conversión)
           impactScore:           assess?.impactScore,

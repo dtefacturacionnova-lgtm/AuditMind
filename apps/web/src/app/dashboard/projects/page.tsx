@@ -262,9 +262,10 @@ function ProjectsPageContent() {
     const lineId   = searchParams.get('strategicLineId') ?? '';
     const prefilled: Partial<AuditProject> = {
       ...blankForm(),
-      name:         searchParams.get('name')         ?? '',
-      riskCategory: mapRiskTypeToCategory(searchParams.get('riskCategory')),
-      legalBasis:   searchParams.get('legalBasis')   ?? '',
+      name:                searchParams.get('name')               ?? '',
+      riskCategory:        mapRiskTypeToCategory(searchParams.get('riskCategory')),
+      legalBasis:          searchParams.get('legalBasis')         ?? '',
+      responsibleEntityId: searchParams.get('responsibleEntityId') ?? undefined,
       legalRequirement: searchParams.get('isMandatory') === 'true' ? 4 : undefined,
       // Copy all 10 scoring fields directly from URL params (passed as-is from Universe)
       impactScore:           Number(searchParams.get('impactScore'))           || undefined,
@@ -353,6 +354,7 @@ function ProjectsPageContent() {
       legalBasis:           u.mandatoryBasis ?? prev.legalBasis ?? '',
       strategicObjectiveId: resolvedObjectiveId,
       strategicLineId:      u.strategicLineId ?? '',
+      responsibleEntityId:  u.auditEntityId   || prev.responsibleEntityId,
       legalRequirement:     u.isMandatory ? 4 : prev.legalRequirement,
       // Direct copy of all 10 scoring fields from Universe assessment
       impactScore:           assess?.impactScore           ?? prev.impactScore,

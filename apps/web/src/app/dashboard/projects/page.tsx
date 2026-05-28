@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   Plus, Pencil, Trash2, X, Save, Loader2, Search,
   ChevronDown, ClipboardList, BarChart3, CheckCircle2,
-  Circle, DollarSign, Users, Clock, RefreshCw, Zap,
+  Circle, DollarSign, Users, Clock, RefreshCw, Zap, ShieldAlert,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { cn, mapRiskTypeToCategory } from '@/lib/utils';
@@ -23,6 +23,7 @@ import {
 } from '@/hooks/useAuditProjects';
 import { useStrategicObjectives } from '@/hooks/useStrategic';
 import { useEntityTree, usePlanCandidates, AuditEntityNode, type AuditableUnit } from '@/hooks/useAuditUniverse2';
+import { RiskCatalogView } from '@/components/RiskCatalogView';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -245,6 +246,7 @@ function ProjectsPageContent() {
   const deleteProject = useDeleteProject();
   const syncCoverage  = useSyncCoverage();
 
+  const [pageTab, setPageTab]           = useState<'projects' | 'catalog'>('projects');
   const [showModal, setShowModal]       = useState(false);
   const [editing, setEditing]           = useState<AuditProject | null>(null);
   const [form, setForm]                 = useState<Partial<AuditProject>>(blankForm());
@@ -449,6 +451,40 @@ function ProjectsPageContent() {
     <div className="flex h-screen flex-col bg-slate-50">
       <Header title="Banco de Proyectos de Auditoría" />
 
+      {/* ── Page Tab Switcher ── */}
+      <div className="flex border-b border-slate-200 bg-white px-6">
+        <button
+          onClick={() => setPageTab('projects')}
+          className={cn(
+            'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors',
+            pageTab === 'projects'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700',
+          )}
+        >
+          <ClipboardList className="h-4 w-4" />
+          Proyectos de Auditoría
+        </button>
+        <button
+          onClick={() => setPageTab('catalog')}
+          className={cn(
+            'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors',
+            pageTab === 'catalog'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700',
+          )}
+        >
+          <ShieldAlert className="h-4 w-4" />
+          Catálogo de Riesgos
+        </button>
+      </div>
+
+      {/* ── Catalog tab ── */}
+      {pageTab === 'catalog' && <RiskCatalogView />}
+
+      {/* ── Projects tab content ── */}
+      {pageTab === 'projects' && <>
+
       {/* ── Banner ── */}
       <div className="bg-gradient-to-r from-[#0F2D4A] to-[#1a4a7a] px-6 py-5">
         <div className="flex flex-wrap gap-3">
@@ -602,6 +638,8 @@ function ProjectsPageContent() {
           </div>
         )}
       </div>
+
+      </>}
 
       {/* ── Modal ── */}
       {showModal && (

@@ -14,27 +14,85 @@ export interface ReportAuditSummary {
   _count:   { findings: number; workingPapers: number };
 }
 
+export interface ReportFinding {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  condition: string;
+  criteria: string;
+  cause: string;
+  effect: string;
+  risk?: string;
+  recommendation?: string;
+  managementResponse?: string;
+  normativeReference?: string;
+  normativeArticle?: string;
+  effectAmount?: number;
+  isMaterial?: boolean;
+  qualityScore?: number;
+  dueDate?: string;
+  closedAt?: string;
+  escalationLevel?: string;
+  responsible?: { name: string };
+  actions?: Array<{
+    id: string;
+    description: string;
+    status: string;
+    progressPct: number;
+    dueDate: string;
+    completionDate?: string;
+    comments?: string;
+  }>;
+}
+
+export interface ReportWorkingPaper {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  code: string;
+  indexSection?: string;
+  conclusion?: string;
+  createdAt: string;
+}
+
 export interface AuditReport {
   generatedAt: string;
+  overallOpinion: string;
   audit: {
-    id: string; code: string; title: string; type: string; status: string;
-    riskLevel: string; materiality: number; startDate: string; endDate: string;
-    closedAt?: string; objectives: string; scope?: string; methodology?: string;
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+    auditOpinion?: string;
+    methodology?: string;
+    materiality?: number;
+    materialityExecution?: number;
+    startDate?: string;
+    endDate?: string;
+    auditPeriodStart?: string;
+    auditPeriodEnd?: string;
+    reportIssuanceDate?: string;
+    objectives?: string;
+    scope?: string;
     overallConclusion?: string;
     organization: { name: string; logoUrl?: string };
     auditEntity: { name: string; category: string; responsible?: string };
     lead?: { id: string; name: string; role: string; email: string };
     team: Array<{ id: string; name: string; role: string; email: string; teamRole: string }>;
-    estimatedHours: number; actualHours: number; hoursVariancePct: number;
+    estimatedHours: number;
+    actualHours: number;
+    hoursVariancePct: number;
   };
   summary: {
     findings:      { total: number; closed: number; open: number; critical: number; material: number; bySeverity: Record<string, number>; byStatus: Record<string, number> };
-    workingPapers: { total: number; approved: number; byStatus: Record<string, number>; byType: Record<string, number> };
+    workingPapers: { total: number; approved: number; byStatus: Record<string, number>; bySection?: Record<string, number> };
     pbc:           { total: number; accepted: number; pending: number };
     confirmations: { total: number; reconciled: number; pending: number };
   };
-  findings:      any[];
-  workingPapers: any[];
+  findings:      ReportFinding[];
+  workingPapers: ReportWorkingPaper[];
   pbcRequests:   any[];
   confirmations: any[];
 }

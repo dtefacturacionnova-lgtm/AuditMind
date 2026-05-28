@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, ExternalLink, BarChart3, AlertTriangle, ClipboardList } from 'lucide-react';
+import { FileText, ExternalLink, AlertTriangle, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { useReportsList } from '@/hooks/useReports';
@@ -79,16 +79,27 @@ export default function ReportsPage() {
                     {formatDate(audit.startDate)} — {formatDate(audit.endDate)}
                   </p>
 
-                  {/* Action */}
-                  <Link
-                    href={`/dashboard/reports/audit/${audit.id}`}
-                    target="_blank"
-                    className="flex items-center justify-center gap-2 w-full py-2 bg-[#0F2D4A] text-white text-sm font-medium rounded-xl hover:bg-[#1a4a7a] transition-colors"
-                  >
-                    <FileText className="w-4 h-4" />
-                    Ver informe
-                    <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                  </Link>
+                  {/* Actions: Preliminary + Final */}
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/dashboard/reports/audit/${audit.id}?mode=preliminary`}
+                      target="_blank"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-amber-500 text-white text-xs font-semibold rounded-xl hover:bg-amber-600 transition-colors"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Preliminar
+                      <ExternalLink className="w-3 h-3 opacity-70" />
+                    </Link>
+                    <Link
+                      href={`/dashboard/reports/audit/${audit.id}?mode=final`}
+                      target="_blank"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#0F2D4A] text-white text-xs font-semibold rounded-xl hover:bg-[#1a4a7a] transition-colors"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Final
+                      <ExternalLink className="w-3 h-3 opacity-70" />
+                    </Link>
+                  </div>
                 </div>
               );
             })}

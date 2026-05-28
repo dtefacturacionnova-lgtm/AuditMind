@@ -28,7 +28,15 @@ export class ReportsService {
             risk: true, recommendation: true, managementResponse: true,
             effectAmount: true, isMaterial: true, qualityScore: true,
             dueDate: true, closedAt: true, escalationLevel: true,
+            normativeReference: true, normativeArticle: true,
             responsible: { select: { name: true } },
+            actions: {
+              select: {
+                id: true, description: true, status: true,
+                progressPct: true, dueDate: true, completionDate: true, comments: true,
+              },
+              orderBy: { createdAt: 'asc' },
+            },
           },
         },
         workingPapers: {
@@ -85,23 +93,31 @@ export class ReportsService {
 
     return {
       generatedAt: new Date().toISOString(),
+      overallOpinion: this.computeOpinion(audit.auditOpinion, findings),
       audit: {
-        id:           audit.id,
-        title:        audit.title,
-        type:         audit.type,
-        status:       audit.status,
-        materiality:  audit.materiality ? Number(audit.materiality) : null,
-        startDate:    audit.startDate,
-        endDate:      audit.endDate,
-        objectives:   audit.objectives,
-        scope:        audit.scope,
-        organization: audit.organization,
-        auditEntity:  audit.auditEntity,
+        id:                 audit.id,
+        title:              audit.title,
+        type:               audit.type,
+        status:             audit.status,
+        auditOpinion:       audit.auditOpinion ?? null,
+        methodology:        audit.methodology ?? null,
+        materiality:        audit.materiality ? Number(audit.materiality) : null,
+        materialityExecution: audit.materialityExecution ? Number(audit.materialityExecution) : null,
+        startDate:          audit.startDate,
+        endDate:            audit.endDate,
+        auditPeriodStart:   audit.auditPeriodStart ?? null,
+        auditPeriodEnd:     audit.auditPeriodEnd ?? null,
+        reportIssuanceDate: audit.reportIssuanceDate ?? null,
+        objectives:         audit.objectives,
+        scope:              audit.scope,
+        overallConclusion:  audit.overallConclusion ?? null,
+        organization:       audit.organization,
+        auditEntity:        audit.auditEntity,
         lead,
         team: (audit.team as any[]).map((t: any) => ({ ...t.user, teamRole: t.role })),
-        estimatedHours:   hoursPlanned,
-        actualHours:      hoursActual,
-        hoursVariancePct: hoursVariance,
+        estimatedHours:     hoursPlanned,
+        actualHours:        hoursActual,
+        hoursVariancePct:   hoursVariance,
       },
       summary: {
         findings: {
@@ -171,6 +187,15 @@ export class ReportsService {
   }
 
   // ─── Util ─────────────────────────────────────────────────────────────────
+  private computeOpinion(auditOpinion: string | null, findings: any[]): string {
+    if (auditOpinion) return auditOpinion;
+    const open = findings.filter((f: any) => !['CLOSED', 'ACCEPTED_RISK'].includes(f.status));
+    if (open.some((f: any) => f.severity === 'CRITICAL')) return 'CRITICAL';
+    if (open.some((f: any) => f.severity === 'HIGH'))     return 'UNSATISFACTORY';
+    if (open.some((f: any) => f.severity === 'MEDIUM'))   return 'NEEDS_IMPROVEMENT';
+    return 'SATISFACTORY';
+  }
+
   private countBy<T extends Record<string, any>>(arr: T[], key: string): Record<string, number> {
     return arr.reduce((acc, item) => {
       const val = item[key] ?? 'UNKNOWN';

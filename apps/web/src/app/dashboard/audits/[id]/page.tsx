@@ -6,10 +6,12 @@ import {
   ArrowLeft, Lock, Calendar, Clock, Users, FileText,
   AlertTriangle, Upload, BadgeCheck, Edit2, ChevronRight,
   TrendingUp, Target, Shield, Sparkles, Wand2, Loader2, X,
-  ClipboardCopy, Check, ListChecks, Plus,
+  ClipboardCopy, Check, ListChecks, Plus, Trash2, BarChart3,
+  CheckCircle2, Circle,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAudit, useUpdateAuditStatus } from '@/hooks/useAudits';
+import { useAuditTimeEntries, useCreateTimeEntry, useDeleteTimeEntry } from '@/hooks/usePlans';
 import { useFindingsByAudit, SEVERITY_CONFIG, STATUS_CONFIG } from '@/hooks/useFindings';
 import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
@@ -43,7 +45,7 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations';
+type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours';
 
 function StatCard({ icon: Icon, label, value, color }: {
   icon: React.ElementType;
@@ -106,12 +108,14 @@ export default function AuditDetailPage() {
     : 0;
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: 'overview',    label: 'Resumen' },
-    { key: 'expediente',  label: '📁 Expediente' },
-    { key: 'team',        label: 'Equipo',         count: audit.team?.length ?? 0 },
-    { key: 'findings',    label: 'Hallazgos',       count: audit._count?.findings ?? 0 },
-    { key: 'pbc',         label: 'PBC',             count: audit._count?.pbcRequests ?? 0 },
-    { key: 'confirmations', label: 'Confirmaciones', count: audit._count?.externalConfirmations ?? 0 },
+    { key: 'overview',      label: 'Resumen' },
+    { key: 'progress',      label: '📊 Progreso' },
+    { key: 'expediente',    label: '📁 Expediente' },
+    { key: 'team',          label: 'Equipo',          count: audit.team?.length ?? 0 },
+    { key: 'findings',      label: 'Hallazgos',        count: audit._count?.findings ?? 0 },
+    { key: 'hours',         label: '⏱ Horas' },
+    { key: 'pbc',           label: 'PBC',              count: audit._count?.pbcRequests ?? 0 },
+    { key: 'confirmations', label: 'Confirmaciones',   count: audit._count?.externalConfirmations ?? 0 },
   ];
 
   async function handleStatusChange(newStatus: string) {
@@ -223,6 +227,12 @@ export default function AuditDetailPage() {
             <div className="p-6">
               {activeTab === 'overview' && (
                 <OverviewTab audit={audit} progressPct={progressPct} />
+              )}
+              {activeTab === 'progress' && (
+                <AuditProgressTab audit={audit} progressPct={progressPct} />
+              )}
+              {activeTab === 'hours' && (
+                <TimesheetTab auditId={id} estimatedHours={audit.estimatedHours ?? 0} />
               )}
               {activeTab === 'expediente' && (
                 <ExpedienteTab
@@ -975,6 +985,270 @@ function TeamTab({ team }: { team: any[] }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── L2.9: Audit Progress Dashboard ──────────────────────────────────────────
+const STATUS_ORDER = ['PLANNING', 'IN_PROGRESS', 'REVIEW', 'CLOSED'];
+
+function AuditProgressTab({ audit, progressPct }: { audit: any; progressPct: number }) {
+  const startDate  = audit.startDate ? new Date(audit.startDate) : new Date(audit.createdAt);
+  const activeDays = Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  const RISK_BADGES: Record<string, string> = {
+    CRITICAL: 'bg-red-100 text-red-700',
+    HIGH:     'bg-orange-100 text-orange-700',
+    MEDIUM:   'bg-amber-100 text-amber-700',
+    LOW:      'bg-green-100 text-green-700',
+  };
+
+  const currentIdx = STATUS_ORDER.indexOf(audit.status);
+
+  return (
+    <div className="space-y-5">
+      {/* Status stepper */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Flujo de la auditoría</p>
+        <div className="flex items-center gap-0">
+          {STATUS_ORDER.map((s, i) => {
+            const done    = i < currentIdx;
+            const current = i === currentIdx;
+            const future  = i > currentIdx;
+            const labels: Record<string, string> = {
+              PLANNING: 'Planificación', IN_PROGRESS: 'En Progreso',
+              REVIEW: 'En Revisión', CLOSED: 'Cerrada',
+            };
+            return (
+              <div key={s} className="flex items-center flex-1 min-w-0">
+                <div className="flex flex-col items-center flex-shrink-0">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${
+                    done    ? 'bg-emerald-500 border-emerald-500 text-white' :
+                    current ? 'bg-blue-600 border-blue-600 text-white' :
+                              'bg-white border-gray-200 text-gray-400'
+                  }`}>
+                    {done ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
+                  </div>
+                  <span className={`text-[10px] mt-1 font-medium text-center leading-tight max-w-[64px] ${
+                    done ? 'text-emerald-600' : current ? 'text-blue-700' : 'text-gray-400'
+                  }`}>{labels[s]}</span>
+                </div>
+                {i < STATUS_ORDER.length - 1 && (
+                  <div className={`flex-1 h-0.5 mx-1 ${i < currentIdx ? 'bg-emerald-400' : 'bg-gray-200'}`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          {
+            label: '% Avance de horas',
+            value: `${progressPct}%`,
+            sub:   `${audit.actualHours ?? 0}h de ${audit.estimatedHours ?? 0}h`,
+            color: progressPct >= 80 ? 'border-red-200 bg-red-50' : progressPct >= 50 ? 'border-amber-200 bg-amber-50' : 'border-blue-200 bg-blue-50',
+            textColor: progressPct >= 80 ? 'text-red-700' : progressPct >= 50 ? 'text-amber-700' : 'text-blue-700',
+            icon: <Clock className="w-5 h-5 opacity-60" />,
+          },
+          {
+            label: 'Hallazgos',
+            value: audit._count?.findings ?? 0,
+            sub:   'Identificados en la auditoría',
+            color: 'border-orange-200 bg-orange-50',
+            textColor: 'text-orange-700',
+            icon: <AlertTriangle className="w-5 h-5 opacity-60" />,
+          },
+          {
+            label: 'Días activos',
+            value: activeDays,
+            sub:   `Desde ${startDate.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}`,
+            color: 'border-slate-200 bg-slate-50',
+            textColor: 'text-slate-700',
+            icon: <Calendar className="w-5 h-5 opacity-60" />,
+          },
+          {
+            label: 'Papeles de trabajo',
+            value: audit._count?.workingPapers ?? 0,
+            sub:   'En el expediente',
+            color: 'border-violet-200 bg-violet-50',
+            textColor: 'text-violet-700',
+            icon: <FileText className="w-5 h-5 opacity-60" />,
+          },
+        ].map(card => (
+          <div key={card.label} className={`rounded-xl border p-4 ${card.color}`}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">{card.label}</p>
+                <p className={`text-2xl font-black ${card.textColor}`}>{card.value}</p>
+                <p className="text-[11px] text-gray-400 mt-1">{card.sub}</p>
+              </div>
+              <span className={card.textColor}>{card.icon}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Hours progress bar */}
+      {(audit.estimatedHours ?? 0) > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Horas ejecutadas vs. planificadas</span>
+            <span className={`font-bold ${progressPct >= 90 ? 'text-red-600' : progressPct >= 60 ? 'text-amber-600' : 'text-blue-600'}`}>
+              {progressPct}%
+            </span>
+          </div>
+          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${progressPct >= 90 ? 'bg-red-500' : progressPct >= 60 ? 'bg-amber-500' : 'bg-blue-500'}`}
+              style={{ width: `${Math.min(progressPct, 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>{audit.actualHours ?? 0} h reales</span>
+            <span>{audit.estimatedHours ?? 0} h planificadas</span>
+          </div>
+        </div>
+      )}
+
+      {/* Risk & dates */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Nivel de riesgo</p>
+          {audit.riskLevel ? (
+            <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${RISK_BADGES[audit.riskLevel] ?? 'bg-gray-100 text-gray-700'}`}>
+              {audit.riskLevel}
+            </span>
+          ) : (
+            <span className="text-sm text-gray-400">No definido</span>
+          )}
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Fechas</p>
+          <div className="space-y-1 text-xs text-gray-600">
+            <div className="flex justify-between">
+              <span className="text-gray-400">Inicio:</span>
+              <span>{audit.startDate ? new Date(audit.startDate).toLocaleDateString('es-CL') : '—'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Fin planificado:</span>
+              <span>{audit.endDate ? new Date(audit.endDate).toLocaleDateString('es-CL') : '—'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── L2.8: Timesheet ─────────────────────────────────────────────────────────
+function TimesheetTab({ auditId, estimatedHours }: { auditId: string; estimatedHours: number }) {
+  const { data: entries = [], isLoading } = useAuditTimeEntries(auditId);
+  const createEntry = useCreateTimeEntry();
+  const deleteEntry = useDeleteTimeEntry();
+  const [date, setDate]   = useState(new Date().toISOString().slice(0, 10));
+  const [hours, setHours] = useState('');
+  const [desc, setDesc]   = useState('');
+
+  const totalHours = entries.reduce((s, e) => s + e.hours, 0);
+  const pct = estimatedHours > 0 ? Math.min(100, Math.round((totalHours / estimatedHours) * 100)) : 0;
+
+  const handleAdd = async () => {
+    if (!hours || +hours <= 0) return;
+    await createEntry.mutateAsync({ auditId, workDate: date, hours: +hours, description: desc || undefined });
+    setHours('');
+    setDesc('');
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Add entry form */}
+      <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
+        <p className="text-xs font-semibold text-slate-700 mb-3">Registrar horas trabajadas</p>
+        <div className="flex gap-2 flex-wrap">
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="number" min="0.5" max="24" step="0.5" placeholder="Horas (ej. 8)"
+            value={hours} onChange={e => setHours(e.target.value)}
+            className="w-32 rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" placeholder="Descripción del trabajo…"
+            value={desc} onChange={e => setDesc(e.target.value)}
+            className="flex-1 min-w-[180px] rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onKeyDown={e => e.key === 'Enter' && handleAdd()} />
+          <button onClick={handleAdd} disabled={!hours || createEntry.isPending}
+            className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+            <Plus className="w-3.5 h-3.5" />
+            {createEntry.isPending ? 'Guardando…' : 'Registrar'}
+          </button>
+        </div>
+      </div>
+
+      {/* Progress vs estimated */}
+      {estimatedHours > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600 font-medium">Horas registradas vs. planificadas</span>
+            <span className={`font-bold ${pct >= 90 ? 'text-red-600' : pct >= 60 ? 'text-amber-600' : 'text-blue-600'}`}>
+              {totalHours.toFixed(1)}h / {estimatedHours}h ({pct}%)
+            </span>
+          </div>
+          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+            <div className={`h-full rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 60 ? 'bg-amber-500' : 'bg-blue-500'}`}
+              style={{ width: `${Math.min(pct, 100)}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* Entries list */}
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="text-center py-10 text-gray-400">
+          <Clock className="w-10 h-10 mx-auto mb-2 opacity-25" />
+          <p className="text-sm font-medium">Sin horas registradas</p>
+          <p className="text-xs mt-1">Registra el tiempo dedicado a esta auditoría.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Fecha</th>
+                <th className="text-right px-4 py-2.5 font-semibold text-gray-600">Horas</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Descripción</th>
+                <th className="px-3 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(e => (
+                <tr key={e.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
+                  <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">
+                    {new Date(e.workDate).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-bold text-gray-800">{e.hours}h</td>
+                  <td className="px-4 py-2.5 text-gray-600">{e.description ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    <button onClick={() => deleteEntry.mutateAsync(e.id)}
+                      disabled={deleteEntry.isPending}
+                      className="text-gray-300 hover:text-red-500 transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              <tr className="bg-gray-50 border-t border-gray-200">
+                <td className="px-4 py-2.5 font-semibold text-gray-700">Total</td>
+                <td className="px-4 py-2.5 text-right font-black text-gray-900">{totalHours.toFixed(1)}h</td>
+                <td colSpan={2} />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PlansService } from './plans.service';
 import {
   CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
+  CreateTimeEntryDto,
 } from './dto/plan.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -119,5 +120,44 @@ export class PlansController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.removeItem(planId, itemId, user);
+  }
+
+  // ── L2.8: Timesheet ──────────────────────────────────────────────────────────
+
+  @Post('time-entries')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Registrar horas trabajadas (timesheet)' })
+  createTimeEntry(@Body() dto: CreateTimeEntryDto, @CurrentUser() user: AuthUser) {
+    return this.service.createTimeEntry(dto, user);
+  }
+
+  @Get('time-entries/audit/:auditId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Listar entradas de tiempo de una auditoría' })
+  getTimeEntries(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
+    return this.service.getTimeEntries(auditId, user);
+  }
+
+  @Get('time-entries/plan-item/:planItemId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Listar entradas de tiempo de un ítem del plan' })
+  getPlanItemTimeEntries(@Param('planItemId') planItemId: string, @CurrentUser() user: AuthUser) {
+    return this.service.getPlanItemTimeEntries(planItemId, user);
+  }
+
+  @Delete('time-entries/:entryId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Eliminar entrada de tiempo propia' })
+  deleteTimeEntry(@Param('entryId') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.deleteTimeEntry(id, user);
+  }
+
+  // ── L2.7: Findings linked to a Banco de Proyectos project ────────────────────
+
+  @Get('project-findings/:projectId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Hallazgos históricos de un proyecto del Banco' })
+  getProjectFindings(@Param('projectId') projectId: string, @CurrentUser() user: AuthUser) {
+    return this.service.getProjectFindings(projectId, user);
   }
 }

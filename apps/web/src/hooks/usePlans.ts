@@ -29,6 +29,9 @@ export interface PlanItem {
   notes?:             string;
   isMandatory?:       boolean;
   originScore?:       number;
+  // L2.4 — team assignment
+  responsibleName?:   string;
+  teamNotes?:         string;
   auditEntity?: {
     id:                string;
     name:              string;
@@ -37,6 +40,37 @@ export interface PlanItem {
     responsible?:      string;
   };
   auditProject?: PlanItemProject;
+}
+
+// L2.8 — Timesheet
+export interface TimeEntry {
+  id:          string;
+  auditId?:    string;
+  planItemId?: string;
+  userId:      string;
+  workDate:    string;
+  hours:       number;
+  description?: string;
+  createdAt:   string;
+}
+
+export interface CreateTimeEntryData {
+  auditId?:    string;
+  planItemId?: string;
+  workDate:    string;
+  hours:       number;
+  description?: string;
+}
+
+// L2.7 — Historical findings for a project
+export interface ProjectFinding {
+  id:        string;
+  title:     string;
+  condition: string;
+  severity:  string;
+  status:    string;
+  createdAt: string;
+  audit: { id: string; title: string; createdAt: string };
 }
 
 export interface AuditPlan {
@@ -49,6 +83,7 @@ export interface AuditPlan {
   approvedAt?:    string;
   totalHours:     number;
   objectives:     string[];
+  amendments?:    any[];
   items:          PlanItem[];
   createdAt:      string;
   updatedAt:      string;
@@ -80,6 +115,7 @@ export interface CreatePlanData {
   name:        string;
   totalHours?: number;
   objectives?: string[];
+  amendments?: any[];
 }
 
 export interface CreatePlanItemData {
@@ -205,6 +241,45 @@ export function useImportFromProjects(planId: string) {
       qc.invalidateQueries({ queryKey: ['plan', planId] });
       qc.invalidateQueries({ queryKey: ['plan-candidates', planId] });
     },
+  });
+}
+
+// ── L2.8: Timesheet ──────────────────────────────────────────────────────────
+export function useAuditTimeEntries(auditId: string) {
+  return useQuery<TimeEntry[]>({
+    queryKey:  ['time-entries', 'audit', auditId],
+    queryFn:   () => apiClient.get(`/plans/time-entries/audit/${auditId}`),
+    enabled:   !!auditId,
+    staleTime: 15_000,
+  });
+}
+
+export function useCreateTimeEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CreateTimeEntryData) => apiClient.post('/plans/time-entries', data),
+    onSuccess: (_, vars) => {
+      if (vars.auditId) qc.invalidateQueries({ queryKey: ['time-entries', 'audit', vars.auditId] });
+      if (vars.planItemId) qc.invalidateQueries({ queryKey: ['time-entries', 'plan-item', vars.planItemId] });
+    },
+  });
+}
+
+export function useDeleteTimeEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/plans/time-entries/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['time-entries'] }),
+  });
+}
+
+// ── L2.7: Historical findings for a project ───────────────────────────────────
+export function useProjectFindings(projectId: string) {
+  return useQuery<ProjectFinding[]>({
+    queryKey:  ['project-findings', projectId],
+    queryFn:   () => apiClient.get(`/plans/project-findings/${projectId}`),
+    enabled:   !!projectId,
+    staleTime: 60_000,
   });
 }
 

@@ -24,6 +24,7 @@ import {
 import { useStrategicObjectives } from '@/hooks/useStrategic';
 import { useEntityTree, usePlanCandidates, AuditEntityNode, type AuditableUnit } from '@/hooks/useAuditUniverse2';
 import { RiskCatalogView } from '@/components/RiskCatalogView';
+import { useProjectFindings } from '@/hooks/usePlans';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -222,6 +223,105 @@ function RiskScoreDisplay({ score, level }: { score?: number; level?: string }) 
   );
 }
 
+// ─── L2.6 + L2.7: Project History Panel ──────────────────────────────────────
+
+function ProjectHistoryPanel({ projectId, project }: { projectId: string; project: AuditProject }) {
+  const { data: findings = [], isLoading } = useProjectFindings(projectId);
+
+  const scoreRows = [
+    { label: 'Impacto',              value: project.impactScore },
+    { label: 'Probabilidad',         value: project.likelihoodScore },
+    { label: 'Madurez Controles',    value: project.controlMaturityScore },
+    { label: 'Materialidad',         value: project.materialityScore },
+    { label: 'Alin. Estratégica',    value: project.strategicAlignScore },
+    { label: 'Alin. Operativa',      value: project.operationalAlignScore },
+    { label: 'Fraude/Denuncias',     value: project.fraudHistoryScore },
+    { label: 'Req. Dirección',       value: project.managementReqScore },
+    { label: 'Rotación Personal',    value: project.staffTurnoverScore },
+    { label: 'Cobertura',            value: project.coverageHistoryScore },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* L2.6 — Evaluación de Riesgo */}
+      <div>
+        <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+          Evaluación de Riesgo Actual
+        </h3>
+        <div className="mb-3 flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div>
+            <p className="text-[11px] text-slate-400">Puntaje Final</p>
+            <p className="text-2xl font-bold text-slate-800">{project.finalRiskScore?.toFixed(1) ?? '—'}</p>
+            <p className="text-[11px] text-slate-400">escala 0–100</p>
+          </div>
+          {project.finalRiskLevel && (
+            <span className={cn('ml-auto rounded-xl px-4 py-1.5 text-base font-bold', RISK_LEVEL_BADGE[project.finalRiskLevel] ?? 'bg-gray-100 text-gray-600')}>
+              {project.finalRiskLevel}
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {scoreRows.map(({ label, value }) => (
+            <div key={label} className="flex items-center justify-between rounded-lg border border-slate-100 bg-white px-3 py-1.5">
+              <span className="text-xs text-slate-500">{label}</span>
+              <span className="text-sm font-bold text-slate-700">{value != null ? `${value}/5` : '—'}</span>
+            </div>
+          ))}
+        </div>
+        {project.coverageGapDays != null && (
+          <div className="mt-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-700">
+            Último historial de cobertura: {project.lastAuditAgeDynamic ?? '—'} · {project.coverageGapDays} días desde última auditoría
+          </div>
+        )}
+      </div>
+
+      {/* L2.7 — Hallazgos de Auditorías Anteriores */}
+      <div>
+        <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+          Hallazgos de Auditorías Anteriores
+        </h3>
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-6 text-sm text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Cargando hallazgos…
+          </div>
+        ) : findings.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
+            No hay hallazgos anteriores vinculados a este proyecto
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {findings.map(f => (
+              <div key={f.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-slate-800">{f.title}</p>
+                  <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                    f.severity === 'CRITICAL' ? 'bg-red-100 text-red-700 border border-red-300'
+                    : f.severity === 'HIGH'   ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                    : f.severity === 'MEDIUM' ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                    : 'bg-green-100 text-green-700 border border-green-300'
+                  )}>
+                    {f.severity}
+                  </span>
+                </div>
+                {f.condition && (
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">{f.condition}</p>
+                )}
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                  <span>Auditoría: <span className="font-medium text-slate-600">{f.audit.title}</span></span>
+                  <span>{new Date(f.createdAt).toLocaleDateString('es')}</span>
+                  <span className={cn('font-medium', f.status === 'CLOSED' ? 'text-emerald-600' : 'text-amber-600')}>
+                    {f.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 function ProjectsPageContent() {
@@ -250,7 +350,7 @@ function ProjectsPageContent() {
   const [showModal, setShowModal]       = useState(false);
   const [editing, setEditing]           = useState<AuditProject | null>(null);
   const [form, setForm]                 = useState<Partial<AuditProject>>(blankForm());
-  const [activeTab, setActiveTab]       = useState<0 | 1 | 2>(0);
+  const [activeTab, setActiveTab]       = useState<0 | 1 | 2 | 3>(0);
   const [saving, setSaving]             = useState(false);
   const [syncResult, setSyncResult]     = useState<{ updated: number } | null>(null);
   const [pendingLineId, setPendingLineId] = useState<string | null>(null);
@@ -680,6 +780,15 @@ function ProjectsPageContent() {
                   )}
                 >{tab}</button>
               ))}
+              {editing && (
+                <button
+                  onClick={() => setActiveTab(3)}
+                  className={cn(
+                    'border-b-2 px-4 py-3 text-sm font-medium transition-colors',
+                    activeTab === 3 ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700',
+                  )}
+                >Historial</button>
+              )}
             </div>
 
             {/* Modal body */}
@@ -1112,17 +1221,22 @@ function ProjectsPageContent() {
                   </div>
                 </div>
               )}
+
+              {/* ── Tab 3: Historial (L2.6 + L2.7) — only when editing ── */}
+              {activeTab === 3 && editing && (
+                <ProjectHistoryPanel projectId={editing.id} project={editing} />
+              )}
             </div>
 
             {/* Modal footer */}
             <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
               <div className="flex gap-2">
                 {activeTab > 0 && (
-                  <button onClick={() => setActiveTab((activeTab - 1) as 0 | 1 | 2)}
+                  <button onClick={() => setActiveTab((activeTab - 1) as 0 | 1 | 2 | 3)}
                     className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">Anterior</button>
                 )}
                 {activeTab < 2 && (
-                  <button onClick={() => setActiveTab((activeTab + 1) as 0 | 1 | 2)}
+                  <button onClick={() => setActiveTab((activeTab + 1) as 0 | 1 | 2 | 3)}
                     className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100">Siguiente</button>
                 )}
               </div>

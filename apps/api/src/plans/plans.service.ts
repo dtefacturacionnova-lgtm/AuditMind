@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import {
   CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
+  CreateTimeEntryDto,
 } from './dto/plan.dto';
 
 const ITEM_INCLUDE = {
@@ -96,6 +97,7 @@ export class PlansService {
         ...(dto.name       != null && { name:       dto.name }),
         ...(dto.totalHours != null && { totalHours: dto.totalHours }),
         ...(dto.objectives != null && { objectives: dto.objectives as any }),
+        ...(dto.amendments != null && { amendments: dto.amendments as any }),
       },
       include: PLAN_INCLUDE,
     });
@@ -187,6 +189,8 @@ export class PlansService {
         ...(dto.notes             != null && { notes:             dto.notes }),
         ...(dto.tentativeStartDate != null && { tentativeStartDate: new Date(dto.tentativeStartDate) }),
         ...(dto.tentativeEndDate   != null && { tentativeEndDate:   new Date(dto.tentativeEndDate) }),
+        ...(dto.responsibleName   != null && { responsibleName:   dto.responsibleName }),
+        ...(dto.teamNotes         != null && { teamNotes:         dto.teamNotes }),
       },
     });
 
@@ -282,5 +286,67 @@ export class PlansService {
     );
 
     return projects.map(p => ({ ...p, alreadyInPlan: importedIds.has(p.id) }));
+  }
+
+  // ── L2.8: Timesheet — create time entry ──────────────────────────────────────
+  async createTimeEntry(dto: CreateTimeEntryDto, user: AuthUser) {
+    return this.prisma.timeEntry.create({
+      data: {
+        organizationId: user.organizationId,
+        userId:         user.id,
+        auditId:        dto.auditId,
+        planItemId:     dto.planItemId,
+        workDate:       new Date(dto.workDate),
+        hours:          dto.hours,
+        description:    dto.description,
+      },
+    });
+  }
+
+  // ── L2.8: Timesheet — list entries for an audit ──────────────────────────────
+  async getTimeEntries(auditId: string, user: AuthUser) {
+    return this.prisma.timeEntry.findMany({
+      where:   { auditId, organizationId: user.organizationId },
+      orderBy: { workDate: 'asc' },
+    });
+  }
+
+  // ── L2.8: Timesheet — list entries for a plan item ───────────────────────────
+  async getPlanItemTimeEntries(planItemId: string, user: AuthUser) {
+    return this.prisma.timeEntry.findMany({
+      where:   { planItemId, organizationId: user.organizationId },
+      orderBy: { workDate: 'asc' },
+    });
+  }
+
+  // ── L2.8: Timesheet — delete entry ───────────────────────────────────────────
+  async deleteTimeEntry(id: string, user: AuthUser) {
+    const entry = await this.prisma.timeEntry.findUnique({ where: { id } });
+    if (!entry || entry.organizationId !== user.organizationId) throw new NotFoundException();
+    if (entry.userId !== user.id) throw new ForbiddenException('Solo puedes eliminar tus propias entradas');
+    await this.prisma.timeEntry.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  // ── L2.7: Findings linked to a project (via audit history) ───────────────────
+  async getProjectFindings(projectId: string, user: AuthUser) {
+    // Find all audits linked to this project's planItems
+    const planItems = await this.prisma.auditPlanItem.findMany({
+      where:   { auditProjectId: projectId },
+      select:  { auditId: true },
+    });
+    const auditIds = planItems.map(i => i.auditId).filter(Boolean) as string[];
+
+    if (auditIds.length === 0) return [];
+
+    return this.prisma.finding.findMany({
+      where:   { auditId: { in: auditIds }, organizationId: user.organizationId },
+      orderBy: { createdAt: 'desc' },
+      select:  {
+        id: true, title: true, condition: true, severity: true,
+        status: true, createdAt: true,
+        audit: { select: { id: true, title: true, createdAt: true } },
+      },
+    });
   }
 }

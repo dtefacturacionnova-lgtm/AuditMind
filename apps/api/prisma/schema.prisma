@@ -358,6 +358,7 @@ model Organization {
   auditPlans             AuditPlan[]
   audits                 Audit[]
   riskRegisters          RiskRegister[]
+  timeEntries            TimeEntry[]
   pbcRequests            PbcRequest[]
   findings               Finding[]
   templates              Template[]
@@ -825,17 +826,45 @@ model AuditPlanItem {
   // Vínculo con la auditoría cuando se ejecuta
   auditId             String?  @unique // FK a Audit (una vez iniciada)
   notes               String?
+  // L2.4 — Asignación de equipo / responsable
+  responsibleName     String?  // nombre libre del auditor líder asignado
+  teamNotes           String?  // notas de equipo (ej. "Senior + 2 juniors")
 
   plan           AuditPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
   auditEntity    AuditEntity?   @relation(fields: [auditEntityId], references: [id])
   auditableUnit  AuditableUnit? @relation(fields: [auditableUnitId], references: [id])
   auditProject   AuditProject?  @relation(fields: [auditProjectId], references: [id])
   audit          Audit?         @relation("PlanItemAudit", fields: [auditId], references: [id])
+  timeEntries    TimeEntry[]
 
   @@index([planId])
   @@index([auditableUnitId])
   @@index([auditProjectId])
   @@map("audit_plan_items")
+}
+
+// L2.8 — Registro de horas (timesheet) por auditor/auditoría
+model TimeEntry {
+  id              String    @id @default(cuid())
+  organizationId  String
+  auditId         String?
+  planItemId      String?
+  userId          String
+  workDate        DateTime
+  hours           Float
+  description     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  audit         Audit?        @relation(fields: [auditId], references: [id])
+  planItem      AuditPlanItem? @relation(fields: [planItemId], references: [id])
+
+  @@index([organizationId])
+  @@index([auditId])
+  @@index([planItemId])
+  @@index([userId])
+  @@map("time_entries")
 }
 
 // ─── MÓDULO 04: EVALUACIÓN DE RIESGOS ─────────────────────────────────────────
@@ -921,6 +950,7 @@ model Audit {
   planItem               AuditPlanItem?         @relation("PlanItemAudit")
   team                   AuditTeam[]
   workingPapers          WorkingPaper[]
+  timeEntries            TimeEntry[]
   pbcRequests            PbcRequest[]
   findings               Finding[]
   dataAnalysisJobs       DataAnalysisJob[]

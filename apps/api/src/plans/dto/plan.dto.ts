@@ -40,6 +40,11 @@ export class UpdatePlanDto {
   @IsArray()
   @IsString({ each: true })
   objectives?: string[];
+
+  @ApiPropertyOptional({ description: 'Historial de cambios del plan (JSON array)' })
+  @IsOptional()
+  @IsArray()
+  amendments?: any[];
 }
 
 export class CreatePlanItemDto {
@@ -101,6 +106,41 @@ export class UpdatePlanItemDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Nombre del auditor líder responsable' })
+  @IsOptional()
+  @IsString()
+  responsibleName?: string;
+
+  @ApiPropertyOptional({ description: 'Notas de equipo asignado' })
+  @IsOptional()
+  @IsString()
+  teamNotes?: string;
+}
+
+export class CreateTimeEntryDto {
+  @ApiProperty()
+  @IsOptional()
+  @IsString()
+  auditId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  planItemId?: string;
+
+  @ApiProperty()
+  @IsDateString()
+  workDate: string;
+
+  @ApiProperty({ example: 8 })
+  @IsNumber()
+  hours: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
 }
 
 export class ImportFromProjectsDto {

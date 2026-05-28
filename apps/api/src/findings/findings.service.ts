@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, ForbiddenException, UnprocessableEntityException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateFindingDto, UpdateFindingDto, AssignResponsibleDto, RejectFindingDto } from './dto/create-finding.dto';
+import { CreateFindingDto, UpdateFindingDto, AssignResponsibleDto, RejectFindingDto, CreateActionDto, UpdateActionDto } from './dto/create-finding.dto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { FindingStatus, UserRole, EscalationLevel, Finding } from '@prisma/client';
 
@@ -346,6 +346,46 @@ export class FindingsService {
     ]);
 
     return updated;
+  }
+
+  // ─── FindingAction CRUD ────────────────────────────────────────────────────
+  async createAction(findingId: string, dto: CreateActionDto, user: AuthUser) {
+    await this.assertFindingAccess(findingId, user);
+    return this.prisma.findingAction.create({
+      data: {
+        findingId,
+        organizationId: user.organizationId,
+        description: dto.description,
+        responsibleId: dto.responsibleId ?? null,
+        dueDate: new Date(dto.dueDate),
+        status: 'PENDING',
+        progressPct: dto.progressPct ?? 0,
+        evidenceUrls: [],
+      },
+    });
+  }
+
+  async updateAction(actionId: string, dto: UpdateActionDto, user: AuthUser) {
+    const action = await this.prisma.findingAction.findUnique({ where: { id: actionId } });
+    if (!action) throw new NotFoundException('Acción no encontrada');
+    if (action.organizationId !== user.organizationId) throw new ForbiddenException();
+
+    const data: Record<string, unknown> = {};
+    if (dto.status      !== undefined) data.status      = dto.status;
+    if (dto.progressPct !== undefined) data.progressPct = dto.progressPct;
+    if (dto.comments    !== undefined) data.comments    = dto.comments;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.completionDate !== undefined) {
+      data.completionDate = dto.completionDate ? new Date(dto.completionDate) : null;
+    }
+
+    // Auto-complete when marking COMPLETED
+    if (dto.status === 'COMPLETED') {
+      if (!data.completionDate) data.completionDate = new Date();
+      if (data.progressPct === undefined) data.progressPct = 100;
+    }
+
+    return this.prisma.findingAction.update({ where: { id: actionId }, data });
   }
 
   async addComment(id: string, content: string, isInternal: boolean, user: AuthUser) {

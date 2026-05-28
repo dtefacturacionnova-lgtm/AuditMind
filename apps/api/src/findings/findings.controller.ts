@@ -8,6 +8,7 @@ import { FindingsService } from './findings.service';
 import {
   CreateFindingDto, UpdateFindingDto,
   AssignResponsibleDto, RejectFindingDto,
+  CreateActionDto, UpdateActionDto,
 } from './dto/create-finding.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -162,6 +163,30 @@ export class FindingsController {
   @ApiOperation({ summary: 'Cerrar hallazgo (requiere evidencia de remediación)' })
   close(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.close(id, user);
+  }
+
+  // ─── Actions ──────────────────────────────────────────────────────────────
+  @Post(':id/actions')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Agregar acción de seguimiento al hallazgo' })
+  createAction(
+    @Param('id') id: string,
+    @Body() dto: CreateActionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.createAction(id, dto, user);
+  }
+
+  @Patch('actions/:actionId')
+  @Roles(UserRole.AUDITOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Actualizar estado/progreso de una acción de seguimiento' })
+  updateAction(
+    @Param('actionId') actionId: string,
+    @Body() dto: UpdateActionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.updateAction(actionId, dto, user);
   }
 
   // ─── Comments ─────────────────────────────────────────────────────────────

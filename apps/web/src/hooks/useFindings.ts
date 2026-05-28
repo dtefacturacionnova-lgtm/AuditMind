@@ -10,13 +10,18 @@ export type FindingStatus =
   | 'CLOSED' | 'OVERDUE' | 'ACCEPTED_RISK';
 export type EscalationLevel = 'NONE' | 'AUDITOR' | 'MANAGER' | 'CAE' | 'COMMITTEE';
 
+export type ActionStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE';
+
 export interface FindingAction {
   id: string;
   description: string;
   dueDate: string;
-  status: string;
+  completionDate?: string;
+  status: ActionStatus;
   progressPct: number;
+  comments?: string;
   responsible?: { id: string; name: string };
+  createdAt: string;
 }
 
 export interface FindingComment {
@@ -252,6 +257,37 @@ export function useAddFindingComment() {
     },
   });
 }
+
+export function useCreateFindingAction(findingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { description: string; dueDate: string; responsibleId?: string; progressPct?: number }) =>
+      apiClient.post<FindingAction>(`/findings/${findingId}/actions`, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['finding', findingId] }),
+  });
+}
+
+export function useUpdateFindingAction(findingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ actionId, ...data }: {
+      actionId: string;
+      status?: string;
+      progressPct?: number;
+      completionDate?: string;
+      comments?: string;
+      description?: string;
+    }) => apiClient.patch<FindingAction>(`/findings/actions/${actionId}`, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['finding', findingId] }),
+  });
+}
+
+export const ACTION_STATUS_CONFIG: Record<ActionStatus, { label: string; color: string; bg: string; dot: string }> = {
+  PENDING:     { label: 'Pendiente',  color: 'text-gray-600',   bg: 'bg-gray-100',   dot: 'bg-gray-400' },
+  IN_PROGRESS: { label: 'En curso',   color: 'text-blue-700',   bg: 'bg-blue-100',   dot: 'bg-blue-500' },
+  COMPLETED:   { label: 'Completada', color: 'text-emerald-700',bg: 'bg-emerald-100',dot: 'bg-emerald-500' },
+  OVERDUE:     { label: 'Vencida',    color: 'text-red-700',    bg: 'bg-red-100',    dot: 'bg-red-500' },
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 export const SEVERITY_CONFIG: Record<FindingSeverity, { label: string; color: string; bg: string; dot: string }> = {

@@ -170,3 +170,56 @@ export class RejectFindingDto {
   @IsString()
   reason: string;
 }
+
+export class CreateActionDto {
+  @ApiProperty()
+  @IsString()
+  description: string;
+
+  @ApiProperty({ example: '2026-06-30' })
+  @IsString()
+  dueDate: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  responsibleId?: string;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  progressPct?: number;
+}
+
+export class UpdateActionDto {
+  @ApiPropertyOptional({ enum: ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'OVERDUE'] })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  progressPct?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  completionDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  comments?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+}

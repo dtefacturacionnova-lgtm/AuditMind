@@ -8,7 +8,7 @@ import {
   ArrowLeft, AlertTriangle, CheckCircle2, Clock, Send,
   ThumbsUp, ThumbsDown, UserPlus, MessageSquare, Shield,
   TrendingUp, FileText, ChevronRight, Lock, RefreshCw,
-  Star, Edit3, X, Check, Sparkles, ChevronDown, ChevronUp, Loader2,
+  Star, Edit3, X, Check, Sparkles, ChevronDown, ChevronUp, Loader2, Plus,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { apiClient } from '@/lib/api-client';
@@ -21,11 +21,16 @@ import {
   useAssignFindingResponsible,
   useCloseFinding,
   useAddFindingComment,
+  useCreateFindingAction,
+  useUpdateFindingAction,
   SEVERITY_CONFIG,
   STATUS_CONFIG,
+  ACTION_STATUS_CONFIG,
   qualityScoreColor,
   qualityScoreBg,
   type FindingStatus,
+  type FindingAction,
+  type ActionStatus,
   type Finding,
 } from '@/hooks/useFindings';
 import { formatDate, cn } from '@/lib/utils';
@@ -495,6 +500,269 @@ function AssignModal({ findingId, onClose }: { findingId: string; onClose: () =>
   );
 }
 
+// ─── Add Action Modal ─────────────────────────────────────────────────────────
+function AddActionModal({ findingId, onClose }: { findingId: string; onClose: () => void }) {
+  const [description, setDescription] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [responsibleId, setResponsibleId] = useState('');
+  const create = useCreateFindingAction(findingId);
+
+  const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-800 text-sm">Nueva acción de seguimiento</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Descripción *</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+              placeholder="¿Qué acción se debe tomar?"
+              className={`${cls} resize-none`}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Fecha límite *</label>
+            <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={cls} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">ID del responsable (opcional)</label>
+            <input
+              value={responsibleId}
+              onChange={e => setResponsibleId(e.target.value)}
+              placeholder="ID del usuario responsable"
+              className={cls}
+            />
+          </div>
+        </div>
+        {create.isError && (
+          <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
+            {(create.error as Error)?.message ?? 'Error al crear acción'}
+          </p>
+        )}
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 py-2 border border-gray-200 text-sm rounded-xl text-gray-600 hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            disabled={!description.trim() || !dueDate || create.isPending}
+            onClick={async () => {
+              await create.mutateAsync({
+                description: description.trim(),
+                dueDate,
+                ...(responsibleId.trim() && { responsibleId: responsibleId.trim() }),
+              });
+              onClose();
+            }}
+            className="flex-1 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-50"
+          >
+            {create.isPending ? 'Creando…' : 'Agregar acción'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Action Card ──────────────────────────────────────────────────────────────
+function ActionCard({ action, findingId }: { action: FindingAction; findingId: string }) {
+  const [editing, setEditing] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<ActionStatus>(action.status);
+  const [draftPct, setDraftPct] = useState(action.progressPct);
+  const [draftComments, setDraftComments] = useState(action.comments ?? '');
+  const update = useUpdateFindingAction(findingId);
+
+  const cfg = ACTION_STATUS_CONFIG[action.status] ?? ACTION_STATUS_CONFIG['PENDING'];
+  const isOverdue = !['COMPLETED'].includes(action.status) && new Date(action.dueDate) < new Date();
+
+  const handleSave = async () => {
+    await update.mutateAsync({
+      actionId: action.id,
+      status: draftStatus,
+      progressPct: draftPct,
+      comments: draftComments,
+    });
+    setEditing(false);
+  };
+
+  return (
+    <div className={`rounded-xl border p-4 space-y-3 ${isOverdue && action.status !== 'COMPLETED' ? 'border-red-200 bg-red-50/40' : 'border-gray-100 bg-white'}`}>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-gray-800 leading-snug">{action.description}</p>
+        </div>
+        <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+          {cfg.label}
+        </span>
+      </div>
+
+      {/* Meta row */}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+        <span className={`flex items-center gap-1 ${isOverdue && action.status !== 'COMPLETED' ? 'text-red-600 font-medium' : ''}`}>
+          <Clock className="w-3.5 h-3.5" />
+          {isOverdue && action.status !== 'COMPLETED' ? 'Vencida: ' : 'Vence: '}
+          {new Date(action.dueDate).toLocaleDateString('es-CL', { year: 'numeric', month: 'short', day: 'numeric' })}
+        </span>
+        {action.responsible && (
+          <span className="flex items-center gap-1">
+            <UserPlus className="w-3.5 h-3.5" />
+            {action.responsible.name}
+          </span>
+        )}
+        {action.completionDate && (
+          <span className="flex items-center gap-1 text-emerald-600">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Completada: {new Date(action.completionDate).toLocaleDateString('es-CL', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </span>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs text-gray-500">
+          <span>Avance</span>
+          <span className="font-semibold">{action.progressPct}%</span>
+        </div>
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${
+              action.progressPct === 100 ? 'bg-emerald-500' :
+              action.progressPct >= 50 ? 'bg-blue-500' : 'bg-amber-400'
+            }`}
+            style={{ width: `${action.progressPct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Comments */}
+      {action.comments && !editing && (
+        <p className="text-xs text-gray-500 italic border-l-2 border-gray-200 pl-2">{action.comments}</p>
+      )}
+
+      {/* Edit form */}
+      {editing ? (
+        <div className="space-y-3 pt-1 border-t border-gray-100">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-500">Estado</label>
+            <select
+              value={draftStatus}
+              onChange={e => setDraftStatus(e.target.value as ActionStatus)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {(Object.keys(ACTION_STATUS_CONFIG) as ActionStatus[]).map(s => (
+                <option key={s} value={s}>{ACTION_STATUS_CONFIG[s].label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-500">Avance: {draftPct}%</label>
+            <input
+              type="range" min={0} max={100} step={5}
+              value={draftPct}
+              onChange={e => setDraftPct(+e.target.value)}
+              className="w-full accent-blue-600"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-500">Comentarios</label>
+            <textarea
+              value={draftComments}
+              onChange={e => setDraftComments(e.target.value)}
+              rows={2}
+              placeholder="Nota sobre el avance..."
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={update.isPending}
+              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {update.isPending ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex justify-end pt-1">
+          <button
+            onClick={() => { setDraftStatus(action.status); setDraftPct(action.progressPct); setDraftComments(action.comments ?? ''); setEditing(true); }}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            Actualizar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Seguimiento Tab ──────────────────────────────────────────────────────────
+function TrackingTab({ finding, onAddAction }: { finding: Finding; onAddAction: () => void }) {
+  const actions = finding.actions ?? [];
+  const total = actions.length;
+  const completed = actions.filter(a => a.status === 'COMPLETED').length;
+  const overdue = actions.filter(a => a.status !== 'COMPLETED' && new Date(a.dueDate) < new Date()).length;
+  const inProgress = actions.filter(a => a.status === 'IN_PROGRESS').length;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary KPIs */}
+      {total > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { label: 'Total', value: total, color: 'text-gray-700', bg: 'bg-gray-50' },
+            { label: 'En curso', value: inProgress, color: 'text-blue-700', bg: 'bg-blue-50' },
+            { label: 'Completadas', value: completed, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+            { label: 'Vencidas', value: overdue, color: 'text-red-700', bg: 'bg-red-50' },
+          ].map(({ label, value, color, bg }) => (
+            <div key={label} className={`${bg} rounded-xl p-3 text-center`}>
+              <p className={`text-xl font-bold ${color}`}>{value}</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">{label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Actions list */}
+      {total === 0 ? (
+        <div className="py-8 text-center">
+          <CheckCircle2 className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+          <p className="text-sm text-gray-400">Sin acciones de seguimiento</p>
+          <p className="text-xs text-gray-300 mt-1">Agrega una acción para rastrear la remediación</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {actions.map(a => (
+            <ActionCard key={a.id} action={a} findingId={finding.id} />
+          ))}
+        </div>
+      )}
+
+      {/* Add action button */}
+      <button
+        onClick={onAddAction}
+        className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-blue-300 rounded-xl text-sm text-blue-600 hover:bg-blue-50 transition-colors"
+      >
+        <Plus className="w-4 h-4" />
+        Agregar acción
+      </button>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function FindingDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -505,6 +773,7 @@ export default function FindingDetailPage() {
   const [commentText, setCommentText] = useState('');
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showImproveModal, setShowImproveModal] = useState(false);
+  const [showAddAction, setShowAddAction] = useState(false);
   const [activeTab, setActiveTab] = useState<'detail' | 'actions' | 'comments'>('detail');
 
   if (isLoading) {
@@ -635,7 +904,7 @@ export default function FindingDetailPage() {
                           : 'border-transparent text-gray-500 hover:text-gray-700'
                       }`}
                     >
-                      {tab === 'detail' ? 'C·C·C·E·R·R' : tab === 'actions' ? `Acciones (${finding.actions?.length ?? 0})` : `Notas (${finding.comments?.length ?? 0})`}
+                      {tab === 'detail' ? 'C·C·C·E·R·R' : tab === 'actions' ? `Seguimiento (${finding.actions?.length ?? 0})` : `Notas (${finding.comments?.length ?? 0})`}
                     </button>
                   ))}
                   {/* AI improve button — always visible, works on any status */}
@@ -664,39 +933,7 @@ export default function FindingDetailPage() {
                   )}
 
                   {activeTab === 'actions' && (
-                    <div className="space-y-3">
-                      {finding.actions && finding.actions.length > 0 ? (
-                        finding.actions.map(action => (
-                          <div key={action.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                            <p className="text-sm text-gray-700">{action.description}</p>
-                            <div className="flex items-center justify-between mt-2">
-                              <span className="text-xs text-gray-400">
-                                {action.responsible?.name ?? 'Sin asignar'} · Vence {formatDate(action.dueDate)}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${action.progressPct}%` }} />
-                                </div>
-                                <span className="text-xs text-gray-500">{action.progressPct}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="py-8 text-center">
-                          <UserPlus className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                          <p className="text-sm text-gray-400">Sin plan de acción asignado</p>
-                          {finding.status === 'APPROVED' && !finding.responsible && (
-                            <button
-                              onClick={() => setShowAssignModal(true)}
-                              className="mt-3 text-sm text-blue-600 hover:underline"
-                            >
-                              Asignar responsable
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <TrackingTab finding={finding} onAddAction={() => setShowAddAction(true)} />
                   )}
 
                   {activeTab === 'comments' && (
@@ -869,6 +1106,10 @@ export default function FindingDetailPage() {
 
       {showAssignModal && (
         <AssignModal findingId={id} onClose={() => setShowAssignModal(false)} />
+      )}
+
+      {showAddAction && (
+        <AddActionModal findingId={id} onClose={() => setShowAddAction(false)} />
       )}
 
       {showImproveModal && (

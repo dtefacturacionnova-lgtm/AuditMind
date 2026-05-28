@@ -5,7 +5,7 @@ import {
   FolderOpen, FolderPlus, Folder, FileText, Plus, ChevronRight, ChevronDown,
   MoreHorizontal, Pencil, Trash2, CheckCircle2, Lock, AlertCircle, Clock,
   Loader2, FilePlus, Upload, X, Music, Image as ImageIcon, FileSpreadsheet,
-  Presentation, File, Star, Settings2, Download, ExternalLink,
+  Presentation, File, Star, Settings2, Download, ExternalLink, Video,
 } from 'lucide-react';
 import {
   useExpediente, useInitializeExpediente, useCreateFolder,
@@ -19,12 +19,14 @@ import { cn } from '@/lib/utils';
 // ─── Helpers de archivo ───────────────────────────────────────────────────────
 
 const MIME_ICONS: { test: (m: string) => boolean; icon: React.ElementType; color: string; label: string }[] = [
-  { test: (m) => m.includes('spreadsheet') || m.includes('excel') || m.includes('.xls'),
+  { test: (m) => m.includes('spreadsheet') || m.includes('excel'),
     icon: FileSpreadsheet, color: 'text-emerald-600', label: 'Excel' },
   { test: (m) => m.includes('presentation') || m.includes('powerpoint'),
     icon: Presentation, color: 'text-orange-500', label: 'PPT' },
   { test: (m) => m.startsWith('audio/'),
-    icon: Music, color: 'text-purple-500', label: 'Audio' },
+    icon: Music, color: 'text-violet-500', label: 'Audio' },
+  { test: (m) => m.startsWith('video/'),
+    icon: Video, color: 'text-sky-500', label: 'Video' },
   { test: (m) => m.startsWith('image/'),
     icon: ImageIcon, color: 'text-pink-500', label: 'Imagen' },
   { test: (m) => m === 'application/pdf',
@@ -33,10 +35,33 @@ const MIME_ICONS: { test: (m: string) => boolean; icon: React.ElementType; color
     icon: FileText, color: 'text-blue-600', label: 'Word' },
 ];
 
-function getMimeInfo(mimeType?: string) {
-  if (!mimeType) return { icon: File, color: 'text-slate-400', label: 'Archivo' };
-  const found = MIME_ICONS.find(({ test }) => test(mimeType));
-  return found ?? { icon: File, color: 'text-slate-400', label: 'Archivo' };
+const EXT_MAP: { ext: string; icon: React.ElementType; color: string; label: string }[] = [
+  { ext: '.xlsx', icon: FileSpreadsheet, color: 'text-emerald-600', label: 'Excel' },
+  { ext: '.xls',  icon: FileSpreadsheet, color: 'text-emerald-600', label: 'Excel' },
+  { ext: '.docx', icon: FileText,        color: 'text-blue-600',    label: 'Word'  },
+  { ext: '.doc',  icon: FileText,        color: 'text-blue-600',    label: 'Word'  },
+  { ext: '.pptx', icon: Presentation,    color: 'text-orange-500',  label: 'PPT'   },
+  { ext: '.ppt',  icon: Presentation,    color: 'text-orange-500',  label: 'PPT'   },
+  { ext: '.pdf',  icon: FileText,        color: 'text-red-500',     label: 'PDF'   },
+  { ext: '.mp3',  icon: Music,           color: 'text-violet-500',  label: 'Audio' },
+  { ext: '.wav',  icon: Music,           color: 'text-violet-500',  label: 'Audio' },
+  { ext: '.mp4',  icon: Video,           color: 'text-sky-500',     label: 'Video' },
+  { ext: '.png',  icon: ImageIcon,       color: 'text-pink-500',    label: 'Imagen'},
+  { ext: '.jpg',  icon: ImageIcon,       color: 'text-pink-500',    label: 'Imagen'},
+  { ext: '.jpeg', icon: ImageIcon,       color: 'text-pink-500',    label: 'Imagen'},
+];
+
+function getMimeInfo(mimeType?: string, filename?: string) {
+  if (mimeType) {
+    const found = MIME_ICONS.find(({ test }) => test(mimeType));
+    if (found) return found;
+  }
+  if (filename) {
+    const lower = filename.toLowerCase();
+    const extMatch = EXT_MAP.find(({ ext }) => lower.endsWith(ext));
+    if (extMatch) return extMatch;
+  }
+  return { icon: File, color: 'text-slate-400', label: 'Archivo' };
 }
 
 function formatBytes(b?: number) {
@@ -249,7 +274,7 @@ function TreeFolderRow({
 // ─── PaperTableRow — fila de la tabla del panel derecho ──────────────────────
 
 function PaperTableRow({ paper }: { paper: WpStub }) {
-  const mimeInfo  = getMimeInfo(paper.mimeType);
+  const mimeInfo  = getMimeInfo(paper.mimeType, paper.originalFilename);
   const IconComp  = paper.wpKind === 'FILE' ? mimeInfo.icon : FileText;
   const iconColor = paper.wpKind === 'FILE' ? mimeInfo.color : 'text-blue-500';
   const st        = WP_STATUS_CONFIG[paper.status as WpStatus];

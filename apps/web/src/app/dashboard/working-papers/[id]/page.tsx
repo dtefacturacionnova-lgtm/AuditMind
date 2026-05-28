@@ -10,7 +10,7 @@ import {
   Link2, Save, Sparkles, Loader2, X, Wand2,
   Brain, Star, Activity, AlertTriangle, RefreshCw, Zap,
   Folder, ChevronRight, Calendar, User, RotateCcw,
-  Download, ExternalLink, FileSpreadsheet, Presentation, Music,
+  Download, ExternalLink, FileSpreadsheet, Presentation, Music, Video,
   Image as ImageIcon, ArrowLeft,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
@@ -422,8 +422,40 @@ const STATUS_ICONS: Partial<Record<WpStatus, React.ElementType>> = {
   ARCHIVED:       Lock,
 };
 
+// ─── FileTypeIcon ─────────────────────────────────────────────────────────────
+
+function FileTypeIcon({ mime, filename, size = 'lg' }: {
+  mime: string;
+  filename?: string | null;
+  size?: 'sm' | 'lg';
+}) {
+  const ext = (filename ?? '').toLowerCase();
+  const isImage = mime.startsWith('image/');
+  const isPdf   = mime === 'application/pdf';
+  const isAudio = mime.startsWith('audio/');
+  const isVideo = mime.startsWith('video/');
+  const isWord  = mime.includes('word') || mime.includes('document') ||
+                  ext.endsWith('.docx') || ext.endsWith('.doc');
+  const isExcel = mime.includes('spreadsheet') || mime.includes('excel') ||
+                  ext.endsWith('.xlsx') || ext.endsWith('.xls');
+  const isPpt   = mime.includes('presentation') || mime.includes('powerpoint') ||
+                  ext.endsWith('.pptx') || ext.endsWith('.ppt');
+
+  const dim  = size === 'lg' ? 'h-16 w-16' : 'h-9 w-9';
+  const icon = size === 'lg' ? 'h-8 w-8'   : 'h-4 w-4';
+  const txt  = size === 'lg' ? 'text-2xl font-bold' : 'text-[10px] font-bold';
+
+  if (isWord)  return <div className={`flex ${dim} shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white ${txt} select-none shadow-sm`}>W</div>;
+  if (isExcel) return <div className={`flex ${dim} shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm`}><FileSpreadsheet className={icon} /></div>;
+  if (isPpt)   return <div className={`flex ${dim} shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white shadow-sm`}><Presentation className={icon} /></div>;
+  if (isPdf)   return <div className={`flex ${dim} shrink-0 items-center justify-center rounded-xl bg-red-500 text-white ${size === 'lg' ? 'text-sm font-bold' : 'text-[9px] font-bold'} select-none shadow-sm`}>PDF</div>;
+  if (isImage) return <div className={`flex ${dim} shrink-0 items-center justify-center rounded-xl bg-pink-500 text-white shadow-sm`}><ImageIcon className={icon} /></div>;
+  if (isAudio) return <div className={`flex ${dim} shrink-0 items-center justify-center rounded-xl bg-violet-500 text-white shadow-sm`}><Music className={icon} /></div>;
+  if (isVideo) return <div className={`flex ${dim} shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm`}><Video className={icon} /></div>;
+  return <div className={`flex ${dim} shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 shadow-sm`}><FileText className={`${icon} text-slate-400`} /></div>;
+}
+
 // ─── FilePaperView ────────────────────────────────────────────────────────────
-// Vista especial para papeles de tipo FILE (Word/Excel/PPT/PDF/Imagen/Audio)
 
 function FilePaperView({ wp }: { wp: WorkingPaper }) {
   const mime    = wp.mimeType ?? '';
@@ -433,6 +465,7 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
   const isImage = mime.startsWith('image/');
   const isPdf   = mime === 'application/pdf';
   const isAudio = mime.startsWith('audio/');
+  const isVideo = mime.startsWith('video/');
   const isWord  = mime.includes('word') || mime.includes('document') ||
                   (wp.originalFilename ?? '').toLowerCase().endsWith('.docx') ||
                   (wp.originalFilename ?? '').toLowerCase().endsWith('.doc');
@@ -444,16 +477,14 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
                   (wp.originalFilename ?? '').toLowerCase().endsWith('.ppt');
   const isOffice = isWord || isExcel || isPpt;
 
-  // Icon + label
-  let TypeIcon: React.ElementType = FileText;
-  let iconCls = 'text-slate-400';
   let typeLabel = 'Archivo';
-  if (isImage)  { TypeIcon = ImageIcon;        iconCls = 'text-pink-500';    typeLabel = 'Imagen'; }
-  else if (isPdf)   { TypeIcon = FileText;     iconCls = 'text-red-500';     typeLabel = 'PDF'; }
-  else if (isAudio) { TypeIcon = Music;        iconCls = 'text-purple-500';  typeLabel = 'Audio'; }
-  else if (isWord)  { TypeIcon = FileText;     iconCls = 'text-blue-600';    typeLabel = 'Word'; }
-  else if (isExcel) { TypeIcon = FileSpreadsheet; iconCls = 'text-emerald-600'; typeLabel = 'Excel'; }
-  else if (isPpt)   { TypeIcon = Presentation; iconCls = 'text-orange-500';  typeLabel = 'PowerPoint'; }
+  if (isImage)  typeLabel = 'Imagen';
+  else if (isPdf)   typeLabel = 'PDF';
+  else if (isAudio) typeLabel = 'Audio';
+  else if (isVideo) typeLabel = 'Video';
+  else if (isWord)  typeLabel = 'Word';
+  else if (isExcel) typeLabel = 'Excel';
+  else if (isPpt)   typeLabel = 'PowerPoint';
 
   const fmtBytes = (b?: number | null) => {
     if (!b) return '';
@@ -462,25 +493,10 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
     return `${(b / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  // Cross-origin download: fetch as blob so the browser downloads instead of navigating
-  async function handleDownload() {
-    if (!fileUrl) return;
-    try {
-      const res  = await fetch(fileUrl, { mode: 'cors' });
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = wp.originalFilename ?? 'archivo';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {
-      // CORS fallback — open in new tab
-      window.open(fileUrl, '_blank');
-    }
-  }
+  // Supabase ?download= forces Content-Disposition: attachment server-side — no CORS needed
+  const downloadUrl = fileUrl
+    ? `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}download=${encodeURIComponent(wp.originalFilename ?? 'archivo')}`
+    : '';
 
   // Microsoft Office Online viewer for Word / Excel / PPT
   const officeViewerUrl = isOffice && fileUrl
@@ -492,9 +508,7 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
       {/* Info card */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-start gap-5">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
-            <TypeIcon className={`h-8 w-8 ${iconCls}`} />
-          </div>
+          <FileTypeIcon mime={mime} filename={wp.originalFilename} size="lg" />
           <div className="flex-1 min-w-0">
             <p className="truncate text-base font-semibold text-slate-800">
               {wp.originalFilename ?? wp.title}
@@ -506,13 +520,13 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
               {wp.fileSize && <span>{fmtBytes(wp.fileSize)}</span>}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              {fileUrl && (
-                <button
-                  onClick={handleDownload}
+              {downloadUrl && (
+                <a
+                  href={downloadUrl}
                   className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                 >
                   <Download className="h-4 w-4" /> Descargar
-                </button>
+                </a>
               )}
               {officeViewerUrl && (
                 <a
@@ -570,6 +584,14 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
         </div>
       )}
 
+      {isVideo && fileUrl && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Reproducir video</p>
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video controls src={fileUrl} className="w-full rounded-xl" />
+        </div>
+      )}
+
       {isOffice && officeViewerUrl && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -583,7 +605,7 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
         </div>
       )}
 
-      {!isImage && !isPdf && !isAudio && !isOffice && (
+      {!isImage && !isPdf && !isAudio && !isVideo && !isOffice && (
         <div className="rounded-xl border border-slate-100 bg-slate-50 px-5 py-4 text-sm text-slate-500">
           Usa el botón de descarga para abrir el archivo.
         </div>

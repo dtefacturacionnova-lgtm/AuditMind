@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CalendarDays, Plus, CheckCircle2, Clock, Zap, Lock,
@@ -9,7 +9,7 @@ import {
 import { Header } from '@/components/layout/Header';
 import {
   usePlans, useCreatePlan,
-  PLAN_STATUS_CONFIG, CreatePlanData,
+  PLAN_STATUS_CONFIG, CreatePlanData, AuditPlan,
 } from '@/hooks/usePlans';
 
 // ─── Create modal ─────────────────────────────────────────────────────────────
@@ -77,6 +77,119 @@ function CreatePlanModal({ open, onClose }: { open: boolean; onClose: () => void
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── L3.1: Multi-Year Coverage Matrix ────────────────────────────────────────
+
+function MultiYearMatrix({ plans }: { plans: AuditPlan[] }) {
+  const sorted = useMemo(() => [...plans].sort((a, b) => a.year - b.year), [plans]);
+  const years  = sorted.map(p => p.year);
+
+  // Collect all unique project/entity names
+  const allNames = useMemo(() => {
+    const set = new Set<string>();
+    plans.forEach(plan => {
+      plan.items.forEach(item => {
+        const name = item.auditProject?.name ?? item.auditEntity?.name;
+        if (name) set.add(name);
+      });
+    });
+    return [...set];
+  }, [plans]);
+
+  // Build lookup: name → year → { hours, level }
+  const lookup = useMemo(() => {
+    const map: Record<string, Record<number, { hours: number; level?: string }>> = {};
+    allNames.forEach(n => { map[n] = {}; });
+    plans.forEach(plan => {
+      plan.items.forEach(item => {
+        const name = item.auditProject?.name ?? item.auditEntity?.name;
+        if (!name) return;
+        map[name][plan.year] = {
+          hours: item.estimatedHours,
+          level: item.auditProject?.finalRiskLevel,
+        };
+      });
+    });
+    return map;
+  }, [allNames, plans]);
+
+  // Sort names by frequency desc, then alpha
+  const sortedNames = useMemo(() =>
+    [...allNames].sort((a, b) => {
+      const fa = years.filter(y => lookup[a][y]).length;
+      const fb = years.filter(y => lookup[b][y]).length;
+      return fb !== fa ? fb - fa : a.localeCompare(b);
+    }),
+    [allNames, years, lookup],
+  );
+
+  if (plans.length < 2 || sortedNames.length === 0) return null;
+
+  const CELL_COLORS: Record<string, string> = {
+    CRITICO: 'bg-red-500 text-white',
+    ALTO:    'bg-orange-500 text-white',
+    MEDIO:   'bg-amber-400 text-gray-900',
+    BAJO:    'bg-green-500 text-white',
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+        <CalendarDays className="w-4 h-4 text-blue-600" />
+        <h3 className="text-sm font-semibold text-gray-700">Cobertura Multianual</h3>
+        <span className="ml-1 text-xs text-gray-400">
+          {years[0]}–{years[years.length - 1]} · {sortedNames.length} proyectos/entidades
+        </span>
+        <div className="ml-auto flex items-center gap-2 text-[10px] text-gray-400">
+          {Object.entries(CELL_COLORS).map(([l, cls]) => (
+            <span key={l} className={`px-1.5 py-0.5 rounded font-semibold ${cls}`}>{l}</span>
+          ))}
+          <span className="px-1.5 py-0.5 rounded bg-blue-400 text-white font-semibold">SIN NIVEL</span>
+        </div>
+      </div>
+      <div className="overflow-auto max-h-96">
+        <table className="w-full text-xs border-collapse">
+          <thead className="sticky top-0 bg-slate-50 z-10">
+            <tr>
+              <th className="px-4 py-2 text-left text-gray-500 font-medium border-b border-gray-100 w-64 min-w-48">Proyecto / Entidad</th>
+              {years.map(y => (
+                <th key={y} className="px-2 py-2 text-center text-gray-500 font-medium border-b border-gray-100 w-16">{y}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedNames.slice(0, 50).map((name, ri) => (
+              <tr key={name} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                <td className="px-4 py-2 text-gray-700 font-medium border-b border-gray-50 max-w-xs truncate" title={name}>{name}</td>
+                {years.map(y => {
+                  const cell = lookup[name][y];
+                  return (
+                    <td key={y} className="px-2 py-2 text-center border-b border-gray-50">
+                      {cell ? (
+                        <span
+                          title={`${cell.hours} h`}
+                          className={`inline-flex items-center justify-center w-8 h-6 rounded text-[10px] font-bold ${CELL_COLORS[cell.level ?? ''] ?? 'bg-blue-400 text-white'}`}>
+                          ✓
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center justify-center w-8 h-6 rounded bg-gray-100 text-gray-300 text-[10px]">–</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {sortedNames.length > 50 && (
+          <p className="text-xs text-gray-400 text-center py-2 border-t border-gray-100">
+            + {sortedNames.length - 50} proyectos adicionales
+          </p>
+        )}
       </div>
     </div>
   );
@@ -224,6 +337,10 @@ export default function PlansPage() {
             })}
           </div>
         )}
+
+        {/* L3.1 — Multi-year matrix */}
+        {plans.length >= 2 && <MultiYearMatrix plans={plans} />}
+
       </div>
 
       <CreatePlanModal open={showCreate} onClose={() => setCreate(false)} />

@@ -7,7 +7,9 @@ import {
   TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Edit2, Save, X,
   Download, ClipboardList, DollarSign, ShieldAlert, BarChart3,
   Globe, AlertCircle, Calendar, Info, Printer, User, History, Users,
+  Sparkles,
 } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 import { Header } from '@/components/layout/Header';
 import {
   usePlan, useApprovePlan, useActivatePlan, useClosePlan,
@@ -1052,6 +1054,177 @@ function CapacityHeatmap({ items, year }: { items: PlanItem[]; year: number }) {
   );
 }
 
+// ─── L3.6: Plan Maturity Score ────────────────────────────────────────────────
+
+function calcMaturityScore(plan: AuditPlan) {
+  const items = plan.items;
+  if (items.length === 0) return { score: 0, dimensions: [] as Array<{ label: string; pts: number; max: number; tip: string }> };
+
+  const withDates = items.filter(i => i.tentativeStartDate && i.tentativeEndDate).length;
+  const d1 = Math.round((withDates / items.length) * 25);
+
+  const withResp = items.filter(i => i.responsibleName).length;
+  const d2 = Math.round((withResp / items.length) * 25);
+
+  const util = plan.utilizationPct;
+  const d3 = Math.min(25,
+    util >= 60 && util <= 95 ? 25
+    : util >= 40 && util < 60 ? Math.round(((util - 40) / 20) * 15) + 10
+    : util > 95 ? Math.max(0, Math.round(25 - (util - 95) * 1.5))
+    : Math.round((util / 40) * 10),
+  );
+
+  const avgHours = items.reduce((s, i) => s + i.estimatedHours, 0) / items.length;
+  const highPrio = items.filter(i => i.priority === 1);
+  const highPrioAvg = highPrio.length > 0
+    ? highPrio.reduce((s, i) => s + i.estimatedHours, 0) / highPrio.length : 0;
+  const d4 = Math.min(25,
+    highPrio.length === 0 ? 12
+    : highPrioAvg >= avgHours ? 25
+    : Math.round((highPrioAvg / avgHours) * 25),
+  );
+
+  return {
+    score: d1 + d2 + d3 + d4,
+    dimensions: [
+      { label: 'Fechas asignadas',        pts: d1, max: 25, tip: `${withDates}/${items.length} ítems con fechas tentativas` },
+      { label: 'Equipo asignado',         pts: d2, max: 25, tip: `${withResp}/${items.length} ítems con responsable` },
+      { label: 'Utilización capacidad',   pts: d3, max: 25, tip: `${util}% — óptimo 60-95%` },
+      { label: 'Alineación riesgo-horas', pts: d4, max: 25, tip: highPrio.length > 0 ? `Alta prioridad: ${highPrioAvg.toFixed(0)} h prom. vs ${avgHours.toFixed(0)} h general` : 'Sin ítems de alta prioridad' },
+    ],
+  };
+}
+
+function MaturityScoreCard({ plan }: { plan: AuditPlan }) {
+  const { score, dimensions } = calcMaturityScore(plan);
+  if (plan.items.length === 0) return null;
+  const color = score >= 75 ? 'text-emerald-600' : score >= 50 ? 'text-amber-600' : 'text-red-600';
+  const bg    = score >= 75 ? 'bg-emerald-50 border-emerald-200' : score >= 50 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+  const label = score >= 75 ? 'Plan maduro' : score >= 50 ? 'En desarrollo' : 'Necesita mejoras';
+  return (
+    <div className={`rounded-xl border p-4 ${bg}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Score de Madurez</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">Completitud del plan — 0 a 100</p>
+        </div>
+        <div className="text-right">
+          <p className={`text-4xl font-black leading-none ${color}`}>{score}</p>
+          <p className={`text-[11px] font-semibold mt-0.5 ${color}`}>{label}</p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {dimensions.map(d => (
+          <div key={d.label}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-600">{d.label}</span>
+              <span className="text-[11px] font-bold text-gray-700">{d.pts}/{d.max}</span>
+            </div>
+            <div className="h-1.5 bg-white/70 rounded-full overflow-hidden mt-0.5">
+              <div className={`h-full rounded-full ${d.pts / d.max >= 0.8 ? 'bg-emerald-500' : d.pts / d.max >= 0.5 ? 'bg-amber-400' : 'bg-red-400'}`}
+                style={{ width: `${(d.pts / d.max) * 100}%` }} />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-0.5">{d.tip}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── L3.2: Auditor View Tab ───────────────────────────────────────────────────
+
+function AuditorViewTab({ plan }: { plan: AuditPlan }) {
+  const items = plan.items;
+
+  const byAuditor = useMemo(() => {
+    const map: Record<string, PlanItem[]> = {};
+    items.forEach(item => {
+      const name = item.responsibleName || '— Sin asignar';
+      if (!map[name]) map[name] = [];
+      map[name].push(item);
+    });
+    return Object.entries(map).sort((a, b) => {
+      if (a[0].startsWith('—')) return 1;
+      if (b[0].startsWith('—')) return -1;
+      const hA = a[1].reduce((s, i) => s + i.estimatedHours, 0);
+      const hB = b[1].reduce((s, i) => s + i.estimatedHours, 0);
+      return hB - hA;
+    });
+  }, [items]);
+
+  const maxHours = Math.max(
+    ...byAuditor.map(([, its]) => its.reduce((s, i) => s + i.estimatedHours, 0)), 1,
+  );
+
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+        <Users className="w-10 h-10 mb-2 opacity-25" />
+        <p className="text-sm">Sin ítems en el plan</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-400">
+        {byAuditor.filter(([n]) => !n.startsWith('—')).length} auditor{byAuditor.filter(([n]) => !n.startsWith('—')).length !== 1 ? 'es' : ''} asignados
+        · {byAuditor.find(([n]) => n.startsWith('—'))?.[1].length ?? 0} sin asignar
+      </p>
+      {byAuditor.map(([name, auditorItems]) => {
+        const totalH = auditorItems.reduce((s, i) => s + i.estimatedHours, 0);
+        const pct    = (totalH / maxHours) * 100;
+        const unassigned = name.startsWith('—');
+        return (
+          <div key={name} className={`bg-white rounded-xl border p-4 ${unassigned ? 'border-dashed border-gray-200 opacity-60' : 'border-gray-200 shadow-sm'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0 ${unassigned ? 'bg-gray-300' : 'bg-blue-600'}`}>
+                  {unassigned ? '?' : name[0].toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{name}</p>
+                  <p className="text-xs text-gray-400">{auditorItems.length} auditoría{auditorItems.length !== 1 ? 's' : ''}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-base font-bold text-gray-800">{totalH.toLocaleString('es-CL')} h</p>
+                {plan.totalHours > 0 && (
+                  <p className="text-[11px] text-gray-400">{Math.round((totalH / plan.totalHours) * 100)}% del plan</p>
+                )}
+              </div>
+            </div>
+            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+              <div className={`h-full rounded-full ${unassigned ? 'bg-gray-300' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
+            </div>
+            <div className="space-y-1">
+              {auditorItems.map(item => {
+                const itemName = item.auditProject?.name ?? item.auditEntity?.name ?? '—';
+                const rl = item.auditProject?.finalRiskLevel;
+                return (
+                  <div key={item.id} className="flex items-center gap-2 py-1 border-b border-gray-50 last:border-0 text-xs">
+                    {rl ? (
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${rl === 'CRITICO' ? 'bg-red-500' : rl === 'ALTO' ? 'bg-orange-500' : rl === 'MEDIO' ? 'bg-amber-400' : 'bg-green-500'}`} />
+                    ) : <span className="w-2 h-2 rounded-full flex-shrink-0 bg-blue-300" />}
+                    <span className="flex-1 text-gray-700 truncate">{itemName}</span>
+                    {item.tentativeStartDate && (
+                      <span className="text-[10px] text-gray-400 flex-shrink-0 hidden sm:inline">
+                        {formatDate(item.tentativeStartDate)} → {formatDate(item.tentativeEndDate)}
+                      </span>
+                    )}
+                    <span className="text-gray-500 flex-shrink-0 w-14 text-right font-medium">{item.estimatedHours} h</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Analysis Tab ─────────────────────────────────────────────────────────────
 function AnalysisTab({ plan }: { plan: AuditPlan }) {
   const items = plan.items;
@@ -1107,6 +1280,9 @@ function AnalysisTab({ plan }: { plan: AuditPlan }) {
 
   return (
     <div className="space-y-5">
+
+      {/* ── Row 0: Maturity Score ── */}
+      <MaturityScoreCard plan={plan} />
 
       {/* ── Row 1: KPI Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1388,8 +1564,11 @@ export default function PlanDetailPage() {
   const [objText, setObjText] = useState('');
   const [showAllItems, setShowAll] = useState(false);
   const [showImportPanel, setShowImportPanel] = useState(false);
-  const [planTab, setPlanTab] = useState<'audits' | 'analysis'>('audits');
+  const [planTab, setPlanTab] = useState<'audits' | 'analysis' | 'auditors'>('audits');
   const [showLog, setShowLog] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiPanel, setShowAiPanel] = useState(false);
 
   const approve  = useApprovePlan();
   const activate = useActivatePlan();
@@ -1433,6 +1612,43 @@ export default function PlanDetailPage() {
       return acc;
     }, {});
 
+  const handleGenerateSummary = async () => {
+    setAiLoading(true);
+    setShowAiPanel(true);
+    setAiSummary(null);
+    const itemLines = plan.items.slice(0, 25).map((item, idx) => {
+      const name = item.auditProject?.name ?? item.auditEntity?.name ?? '—';
+      const risk = item.auditProject?.finalRiskLevel ?? '—';
+      return `${idx + 1}. ${name} | Riesgo: ${risk} | Horas: ${item.estimatedHours} | Responsable: ${item.responsibleName ?? 'Sin asignar'}`;
+    }).join('\n');
+    const prompt = `Eres el asistente de auditoría CASSANDRA. Genera un resumen ejecutivo profesional del Plan Anual de Auditoría ${plan.year} para el Comité de Auditoría Interna.
+
+Datos del plan:
+- Nombre: ${plan.name}
+- Estado: ${PLAN_STATUS_CONFIG[plan.status].label}
+- Horas: ${plan.allocatedHours} asignadas de ${plan.totalHours} disponibles (${plan.utilizationPct}% utilización)
+- Auditorías planificadas: ${plan.items.length}
+- Prioridad alta: ${plan.items.filter(i => i.priority === 1).length} | Media: ${plan.items.filter(i => i.priority === 2).length} | Baja: ${plan.items.filter(i => i.priority === 3).length}
+- Objetivos del plan: ${plan.objectives.join('; ') || 'No definidos'}
+
+Auditorías incluidas:
+${itemLines}
+
+Genera en español un resumen ejecutivo de 3-4 párrafos (máximo 350 palabras) que incluya: síntesis del alcance y cobertura, principales riesgos priorizados, distribución de recursos y conclusión ejecutiva. Usa lenguaje formal para el Comité de Auditoría.`;
+    try {
+      const result = await apiClient.post<{ response: string }>('/ai/chat', {
+        agentType: 'CASSANDRA',
+        message: prompt,
+        history: [],
+      });
+      setAiSummary(result.response);
+    } catch {
+      setAiSummary('Error al conectar con el servicio de IA. Verifica que el AI Service esté activo (puerto 3003).');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const handleSaveObjectives = async () => {
     const objectives = objText.split('\n').map(s => s.trim()).filter(Boolean);
     await updatePlan.mutateAsync({ objectives });
@@ -1448,6 +1664,50 @@ export default function PlanDetailPage() {
 
       {showImportPanel && (
         <ImportFromBancoPanel planId={plan.id} planYear={plan.year} onClose={() => setShowImportPanel(false)} />
+      )}
+
+      {/* ── L3.3: AI Summary Modal ── */}
+      {showAiPanel && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-10">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-violet-500" />
+                <div>
+                  <p className="text-sm font-bold text-gray-800">Resumen Ejecutivo del Plan {plan.year}</p>
+                  <p className="text-xs text-gray-400">Generado por IA — Solo lectura</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAiPanel(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-6 py-5 min-h-40">
+              {aiLoading ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                  <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm text-gray-500">Analizando el plan con IA…</p>
+                </div>
+              ) : aiSummary ? (
+                <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {aiSummary}
+                </div>
+              ) : null}
+            </div>
+            <div className="border-t border-gray-100 px-6 py-4 flex justify-between">
+              <button
+                onClick={handleGenerateSummary}
+                disabled={aiLoading}
+                className="flex items-center gap-1.5 text-xs text-violet-600 hover:underline disabled:opacity-50">
+                <Sparkles className="w-3.5 h-3.5" /> Regenerar
+              </button>
+              <button onClick={() => setShowAiPanel(false)}
+                className="px-4 py-2 border border-gray-200 text-sm text-gray-600 rounded-xl hover:bg-gray-50">
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex-1 overflow-auto">
@@ -1480,6 +1740,15 @@ export default function PlanDetailPage() {
                   data-no-print>
                   <Printer className="w-3.5 h-3.5" />
                   PDF / Imprimir
+                </button>
+                <button
+                  onClick={handleGenerateSummary}
+                  disabled={aiLoading || plan.items.length === 0}
+                  className="px-3 py-2 border border-violet-300 bg-violet-50 text-violet-700 text-xs font-semibold rounded-xl hover:bg-violet-100 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                  data-no-print
+                  title="Genera un resumen ejecutivo del plan usando IA (Gemini)">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {aiLoading ? 'Generando...' : '✨ Resumen IA'}
                 </button>
                 {canEdit && (
                   <button
@@ -1554,6 +1823,17 @@ export default function PlanDetailPage() {
               )}>
               <BarChart3 className="w-4 h-4" />
               Análisis del plan
+            </button>
+            <button
+              onClick={() => setPlanTab('auditors')}
+              className={cn(
+                'flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors border-b-2',
+                planTab === 'auditors'
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/40'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50',
+              )}>
+              <Users className="w-4 h-4" />
+              Por Auditor
             </button>
           </div>
 
@@ -1790,6 +2070,9 @@ export default function PlanDetailPage() {
 
           {/* ── Tab: Análisis ── */}
           {planTab === 'analysis' && <AnalysisTab plan={plan} />}
+
+          {/* ── Tab: Por Auditor (L3.2) ── */}
+          {planTab === 'auditors' && <AuditorViewTab plan={plan} />}
 
         </div>
       </div>

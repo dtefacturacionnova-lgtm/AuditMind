@@ -262,7 +262,8 @@ export class PlansService {
       where: {
         organizationId: user.organizationId,
         includeInPlan:  true,
-        targetPlanYear: plan.year,
+        // No targetPlanYear filter — show all marked projects regardless of intended year.
+        // The frontend shows the targetPlanYear tag so the user can decide.
         active:         true,
       },
       include: {

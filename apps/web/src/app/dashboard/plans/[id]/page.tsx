@@ -10,12 +10,12 @@ import {
 import { Header } from '@/components/layout/Header';
 import {
   usePlan, useApprovePlan, useActivatePlan, useClosePlan,
-  useAddPlanItem, useUpdatePlanItem, useRemovePlanItem, useUpdatePlan,
+  useUpdatePlanItem, useRemovePlanItem, useUpdatePlan,
   useImportFromProjects, usePlanProjectCandidates,
   PLAN_STATUS_CONFIG, PRIORITY_CONFIG, RISK_LEVEL_CONFIG,
-  CreatePlanItemData, PlanItem, ProjectCandidate,
+  PlanItem, ProjectCandidate,
 } from '@/hooks/usePlans';
-import { useAuditUniverse } from '@/hooks/useAuditUniverse';
+import { useAuditProjects } from '@/hooks/useAuditProjects';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatDate(d?: string | null) {
@@ -52,7 +52,7 @@ function CapacityBar({ pct, allocated, remaining, total }: {
 }
 
 // ─── Import from Banco de Proyectos panel ─────────────────────────────────────
-function ImportFromBancoPanel({ planId, onClose }: { planId: string; onClose: () => void }) {
+function ImportFromBancoPanel({ planId, planYear, onClose }: { planId: string; planYear: number; onClose: () => void }) {
   const { data: candidates = [], isLoading } = usePlanProjectCandidates(planId);
   const importMut = useImportFromProjects(planId);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -156,11 +156,21 @@ function ImportFromBancoPanel({ planId, onClose }: { planId: string; onClose: ()
                           onChange={() => toggle(p.id)}
                           className="mt-0.5 accent-indigo-600 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs font-mono text-gray-400">{p.correlative}</span>
                             {p.finalRiskLevel && (
                               <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${rl.bg} ${rl.color}`}>
                                 {rl.label}
+                              </span>
+                            )}
+                            {/* Year mismatch warning */}
+                            {p.targetPlanYear && p.targetPlanYear !== planYear ? (
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                                Año objetivo: {p.targetPlanYear}
+                              </span>
+                            ) : (
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                                {p.planYear}
                               </span>
                             )}
                           </div>
@@ -243,97 +253,108 @@ function ImportFromBancoPanel({ planId, onClose }: { planId: string; onClose: ()
   );
 }
 
-// ─── Add item form (manual entity) ────────────────────────────────────────────
-function AddItemForm({ planId, existingEntityIds, onAdded }: {
+// ─── Quick add any project from Banco de Proyectos directly ──────────────────
+// For projects NOT yet marked "Incluir en Plan" but you want to add ad-hoc.
+function QuickAddProjectForm({ planId, existingProjectIds, onAdded }: {
   planId: string;
-  existingEntityIds: string[];
+  existingProjectIds: string[];
   onAdded: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<CreatePlanItemData>({
-    auditEntityId: '', estimatedHours: 80, priority: 2,
-  });
-  const addItem = useAddPlanItem(planId);
-  const { data: univResp } = useAuditUniverse({ limit: 100 });
-  const entities = univResp?.data ?? [];
-  const available = entities.filter(e => !existingEntityIds.includes(e.id));
+  const [open, setOpen]         = useState(false);
+  const [selectedId, setSelectedId] = useState('');
+  const [search, setSearch]     = useState('');
+  const { data: allProjects = [] } = useAuditProjects();
+  const importMut = useImportFromProjects(planId);
 
-  const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.auditEntityId) return;
-    await addItem.mutateAsync(form);
-    setForm({ auditEntityId: '', estimatedHours: 80, priority: 2 });
-    setOpen(false);
-    onAdded();
-  };
+  // Show projects not already in the plan and NOT already marked includeInPlan
+  // (those come via the main "Importar del Banco" panel)
+  const available = allProjects.filter(
+    p => !existingProjectIds.includes(p.id) && !p.includeInPlan,
+  );
+  const filtered = search
+    ? available.filter(p =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.correlative.toLowerCase().includes(search.toLowerCase()),
+      )
+    : available;
 
   if (!open) {
     return (
       <button onClick={() => setOpen(true)}
         className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 text-gray-500 text-xs rounded-xl hover:border-blue-400 hover:text-blue-600 w-full justify-center transition-colors">
-        <Plus className="w-3.5 h-3.5" /> Agregar auditoría al plan
+        <Plus className="w-3.5 h-3.5" /> Agregar proyecto del Banco directamente
       </button>
     );
   }
 
+  const handleAdd = async () => {
+    if (!selectedId) return;
+    await importMut.mutateAsync([selectedId]);
+    setSelectedId('');
+    setSearch('');
+    setOpen(false);
+    onAdded();
+  };
+
+  const RISK_COLORS: Record<string, string> = {
+    CRITICO: 'text-red-600', ALTO: 'text-orange-600', MEDIO: 'text-amber-600', BAJO: 'text-green-600',
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="bg-blue-50 rounded-xl border border-blue-200 p-4 space-y-3">
-      <p className="text-xs font-semibold text-blue-700">Agregar auditoría del universo</p>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2">
-          <select required value={form.auditEntityId}
-            onChange={e => setForm(p => ({ ...p, auditEntityId: e.target.value }))}
-            className={cls + ' bg-white'}>
-            <option value="">Seleccionar entidad...</option>
-            {available.map(e => (
-              <option key={e.id} value={e.id}>
-                [{e.category}] {e.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-gray-600 block mb-1">Horas estimadas</label>
-          <input type="number" required value={form.estimatedHours}
-            onChange={e => setForm(p => ({ ...p, estimatedHours: +e.target.value }))}
-            min={1} className={cls} />
-        </div>
-        <div>
-          <label className="text-xs text-gray-600 block mb-1">Prioridad</label>
-          <select value={form.priority ?? 2}
-            onChange={e => setForm(p => ({ ...p, priority: +e.target.value }))}
-            className={cls + ' bg-white'}>
-            <option value={1}>Alta</option>
-            <option value={2}>Media</option>
-            <option value={3}>Baja</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-gray-600 block mb-1">Inicio tentativo</label>
-          <input type="date" value={form.tentativeStartDate ?? ''}
-            onChange={e => setForm(p => ({ ...p, tentativeStartDate: e.target.value || undefined }))}
-            className={cls} />
-        </div>
-        <div>
-          <label className="text-xs text-gray-600 block mb-1">Fin tentativo</label>
-          <input type="date" value={form.tentativeEndDate ?? ''}
-            onChange={e => setForm(p => ({ ...p, tentativeEndDate: e.target.value || undefined }))}
-            className={cls} />
-        </div>
+    <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3">
+      <div>
+        <p className="text-xs font-semibold text-slate-700">Agregar proyecto del Banco directamente</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">
+          Proyectos sin "Incluir en Plan" que quieres incorporar de forma directa.
+        </p>
       </div>
-      <div className="flex gap-2">
-        <button type="submit" disabled={addItem.isPending}
-          className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-60">
-          {addItem.isPending ? 'Agregando...' : 'Agregar'}
+      <input
+        type="text" placeholder="Buscar por nombre o correlativo…"
+        value={search} onChange={e => { setSearch(e.target.value); setSelectedId(''); }}
+        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      {filtered.length === 0 ? (
+        <p className="text-xs text-slate-400 text-center py-2">
+          {available.length === 0
+            ? 'Todos los proyectos del Banco ya están en este plan o marcados para importar.'
+            : 'Sin resultados para esa búsqueda.'}
+        </p>
+      ) : (
+        <div className="max-h-48 overflow-y-auto space-y-1">
+          {filtered.map(p => (
+            <label key={p.id}
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition-all text-xs ${
+                selectedId === p.id
+                  ? 'border-blue-400 bg-blue-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}>
+              <input type="radio" name="quick-add-project"
+                value={p.id} checked={selectedId === p.id}
+                onChange={() => setSelectedId(p.id)}
+                className="accent-blue-600 flex-shrink-0" />
+              <span className="font-mono text-gray-400 flex-shrink-0">{p.correlative}</span>
+              <span className="flex-1 truncate text-gray-800 font-medium">{p.name}</span>
+              {p.finalRiskLevel && (
+                <span className={`flex-shrink-0 font-semibold ${RISK_COLORS[p.finalRiskLevel] ?? 'text-gray-500'}`}>
+                  {p.finalRiskLevel}
+                </span>
+              )}
+              <span className="flex-shrink-0 text-gray-400">{p.planYear}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2 pt-1">
+        <button onClick={handleAdd} disabled={!selectedId || importMut.isPending}
+          className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+          {importMut.isPending ? 'Agregando…' : 'Agregar al plan'}
         </button>
-        <button type="button" onClick={() => setOpen(false)}
+        <button onClick={() => { setOpen(false); setSearch(''); setSelectedId(''); }}
           className="px-4 py-2 border border-gray-200 text-xs text-gray-600 rounded-lg hover:bg-gray-50">
           Cancelar
         </button>
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -533,7 +554,7 @@ export default function PlanDetailPage() {
       ]} />
 
       {showImportPanel && (
-        <ImportFromBancoPanel planId={plan.id} onClose={() => setShowImportPanel(false)} />
+        <ImportFromBancoPanel planId={plan.id} planYear={plan.year} onClose={() => setShowImportPanel(false)} />
       )}
 
       <div className="flex-1 overflow-auto p-6">
@@ -786,9 +807,9 @@ export default function PlanDetailPage() {
                       <ClipboardList className="w-3.5 h-3.5" />
                       Importar del Banco de Proyectos
                     </button>
-                    <AddItemForm
+                    <QuickAddProjectForm
                       planId={plan.id}
-                      existingEntityIds={sortedItems.map(i => i.auditEntityId ?? '').filter(Boolean)}
+                      existingProjectIds={sortedItems.map(i => i.auditProjectId ?? '').filter(Boolean)}
                       onAdded={() => {}}
                     />
                   </div>

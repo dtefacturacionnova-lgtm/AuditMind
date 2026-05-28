@@ -31,6 +31,13 @@ enum AuditType {
   ESG
   FORENSIC
   BCP_DRP
+  // ── Tipos especializados El Salvador ──────────────────────────────────────
+  INTERNAL_GOVERNMENTAL  // Auditoría Interna Gubernamental (NAIG Decreto 7/2016)
+  EXTERNAL_FINANCIAL     // Auditoría Externa Financiera (CVPCPA Res. 129/2022 + NIA)
+  IT_SECURITY            // Seguridad de la Información (ISO 27001:2022 + NRP-23/32)
+  BCP_CONTINUITY         // Continuidad del Negocio (ISO 22301:2019 + NRP-24)
+  IT_SYSTEMS             // Sistemas de Información y BD (COBIT 2019 + D.L. 144/2024)
+  AML                    // Prevención Lavado de Dinero y Activos (Ley LCDA + NRP-36 + GAFI)
 }
 
 enum AuditStatus {

@@ -103,6 +103,13 @@ export class WorkingPapersController {
     return this.service.updateStatus(id, dto, user);
   }
 
+  @Delete(':id')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Eliminar papel de trabajo (cascada: secciones, versiones, comentarios, marcas)' })
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.remove(id, user);
+  }
+
   // ─── Tick marks ───────────────────────────────────────────────────────────────
 
   @Post(':id/tick-marks')

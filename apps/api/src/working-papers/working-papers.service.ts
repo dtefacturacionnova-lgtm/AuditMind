@@ -186,6 +186,7 @@ export class WorkingPapersService {
       where: { id },
       data:  {
         ...(dto.title      !== undefined && { title: dto.title }),
+        ...(dto.ref        !== undefined && { ref: dto.ref }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...(dto.content    !== undefined && { content: dto.content as any }),
         ...(dto.conclusion !== undefined && { conclusion: dto.conclusion }),
@@ -230,6 +231,19 @@ export class WorkingPapersService {
       data:    { status: dto.status },
       include: INCLUDE_FULL,
     });
+  }
+
+  async remove(id: string, user: AuthUser): Promise<{ deleted: boolean }> {
+    const wp = await this.prisma.workingPaper.findFirst({
+      where: { id, audit: { organizationId: user.organizationId } },
+      select: { id: true },
+    });
+    if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
+
+    // All child records (PaperSection, WorkingPaperVersion, WorkingPaperComment,
+    // TickMarkEntry, PaperLink) have onDelete: Cascade — one delete suffices.
+    await this.prisma.workingPaper.delete({ where: { id } });
+    return { deleted: true };
   }
 
   async getIndex(auditId: string, user: AuthUser) {

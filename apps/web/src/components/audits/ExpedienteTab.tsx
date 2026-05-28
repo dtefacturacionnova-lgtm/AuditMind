@@ -6,10 +6,12 @@ import {
   MoreHorizontal, Pencil, Trash2, CheckCircle2, Lock, AlertCircle, Clock,
   Loader2, FilePlus, Upload, X, Music, Image as ImageIcon, FileSpreadsheet,
   Presentation, File, Star, Settings2, Download, ExternalLink, Video,
+  AlertTriangle, Activity, BadgeCheck, MessageSquare, Brain,
 } from 'lucide-react';
 import {
   useExpediente, useInitializeExpediente, useCreateFolder,
   useUpdateFolder, useDeleteFolder, useSignOffPhase, useUploadFileToFolder,
+  useDeleteWorkingPaper, useRenamePaper, useAssignPaperToFolder,
   AuditPhase, AuditFolder, WpStub, PHASE_CONFIG, PHASE_STATUS_CONFIG,
 } from '@/hooks/useExpediente';
 import { WP_STATUS_CONFIG, type WpStatus } from '@/hooks/useWorkingPapers';
@@ -80,12 +82,27 @@ function formatDate(iso: string) {
 }
 
 // Badge config por tipo de papel
-const WP_KIND_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  FILE:     { label: 'Archivo',     bg: 'bg-slate-100',   color: 'text-slate-600' },
-  SMART:    { label: 'Inteligente', bg: 'bg-blue-100',    color: 'text-blue-700' },
-  STANDARD: { label: 'Estándar',    bg: 'bg-indigo-50',   color: 'text-indigo-700' },
-  MASTER:   { label: 'Maestro',     bg: 'bg-purple-100',  color: 'text-purple-700' },
-  LIVE:     { label: 'En Vivo',     bg: 'bg-emerald-100', color: 'text-emerald-700' },
+const WP_KIND_CONFIG: Record<string, { label: string; bg: string; color: string; Icon: React.ElementType }> = {
+  FILE:     { label: 'Archivo',     bg: 'bg-slate-100',   color: 'text-slate-600',   Icon: File },
+  SMART:    { label: 'Inteligente', bg: 'bg-blue-100',    color: 'text-blue-700',    Icon: Brain },
+  STANDARD: { label: 'Estándar',    bg: 'bg-indigo-50',   color: 'text-indigo-700',  Icon: FileText },
+  MASTER:   { label: 'Maestro',     bg: 'bg-purple-100',  color: 'text-purple-700',  Icon: Star },
+  LIVE:     { label: 'En Vivo',     bg: 'bg-emerald-100', color: 'text-emerald-700', Icon: Activity },
+};
+
+// Ícono + color de estado para columna compacta
+const STATUS_ICON_MAP: Partial<Record<WpStatus, { Icon: React.ElementType; cls: string; tip: string }>> = {
+  NOT_STARTED:    { Icon: Clock,          cls: 'text-slate-400',   tip: 'No iniciado' },
+  IN_PROGRESS:    { Icon: Activity,       cls: 'text-amber-500',   tip: 'En progreso' },
+  PENDING_REVIEW: { Icon: Clock,          cls: 'text-orange-400',  tip: 'Pendiente revisión' },
+  RETURNED:       { Icon: AlertTriangle,  cls: 'text-red-500',     tip: 'Devuelto con observaciones' },
+  REVIEWED:       { Icon: CheckCircle2,   cls: 'text-blue-500',    tip: 'Revisado' },
+  SIGNED_OFF:     { Icon: BadgeCheck,     cls: 'text-emerald-500', tip: 'Firmado' },
+  CLOSED:         { Icon: Lock,           cls: 'text-slate-400',   tip: 'Cerrado' },
+  DRAFT:          { Icon: Clock,          cls: 'text-slate-400',   tip: 'Borrador' },
+  IN_REVIEW:      { Icon: AlertCircle,    cls: 'text-orange-400',  tip: 'En revisión' },
+  APPROVED:       { Icon: CheckCircle2,   cls: 'text-emerald-500', tip: 'Aprobado' },
+  ARCHIVED:       { Icon: Lock,           cls: 'text-slate-300',   tip: 'Archivado' },
 };
 
 // ─── Helpers árbol ────────────────────────────────────────────────────────────
@@ -271,24 +288,328 @@ function TreeFolderRow({
   );
 }
 
-// ─── PaperTableRow — fila de la tabla del panel derecho ──────────────────────
+// ─── UserInitials — avatar de usuario compacto ───────────────────────────────
 
-function PaperTableRow({ paper }: { paper: WpStub }) {
-  const mimeInfo  = getMimeInfo(paper.mimeType, paper.originalFilename);
-  const IconComp  = paper.wpKind === 'FILE' ? mimeInfo.icon : FileText;
-  const iconColor = paper.wpKind === 'FILE' ? mimeInfo.color : 'text-blue-500';
-  const st        = WP_STATUS_CONFIG[paper.status as WpStatus];
-  const kindCfg   = WP_KIND_CONFIG[paper.wpKind] ?? WP_KIND_CONFIG.STANDARD;
+function UserInitials({ name, avatarUrl, tip }: { name: string; avatarUrl?: string | null; tip: string }) {
+  const initials = name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2);
+  return (
+    <span title={tip} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-semibold text-slate-600 overflow-hidden">
+      {avatarUrl
+        ? <img src={avatarUrl} alt={name} className="h-full w-full object-cover" />
+        : initials
+      }
+    </span>
+  );
+}
+
+// ─── PaperActionsMenu — menú ⋮ por fila ──────────────────────────────────────
+
+function PaperActionsMenu({
+  paper,
+  onRename,
+  onMove,
+  onDelete,
+}: {
+  paper: WpStub;
+  onRename: () => void;
+  onMove: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [open]);
+
+  const downloadUrl = paper.fileUrl
+    ? `${paper.fileUrl}${paper.fileUrl.includes('?') ? '&' : '?'}download=${encodeURIComponent(paper.originalFilename ?? 'archivo')}`
+    : '';
 
   return (
-    <tr className="group border-b border-slate-100 hover:bg-slate-50/70 transition-colors">
+    <div ref={menuRef} className="relative">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+        title="Más acciones"
+      >
+        <MoreHorizontal className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-7 z-50 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          <Link
+            href={`/dashboard/working-papers/${paper.id}`}
+            className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
+            onClick={() => setOpen(false)}
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-slate-400" /> Abrir papel
+          </Link>
+          <button
+            onClick={() => { setOpen(false); onRename(); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
+          >
+            <Pencil className="h-3.5 w-3.5 text-slate-400" /> Renombrar
+          </button>
+          <button
+            onClick={() => { setOpen(false); onMove(); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
+          >
+            <FolderOpen className="h-3.5 w-3.5 text-amber-500" /> Mover a carpeta
+          </button>
+          {downloadUrl && (
+            <>
+              <div className="my-1 border-t border-slate-100" />
+              <a
+                href={downloadUrl}
+                className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
+                onClick={() => setOpen(false)}
+              >
+                <Download className="h-3.5 w-3.5 text-slate-400" /> Descargar
+              </a>
+            </>
+          )}
+          <div className="my-1 border-t border-slate-100" />
+          <button
+            onClick={() => { setOpen(false); onDelete(); }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Eliminar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── RenamePaperModal ─────────────────────────────────────────────────────────
+
+function RenamePaperModal({
+  paper,
+  onSave,
+  onClose,
+}: {
+  paper: WpStub;
+  onSave: (title: string, ref: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [title,  setTitle]  = useState(paper.title);
+  const [ref,    setRef]    = useState(paper.ref ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!title.trim()) return;
+    setSaving(true);
+    try { await onSave(title.trim(), ref.trim()); onClose(); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <h3 className="text-sm font-semibold text-slate-800">Renombrar documento</h3>
+          <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="space-y-4 px-6 py-5">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-600">Título</label>
+            <input
+              type="text" value={title} onChange={e => setTitle(e.target.value)} autoFocus
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-600">
+              Referencia <span className="font-normal text-slate-400">(ej. A-01, PT-B2.1)</span>
+            </label>
+            <input
+              type="text" value={ref} onChange={e => setRef(e.target.value)} placeholder="Opcional"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-xs text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button
+            onClick={handleSave} disabled={!title.trim() || saving}
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {saving && <Loader2 className="h-3 w-3 animate-spin" />} Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MovePaperModal ───────────────────────────────────────────────────────────
+
+function MovePaperModal({
+  paper,
+  phases,
+  onMove,
+  onClose,
+}: {
+  paper: WpStub;
+  phases: AuditPhase[];
+  onMove: (folderId: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [saving, setSaving]     = useState(false);
+
+  function flatFolders(folders: AuditFolder[]): AuditFolder[] {
+    return folders.flatMap(f => [f, ...flatFolders(f.children ?? [])]);
+  }
+
+  const handleMove = async () => {
+    if (!targetId) return;
+    setSaving(true);
+    try { await onMove(targetId); onClose(); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800">Mover a carpeta</h3>
+            <p className="mt-0.5 truncate text-xs text-slate-400" style={{ maxWidth: 240 }}>{paper.title}</p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="max-h-72 overflow-y-auto py-1">
+          {phases.map(phase => (
+            <div key={phase.id}>
+              <p className={cn('px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide', PHASE_CONFIG[phase.phaseType].color)}>
+                {phase.name}
+              </p>
+              {flatFolders(phase.folders).map(folder => (
+                <button
+                  key={folder.id}
+                  onClick={() => setTargetId(folder.id)}
+                  className={cn(
+                    'flex w-full items-center gap-2 px-4 py-2 text-left text-xs transition-colors hover:bg-slate-50',
+                    targetId === folder.id ? 'bg-blue-50 text-blue-700' : 'text-slate-700',
+                  )}
+                >
+                  <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <span className="shrink-0 font-mono text-[10px] text-slate-400">{folder.ref}</span>
+                  <span className="truncate">{folder.name}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-xs text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button
+            onClick={handleMove} disabled={!targetId || saving}
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {saving && <Loader2 className="h-3 w-3 animate-spin" />} Mover aquí
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DeletePaperModal ─────────────────────────────────────────────────────────
+
+function DeletePaperModal({
+  paper,
+  onConfirm,
+  onClose,
+}: {
+  paper: WpStub;
+  onConfirm: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleConfirm = async () => {
+    setDeleting(true);
+    try { await onConfirm(); onClose(); }
+    finally { setDeleting(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
+        <div className="px-6 pt-6 pb-4">
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+            <Trash2 className="h-5 w-5 text-red-600" />
+          </div>
+          <h3 className="text-sm font-semibold text-slate-800">Eliminar documento</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            ¿Seguro que deseas eliminar <span className="font-medium text-slate-700">&ldquo;{paper.title}&rdquo;</span>?
+            Esta acción no se puede deshacer.
+          </p>
+          {paper._count?.comments || paper._count?.findings ? (
+            <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700">
+              Este papel tiene{paper._count.comments ? ` ${paper._count.comments} comentario(s)` : ''}{paper._count.findings ? ` ${paper._count.findings} hallazgo(s)` : ''} asociados que también serán eliminados.
+            </div>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-xs text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button
+            onClick={handleConfirm} disabled={deleting}
+            className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60"
+          >
+            {deleting && <Loader2 className="h-3 w-3 animate-spin" />} Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PaperTableRow — fila de la tabla del panel derecho ──────────────────────
+
+function PaperTableRow({
+  paper,
+  onRename,
+  onMove,
+  onDelete,
+}: {
+  paper: WpStub;
+  onRename: (p: WpStub) => void;
+  onMove:   (p: WpStub) => void;
+  onDelete: (p: WpStub) => void;
+}) {
+  const mimeInfo = getMimeInfo(paper.mimeType, paper.originalFilename);
+  const kindCfg  = WP_KIND_CONFIG[paper.wpKind] ?? WP_KIND_CONFIG.STANDARD;
+  const stIcon   = STATUS_ICON_MAP[paper.status as WpStatus];
+  const counts   = paper._count ?? { comments: 0, findings: 0, tickEntries: 0 };
+
+  // Icon for type column
+  let TypeIcon: React.ElementType;
+  let typeIconCls: string;
+  if (paper.wpKind === 'FILE') {
+    TypeIcon    = mimeInfo.icon;
+    typeIconCls = mimeInfo.color;
+  } else {
+    TypeIcon    = kindCfg.Icon;
+    typeIconCls = kindCfg.color;
+  }
+
+  return (
+    <tr className="group border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
       {/* Icono de tipo */}
-      <td className="w-9 py-3 pl-5 pr-2">
-        <IconComp className={cn('h-4 w-4', iconColor)} />
+      <td className="w-9 py-3 pl-4 pr-1">
+        <TypeIcon className={cn('h-4 w-4', typeIconCls)} />
       </td>
 
       {/* Referencia */}
-      <td className="w-20 px-2 py-3">
+      <td className="w-16 px-1 py-3">
         {paper.ref && (
           <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
             {paper.ref}
@@ -296,70 +617,89 @@ function PaperTableRow({ paper }: { paper: WpStub }) {
         )}
       </td>
 
-      {/* Título + nombre original */}
-      <td className="min-w-0 px-2 py-3">
+      {/* Título + metadata */}
+      <td className="min-w-0 px-2 py-2.5">
         <div className="min-w-0">
-          <Link
-            href={`/dashboard/working-papers/${paper.id}`}
-            className="block truncate text-sm font-medium text-slate-700 hover:text-blue-600 transition-colors"
-          >
-            {paper.title}
-          </Link>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link
+              href={`/dashboard/working-papers/${paper.id}`}
+              className="block truncate text-xs font-medium text-slate-700 hover:text-blue-600 transition-colors"
+            >
+              {paper.title}
+            </Link>
+            <span className={cn('hidden shrink-0 rounded-full px-1.5 py-px text-[9px] font-medium sm:block', kindCfg.bg, kindCfg.color)}>
+              {kindCfg.label}
+            </span>
+          </div>
           {paper.originalFilename && (
-            <span className="block truncate text-[10px] text-slate-400 mt-0.5">
+            <span className="block truncate text-[10px] text-slate-400">
               {paper.originalFilename}
             </span>
           )}
+          {/* Elaborado/Revisado por */}
+          <div className="mt-1 flex items-center gap-2">
+            {paper.preparedBy && (
+              <span className="flex items-center gap-1" title={`Elaborado por: ${paper.preparedBy.name}`}>
+                <UserInitials name={paper.preparedBy.name} avatarUrl={paper.preparedBy.avatarUrl} tip={`Elaborado: ${paper.preparedBy.name}`} />
+                <span className="truncate text-[9px] text-slate-400 max-w-[60px]">{paper.preparedBy.name.split(' ')[0]}</span>
+              </span>
+            )}
+            {paper.reviewedBy && (
+              <span className="flex items-center gap-1" title={`Revisado por: ${paper.reviewedBy.name}`}>
+                <span className="text-[9px] text-slate-300">→</span>
+                <UserInitials name={paper.reviewedBy.name} avatarUrl={paper.reviewedBy.avatarUrl} tip={`Revisado: ${paper.reviewedBy.name}`} />
+                <span className="truncate text-[9px] text-slate-400 max-w-[60px]">{paper.reviewedBy.name.split(' ')[0]}</span>
+              </span>
+            )}
+          </div>
         </div>
       </td>
 
-      {/* Tipo de papel */}
-      <td className="w-28 px-2 py-3">
-        <span className={cn(
-          'whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium',
-          kindCfg.bg, kindCfg.color,
-        )}>
-          {kindCfg.label}
-        </span>
-      </td>
-
-      {/* Estado */}
-      <td className="w-28 px-2 py-3">
-        {st && (
-          <span className={cn(
-            'whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium',
-            st.bg, st.color,
-          )}>
-            {st.label}
+      {/* Estado — solo ícono */}
+      <td className="w-8 px-1 py-3 text-center">
+        {stIcon && (
+          <span title={stIcon.tip}>
+            <stIcon.Icon className={cn('mx-auto h-3.5 w-3.5', stIcon.cls)} />
           </span>
         )}
       </td>
 
-      {/* Fecha */}
-      <td className="w-28 whitespace-nowrap px-2 py-3 text-xs text-slate-400">
-        {formatDate(paper.createdAt)}
+      {/* Indicadores: comentarios · hallazgos · marcas */}
+      <td className="w-24 px-1 py-3">
+        <div className="flex items-center gap-2.5">
+          <span
+            title={`${counts.comments} comentario(s)`}
+            className={cn('flex items-center gap-0.5 text-[10px]', counts.comments > 0 ? 'text-orange-500' : 'text-slate-300')}
+          >
+            <MessageSquare className="h-3 w-3" />
+            {counts.comments > 0 && <span className="font-medium">{counts.comments}</span>}
+          </span>
+          <span
+            title={`${counts.findings} hallazgo(s)`}
+            className={cn('flex items-center gap-0.5 text-[10px]', counts.findings > 0 ? 'text-red-500' : 'text-slate-300')}
+          >
+            <AlertTriangle className="h-3 w-3" />
+            {counts.findings > 0 && <span className="font-medium">{counts.findings}</span>}
+          </span>
+          <span
+            title={`${counts.tickEntries} marca(s) de auditoría`}
+            className={cn('flex items-center gap-0.5 text-[10px]', counts.tickEntries > 0 ? 'text-emerald-500' : 'text-slate-300')}
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            {counts.tickEntries > 0 && <span className="font-medium">{counts.tickEntries}</span>}
+          </span>
+        </div>
       </td>
 
-      {/* Acciones */}
-      <td className="w-16 py-3 pl-2 pr-5">
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <Link
-            href={`/dashboard/working-papers/${paper.id}`}
-            title="Abrir"
-            className="rounded p-1 text-slate-400 transition-colors hover:bg-blue-100 hover:text-blue-600"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Link>
-          {paper.fileUrl && (
-            <a
-              href={paper.fileUrl}
-              download
-              title="Descargar"
-              className="rounded p-1 text-slate-400 transition-colors hover:bg-emerald-100 hover:text-emerald-600"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </a>
-          )}
+      {/* Acciones ⋮ */}
+      <td className="w-10 py-3 pl-1 pr-3">
+        <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
+          <PaperActionsMenu
+            paper={paper}
+            onRename={() => onRename(paper)}
+            onMove={() => onMove(paper)}
+            onDelete={() => onDelete(paper)}
+          />
         </div>
       </td>
     </tr>
@@ -621,18 +961,26 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
   const updateFolder = useUpdateFolder(auditId);
   const deleteFolder = useDeleteFolder(auditId);
   const signOff      = useSignOffPhase(auditId);
+  const deletePaper  = useDeleteWorkingPaper(auditId);
+  const renamePaper  = useRenamePaper(auditId);
+  const movePaper    = useAssignPaperToFolder(auditId);
   const { data: templates } = useIndexTemplates();
 
   // Panel split
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
-  // Modal state
+  // Folder modal state
   const [folderModal, setFolderModal] = useState<{
     mode: 'create' | 'edit';
     parentId?: string;
     phaseId?: string;
     folder?: AuditFolder;
   } | null>(null);
+
+  // Paper modal state
+  const [renameModal, setRenameModal] = useState<WpStub | null>(null);
+  const [moveModal,   setMoveModal]   = useState<WpStub | null>(null);
+  const [deleteModal, setDeleteModal] = useState<WpStub | null>(null);
 
   const [uploadFolderId, setUploadFolderId]       = useState<string | null>(null);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
@@ -925,28 +1273,23 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 z-10 bg-slate-50">
                     <tr className="border-b border-slate-200">
-                      <th className="w-9 py-2.5 pl-5 pr-2" />
-                      <th className="w-20 px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        Ref.
-                      </th>
-                      <th className="px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        Documento
-                      </th>
-                      <th className="w-28 px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        Tipo
-                      </th>
-                      <th className="w-28 px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        Estado
-                      </th>
-                      <th className="w-28 px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        Fecha
-                      </th>
-                      <th className="w-16 py-2.5 pl-2 pr-5" />
+                      <th className="w-9 py-2 pl-4 pr-1" />
+                      <th className="w-16 px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Ref.</th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Documento</th>
+                      <th className="w-8 px-1 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400" title="Estado">St.</th>
+                      <th className="w-24 px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Indicadores</th>
+                      <th className="w-10 py-2 pl-1 pr-3" />
                     </tr>
                   </thead>
                   <tbody>
                     {selectedFolder.papers.map((paper) => (
-                      <PaperTableRow key={paper.id} paper={paper} />
+                      <PaperTableRow
+                        key={paper.id}
+                        paper={paper}
+                        onRename={setRenameModal}
+                        onMove={setMoveModal}
+                        onDelete={setDeleteModal}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -1013,6 +1356,34 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
           folderId={uploadFolderId}
           auditId={auditId}
           onClose={() => setUploadFolderId(null)}
+        />
+      )}
+      {renameModal && (
+        <RenamePaperModal
+          paper={renameModal}
+          onSave={async (title, ref) => {
+            await renamePaper.mutateAsync({ paperId: renameModal.id, title, ref: ref || undefined });
+          }}
+          onClose={() => setRenameModal(null)}
+        />
+      )}
+      {moveModal && (
+        <MovePaperModal
+          paper={moveModal}
+          phases={phases}
+          onMove={async (folderId) => {
+            await movePaper.mutateAsync({ paperId: moveModal.id, folderId });
+          }}
+          onClose={() => setMoveModal(null)}
+        />
+      )}
+      {deleteModal && (
+        <DeletePaperModal
+          paper={deleteModal}
+          onConfirm={async () => {
+            await deletePaper.mutateAsync(deleteModal.id);
+          }}
+          onClose={() => setDeleteModal(null)}
         />
       )}
     </div>

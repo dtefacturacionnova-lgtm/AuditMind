@@ -18,7 +18,10 @@ const PAPER_STUB_SELECT = {
   status: true, wpKind: true, type: true,
   mimeType: true, originalFilename: true, fileUrl: true,
   createdAt: true,
-} as const;
+  preparedBy: { select: { id: true, name: true, avatarUrl: true } },
+  reviewedBy:  { select: { id: true, name: true, avatarUrl: true } },
+  _count: { select: { comments: true, findings: true, tickEntries: true } },
+};
 
 // DEFAULT_INDEX_TEMPLATE moved to IndexTemplatesService (IIA_STANDARD_STRUCTURE)
 

@@ -21,6 +21,9 @@ export interface WpStub {
   originalFilename?: string;
   fileUrl?: string;
   createdAt: string;
+  preparedBy?: { id: string; name: string; avatarUrl?: string | null };
+  reviewedBy?:  { id: string; name: string; avatarUrl?: string | null };
+  _count?: { comments: number; findings: number; tickEntries: number };
 }
 
 export interface AuditFolder {
@@ -132,6 +135,26 @@ export function useAssignPaperToFolder(auditId: string) {
       qc.invalidateQueries({ queryKey: ['expediente', auditId] });
       qc.invalidateQueries({ queryKey: ['working-papers'] });
     },
+  });
+}
+
+export function useDeleteWorkingPaper(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) => apiClient.delete(`/working-papers/${paperId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expediente', auditId] });
+      qc.invalidateQueries({ queryKey: ['wps', 'audit', auditId] });
+    },
+  });
+}
+
+export function useRenamePaper(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, title, ref }: { paperId: string; title: string; ref?: string }) =>
+      apiClient.patch(`/working-papers/${paperId}`, { title, ...(ref !== undefined && { ref }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expediente', auditId] }),
   });
 }
 

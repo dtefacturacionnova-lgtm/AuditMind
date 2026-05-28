@@ -6,7 +6,12 @@ import { CreateWorkingPaperDto } from './create-working-paper.dto';
 
 export class UpdateWorkingPaperDto extends PartialType(
   OmitType(CreateWorkingPaperDto, ['auditId', 'indexSection'] as const),
-) {}
+) {
+  @ApiPropertyOptional({ example: 'A-01', description: 'Referencia del papel en el expediente' })
+  @IsOptional()
+  @IsString()
+  ref?: string;
+}
 
 export class UpdateWorkingPaperStatusDto {
   @ApiProperty({ enum: WorkingPaperStatus })

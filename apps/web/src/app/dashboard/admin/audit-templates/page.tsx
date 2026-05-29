@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Plus, Pencil, Trash2, Star, Lock, Copy,
-  X, Check, Loader2, Settings2, ClipboardList, Eye,
+  X, Check, Loader2, Settings2, ClipboardList, Eye, RefreshCw,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -13,6 +13,7 @@ import {
   useDeleteAuditTemplate,
   useDuplicateAuditTemplate,
   useSetDefaultAuditTemplate,
+  useReseedSystemTemplates,
   type AuditTemplate,
   type PaperDef,
   type CreateAuditTemplateData,
@@ -405,7 +406,7 @@ function TemplateEditorModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 className="text-base font-semibold text-slate-800">
-            {mode === 'create' ? 'Nueva plantilla de auditoría' : 'Editar plantilla'}
+            {mode === 'create' ? 'Nueva plantilla de auditoría' : `Editar plantilla${initial?.isSystem ? ' (Sistema)' : ''}`}
           </h2>
           <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
             <X className="h-4 w-4" />
@@ -615,20 +616,18 @@ function TemplateCard({
         )}
         <button
           type="button"
+          onClick={onEdit}
+          className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-100"
+        >
+          <Pencil className="h-3 w-3" /> Editar
+        </button>
+        <button
+          type="button"
           onClick={onDuplicate}
           className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-100"
         >
           <Copy className="h-3 w-3" /> Duplicar
         </button>
-        {!template.isSystem && (
-          <button
-            type="button"
-            onClick={onEdit}
-            className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-100"
-          >
-            <Pencil className="h-3 w-3" /> Editar
-          </button>
-        )}
         {!template.isSystem && !template.isDefault && (
           <button
             type="button"
@@ -660,6 +659,7 @@ export default function AuditTemplatesPage() {
   const deleteTemplate   = useDeleteAuditTemplate();
   const duplicateTemplate = useDuplicateAuditTemplate();
   const setDefault       = useSetDefaultAuditTemplate();
+  const reseedSystem     = useReseedSystemTemplates();
 
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -707,6 +707,24 @@ export default function AuditTemplatesPage() {
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
+          <button
+            type="button"
+            disabled={reseedSystem.isPending}
+            onClick={() => {
+              reseedSystem.mutate(undefined, {
+                onSuccess: (result) => {
+                  alert(`Plantillas restauradas: ${result.updated} actualizadas, ${result.created} creadas.`);
+                },
+              });
+            }}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            title="Actualiza las plantillas de sistema con el catálogo de papeles más reciente"
+          >
+            {reseedSystem.isPending
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <RefreshCw className="h-4 w-4" />}
+            Restaurar plantillas
+          </button>
           <button
             type="button"
             onClick={() => setModal({ mode: 'create' })}

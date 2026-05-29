@@ -101,3 +101,12 @@ export function useSetDefaultAuditTemplate() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['audit-templates'] }),
   });
 }
+
+export function useReseedSystemTemplates() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post<{ updated: number; created: number }>('/audit-templates/reseed-system', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['audit-templates'] }),
+  });
+}

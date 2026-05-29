@@ -66,4 +66,10 @@ export class AuditTemplatesController {
   setDefault(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.setDefault(id, user);
   }
+
+  @Post('reseed-system')
+  @ApiOperation({ summary: 'Restaurar / actualizar plantillas de sistema con el catálogo más reciente' })
+  reseedSystem(@CurrentUser() user: AuthUser) {
+    return this.service.reseedSystemTemplates(user);
+  }
 }

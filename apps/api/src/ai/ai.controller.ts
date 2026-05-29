@@ -10,16 +10,20 @@ import {
   UseInterceptors,
   UploadedFile,
   Headers,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import {
   IsString, IsArray, IsOptional, IsNumber,
-  ValidateNested, IsObject, IsNotEmpty, Min, Max,
+  ValidateNested, IsObject, IsNotEmpty, Min, Max, ArrayMinSize, ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuthUser } from '../auth/jwt.strategy';
 import { AiService } from './ai.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 class MessageDto {
   @IsString() role!: string;
@@ -42,12 +46,23 @@ class CaatsDto {
   @IsOptional() @IsNumber() @Min(0.01) @Max(0.5) contamination?: number;
 }
 
+class MultiYearAnalysisDto {
+  @IsArray()
+  @ArrayMinSize(2)
+  @ArrayMaxSize(6)
+  @IsString({ each: true })
+  auditIds!: string[];
+}
+
 @ApiTags('AI')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('ai')
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   // ─── Chat ──────────────────────────────────────────────────────────────────
   @Post('chat')
@@ -158,5 +173,81 @@ export class AiController {
   @ApiOperation({ summary: 'Eliminar documento de la base de conocimiento RAG' })
   async deleteRagDocument(@Param('docId') docId: string) {
     return this.aiService.deleteRagDocument(docId);
+  }
+
+  // ─── ATLAS — Análisis Multi-Año ──────────────────────────────────────────────
+  @Post('multi-year-analysis')
+  @ApiOperation({ summary: 'ATLAS: Análisis de inteligencia histórica multi-año (2-6 auditorías)' })
+  async multiYearAnalysis(
+    @Body() dto: MultiYearAnalysisDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    // Fetch all audits with their findings from the DB
+    const audits = await this.prisma.audit.findMany({
+      where: {
+        id: { in: dto.auditIds },
+        organizationId: user.organizationId,
+      },
+      include: {
+        auditEntity: { select: { name: true, type: true } },
+        findings: {
+          select: {
+            id: true, title: true, severity: true, status: true,
+            condition: true, criteria: true, cause: true,
+            effect: true, risk: true, recommendation: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    // Security: ensure all requested IDs were found in the org
+    if (audits.length !== dto.auditIds.length) {
+      throw new ForbiddenException('Algunas auditorías no pertenecen a su organización');
+    }
+
+    // Build the structured payload for the AI service
+    const auditPayload = audits.map(a => ({
+      id: a.id,
+      title: a.title,
+      type: a.type,
+      subtype: (a as any).subtype ?? undefined,
+      startDate: a.startDate ? new Date(a.startDate).getFullYear().toString() : undefined,
+      endDate:   a.endDate   ? new Date(a.endDate).getFullYear().toString()   : undefined,
+      status: a.status,
+      riskLevel: a.riskLevel ?? undefined,
+      entityName: (a as any).auditEntity?.name ?? (a as any).entityName ?? a.title,
+      scope: a.scope ?? undefined,
+      findings: a.findings.map(f => ({
+        id: f.id,
+        title: f.title,
+        severity: f.severity,
+        status: f.status,
+        condition:      f.condition      ?? undefined,
+        criteria:       f.criteria       ?? undefined,
+        cause:          f.cause          ?? undefined,
+        effect:         f.effect         ?? undefined,
+        risk:           f.risk           ?? undefined,
+        recommendation: f.recommendation ?? undefined,
+      })),
+    }));
+
+    // Infer entity name from first audit (best available)
+    const entityName =
+      (audits[0] as any).auditEntity?.name ??
+      (audits[0] as any).entityName ??
+      audits[0].title;
+
+    // Get org name if available
+    const org = await this.prisma.organization.findUnique({
+      where: { id: user.organizationId },
+      select: { name: true },
+    });
+
+    return this.aiService.multiYearAnalysis({
+      audits: auditPayload,
+      organizationName: org?.name,
+      auditEntityName: entityName,
+    });
   }
 }

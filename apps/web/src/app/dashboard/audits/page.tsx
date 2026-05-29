@@ -3,7 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   Search, Plus, ClipboardList,
-  ArrowRight, Lock, ChevronDown,
+  ArrowRight, Lock, ChevronDown, Sparkles,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAudits } from '@/hooks/useAudits';
@@ -13,6 +13,7 @@ import {
   getTypeLabel, getSubtypeLabel,
   TYPE_BADGE,
 } from '@/lib/audit-types';
+import { AtlasAnalysisModal } from '@/components/audits/AtlasAnalysisModal';
 
 const STATUS_STYLES: Record<string, string> = {
   PLANNING:    'bg-blue-100 text-blue-700',
@@ -45,11 +46,12 @@ const STATUS_FILTERS = [
 ];
 
 export default function AuditsPage() {
-  const [search,  setSearch]  = useState('');
-  const [status,  setStatus]  = useState('');
-  const [type,    setType]    = useState('');
-  const [subtype, setSubtype] = useState('');
-  const [page, setPage] = useState(1);
+  const [search,     setSearch]     = useState('');
+  const [status,     setStatus]     = useState('');
+  const [type,       setType]       = useState('');
+  const [subtype,    setSubtype]    = useState('');
+  const [page,       setPage]       = useState(1);
+  const [showAtlas,  setShowAtlas]  = useState(false);
 
   // Reset subtype when type changes
   function handleTypeChange(v: string) {
@@ -131,13 +133,23 @@ export default function AuditsPage() {
             )}
           </div>
 
-          <Link
-            href="/dashboard/audits/new"
-            className="flex items-center gap-1.5 rounded-lg bg-[#0F2D4A] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1a4a7a] transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Nueva Auditoría
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAtlas(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+              title="Análisis de inteligencia histórica multi-año con ATLAS"
+            >
+              <Sparkles className="h-4 w-4" />
+              Análisis Multi-Año
+            </button>
+            <Link
+              href="/dashboard/audits/new"
+              className="flex items-center gap-1.5 rounded-lg bg-[#0F2D4A] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1a4a7a] transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Nueva Auditoría
+            </Link>
+          </div>
         </div>
 
         {/* Summary stat */}
@@ -271,6 +283,23 @@ export default function AuditsPage() {
           </div>
         )}
       </div>
+
+      {/* ATLAS — Multi-Year Analysis Modal */}
+      {showAtlas && (
+        <AtlasAnalysisModal
+          audits={(data?.data ?? []).map(a => ({
+            id:            a.id,
+            title:         a.title,
+            status:        a.status,
+            startDate:     a.startDate ?? undefined,
+            endDate:       a.endDate   ?? undefined,
+            type:          a.type      ?? undefined,
+            riskLevel:     a.riskLevel ?? undefined,
+            findingsCount: a._count?.findings ?? 0,
+          }))}
+          onClose={() => setShowAtlas(false)}
+        />
+      )}
     </div>
   );
 }

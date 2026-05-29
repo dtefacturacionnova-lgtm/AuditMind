@@ -1,14 +1,17 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private readonly aiServiceUrl: string;
-
   private readonly internalKey: string;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private prisma: PrismaService,
+  ) {
     this.aiServiceUrl = this.config.get<string>('AI_SERVICE_URL', 'http://localhost:3003');
     this.internalKey  = this.config.get<string>('AI_SERVICE_INTERNAL_KEY', 'auditmind-internal-2026-xK9mP3qR');
   }
@@ -253,6 +256,59 @@ export class AiService {
       const err = await res.text();
       throw new HttpException(
         `CAATs analysis failed: ${err}`,
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+    return res.json() as Promise<unknown>;
+  }
+
+  // ─── ATLAS — Análisis Multi-Año ───────────────────────────────────────────────
+  async multiYearAnalysis(payload: {
+    audits: Array<{
+      id: string;
+      title: string;
+      type: string;
+      subtype?: string;
+      startDate?: string;
+      endDate?: string;
+      status: string;
+      riskLevel?: string;
+      entityName?: string;
+      scope?: string;
+      findings: Array<{
+        id: string;
+        title: string;
+        severity: string;
+        status: string;
+        condition?: string;
+        criteria?: string;
+        cause?: string;
+        effect?: string;
+        risk?: string;
+        recommendation?: string;
+      }>;
+    }>;
+    organizationName?: string;
+    auditEntityName?: string;
+  }): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/agents/multi-year-analysis`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-key': this.internalKey,
+      },
+      body: JSON.stringify({
+        audits: payload.audits,
+        organization_name: payload.organizationName,
+        audit_entity_name: payload.auditEntityName,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      this.logger.error(`ATLAS multi-year error ${res.status}: ${err}`);
+      throw new HttpException(
+        `Error en análisis multi-año: ${res.status}`,
         HttpStatus.BAD_GATEWAY,
       );
     }

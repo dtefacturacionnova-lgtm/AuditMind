@@ -860,11 +860,12 @@ function TemplateEditorModal({
           {/* ── Tab: Carpetas ── */}
           {activeTab === 'structure' && (
             <div className="space-y-3">
-              {isSystem ? (
-                <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs text-amber-800 mb-3">
-                  Las carpetas de las plantillas de sistema están predefinidas. Puedes verlas aquí, pero los cambios se sobrescribirán al restaurar las plantillas. Para estructuras personalizadas, duplica esta plantilla.
+              {isSystem && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs text-amber-800">
+                  ⚠️ Los cambios que hagas aquí se sobrescribirán si usas "Restaurar plantillas". Para una estructura permanente personalizada, duplica esta plantilla.
                 </div>
-              ) : (
+              )}
+              {!isSystem && (
                 <p className="text-xs text-slate-500">
                   Define las carpetas (y subcarpetas) que se crearán en el expediente cuando se use esta plantilla. Cada carpeta va asociada a una fase de la auditoría.
                 </p>
@@ -872,7 +873,7 @@ function TemplateEditorModal({
               <SectionsEditor
                 sections={sections}
                 onChange={setSections}
-                readOnly={isSystem}
+                readOnly={false}
               />
             </div>
           )}

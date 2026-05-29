@@ -706,7 +706,7 @@ function LivePaperView() {
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
-type TabKey = 'content' | 'sections' | 'graph' | 'review' | 'history';
+type TabKey = 'content' | 'sections' | 'graph' | 'review' | 'history' | 'file';
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -851,6 +851,7 @@ export default function WpDetailPage() {
   const showGraphTab    = wpKind === 'SMART' || wpKind === 'MASTER';
 
   const allTabs: { key: TabKey; label: string; icon: React.ElementType; show: boolean }[] = [
+    { key: 'file'     as TabKey, label: 'Documento',   icon: Download,       show: isFilePaper },
     { key: 'content'  as TabKey, label: 'Contenido',   icon: FileText,       show: !isFilePaper && wpKind !== 'MASTER' && wpKind !== 'LIVE' && wpKind !== 'SMART' },
     { key: 'sections' as TabKey, label: 'Secciones',   icon: Brain,          show: showSectionsTab },
     { key: 'graph'    as TabKey, label: 'Grafo',        icon: Network,        show: showGraphTab },
@@ -1107,7 +1108,7 @@ export default function WpDetailPage() {
           </div>
 
           {/* ── FILE paper view ── */}
-          {isFilePaper && effectiveTab !== 'review' && effectiveTab !== 'history' && (
+          {isFilePaper && effectiveTab === 'file' && (
             <FilePaperView wp={wp} />
           )}
 

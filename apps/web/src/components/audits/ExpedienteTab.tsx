@@ -16,6 +16,7 @@ import {
 } from '@/hooks/useExpediente';
 import { WP_STATUS_CONFIG, type WpStatus } from '@/hooks/useWorkingPapers';
 import { useIndexTemplates } from '@/hooks/useIndexTemplates';
+import { useAvailableTemplatePapers, useAddTemplatePaper } from '@/hooks/useAudits';
 import { cn } from '@/lib/utils';
 
 // ─── Helpers de archivo ───────────────────────────────────────────────────────
@@ -950,11 +951,12 @@ function UploadModal({
 interface ExpedienteTabProps {
   auditId: string;
   auditTitle: string;
+  templateId?: string;
   onOpenPaper?: (paperId: string) => void;
   onCreatePaper?: (folderId: string) => void;
 }
 
-export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
+export function ExpedienteTab({ auditId, templateId, onCreatePaper }: ExpedienteTabProps) {
   const { data: phases, isLoading } = useExpediente(auditId);
   const initMutation = useInitializeExpediente(auditId);
   const createFolder = useCreateFolder(auditId);
@@ -982,8 +984,15 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
   const [moveModal,   setMoveModal]   = useState<WpStub | null>(null);
   const [deleteModal, setDeleteModal] = useState<WpStub | null>(null);
 
-  const [uploadFolderId, setUploadFolderId]       = useState<string | null>(null);
+  const [uploadFolderId, setUploadFolderId]         = useState<string | null>(null);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showAvailPapers, setShowAvailPapers]       = useState(false);
+
+  // Papeles disponibles de la plantilla
+  const { data: availPapers, isLoading: availLoading } = useAvailableTemplatePapers(
+    templateId ? auditId : undefined,
+  );
+  const addPaper = useAddTemplatePaper(auditId);
 
   // Auto-seleccionar la primera carpeta disponible
   useEffect(() => {
@@ -1204,6 +1213,66 @@ export function ExpedienteTab({ auditId, onCreatePaper }: ExpedienteTabProps) {
             );
           })}
         </div>
+
+        {/* ─── Papeles disponibles de la plantilla ──────────────────────── */}
+        {templateId && (
+          <div className="border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setShowAvailPapers((v) => !v)}
+              className="flex w-full items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <FilePlus className="h-3.5 w-3.5" />
+                Papeles de la plantilla
+                {availPapers && availPapers.length > 0 && (
+                  <span className="rounded-full bg-blue-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    {availPapers.length}
+                  </span>
+                )}
+              </span>
+              {showAvailPapers
+                ? <ChevronDown className="h-3 w-3" />
+                : <ChevronRight className="h-3 w-3" />}
+            </button>
+
+            {showAvailPapers && (
+              <div className="max-h-56 overflow-y-auto bg-white">
+                {availLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                  </div>
+                ) : !availPapers?.length ? (
+                  <p className="px-3 py-3 text-center text-[11px] text-slate-400">
+                    Todos los papeles de la plantilla ya están en el expediente ✓
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {availPapers.map((p) => (
+                      <li key={p.code} className="flex items-center gap-2 px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[11px] font-medium text-slate-700">
+                            <span className="mr-1 font-mono text-[10px] text-slate-400">{p.code}</span>
+                            {p.title}
+                          </p>
+                          <p className="text-[10px] text-slate-400">{p.indexSection} · {p.wpKind}</p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={addPaper.isPending}
+                          onClick={() => addPaper.mutate(p.code)}
+                          className="shrink-0 rounded px-2 py-1 text-[10px] font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+                        >
+                          {addPaper.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : '+ Agregar'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ─── PANEL DERECHO: contenido de la carpeta seleccionada ────────── */}

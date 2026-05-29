@@ -67,6 +67,7 @@ export default function NewAuditPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
   const [templateId, setTemplateId] = useState<string>('');
+  const [scaffoldMode, setScaffoldMode] = useState<'FULL' | 'STRUCTURE_ONLY'>('FULL');
 
   const createAudit = useCreateAudit();
   const { data: universeData } = useAuditUniverse({ limit: 100 });
@@ -120,6 +121,7 @@ export default function NewAuditPage() {
       objectives: form.objectives.trim() || undefined,
       isInvestigationMode: form.isInvestigationMode,
       templateId: templateId || undefined,
+      scaffoldMode: templateId ? scaffoldMode : undefined,
     };
 
     if (form.enableMateriality && form.materialityBase) {
@@ -258,25 +260,68 @@ export default function NewAuditPage() {
               )}
 
               {/* Plantilla de Papeles */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Plantilla de Papeles de Trabajo
-                </label>
-                <select
-                  value={templateId}
-                  onChange={(e) => setTemplateId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="">Estándar del sistema (según tipo)</option>
-                  {(templates ?? []).map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} — {t.papers.length} papeles{t.isDefault ? ' ★' : ''}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-slate-500">
-                  Define qué papeles de trabajo se crean automáticamente al iniciar esta auditoría
-                </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Plantilla de Papeles de Trabajo
+                  </label>
+                  <select
+                    value={templateId}
+                    onChange={(e) => {
+                      setTemplateId(e.target.value);
+                      // Reset to FULL when template changes
+                      setScaffoldMode('FULL');
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">Sin plantilla (expediente manual)</option>
+                    {(templates ?? []).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} — {t.papers.length} papeles{t.isDefault ? ' ★' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {templateId
+                      ? 'La plantilla define qué papeles de trabajo se crean automáticamente'
+                      : 'Sin plantilla: se iniciará con una carpeta vacía "Plantilla de Índice"'}
+                  </p>
+                </div>
+
+                {/* Scaffold mode — solo cuando hay plantilla seleccionada */}
+                {templateId && (
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-2.5">
+                    <p className="text-xs font-semibold text-blue-800">¿Qué desea crear desde la plantilla?</p>
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="scaffoldMode"
+                        value="FULL"
+                        checked={scaffoldMode === 'FULL'}
+                        onChange={() => setScaffoldMode('FULL')}
+                        className="mt-0.5 accent-blue-600"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">Estructura completa + todos los papeles</p>
+                        <p className="text-xs text-slate-500">Crea automáticamente cada papel de trabajo definido en la plantilla</p>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="scaffoldMode"
+                        value="STRUCTURE_ONLY"
+                        checked={scaffoldMode === 'STRUCTURE_ONLY'}
+                        onChange={() => setScaffoldMode('STRUCTURE_ONLY')}
+                        className="mt-0.5 accent-blue-600"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">Solo la estructura de carpetas</p>
+                        <p className="text-xs text-slate-500">No crea papeles ahora — los podrás agregar individualmente desde el expediente cuando los necesites</p>
+                      </div>
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

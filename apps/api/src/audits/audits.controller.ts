@@ -165,4 +165,24 @@ export class AuditsController {
   deleteTrialBalance(@Param('tbId') tbId: string, @CurrentUser() user: AuthUser) {
     return this.service.deleteTrialBalance(tbId, user);
   }
+
+  // ─── Papeles disponibles desde plantilla ─────────────────────────────────────
+
+  @Get(':id/available-template-papers')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Lista los papeles de la plantilla que aún no se han creado en la auditoría' })
+  getAvailableTemplatePapers(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.getAvailableTemplatePapers(id, user);
+  }
+
+  @Post(':id/add-template-paper')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Agrega un papel específico desde la plantilla al expediente' })
+  addTemplatePaper(
+    @Param('id') id: string,
+    @Body() body: { code: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.addPaperFromTemplate(id, body.code, user);
+  }
 }

@@ -1,6 +1,7 @@
 import {
   IsString, IsOptional, IsEnum, IsDateString, IsNumber,
   IsUUID, IsBoolean, IsArray, Min, Max, ValidateNested,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -108,4 +109,12 @@ export class CreateAuditDto {
   @IsOptional()
   @IsString()
   templateId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['FULL', 'STRUCTURE_ONLY'],
+    description: 'FULL (default): crea carpetas + todos los papeles. STRUCTURE_ONLY: solo marca la plantilla, sin crear papeles (se agregan a demanda).',
+  })
+  @IsOptional()
+  @IsIn(['FULL', 'STRUCTURE_ONLY'])
+  scaffoldMode?: 'FULL' | 'STRUCTURE_ONLY';
 }

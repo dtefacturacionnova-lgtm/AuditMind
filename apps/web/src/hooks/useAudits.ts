@@ -28,6 +28,8 @@ export interface Audit {
     auditRisk: number;
   };
   isInvestigationMode: boolean;
+  templateId?: string;
+  template?: { id: string; name: string };
   auditableUnit?: { id: string; name: string; division?: string };
   auditEntity?: { id: string; name: string; category?: string; inherentRiskScore?: number };
   leadAuditor?: { id: string; name: string; avatarUrl?: string };
@@ -98,6 +100,39 @@ export function useUpdateAuditStatus() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['audits'] });
       qc.invalidateQueries({ queryKey: ['audits', vars.id] });
+    },
+  });
+}
+
+// ─── Papeles disponibles desde plantilla ─────────────────────────────────────
+
+export interface AvailableTemplatePaper {
+  code: string;
+  indexSection: string;
+  title: string;
+  type: string;
+  wpKind: string;
+  paperCode?: string;
+}
+
+export function useAvailableTemplatePapers(auditId: string | undefined) {
+  return useQuery<AvailableTemplatePaper[]>({
+    queryKey: ['available-template-papers', auditId],
+    queryFn: () => apiClient.get<AvailableTemplatePaper[]>(`/audits/${auditId}/available-template-papers`),
+    enabled: !!auditId,
+    staleTime: 30_000,
+  });
+}
+
+export function useAddTemplatePaper(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) =>
+      apiClient.post(`/audits/${auditId}/add-template-paper`, { code }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['available-template-papers', auditId] });
+      qc.invalidateQueries({ queryKey: ['audits', auditId] });
+      qc.invalidateQueries({ queryKey: ['expediente', auditId] });
     },
   });
 }

@@ -6,6 +6,18 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { PhaseType } from '@prisma/client';
 import { CreateIndexTemplateDto, UpdateIndexTemplateDto } from './dto/index-template.dto';
 
+// ─── Plantilla en Blanco (una sola carpeta raíz, sin papeles) ────────────────
+export const BLANK_STRUCTURE = [
+  {
+    phaseType: 'PLANNING' as const,
+    name: 'Índice de Auditoría',
+    order: 0,
+    folders: [
+      { ref: 'PT', name: 'Plantilla de Índice', sortOrder: 0 },
+    ],
+  },
+];
+
 // ─── Plantilla IIA estándar (fallback y seed inicial) ────────────────────────
 export const IIA_STANDARD_STRUCTURE = [
   {
@@ -67,25 +79,46 @@ export const IIA_STANDARD_STRUCTURE = [
 export class IndexTemplatesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ─── Seed IIA estándar (lazy, si la org no tiene ninguna) ────────────────
+  // ─── Seed de plantillas del sistema (lazy) ───────────────────────────────
+  // Crea "IIA Estándar" (default) + "Plantilla en Blanco" si no existen todavía.
 
   private async seedIfEmpty(user: AuthUser) {
-    const count = await this.prisma.indexTemplate.count({
-      where: { organizationId: user.organizationId },
-    });
-    if (count > 0) return;
+    const orgId = user.organizationId;
 
-    await this.prisma.indexTemplate.create({
-      data: {
-        organizationId: user.organizationId,
-        name: 'IIA Estándar',
-        description: 'Plantilla basada en estándares IIA con estructura A-G.',
-        isDefault: true,
-        isSystem: true,
-        structure: IIA_STANDARD_STRUCTURE as object,
-        createdById: user.id,
-      },
+    // IIA Estándar — crear si no existe ninguna plantilla de índice
+    const count = await this.prisma.indexTemplate.count({ where: { organizationId: orgId } });
+    if (count === 0) {
+      await this.prisma.indexTemplate.create({
+        data: {
+          organizationId: orgId,
+          name: 'IIA Estándar',
+          description: 'Plantilla basada en estándares IIA con estructura de fases A–G.',
+          isDefault: true,
+          isSystem: true,
+          structure: IIA_STANDARD_STRUCTURE as object,
+          createdById: user.id,
+        },
+      });
+    }
+
+    // Plantilla en Blanco — asegurar que siempre exista (puede faltar en orgs antiguas)
+    const blankExists = await this.prisma.indexTemplate.findFirst({
+      where: { organizationId: orgId, name: 'Plantilla en Blanco' },
+      select: { id: true },
     });
+    if (!blankExists) {
+      await this.prisma.indexTemplate.create({
+        data: {
+          organizationId: orgId,
+          name: 'Plantilla en Blanco',
+          description: 'Expediente mínimo con una sola carpeta raíz. Úsala cuando no necesitas una estructura predefinida.',
+          isDefault: false,
+          isSystem: true,
+          structure: BLANK_STRUCTURE as object,
+          createdById: user.id,
+        },
+      });
+    }
   }
 
   // ─── Listar plantillas de la org ──────────────────────────────────────────

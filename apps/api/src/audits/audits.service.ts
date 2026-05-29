@@ -98,7 +98,7 @@ export class AuditsService {
     });
 
     // Auto-scaffold working papers based on audit type (fire-and-forget)
-    void this.auditIndex.scaffold(audit.id, audit.type as AuditType, user.id, dto.templateId);
+    void this.auditIndex.scaffold(audit.id, audit.type as AuditType, user.id, dto.templateId, dto.scaffoldMode);
 
     return this.findOne(audit.id, user);
   }
@@ -169,6 +169,7 @@ export class AuditsService {
         team: {
           include: { user: { select: { id: true, name: true, role: true, avatarUrl: true } } },
         },
+        template: { select: { id: true, name: true } },
         _count: {
           select: {
             workingPapers: true,
@@ -457,5 +458,17 @@ export class AuditsService {
       }),
     ]);
     return { audit, wpStats, findingStats, pbcStats };
+  }
+
+  // ─── Papeles disponibles desde plantilla ─────────────────────────────────────
+
+  async getAvailableTemplatePapers(auditId: string, user: AuthUser) {
+    return this.auditIndex.getAvailableTemplatePapers(auditId, user.organizationId);
+  }
+
+  async addPaperFromTemplate(auditId: string, code: string, user: AuthUser) {
+    // Verify audit belongs to org
+    await this.findOne(auditId, user);
+    return this.auditIndex.addPaperFromTemplate(auditId, code, user.id, user.organizationId);
   }
 }

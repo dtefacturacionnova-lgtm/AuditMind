@@ -858,20 +858,78 @@ export class AuditIndexService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  // ─── Private helper: crea un solo papel + sus secciones ──────────────────
+
+  private async _createOnePaper(
+    auditId:      string,
+    def:          PaperDef,
+    preparedById: string,
+  ) {
+    const wp = await this.prisma.workingPaper.create({
+      data: {
+        auditId,
+        code:         def.code,
+        indexSection: def.indexSection,
+        title:        def.title,
+        type:         def.type,
+        wpKind:       def.wpKind,
+        paperCode:    def.paperCode ?? null,
+        preparedById,
+      },
+    });
+
+    if (def.paperCode && (def.wpKind === WpKind.SMART || def.wpKind === WpKind.MASTER)) {
+      const tpl = PAPER_TEMPLATES[def.paperCode];
+      if (tpl?.length) {
+        await this.prisma.paperSection.createMany({
+          data: tpl.map((t) => ({
+            paperId:      wp.id,
+            sectionKey:   t.sectionKey,
+            label:        t.label,
+            description:  t.description   ?? null,
+            fieldType:    t.fieldType,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            value:        (t.defaultValue ?? null) as any,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            options:      (t.options       ?? [])  as any,
+            isRequired:   t.isRequired,
+            isAutoFilled: t.isAutoFilled,
+            sourceRef:    t.sourceRef      ?? null,
+            sortOrder:    t.sortOrder,
+            aiHint:       t.aiHint         ?? null,
+          })),
+          skipDuplicates: true,
+        });
+        this.logger.debug(`[AuditIndex]   ✓ ${def.code} (${def.paperCode}) — ${tpl.length} sections`);
+      }
+    } else {
+      this.logger.debug(`[AuditIndex]   ✓ ${def.code} — STANDARD`);
+    }
+
+    return wp;
+  }
+
   /**
    * Auto-scaffold working papers for a newly created audit.
-   * Creates PT records + initializes PaperSections from templates.
-   * Fire-and-forget safe — errors are logged but don't abort the audit creation.
-   *
-   * If templateId is provided, uses the AuditTemplate from the DB.
-   * Falls back to AUDIT_TYPE_INDEX if the template is not found.
+   * - scaffoldMode 'FULL' (default): crea todos los papeles de la plantilla
+   * - scaffoldMode 'STRUCTURE_ONLY': omite la creación de papeles (el usuario
+   *   los agregará manualmente desde "Papeles disponibles de la plantilla")
    */
   async scaffold(
-    auditId:      string,
-    auditType:    AuditType,
-    preparedById: string,
-    templateId?:  string,
+    auditId:       string,
+    auditType:     AuditType,
+    preparedById:  string,
+    templateId?:   string,
+    scaffoldMode?: 'FULL' | 'STRUCTURE_ONLY',
   ): Promise<void> {
+    // STRUCTURE_ONLY: no crear papeles ahora; el usuario los añade a demanda
+    if (scaffoldMode === 'STRUCTURE_ONLY') {
+      this.logger.log(
+        `[AuditIndex] STRUCTURE_ONLY — omitiendo creación de papeles para audit ${auditId}`,
+      );
+      return;
+    }
+
     let index: PaperDef[];
 
     if (templateId) {
@@ -899,57 +957,80 @@ export class AuditIndexService {
 
     for (const def of index) {
       try {
-        const wp = await this.prisma.workingPaper.create({
-          data: {
-            auditId,
-            code:         def.code,
-            indexSection: def.indexSection,
-            title:        def.title,
-            type:         def.type,
-            wpKind:       def.wpKind,
-            paperCode:    def.paperCode ?? null,
-            preparedById,
-          },
-        });
-
-        // Auto-initialize sections for SMART and MASTER papers
-        if (def.paperCode && (def.wpKind === WpKind.SMART || def.wpKind === WpKind.MASTER)) {
-          const template = PAPER_TEMPLATES[def.paperCode];
-          if (template?.length) {
-            await this.prisma.paperSection.createMany({
-              data: template.map((t) => ({
-                paperId:      wp.id,
-                sectionKey:   t.sectionKey,
-                label:        t.label,
-                description:  t.description   ?? null,
-                fieldType:    t.fieldType,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                value:        (t.defaultValue ?? null) as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                options:      (t.options       ?? [])  as any,
-                isRequired:   t.isRequired,
-                isAutoFilled: t.isAutoFilled,
-                sourceRef:    t.sourceRef      ?? null,
-                sortOrder:    t.sortOrder,
-                aiHint:       t.aiHint         ?? null,
-              })),
-              skipDuplicates: true,
-            });
-            this.logger.debug(
-              `[AuditIndex]   ✓ ${def.code} (${def.paperCode}) — ${template.length} sections`,
-            );
-          }
-        } else {
-          this.logger.debug(`[AuditIndex]   ✓ ${def.code} — STANDARD`);
-        }
+        await this._createOnePaper(auditId, def, preparedById);
       } catch (err) {
-        // Don't abort scaffold if one paper fails
-        this.logger.error(
-          `[AuditIndex]   ✗ ${def.code} failed: ${String(err)}`,
-        );
+        this.logger.error(`[AuditIndex]   ✗ ${def.code} failed: ${String(err)}`);
       }
     }
 
     this.logger.log(`[AuditIndex] Scaffold complete for audit ${auditId}`);
+  }
+
+  /**
+   * Retorna los papeles de la plantilla asociada a la auditoría que aún
+   * NO han sido creados como WorkingPaper en el proyecto.
+   */
+  async getAvailableTemplatePapers(
+    auditId:        string,
+    organizationId: string,
+  ): Promise<PaperDef[]> {
+    const audit = await this.prisma.audit.findFirst({
+      where: { id: auditId, organizationId },
+      select: { templateId: true },
+    });
+    if (!audit?.templateId) return [];
+
+    const template = await this.prisma.auditTemplate.findFirst({
+      where: { id: audit.templateId, organizationId },
+      select: { papers: true },
+    });
+    if (!template) return [];
+
+    const allPapers = template.papers as unknown as PaperDef[];
+
+    const existing = await this.prisma.workingPaper.findMany({
+      where: { auditId },
+      select: { code: true },
+    });
+    const existingCodes = new Set(existing.map((p) => p.code));
+
+    return allPapers.filter((p) => !existingCodes.has(p.code));
+  }
+
+  /**
+   * Agrega un papel específico (por código) desde la plantilla del proyecto.
+   * Útil cuando se creó la auditoría en modo STRUCTURE_ONLY o para añadir
+   * papeles opcionales después del scaffold inicial.
+   */
+  async addPaperFromTemplate(
+    auditId:        string,
+    code:           string,
+    preparedById:   string,
+    organizationId: string,
+  ) {
+    const audit = await this.prisma.audit.findFirst({
+      where: { id: auditId, organizationId },
+      select: { templateId: true },
+    });
+    if (!audit?.templateId) {
+      throw new Error('Esta auditoría no tiene plantilla de auditoría asignada');
+    }
+
+    const template = await this.prisma.auditTemplate.findFirst({
+      where: { id: audit.templateId, organizationId },
+      select: { papers: true },
+    });
+    if (!template) throw new Error('Plantilla no encontrada');
+
+    const allPapers = template.papers as unknown as PaperDef[];
+    const def = allPapers.find((p) => p.code === code);
+    if (!def) throw new Error(`Papel "${code}" no existe en la plantilla`);
+
+    const existing = await this.prisma.workingPaper.findFirst({
+      where: { auditId, code },
+    });
+    if (existing) throw new Error(`El papel "${code}" ya existe en esta auditoría`);
+
+    return this._createOnePaper(auditId, def, preparedById);
   }
 }

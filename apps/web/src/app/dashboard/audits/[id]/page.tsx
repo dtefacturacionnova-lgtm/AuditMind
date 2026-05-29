@@ -264,6 +264,7 @@ export default function AuditDetailPage() {
                 <ExpedienteTab
                   auditId={id}
                   auditTitle={audit.title}
+                  templateId={audit.templateId}
                   onCreatePaper={(folderId) => {
                     router.push(`/dashboard/working-papers/new?auditId=${id}&folderId=${folderId}`);
                   }}

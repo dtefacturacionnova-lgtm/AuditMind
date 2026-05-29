@@ -50,6 +50,7 @@ export interface CreateAuditTemplateData {
   description?: string;
   auditTypes: string[];
   papers: PaperDef[];
+  sections?: SectionDef[];
   isDefault?: boolean;
 }
 

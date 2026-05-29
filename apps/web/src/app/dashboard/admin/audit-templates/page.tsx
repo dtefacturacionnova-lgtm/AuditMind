@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import {
   Plus, Pencil, Trash2, Star, Lock, Copy,
-  X, Check, Loader2, Settings2, ClipboardList, Eye, RefreshCw,
+  X, Check, Loader2, ClipboardList, Eye, RefreshCw,
+  FolderOpen, FolderPlus, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -58,7 +59,25 @@ const WP_TYPES: WorkingPaperType[] = [
 
 const WP_KINDS: WpKind[] = ['STANDARD', 'SMART', 'MASTER'];
 
-// ─── Empty paper row ──────────────────────────────────────────────────────────
+type PhaseType = 'PLANNING' | 'FIELDWORK' | 'REPORTING' | 'FOLLOWUP';
+
+const PHASE_TYPES: PhaseType[] = ['PLANNING', 'FIELDWORK', 'REPORTING', 'FOLLOWUP'];
+
+const PHASE_TYPE_LABELS: Record<PhaseType, string> = {
+  PLANNING:  'Planificación',
+  FIELDWORK: 'Ejecución',
+  REPORTING: 'Informe',
+  FOLLOWUP:  'Seguimiento',
+};
+
+const PHASE_TYPE_COLORS: Record<PhaseType, string> = {
+  PLANNING:  'bg-blue-50 text-blue-700 border-blue-200',
+  FIELDWORK: 'bg-amber-50 text-amber-700 border-amber-200',
+  REPORTING: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  FOLLOWUP:  'bg-purple-50 text-purple-700 border-purple-200',
+};
+
+// ─── Empty helpers ────────────────────────────────────────────────────────────
 
 function emptyPaper(): PaperDef {
   return {
@@ -69,6 +88,255 @@ function emptyPaper(): PaperDef {
     wpKind: 'STANDARD',
     paperCode: '',
   };
+}
+
+function emptySection(): SectionDef {
+  return { ref: '', name: '', phaseType: 'PLANNING', children: [] };
+}
+
+// ─── Sections editor ──────────────────────────────────────────────────────────
+
+function SectionsEditor({
+  sections,
+  onChange,
+  readOnly = false,
+}: {
+  sections: SectionDef[];
+  onChange: (sections: SectionDef[]) => void;
+  readOnly?: boolean;
+}) {
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  function updateSection(idx: number, field: keyof SectionDef, value: any) {
+    onChange(sections.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
+  }
+
+  function removeSection(idx: number) {
+    onChange(sections.filter((_, i) => i !== idx));
+  }
+
+  function addSection() {
+    const next = [...sections, emptySection()];
+    onChange(next);
+    setExpanded((prev) => ({ ...prev, [next.length - 1]: false }));
+  }
+
+  function addChild(idx: number) {
+    const updated = sections.map((s, i) => {
+      if (i !== idx) return s;
+      return { ...s, children: [...(s.children ?? []), { ref: '', name: '' }] };
+    });
+    onChange(updated);
+    setExpanded((prev) => ({ ...prev, [idx]: true }));
+  }
+
+  function updateChild(sIdx: number, cIdx: number, field: 'ref' | 'name', value: string) {
+    onChange(
+      sections.map((s, i) => {
+        if (i !== sIdx) return s;
+        const children = (s.children ?? []).map((c, j) =>
+          j === cIdx ? { ...c, [field]: value } : c,
+        );
+        return { ...s, children };
+      }),
+    );
+  }
+
+  function removeChild(sIdx: number, cIdx: number) {
+    onChange(
+      sections.map((s, i) => {
+        if (i !== sIdx) return s;
+        return { ...s, children: (s.children ?? []).filter((_, j) => j !== cIdx) };
+      }),
+    );
+  }
+
+  function toggleExpanded(idx: number) {
+    setExpanded((prev) => ({ ...prev, [idx]: !prev[idx] }));
+  }
+
+  if (readOnly && sections.length === 0) {
+    return (
+      <p className="text-xs text-slate-400 italic py-2">
+        Esta plantilla del sistema no tiene una estructura de carpetas definida.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {sections.length === 0 && !readOnly && (
+        <p className="text-xs text-slate-400 italic py-2">
+          Sin carpetas definidas. Las carpetas estructuran el expediente de la auditoría.
+        </p>
+      )}
+
+      {sections.map((section, idx) => {
+        const hasChildren = (section.children?.length ?? 0) > 0;
+        const isExpanded  = expanded[idx] ?? hasChildren;
+
+        return (
+          <div
+            key={idx}
+            className={cn(
+              'rounded-lg border bg-white overflow-hidden',
+              readOnly ? 'border-slate-200' : 'border-slate-200 hover:border-slate-300',
+            )}
+          >
+            {/* Section row */}
+            <div className="flex items-center gap-2 px-3 py-2">
+              {/* Expand toggle */}
+              <button
+                type="button"
+                onClick={() => toggleExpanded(idx)}
+                className="shrink-0 text-slate-400 hover:text-slate-600 p-0.5"
+                tabIndex={-1}
+              >
+                {isExpanded
+                  ? <ChevronDown className="h-3.5 w-3.5" />
+                  : <ChevronRight className="h-3.5 w-3.5" />}
+              </button>
+
+              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+
+              {/* Ref */}
+              {readOnly ? (
+                <span className="w-14 font-mono text-xs font-semibold text-slate-700">{section.ref}</span>
+              ) : (
+                <input
+                  value={section.ref}
+                  onChange={(e) => updateSection(idx, 'ref', e.target.value)}
+                  placeholder="Ref"
+                  className="w-14 rounded border border-slate-200 px-1.5 py-1 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              )}
+
+              {/* Name */}
+              {readOnly ? (
+                <span className="flex-1 text-xs text-slate-700">{section.name}</span>
+              ) : (
+                <input
+                  value={section.name}
+                  onChange={(e) => updateSection(idx, 'name', e.target.value)}
+                  placeholder="Nombre de la carpeta"
+                  className="flex-1 rounded border border-slate-200 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              )}
+
+              {/* PhaseType */}
+              {readOnly ? (
+                <span className={cn(
+                  'shrink-0 rounded border px-2 py-0.5 text-[10px] font-medium',
+                  section.phaseType
+                    ? PHASE_TYPE_COLORS[section.phaseType as PhaseType]
+                    : 'bg-slate-50 text-slate-500 border-slate-200',
+                )}>
+                  {section.phaseType ? PHASE_TYPE_LABELS[section.phaseType as PhaseType] : '—'}
+                </span>
+              ) : (
+                <select
+                  value={section.phaseType ?? ''}
+                  onChange={(e) => updateSection(idx, 'phaseType', e.target.value || undefined)}
+                  className="w-32 rounded border border-slate-200 px-1 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                >
+                  <option value="">— Fase —</option>
+                  {PHASE_TYPES.map((pt) => (
+                    <option key={pt} value={pt}>{PHASE_TYPE_LABELS[pt]}</option>
+                  ))}
+                </select>
+              )}
+
+              {/* Actions */}
+              {!readOnly && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => addChild(idx)}
+                    title="Agregar subcarpeta"
+                    className="rounded p-0.5 text-slate-400 hover:bg-blue-50 hover:text-blue-500"
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeSection(idx)}
+                    className="rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Children rows */}
+            {isExpanded && hasChildren && (
+              <div className="border-t border-slate-100 bg-slate-50/60 divide-y divide-slate-100">
+                {(section.children ?? []).map((child, cIdx) => (
+                  <div key={cIdx} className="flex items-center gap-2 pl-10 pr-3 py-1.5">
+                    <div className="h-3 w-3 shrink-0 text-slate-300">└</div>
+
+                    {/* Child ref */}
+                    {readOnly ? (
+                      <span className="w-14 font-mono text-xs text-slate-500">{child.ref}</span>
+                    ) : (
+                      <input
+                        value={child.ref}
+                        onChange={(e) => updateChild(idx, cIdx, 'ref', e.target.value)}
+                        placeholder="Ref"
+                        className="w-14 rounded border border-slate-200 px-1.5 py-1 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                      />
+                    )}
+
+                    {/* Child name */}
+                    {readOnly ? (
+                      <span className="flex-1 text-xs text-slate-500">{child.name}</span>
+                    ) : (
+                      <input
+                        value={child.name}
+                        onChange={(e) => updateChild(idx, cIdx, 'name', e.target.value)}
+                        placeholder="Nombre de la subcarpeta"
+                        className="flex-1 rounded border border-slate-200 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                      />
+                    )}
+
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => removeChild(idx, cIdx)}
+                        className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Collapsed children indicator */}
+            {!isExpanded && hasChildren && (
+              <div
+                className="border-t border-slate-100 bg-slate-50/60 px-10 py-1 text-[10px] text-slate-400 cursor-pointer hover:bg-slate-100"
+                onClick={() => toggleExpanded(idx)}
+              >
+                {section.children!.length} subcarpeta{section.children!.length !== 1 ? 's' : ''} — clic para expandir
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={addSection}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
+        >
+          <Plus className="h-3.5 w-3.5" /> Agregar carpeta
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ─── Papers table editor ──────────────────────────────────────────────────────
@@ -102,7 +370,7 @@ function PapersEditor({
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="px-2 py-2 text-left font-medium text-slate-500 w-20">Código</th>
-              <th className="px-2 py-2 text-left font-medium text-slate-500 w-16">Sección</th>
+              <th className="px-2 py-2 text-left font-medium text-slate-500 w-44">Carpeta</th>
               <th className="px-2 py-2 text-left font-medium text-slate-500">Título</th>
               <th className="px-2 py-2 text-left font-medium text-slate-500 w-32">Tipo</th>
               <th className="px-2 py-2 text-left font-medium text-slate-500 w-24">Clase</th>
@@ -238,17 +506,19 @@ function TemplateViewModal({
   template: AuditTemplate;
   onClose: () => void;
 }) {
+  const [tab, setTab] = useState<'papers' | 'structure'>('structure');
   const typeLabels = AUDIT_TYPES.reduce<Record<string, string>>((acc, t) => {
     acc[t.value] = t.label; return acc;
   }, {});
 
   // Group papers by indexSection
-  const sections = template.papers.reduce<Record<string, PaperDef[]>>((acc, p) => {
+  const papersBySec = template.papers.reduce<Record<string, PaperDef[]>>((acc, p) => {
     (acc[p.indexSection] ??= []).push(p);
     return acc;
   }, {});
+  const sectionKeys = Object.keys(papersBySec).sort();
 
-  const sectionKeys = Object.keys(sections).sort();
+  const hasSections = (template.sections?.length ?? 0) > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
@@ -285,65 +555,118 @@ function TemplateViewModal({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
-          {template.papers.length === 0 ? (
-            <p className="text-center text-sm text-slate-400 py-8">Esta plantilla no tiene papeles definidos.</p>
-          ) : (
-            <>
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Papeles de trabajo — {template.papers.length} {template.papers.length === 1 ? 'papel' : 'papeles'}
-                </p>
-              </div>
+        {/* Tabs */}
+        <div className="flex gap-0 border-b border-slate-100 px-6">
+          <button
+            type="button"
+            onClick={() => setTab('structure')}
+            className={cn(
+              'px-4 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors',
+              tab === 'structure'
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700',
+            )}
+          >
+            Estructura de carpetas {hasSections && `(${template.sections!.length})`}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('papers')}
+            className={cn(
+              'px-4 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors',
+              tab === 'papers'
+                ? 'border-blue-600 text-blue-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700',
+            )}
+          >
+            Papeles de trabajo ({template.papers.length})
+          </button>
+        </div>
 
-              {sectionKeys.map((sec) => (
-                <div key={sec} className="space-y-1">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">
-                    Sección {sec}
-                  </p>
-                  <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50">
-                          <th className="px-3 py-2 text-left font-medium text-slate-500 w-20">Código</th>
-                          <th className="px-3 py-2 text-left font-medium text-slate-500">Título del papel</th>
-                          <th className="px-3 py-2 text-left font-medium text-slate-500 w-36">Tipo</th>
-                          <th className="px-3 py-2 text-left font-medium text-slate-500 w-24">Clase</th>
-                          <th className="px-3 py-2 text-left font-medium text-slate-500 w-24">Clave PT</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {sections[sec].map((paper, i) => (
-                          <tr key={i} className="hover:bg-slate-50/60">
-                            <td className="px-3 py-2 font-mono text-slate-700 font-medium">{paper.code}</td>
-                            <td className="px-3 py-2 text-slate-700">{paper.title}</td>
-                            <td className="px-3 py-2">
-                              <span className={cn(
-                                'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                                WP_TYPE_COLORS[paper.type],
-                              )}>
-                                {WP_TYPE_LABELS[paper.type]}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2">
-                              <span className={cn(
-                                'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                                WP_KIND_COLORS[paper.wpKind],
-                              )}>
-                                {WP_KIND_LABELS[paper.wpKind]}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 font-mono text-slate-500 text-[11px]">
-                              {paper.paperCode ?? '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+        {/* Body */}
+        <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+          {/* Structure tab */}
+          {tab === 'structure' && (
+            <div className="space-y-2">
+              {!hasSections ? (
+                <p className="text-center text-sm text-slate-400 py-8">
+                  Esta plantilla no tiene una estructura de carpetas definida.
+                </p>
+              ) : (
+                <SectionsEditor
+                  sections={template.sections ?? []}
+                  onChange={() => {}}
+                  readOnly
+                />
+              )}
+            </div>
+          )}
+
+          {/* Papers tab */}
+          {tab === 'papers' && (
+            <>
+              {template.papers.length === 0 ? (
+                <p className="text-center text-sm text-slate-400 py-8">Esta plantilla no tiene papeles definidos.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {template.papers.length} {template.papers.length === 1 ? 'papel' : 'papeles'}
+                    </p>
                   </div>
-                </div>
-              ))}
+
+                  {sectionKeys.map((sec) => {
+                    const secDef = template.sections?.find((s) => s.ref === sec);
+                    return (
+                      <div key={sec} className="space-y-1">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">
+                          {secDef ? `${sec} — ${secDef.name}` : `Sección ${sec}`}
+                        </p>
+                        <div className="overflow-hidden rounded-lg border border-slate-200">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200 bg-slate-50">
+                                <th className="px-3 py-2 text-left font-medium text-slate-500 w-20">Código</th>
+                                <th className="px-3 py-2 text-left font-medium text-slate-500">Título del papel</th>
+                                <th className="px-3 py-2 text-left font-medium text-slate-500 w-36">Tipo</th>
+                                <th className="px-3 py-2 text-left font-medium text-slate-500 w-24">Clase</th>
+                                <th className="px-3 py-2 text-left font-medium text-slate-500 w-24">Clave PT</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {papersBySec[sec].map((paper, i) => (
+                                <tr key={i} className="hover:bg-slate-50/60">
+                                  <td className="px-3 py-2 font-mono text-slate-700 font-medium">{paper.code}</td>
+                                  <td className="px-3 py-2 text-slate-700">{paper.title}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={cn(
+                                      'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                                      WP_TYPE_COLORS[paper.type],
+                                    )}>
+                                      {WP_TYPE_LABELS[paper.type]}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <span className={cn(
+                                      'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                                      WP_KIND_COLORS[paper.wpKind],
+                                    )}>
+                                      {WP_KIND_LABELS[paper.wpKind]}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 font-mono text-slate-500 text-[11px]">
+                                    {paper.paperCode ?? '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
             </>
           )}
         </div>
@@ -378,15 +701,21 @@ function TemplateEditorModal({
   onSave: (data: CreateAuditTemplateData) => Promise<void>;
   onClose: () => void;
 }) {
-  const [name, setName]             = useState(initial?.name ?? '');
+  const [name, setName]               = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
-  const [auditTypes, setAuditTypes] = useState<string[]>(initial?.auditTypes ?? []);
-  const [papers, setPapers]         = useState<PaperDef[]>(
+  const [auditTypes, setAuditTypes]   = useState<string[]>(initial?.auditTypes ?? []);
+  const [papers, setPapers]           = useState<PaperDef[]>(
     initial?.papers ? JSON.parse(JSON.stringify(initial.papers)) : [],
   );
-  const [isDefault, setIsDefault]   = useState(initial?.isDefault ?? false);
-  const [saving, setSaving]         = useState(false);
-  const [error, setError]           = useState('');
+  const [sections, setSections]       = useState<SectionDef[]>(
+    initial?.sections ? JSON.parse(JSON.stringify(initial.sections)) : [],
+  );
+  const [isDefault, setIsDefault]     = useState(initial?.isDefault ?? false);
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState('');
+  const [activeTab, setActiveTab]     = useState<'general' | 'structure' | 'papers'>('general');
+
+  const isSystem = initial?.isSystem ?? false;
 
   function toggleType(value: string) {
     setAuditTypes((prev) =>
@@ -405,6 +734,7 @@ function TemplateEditorModal({
         description: description.trim() || undefined,
         auditTypes,
         papers,
+        sections: sections.length > 0 ? sections : undefined,
         isDefault,
       });
       onClose();
@@ -420,99 +750,153 @@ function TemplateEditorModal({
       <div className="w-full max-w-4xl rounded-xl bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <h2 className="text-base font-semibold text-slate-800">
-            {mode === 'create' ? 'Nueva plantilla de auditoría' : `Editar plantilla${initial?.isSystem ? ' (Sistema)' : ''}`}
-          </h2>
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">
+              {mode === 'create' ? 'Nueva plantilla de auditoría' : `Editar plantilla${isSystem ? ' (Sistema)' : ''}`}
+            </h2>
+            {isSystem && (
+              <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1">
+                <Lock className="h-3 w-3" /> Las plantillas de sistema pueden editarse pero sus cambios se restauran con "Restaurar plantillas"
+              </p>
+            )}
+          </div>
           <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Section A: Info general */}
-          <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              A. Información general
-            </p>
+        {/* Tab bar */}
+        <div className="flex gap-0 border-b border-slate-100 px-6">
+          {(
+            [
+              { key: 'general',   label: 'General' },
+              { key: 'structure', label: `Carpetas (${sections.length})` },
+              { key: 'papers',    label: `Papeles (${papers.length})` },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveTab(key)}
+              className={cn(
+                'px-4 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors',
+                activeTab === key
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-700',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">
-                  Nombre <span className="text-red-400">*</span>
-                </label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="ej. Auditoría Financiera Estándar"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Descripción</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Breve descripción de uso"
-                  rows={1}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-xs font-medium text-slate-600">
-                Tipos de auditoría aplicables <span className="text-red-400">*</span>
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {AUDIT_TYPES.map((t) => (
-                  <label
-                    key={t.value}
-                    className={cn(
-                      'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs cursor-pointer transition-colors',
-                      auditTypes.includes(t.value)
-                        ? 'border-blue-400 bg-blue-50 text-blue-700'
-                        : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50',
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={auditTypes.includes(t.value)}
-                      onChange={() => toggleType(t.value)}
-                      className="h-3.5 w-3.5 rounded accent-blue-600"
-                    />
-                    <span className="truncate">{t.label}</span>
+        <div className="p-6 min-h-[360px] max-h-[60vh] overflow-y-auto">
+          {/* ── Tab: General ── */}
+          {activeTab === 'general' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Nombre <span className="text-red-400">*</span>
                   </label>
-                ))}
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="ej. Auditoría Financiera Estándar"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Descripción</label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Breve descripción de uso"
+                    rows={2}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-medium text-slate-600">
+                  Tipos de auditoría aplicables <span className="text-red-400">*</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {AUDIT_TYPES.map((t) => (
+                    <label
+                      key={t.value}
+                      className={cn(
+                        'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs cursor-pointer transition-colors',
+                        auditTypes.includes(t.value)
+                          ? 'border-blue-400 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={auditTypes.includes(t.value)}
+                        onChange={() => toggleType(t.value)}
+                        className="h-3.5 w-3.5 rounded accent-blue-600"
+                      />
+                      <span className="truncate">{t.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={isDefault}
+                  onChange={(e) => setIsDefault(e.target.checked)}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                Establecer como plantilla predeterminada para estos tipos
+              </label>
             </div>
+          )}
 
-            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer w-fit">
-              <input
-                type="checkbox"
-                checked={isDefault}
-                onChange={(e) => setIsDefault(e.target.checked)}
-                className="h-4 w-4 rounded accent-blue-600"
+          {/* ── Tab: Carpetas ── */}
+          {activeTab === 'structure' && (
+            <div className="space-y-3">
+              {isSystem ? (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs text-amber-800 mb-3">
+                  Las carpetas de las plantillas de sistema están predefinidas. Puedes verlas aquí, pero los cambios se sobrescribirán al restaurar las plantillas. Para estructuras personalizadas, duplica esta plantilla.
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Define las carpetas (y subcarpetas) que se crearán en el expediente cuando se use esta plantilla. Cada carpeta va asociada a una fase de la auditoría.
+                </p>
+              )}
+              <SectionsEditor
+                sections={sections}
+                onChange={setSections}
+                readOnly={isSystem}
               />
-              Establecer como plantilla predeterminada para estos tipos
-            </label>
-          </div>
+            </div>
+          )}
 
-          {/* Section B: Papers */}
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              B. Papeles de trabajo ({papers.length})
-            </p>
-            <PapersEditor
-              papers={papers}
-              sections={initial?.sections ?? []}
-              onChange={setPapers}
-            />
-          </div>
-
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+          {/* ── Tab: Papeles ── */}
+          {activeTab === 'papers' && (
+            <div className="space-y-3">
+              {sections.length === 0 && !isSystem && (
+                <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-2.5 text-xs text-blue-800">
+                  Tip: define las carpetas en la pestaña "Carpetas" primero para que el campo "Carpeta" de los papeles sea un selector en lugar de texto libre.
+                </div>
+              )}
+              <PapersEditor
+                papers={papers}
+                sections={sections}
+                onChange={setPapers}
+              />
+            </div>
           )}
         </div>
+
+        {error && (
+          <div className="mx-6 mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+        )}
 
         {/* Footer */}
         <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
@@ -565,6 +949,8 @@ function TemplateCard({
     return acc;
   }, {});
 
+  const sectionCount = template.sections?.length ?? 0;
+
   return (
     <div
       className={cn(
@@ -611,8 +997,17 @@ function TemplateCard({
       </div>
 
       {/* Stats */}
-      <div className="mt-2 text-xs text-slate-500">
-        {template.papers.length} {template.papers.length === 1 ? 'papel' : 'papeles'}
+      <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
+        <span>{template.papers.length} {template.papers.length === 1 ? 'papel' : 'papeles'}</span>
+        {sectionCount > 0 && (
+          <>
+            <span className="text-slate-300">·</span>
+            <span className="flex items-center gap-1">
+              <FolderOpen className="h-3 w-3 text-amber-500" />
+              {sectionCount} carpeta{sectionCount !== 1 ? 's' : ''}
+            </span>
+          </>
+        )}
       </div>
 
       {/* Actions */}
@@ -622,7 +1017,7 @@ function TemplateCard({
           onClick={onView}
           className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-50 font-medium"
         >
-          <Eye className="h-3 w-3" /> Ver papeles
+          <Eye className="h-3 w-3" /> Ver
         </button>
         {!template.isDefault && (
           <button
@@ -673,12 +1068,12 @@ export default function AuditTemplatesPage() {
   const [filterType, setFilterType] = useState('');
   const { data: templates, isLoading } = useAuditTemplates(filterType || undefined);
 
-  const createTemplate   = useCreateAuditTemplate();
-  const updateTemplate   = useUpdateAuditTemplate();
-  const deleteTemplate   = useDeleteAuditTemplate();
+  const createTemplate    = useCreateAuditTemplate();
+  const updateTemplate    = useUpdateAuditTemplate();
+  const deleteTemplate    = useDeleteAuditTemplate();
   const duplicateTemplate = useDuplicateAuditTemplate();
-  const setDefault       = useSetDefaultAuditTemplate();
-  const reseedSystem     = useReseedSystemTemplates();
+  const setDefault        = useSetDefaultAuditTemplate();
+  const reseedSystem      = useReseedSystemTemplates();
 
   const [modal, setModal] = useState<ModalState>(null);
 
@@ -712,7 +1107,7 @@ export default function AuditTemplatesPage() {
       {/* Sub-header */}
       <div className="flex items-center justify-between border-b border-slate-100 px-6 py-3 gap-4 flex-wrap">
         <p className="text-sm text-slate-500">
-          Define los papeles de trabajo que se crean automáticamente al iniciar cada tipo de auditoría
+          Define carpetas y papeles de trabajo que se crean automáticamente al iniciar cada tipo de auditoría
         </p>
         <div className="flex items-center gap-3">
           {/* Filter */}
@@ -769,7 +1164,7 @@ export default function AuditTemplatesPage() {
               <p className="mt-1 text-sm text-slate-500">
                 {filterType
                   ? 'No hay plantillas para este tipo. Prueba con otro filtro o crea una nueva.'
-                  : 'Crea tu primera plantilla de auditoría para definir los papeles de trabajo estándar.'}
+                  : 'Crea tu primera plantilla de auditoría para definir carpetas y papeles de trabajo estándar.'}
               </p>
             </div>
           </div>

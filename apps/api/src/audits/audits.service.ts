@@ -65,6 +65,7 @@ export class AuditsService {
         scope: dto.scope,
         objectives: dto.objectives,
         isInvestigationMode: dto.isInvestigationMode ?? false,
+        templateId: dto.templateId ?? null,
         ...( materialityData && {
           materiality: materialityData.materiality,
           materialityExecution: materialityData.materialityExecution,
@@ -97,7 +98,7 @@ export class AuditsService {
     });
 
     // Auto-scaffold working papers based on audit type (fire-and-forget)
-    void this.auditIndex.scaffold(audit.id, audit.type as AuditType, user.id);
+    void this.auditIndex.scaffold(audit.id, audit.type as AuditType, user.id, dto.templateId);
 
     return this.findOne(audit.id, user);
   }

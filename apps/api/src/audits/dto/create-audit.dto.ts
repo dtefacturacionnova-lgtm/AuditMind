@@ -103,4 +103,9 @@ export class CreateAuditDto {
   @IsArray()
   @IsUUID('all', { each: true })
   teamMemberIds?: string[];
+
+  @ApiPropertyOptional({ description: 'ID de la plantilla AuditTemplate a usar en el scaffold' })
+  @IsOptional()
+  @IsString()
+  templateId?: string;
 }

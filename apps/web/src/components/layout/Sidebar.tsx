@@ -97,6 +97,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Usuarios', href: '/dashboard/admin/users', icon: Users2 },
       { label: 'Catálogos Generales', href: '/dashboard/admin/catalogs', icon: ListTree },
       { label: 'Plantillas de Índice', href: '/dashboard/admin/index-templates', icon: FolderOpen },
+      { label: 'Plantillas de Auditoría', href: '/dashboard/admin/audit-templates', icon: ClipboardList },
       { label: 'Conectores de Datos', href: '/dashboard/admin/data-sources', icon: Plug },
       { label: 'Base de Conocimiento', href: '/dashboard/admin/knowledge', icon: BookOpen },
       { label: 'Configuración', href: '/dashboard/admin/settings', icon: Settings },

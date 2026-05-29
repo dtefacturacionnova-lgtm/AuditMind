@@ -384,6 +384,7 @@ model Organization {
   aiInteractions         AIInteraction[]
   dataSources            DataSource[]
   indexTemplates         IndexTemplate[]
+  auditTemplates         AuditTemplate[]
   entityTypeConfigs      EntityTypeConfig[]
   processCategoryConfigs ProcessCategoryConfig[]
   strategicObjectives    StrategicObjective[]
@@ -419,6 +420,7 @@ model User {
   signedOffPapers       WorkingPaper[]        @relation("WpSignedOffBy")
   signedOffPhases       AuditPhase[]          @relation("PhaseSignOff")
   createdIndexTemplates IndexTemplate[]       @relation("IndexTemplateCreator")
+  createdAuditTemplates AuditTemplate[]      @relation("AuditTemplateCreator")
   ownedEntities     AuditEntity[]         @relation("EntityOwner")
   findings          Finding[]             @relation("FindingResponsible")
   aiInteractions    AIInteraction[]
@@ -970,6 +972,9 @@ model Audit {
   phases                 AuditPhase[]
   folders                AuditFolder[]
 
+  templateId              String?
+  template                AuditTemplate? @relation(fields: [templateId], references: [id])
+
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([leadAuditorId])
@@ -1050,6 +1055,30 @@ model IndexTemplate {
 
   @@index([organizationId])
   @@map("index_templates")
+}
+
+// ─── Plantilla de Papeles de Trabajo por Tipo de Auditoría ───────────────────
+// Define qué papeles crear automáticamente al iniciar una auditoría.
+// Reemplaza/extiende el mapa AUDIT_TYPE_INDEX hardcodeado.
+model AuditTemplate {
+  id             String      @id @default(cuid())
+  organizationId String
+  name           String      @db.VarChar(150)
+  description    String?
+  auditTypes     Json        // AuditType[] — tipos para los que aparece en el selector
+  papers         Json        // PaperDef[] — { code, indexSection, title, type, wpKind, paperCode? }
+  isDefault      Boolean     @default(false)  // default para sus tipos aplicables
+  isSystem       Boolean     @default(false)  // precargada — solo se puede duplicar
+  createdById    String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      User         @relation("AuditTemplateCreator", fields: [createdById], references: [id])
+  audits         Audit[]
+
+  @@index([organizationId])
+  @@map("audit_templates")
 }
 
 model AuditTeam {

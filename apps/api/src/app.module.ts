@@ -24,6 +24,7 @@ import { DataSourcesModule } from './data-sources/data-sources.module';
 import { RisksModule } from './risks/risks.module';
 import { AuditFoldersModule } from './audit-folders/audit-folders.module';
 import { IndexTemplatesModule } from './index-templates/index-templates.module';
+import { AuditTemplatesModule } from './audit-templates/audit-templates.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
 import { StrategicModule } from './strategic/strategic.module';
 import { AuditProjectsModule } from './audit-projects/audit-projects.module';
@@ -51,6 +52,7 @@ import { AuditProjectsModule } from './audit-projects/audit-projects.module';
     RisksModule,
     AuditFoldersModule,
     IndexTemplatesModule,
+    AuditTemplatesModule,
     CatalogsModule,
     StrategicModule,
     AuditProjectsModule,

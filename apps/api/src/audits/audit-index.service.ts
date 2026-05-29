@@ -862,13 +862,36 @@ export class AuditIndexService {
    * Auto-scaffold working papers for a newly created audit.
    * Creates PT records + initializes PaperSections from templates.
    * Fire-and-forget safe — errors are logged but don't abort the audit creation.
+   *
+   * If templateId is provided, uses the AuditTemplate from the DB.
+   * Falls back to AUDIT_TYPE_INDEX if the template is not found.
    */
   async scaffold(
     auditId:      string,
     auditType:    AuditType,
     preparedById: string,
+    templateId?:  string,
   ): Promise<void> {
-    const index = AUDIT_TYPE_INDEX[auditType] ?? INDEX_INTERNAL;
+    let index: PaperDef[];
+
+    if (templateId) {
+      const template = await this.prisma.auditTemplate.findUnique({
+        where: { id: templateId },
+      });
+      if (template) {
+        index = template.papers as unknown as PaperDef[];
+        this.logger.log(
+          `[AuditIndex] Using template "${template.name}" (${templateId}) for audit ${auditId}`,
+        );
+      } else {
+        this.logger.warn(
+          `[AuditIndex] Template ${templateId} not found — falling back to default index`,
+        );
+        index = AUDIT_TYPE_INDEX[auditType] ?? INDEX_INTERNAL;
+      }
+    } else {
+      index = AUDIT_TYPE_INDEX[auditType] ?? INDEX_INTERNAL;
+    }
 
     this.logger.log(
       `[AuditIndex] Scaffolding ${index.length} papers for audit ${auditId} (${auditType})`,

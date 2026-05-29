@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useCreateAudit } from '@/hooks/useAudits';
 import { useAuditUniverse } from '@/hooks/useAuditUniverse';
+import { useAuditTemplates } from '@/hooks/useAuditTemplates';
 import { AUDIT_TYPES, AUDIT_SUBTYPES } from '@/lib/audit-types';
 
 interface FormData {
@@ -65,8 +66,11 @@ export default function NewAuditPage() {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
+  const [templateId, setTemplateId] = useState<string>('');
+
   const createAudit = useCreateAudit();
   const { data: universeData } = useAuditUniverse({ limit: 100 });
+  const { data: templates } = useAuditTemplates(form.type);
 
   function set(field: keyof FormData, value: string | boolean) {
     setForm((prev) => ({
@@ -115,6 +119,7 @@ export default function NewAuditPage() {
       scope: form.scope.trim() || undefined,
       objectives: form.objectives.trim() || undefined,
       isInvestigationMode: form.isInvestigationMode,
+      templateId: templateId || undefined,
     };
 
     if (form.enableMateriality && form.materialityBase) {
@@ -251,6 +256,28 @@ export default function NewAuditPage() {
                   </select>
                 </div>
               )}
+
+              {/* Plantilla de Papeles */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Plantilla de Papeles de Trabajo
+                </label>
+                <select
+                  value={templateId}
+                  onChange={(e) => setTemplateId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">Estándar del sistema (según tipo)</option>
+                  {(templates ?? []).map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} — {t.papers.length} papeles{t.isDefault ? ' ★' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  Define qué papeles de trabajo se crean automáticamente al iniciar esta auditoría
+                </p>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>

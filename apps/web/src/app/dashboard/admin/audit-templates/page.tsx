@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Plus, Pencil, Trash2, Star, Lock, Copy,
-  X, Check, Loader2, Settings2, ClipboardList,
+  X, Check, Loader2, Settings2, ClipboardList, Eye,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -195,6 +195,158 @@ function PapersEditor({
   );
 }
 
+// ─── Template view modal (read-only) ─────────────────────────────────────────
+
+const WP_TYPE_COLORS: Record<WorkingPaperType, string> = {
+  PLANNING_UNDERSTANDING: 'bg-blue-100 text-blue-700',
+  CONTROL_EVALUATION:     'bg-purple-100 text-purple-700',
+  SUBSTANTIVE_TEST:       'bg-amber-100 text-amber-700',
+  DATA_ANALYSIS:          'bg-cyan-100 text-cyan-700',
+  FINDING:                'bg-red-100 text-red-700',
+  CLOSURE_CONCLUSION:     'bg-green-100 text-green-700',
+  INTERVIEW:              'bg-orange-100 text-orange-700',
+  CONFIRMATION:           'bg-teal-100 text-teal-700',
+  NORMATIVE_ANALYSIS:     'bg-indigo-100 text-indigo-700',
+};
+
+const WP_KIND_COLORS: Record<WpKind, string> = {
+  STANDARD: 'bg-slate-100 text-slate-600',
+  SMART:    'bg-emerald-100 text-emerald-700',
+  MASTER:   'bg-violet-100 text-violet-700',
+};
+
+function TemplateViewModal({
+  template,
+  onClose,
+}: {
+  template: AuditTemplate;
+  onClose: () => void;
+}) {
+  const typeLabels = AUDIT_TYPES.reduce<Record<string, string>>((acc, t) => {
+    acc[t.value] = t.label; return acc;
+  }, {});
+
+  // Group papers by indexSection
+  const sections = template.papers.reduce<Record<string, PaperDef[]>>((acc, p) => {
+    (acc[p.indexSection] ??= []).push(p);
+    return acc;
+  }, {});
+
+  const sectionKeys = Object.keys(sections).sort();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
+      <div className="w-full max-w-4xl rounded-xl bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-6 py-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base font-semibold text-slate-800 truncate">{template.name}</h2>
+              {template.isSystem && (
+                <span className="shrink-0 flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                  <Lock className="h-2.5 w-2.5" /> Sistema
+                </span>
+              )}
+              {template.isDefault && (
+                <span className="shrink-0 flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                  <Star className="h-2.5 w-2.5" /> Predeterminada
+                </span>
+              )}
+            </div>
+            {template.description && (
+              <p className="mt-1 text-xs text-slate-500">{template.description}</p>
+            )}
+            <div className="mt-2 flex flex-wrap gap-1">
+              {template.auditTypes.map((t) => (
+                <span key={t} className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">
+                  {typeLabels[t] ?? t}
+                </span>
+              ))}
+            </div>
+          </div>
+          <button onClick={onClose} className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+          {template.papers.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-8">Esta plantilla no tiene papeles definidos.</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Papeles de trabajo — {template.papers.length} {template.papers.length === 1 ? 'papel' : 'papeles'}
+                </p>
+              </div>
+
+              {sectionKeys.map((sec) => (
+                <div key={sec} className="space-y-1">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1">
+                    Sección {sec}
+                  </p>
+                  <div className="overflow-hidden rounded-lg border border-slate-200">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50">
+                          <th className="px-3 py-2 text-left font-medium text-slate-500 w-20">Código</th>
+                          <th className="px-3 py-2 text-left font-medium text-slate-500">Título del papel</th>
+                          <th className="px-3 py-2 text-left font-medium text-slate-500 w-36">Tipo</th>
+                          <th className="px-3 py-2 text-left font-medium text-slate-500 w-24">Clase</th>
+                          <th className="px-3 py-2 text-left font-medium text-slate-500 w-24">Clave PT</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {sections[sec].map((paper, i) => (
+                          <tr key={i} className="hover:bg-slate-50/60">
+                            <td className="px-3 py-2 font-mono text-slate-700 font-medium">{paper.code}</td>
+                            <td className="px-3 py-2 text-slate-700">{paper.title}</td>
+                            <td className="px-3 py-2">
+                              <span className={cn(
+                                'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                                WP_TYPE_COLORS[paper.type],
+                              )}>
+                                {WP_TYPE_LABELS[paper.type]}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className={cn(
+                                'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                                WP_KIND_COLORS[paper.wpKind],
+                              )}>
+                                {WP_KIND_LABELS[paper.wpKind]}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 font-mono text-slate-500 text-[11px]">
+                              {paper.paperCode ?? '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Template editor modal ────────────────────────────────────────────────────
 
 type EditorMode = 'create' | 'edit';
@@ -371,12 +523,14 @@ function TemplateEditorModal({
 
 function TemplateCard({
   template,
+  onView,
   onEdit,
   onDuplicate,
   onDelete,
   onSetDefault,
 }: {
   template: AuditTemplate;
+  onView: () => void;
   onEdit: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -443,6 +597,13 @@ function TemplateCard({
 
       {/* Actions */}
       <div className="mt-4 flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onView}
+          className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-50 font-medium"
+        >
+          <Eye className="h-3 w-3" /> Ver papeles
+        </button>
         {!template.isDefault && (
           <button
             type="button"
@@ -463,7 +624,7 @@ function TemplateCard({
           <button
             type="button"
             onClick={onEdit}
-            className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-50"
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-100"
           >
             <Pencil className="h-3 w-3" /> Editar
           </button>
@@ -487,6 +648,7 @@ function TemplateCard({
 type ModalState =
   | { mode: 'create' }
   | { mode: 'edit'; template: AuditTemplate }
+  | { mode: 'view'; template: AuditTemplate }
   | null;
 
 export default function AuditTemplatesPage() {
@@ -580,6 +742,7 @@ export default function AuditTemplatesPage() {
               <TemplateCard
                 key={tpl.id}
                 template={tpl}
+                onView={() => setModal({ mode: 'view', template: tpl })}
                 onEdit={() => setModal({ mode: 'edit', template: tpl })}
                 onDuplicate={() => handleDuplicate(tpl)}
                 onDelete={() => handleDelete(tpl)}
@@ -590,11 +753,19 @@ export default function AuditTemplatesPage() {
         )}
       </div>
 
-      {/* Editor modal */}
-      {modal && (
+      {/* View modal (read-only) */}
+      {modal?.mode === 'view' && (
+        <TemplateViewModal
+          template={modal.template}
+          onClose={() => setModal(null)}
+        />
+      )}
+
+      {/* Editor modal (create / edit) */}
+      {(modal?.mode === 'create' || modal?.mode === 'edit') && (
         <TemplateEditorModal
           mode={modal.mode}
-          initial={'template' in modal ? modal.template : undefined}
+          initial={modal.mode === 'edit' ? modal.template : undefined}
           onSave={handleSave}
           onClose={() => setModal(null)}
         />

@@ -19,6 +19,7 @@ import { MinervaAuditPanel } from '@/components/audits/MinervaAuditPanel';
 import { ExpedienteTab } from '@/components/audits/ExpedienteTab';
 import { RollForwardModal } from '@/components/audits/RollForwardModal';
 import { SignOffMatrix }   from '@/components/audits/SignOffMatrix';
+import { TrialBalanceTab } from '@/components/audits/TrialBalanceTab';
 
 const STATUS_STYLES: Record<string, string> = {
   PLANNING: 'bg-blue-100 text-blue-700 border border-blue-200',
@@ -47,7 +48,7 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff';
+type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff' | 'trial-balance';
 
 function StatCard({ icon: Icon, label, value, color }: {
   icon: React.ElementType;
@@ -119,7 +120,8 @@ export default function AuditDetailPage() {
     { key: 'hours',         label: '⏱ Horas' },
     { key: 'pbc',           label: 'PBC',              count: audit._count?.pbcRequests ?? 0 },
     { key: 'confirmations', label: 'Confirmaciones',   count: audit._count?.externalConfirmations ?? 0 },
-    { key: 'signoff',       label: '✍ Matriz de Firmas' },
+    { key: 'signoff',         label: '✍ Matriz de Firmas' },
+    { key: 'trial-balance',  label: '📊 Balance' },
   ];
 
   async function handleStatusChange(newStatus: string) {
@@ -283,6 +285,10 @@ export default function AuditDetailPage() {
               {/* F6.2 Sign-off matrix */}
               {activeTab === 'signoff' && (
                 <SignOffMatrix auditId={id} />
+              )}
+              {/* F6.7 Trial Balance */}
+              {activeTab === 'trial-balance' && (
+                <TrialBalanceTab auditId={id} />
               )}
             </div>
           </div>

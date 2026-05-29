@@ -965,6 +965,7 @@ model Audit {
   externalConfirmations  ExternalConfirmation[]
   bcpAudit               BcpAudit?
   connectorImports       ConnectorImport[]
+  trialBalances          TrialBalance[]
   // ─── Expediente de auditoría (fases y carpetas) ───────────────────────────
   phases                 AuditPhase[]
   folders                AuditFolder[]
@@ -1123,6 +1124,11 @@ model WorkingPaper {
   crossReferences Json               @default("[]")
   aiAssisted      Boolean            @default(false)
   parentPaperId   String?
+  // ─── F6.6 Checkout / collaborative lock ──────────────────────────────────
+  checkedOutById  String?            // userId que tiene el paper abierto para edición
+  checkedOutAt    DateTime?          // timestamp del checkout (auto-expires 30 min)
+  // ─── F6.7 Trial Balance links ─────────────────────────────────────────────
+  trialBalanceLinks TrialBalancePaperLink[]
   // ─── Archivo adjunto (wpKind = FILE) ─────────────────────────────────────
   fileUrl          String?           // Supabase Storage public URL
   originalFilename String?           // Nombre original del archivo
@@ -1352,6 +1358,44 @@ model PbcPaperLink {
   @@unique([pbcId, paperId])
   @@index([paperId])
   @@map("pbc_paper_links")
+}
+
+// ─── F6.7 Trial Balance ───────────────────────────────────────────────────────
+model TrialBalance {
+  id           String   @id @default(cuid())
+  auditId      String
+  orgId        String
+  filename     String
+  periodLabel  String   // e.g. "Diciembre 2024"
+  accounts     Json     // array: { code, name, debit, credit, balance }
+  totalDebit   Decimal  @db.Decimal(18, 2)
+  totalCredit  Decimal  @db.Decimal(18, 2)
+  isBalanced   Boolean  @default(false)
+  importedById String
+  importedAt   DateTime @default(now())
+
+  audit        Audit                    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  paperLinks   TrialBalancePaperLink[]
+
+  @@index([auditId])
+  @@map("trial_balances")
+}
+
+model TrialBalancePaperLink {
+  id             String @id @default(cuid())
+  trialBalanceId String
+  paperId        String
+  accountCodes   Json   @default("[]")  // selected account codes
+  note           String?
+  createdAt      DateTime @default(now())
+  createdById    String
+
+  trialBalance TrialBalance @relation(fields: [trialBalanceId], references: [id], onDelete: Cascade)
+  paper        WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@unique([trialBalanceId, paperId])
+  @@index([paperId])
+  @@map("trial_balance_paper_links")
 }
 
 model PbcMessage {

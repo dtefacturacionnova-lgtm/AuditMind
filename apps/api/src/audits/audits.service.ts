@@ -349,6 +349,93 @@ export class AuditsService {
     return this.findOne(newAudit.id, user);
   }
 
+  // ─── F6.7 Trial Balance ──────────────────────────────────────────────────────
+
+  async importTrialBalance(
+    auditId: string,
+    dto: {
+      filename: string;
+      periodLabel: string;
+      accounts: Array<{ code: string; name: string; debit: number; credit: number; balance: number }>;
+    },
+    user: AuthUser,
+  ) {
+    await this.findOne(auditId, user); // validates access + org
+
+    const totalDebit  = dto.accounts.reduce((s, a) => s + (a.debit  ?? 0), 0);
+    const totalCredit = dto.accounts.reduce((s, a) => s + (a.credit ?? 0), 0);
+    const isBalanced  = Math.abs(totalDebit - totalCredit) < 0.01;
+
+    return this.prisma.trialBalance.create({
+      data: {
+        auditId,
+        orgId:       user.organizationId,
+        filename:    dto.filename,
+        periodLabel: dto.periodLabel,
+        accounts:    dto.accounts as any,
+        totalDebit,
+        totalCredit,
+        isBalanced,
+        importedById: user.id,
+      },
+    });
+  }
+
+  async listTrialBalances(auditId: string, user: AuthUser) {
+    await this.findOne(auditId, user);
+    return this.prisma.trialBalance.findMany({
+      where:   { auditId },
+      orderBy: { importedAt: 'desc' },
+      select: {
+        id: true, filename: true, periodLabel: true, importedAt: true,
+        totalDebit: true, totalCredit: true, isBalanced: true,
+        _count: { select: { paperLinks: true } },
+      },
+    });
+  }
+
+  async getTrialBalance(tbId: string, user: AuthUser) {
+    const tb = await this.prisma.trialBalance.findUnique({
+      where: { id: tbId },
+      include: {
+        paperLinks: {
+          include: {
+            paper: { select: { id: true, code: true, title: true, indexSection: true } },
+          },
+        },
+      },
+    });
+    if (!tb) throw new NotFoundException('Balance no encontrado');
+    if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+    return tb;
+  }
+
+  async linkTrialBalanceToPaper(
+    tbId: string,
+    paperId: string,
+    accountCodes: string[],
+    note: string | undefined,
+    user: AuthUser,
+  ) {
+    const tb = await this.prisma.trialBalance.findUnique({ where: { id: tbId } });
+    if (!tb) throw new NotFoundException('Balance no encontrado');
+    if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+
+    return this.prisma.trialBalancePaperLink.upsert({
+      where:  { trialBalanceId_paperId: { trialBalanceId: tbId, paperId } },
+      create: { trialBalanceId: tbId, paperId, accountCodes, note, createdById: user.id },
+      update: { accountCodes, note },
+    });
+  }
+
+  async deleteTrialBalance(tbId: string, user: AuthUser) {
+    const tb = await this.prisma.trialBalance.findUnique({ where: { id: tbId } });
+    if (!tb) throw new NotFoundException();
+    if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+    await this.prisma.trialBalance.delete({ where: { id: tbId } });
+    return { deleted: true };
+  }
+
   async getProgress(id: string, user: AuthUser) {
     const audit = await this.findOne(id, user);
     const [wpStats, findingStats, pbcStats] = await Promise.all([

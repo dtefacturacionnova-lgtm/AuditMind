@@ -283,6 +283,22 @@ export class WorkingPapersController {
     return this.references.createReference(id, dto, user);
   }
 
+  // ─── F6.6 Checkout / collaborative lock ──────────────────────────────────────
+
+  @Post(':id/checkout')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'F6.6 — Marcar papel de trabajo como "abierto para edición" por el usuario actual' })
+  checkout(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.checkout(id, user);
+  }
+
+  @Post(':id/checkin')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'F6.6 — Liberar el lock de edición del papel de trabajo' })
+  checkin(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.checkin(id, user);
+  }
+
   // ─── F6.2 Sign-off matrix ─────────────────────────────────────────────────────
 
   @Post(':id/sign')

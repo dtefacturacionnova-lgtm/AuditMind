@@ -35,6 +35,7 @@ import { formatDate, formatRelativeTime } from '@/lib/utils';
 import type { WorkingPaper, TickMarkEntry } from '@/hooks/useWorkingPapers';
 import { useSignOff, usePbcLinks, useLinkPbc, useUnlinkPbc } from '@/hooks/useWorkingPaperSignOff';
 import type { SignOffLevel } from '@/hooks/useWorkingPaperSignOff';
+import { useCheckout, useCheckin } from '@/hooks/useCheckout';
 
 // ─── Scriptorium Draft Modal ──────────────────────────────────────────────────
 
@@ -929,6 +930,7 @@ export default function WpDetailPage() {
   const [showAgentPanel,  setAgentPanel] = useState(false);
   const [reviewAlert,     setReviewAlert] = useState(false);
   const [agentAutoMsg,    setAgentAutoMsg] = useState('');
+  const [checkoutBanner,  setCheckoutBanner] = useState<string | null>(null);
 
   // Initialize content from server data — use useEffect to avoid setState-during-render
   const [initialized, setInit] = useState(false);
@@ -939,6 +941,25 @@ export default function WpDetailPage() {
       setInit(true);
     }
   }, [wp, initialized]);
+
+  // F6.6 — Auto-checkout on mount, auto-checkin on unmount
+  const checkout = useCheckout(params.id);
+  const checkin  = useCheckin(params.id);
+  useEffect(() => {
+    if (!wp) return;
+    const locked = wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED';
+    if (locked) return; // no checkout needed for read-only papers
+    checkout.mutateAsync().then(result => {
+      if (!result.success && result.lockedBy) {
+        const exp = result.expiresAt ? ` (expira ${new Date(result.expiresAt).toLocaleTimeString()})` : '';
+        setCheckoutBanner(`${result.lockedBy} tiene este papel abierto para edición${exp}.`);
+      }
+    }).catch(() => {/* ignore checkout errors silently */});
+    return () => {
+      checkin.mutate();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id, wp?.status]);
 
   const setField = useCallback((key: string) => (value: string) => {
     setContent(prev => ({ ...prev, [key]: value }));
@@ -1231,6 +1252,23 @@ export default function WpDetailPage() {
                     )}
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* F6.6 Checkout banner — paper open by another user */}
+            {checkoutBanner && (
+              <div className="mx-5 mb-4 flex items-center gap-2.5 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-800">Papel en uso por otro usuario</p>
+                  <p className="text-xs text-amber-600">{checkoutBanner} Tus cambios podrían generar conflictos.</p>
+                </div>
+                <button
+                  onClick={() => setCheckoutBanner(null)}
+                  className="text-amber-400 hover:text-amber-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             )}
 

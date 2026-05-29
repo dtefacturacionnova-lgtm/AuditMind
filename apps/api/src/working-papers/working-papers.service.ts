@@ -351,6 +351,62 @@ export class WorkingPapersService {
     });
   }
 
+  // ─── F6.6 Checkout / collaborative lock ──────────────────────────────────────
+
+  private readonly CHECKOUT_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+  async checkout(id: string, user: AuthUser) {
+    const wp = await this.findOne(id, user);
+
+    if (this.LOCKED_STATUSES.includes(wp.status as WorkingPaperStatus)) {
+      throw new BadRequestException('El papel está bloqueado y no puede ser editado');
+    }
+
+    const now = new Date();
+
+    // Check if someone else has it checked out and the lock hasn't expired
+    if (
+      wp.checkedOutById &&
+      wp.checkedOutById !== user.id &&
+      wp.checkedOutAt &&
+      now.getTime() - new Date(wp.checkedOutAt).getTime() < this.CHECKOUT_TTL_MS
+    ) {
+      return {
+        success:     false,
+        lockedBy:    wp.checkedOutById,
+        lockedAt:    wp.checkedOutAt,
+        expiresAt:   new Date(new Date(wp.checkedOutAt).getTime() + this.CHECKOUT_TTL_MS),
+      };
+    }
+
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { checkedOutById: user.id, checkedOutAt: now },
+    });
+
+    return { success: true, checkedOutById: user.id, checkedOutAt: now };
+  }
+
+  async checkin(id: string, user: AuthUser) {
+    const wp = await this.findOne(id, user);
+
+    // Only the current holder or a manager can release the lock
+    const canRelease =
+      wp.checkedOutById === user.id ||
+      ([UserRole.CAE, UserRole.AUDIT_MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN] as string[]).includes(user.role);
+
+    if (!canRelease) {
+      throw new ForbiddenException('Solo el usuario que abrió el papel puede liberarlo');
+    }
+
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { checkedOutById: null, checkedOutAt: null },
+    });
+
+    return { success: true };
+  }
+
   // ─── F6.2 Sign-off matrix ─────────────────────────────────────────────────────
 
   async signOff(

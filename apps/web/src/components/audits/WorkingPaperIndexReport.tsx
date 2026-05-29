@@ -649,16 +649,37 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
       {/* ── Print CSS injected via style tag ──────────────────────────────── */}
       <style>{`
         @media print {
-          body > *:not(#wp-index-print-root) { display: none !important; }
-          #wp-index-print-root { position: static !important; }
-          .no-print { display: none !important; }
+          /* Hide everything on the page, then reveal only our report */
+          body * { visibility: hidden !important; }
+          #wp-index-print-root,
+          #wp-index-print-root * { visibility: visible !important; }
+
+          /* Toolbar must not print */
+          .no-print,
+          .no-print * { visibility: hidden !important; display: none !important; }
+
+          /* Position the report flush to the top-left corner */
+          #wp-index-print-root {
+            position: absolute !important;
+            inset: 0 !important;
+            overflow: visible !important;
+            background: white !important;
+          }
+
+          /* The scrollable report body */
+          #wp-report-scroll {
+            overflow: visible !important;
+            height: auto !important;
+            padding: 0 !important;
+          }
+
           @page {
             size: A4;
             margin: 15mm 12mm 15mm 12mm;
           }
-          .print-page-break { page-break-before: always; }
-          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
+
         @media screen {
           #wp-index-print-root { position: fixed; inset: 0; z-index: 9999; }
         }
@@ -741,7 +762,7 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
         </div>
 
         {/* Scrollable report area */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
+        <div id="wp-report-scroll" style={{ flex: 1, overflowY: 'auto', padding: '24px 32px' }}>
           {isLoading ? (
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',

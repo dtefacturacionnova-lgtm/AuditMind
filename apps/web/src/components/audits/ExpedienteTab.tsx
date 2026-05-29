@@ -9,9 +9,10 @@ import {
   AlertTriangle, Activity, BadgeCheck, MessageSquare, Brain,
 } from 'lucide-react';
 import {
-  useExpediente, useInitializeExpediente, useCreateFolder,
-  useUpdateFolder, useDeleteFolder, useSignOffPhase, useUploadFileToFolder,
-  useDeleteWorkingPaper, useRenamePaper, useAssignPaperToFolder,
+  useExpediente, useInitializeExpediente, useInitializeFromAuditTemplate,
+  useCreateFolder, useUpdateFolder, useDeleteFolder, useSignOffPhase,
+  useUploadFileToFolder, useDeleteWorkingPaper, useRenamePaper,
+  useAssignPaperToFolder,
   AuditPhase, AuditFolder, WpStub, PHASE_CONFIG, PHASE_STATUS_CONFIG,
 } from '@/hooks/useExpediente';
 import { WP_STATUS_CONFIG, type WpStatus } from '@/hooks/useWorkingPapers';
@@ -958,7 +959,8 @@ interface ExpedienteTabProps {
 
 export function ExpedienteTab({ auditId, templateId, onCreatePaper }: ExpedienteTabProps) {
   const { data: phases, isLoading } = useExpediente(auditId);
-  const initMutation = useInitializeExpediente(auditId);
+  const initMutation            = useInitializeExpediente(auditId);
+  const initFromAuditTemplate   = useInitializeFromAuditTemplate(auditId);
   const createFolder = useCreateFolder(auditId);
   const updateFolder = useUpdateFolder(auditId);
   const deleteFolder = useDeleteFolder(auditId);
@@ -1097,17 +1099,32 @@ export function ExpedienteTab({ auditId, templateId, onCreatePaper }: Expediente
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => { if (hasMultiple) setShowTemplatePicker(true); else initMutation.mutate(undefined); }}
-            disabled={initMutation.isPending}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {initMutation.isPending
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : <FolderPlus className="h-4 w-4" />
-            }
-            {hasMultiple ? 'Elegir plantilla e inicializar' : 'Inicializar expediente'}
-          </button>
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={() => { if (hasMultiple) setShowTemplatePicker(true); else initMutation.mutate(undefined); }}
+              disabled={initMutation.isPending}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              {initMutation.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <FolderPlus className="h-4 w-4" />
+              }
+              {hasMultiple ? 'Elegir plantilla e inicializar' : 'Inicializar expediente'}
+            </button>
+            {templateId && (
+              <button
+                onClick={() => initFromAuditTemplate.mutate()}
+                disabled={initFromAuditTemplate.isPending}
+                className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-5 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+              >
+                {initFromAuditTemplate.isPending
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <FolderPlus className="h-4 w-4" />
+                }
+                Usar estructura de la plantilla de auditoría
+              </button>
+            )}
+          </div>
         )}
       </div>
     );

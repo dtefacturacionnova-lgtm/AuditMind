@@ -26,12 +26,20 @@ export interface PaperDef {
   paperCode?: string;
 }
 
+export interface SectionDef {
+  ref: string;
+  name: string;
+  phaseType?: 'PLANNING' | 'FIELDWORK' | 'REPORTING' | 'FOLLOWUP';
+  children?: Array<{ ref: string; name: string }>;
+}
+
 export interface AuditTemplate {
   id: string;
   name: string;
   description?: string;
   auditTypes: string[];
   papers: PaperDef[];
+  sections?: SectionDef[];
   isDefault: boolean;
   isSystem: boolean;
   createdAt: string;

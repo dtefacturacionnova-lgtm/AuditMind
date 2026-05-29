@@ -42,7 +42,18 @@ export class AuditFoldersController {
     return this.service.initializeFromTemplate(auditId, user, body?.templateId);
   }
 
-  // ─── Fases ────────────────���───────────────────────────────────────────────
+  @Post('initialize-from-template')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Inicializar expediente desde la estructura de la plantilla de auditoría' })
+  @HttpCode(HttpStatus.CREATED)
+  initializeFromAuditTemplate(
+    @Param('auditId') auditId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.initializeFromAuditTemplateSections(auditId, user);
+  }
+
+  // ─── Fases ────────────────────────────────────────────────────────────────
 
   @Post('phases')
   @Roles(UserRole.AUDITOR)

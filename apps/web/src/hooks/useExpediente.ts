@@ -86,6 +86,15 @@ export function useInitializeExpediente(auditId: string) {
   });
 }
 
+export function useInitializeFromAuditTemplate(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiClient.post(`/audits/${auditId}/expediente/initialize-from-template`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expediente', auditId] }),
+  });
+}
+
 export function useCreateFolder(auditId: string) {
   const qc = useQueryClient();
   return useMutation({

@@ -16,6 +16,7 @@ import {
   useReseedSystemTemplates,
   type AuditTemplate,
   type PaperDef,
+  type SectionDef,
   type CreateAuditTemplateData,
   type WorkingPaperType,
   type WpKind,
@@ -74,9 +75,11 @@ function emptyPaper(): PaperDef {
 
 function PapersEditor({
   papers,
+  sections,
   onChange,
 }: {
   papers: PaperDef[];
+  sections: SectionDef[];
   onChange: (papers: PaperDef[]) => void;
 }) {
   function updateRow(idx: number, field: keyof PaperDef, value: string) {
@@ -126,12 +129,24 @@ function PapersEditor({
                   />
                 </td>
                 <td className="px-2 py-1">
-                  <input
-                    value={paper.indexSection}
-                    onChange={(e) => updateRow(idx, 'indexSection', e.target.value)}
-                    placeholder="A"
-                    className="w-full rounded border border-slate-200 px-1.5 py-1 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
+                  {sections.length > 0 ? (
+                    <select
+                      value={paper.indexSection}
+                      onChange={(e) => updateRow(idx, 'indexSection', e.target.value)}
+                      className="w-full rounded border border-slate-200 px-1 py-1 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                    >
+                      {sections.map((s) => (
+                        <option key={s.ref} value={s.ref}>{s.ref} — {s.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={paper.indexSection}
+                      onChange={(e) => updateRow(idx, 'indexSection', e.target.value)}
+                      placeholder="A"
+                      className="w-full rounded border border-slate-200 px-1.5 py-1 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  )}
                 </td>
                 <td className="px-2 py-1">
                   <input
@@ -487,7 +502,11 @@ function TemplateEditorModal({
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               B. Papeles de trabajo ({papers.length})
             </p>
-            <PapersEditor papers={papers} onChange={setPapers} />
+            <PapersEditor
+              papers={papers}
+              sections={initial?.sections ?? []}
+              onChange={setPapers}
+            />
           </div>
 
           {error && (

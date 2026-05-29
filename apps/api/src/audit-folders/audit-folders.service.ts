@@ -110,6 +110,95 @@ export class AuditFoldersService {
     }
   }
 
+  // ─── Inicializar expediente (desde secciones de AuditTemplate) ──────────
+
+  /**
+   * Inicializa el expediente usando la estructura de secciones definida en
+   * la plantilla de auditoría (AuditTemplate.sections), en lugar de un IndexTemplate.
+   */
+  async initializeFromAuditTemplateSections(
+    auditId:  string,
+    user:     AuthUser,
+  ): Promise<void> {
+    await this.verifyAuditAccess(auditId, user);
+
+    const existing = await this.prisma.auditPhase.count({ where: { auditId } });
+    if (existing > 0) throw new BadRequestException('El expediente ya fue inicializado');
+
+    const audit = await this.prisma.audit.findFirst({
+      where: { id: auditId, organizationId: user.organizationId },
+      select: { templateId: true },
+    });
+    if (!audit?.templateId) {
+      throw new BadRequestException('Esta auditoría no tiene plantilla de auditoría asignada');
+    }
+
+    const template = await this.prisma.auditTemplate.findFirst({
+      where: { id: audit.templateId },
+      select: { sections: true },
+    });
+    if (!template?.sections) {
+      throw new BadRequestException('La plantilla no tiene estructura de carpetas definida — usa una Plantilla de Índice');
+    }
+
+    interface SectionDef {
+      ref: string; name: string;
+      phaseType?: string;
+      children?: Array<{ ref: string; name: string }>;
+    }
+    const sections = template.sections as unknown as SectionDef[];
+
+    // Group sections by phaseType (preserving insertion order)
+    const phaseGroups = new Map<string, SectionDef[]>();
+    const phaseOrder: string[] = [];
+    for (const s of sections) {
+      const pt = s.phaseType ?? 'PLANNING';
+      if (!phaseGroups.has(pt)) { phaseGroups.set(pt, []); phaseOrder.push(pt); }
+      phaseGroups.get(pt)!.push(s);
+    }
+
+    const PHASE_NAMES: Record<string, string> = {
+      PLANNING:  'Planificación',
+      FIELDWORK: 'Ejecución',
+      REPORTING: 'Informe',
+      FOLLOWUP:  'Seguimiento',
+    };
+
+    let order = 0;
+    for (const phaseType of phaseOrder) {
+      const phaseSections = phaseGroups.get(phaseType)!;
+      const phase = await this.prisma.auditPhase.create({
+        data: {
+          auditId,
+          phaseType: phaseType as PhaseType,
+          name: PHASE_NAMES[phaseType] ?? phaseType,
+          order: order++,
+        },
+      });
+
+      for (const [si, section] of phaseSections.entries()) {
+        const folder = await this.prisma.auditFolder.create({
+          data: {
+            auditId, phaseId: phase.id,
+            ref: section.ref, name: section.name,
+            sortOrder: si, createdById: user.id,
+          },
+        });
+        if (section.children?.length) {
+          for (const [ci, child] of section.children.entries()) {
+            await this.prisma.auditFolder.create({
+              data: {
+                auditId, phaseId: phase.id, parentId: folder.id,
+                ref: child.ref, name: child.name,
+                sortOrder: ci, createdById: user.id,
+              },
+            });
+          }
+        }
+      }
+    }
+  }
+
   // ─── Obtener expediente completo (fases + carpetas + conteos) ────────────
 
   async getExpediente(auditId: string, user: AuthUser) {

@@ -1069,6 +1069,7 @@ model AuditTemplate {
   papers         Json        // PaperDef[] — { code, indexSection, title, type, wpKind, paperCode? }
   isDefault      Boolean     @default(false)  // default para sus tipos aplicables
   isSystem       Boolean     @default(false)  // precargada — solo se puede duplicar
+  sections       Json?       // SectionDef[] — folder structure: { ref, name, phaseType, children? }
   createdById    String
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt

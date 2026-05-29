@@ -21,12 +21,22 @@ interface PaperDef {
   paperCode?: string;
 }
 
+// ─── SectionDef — folder/subfolder structure ─────────────────────────────────
+
+interface SectionDef {
+  ref: string;
+  name: string;
+  phaseType: 'PLANNING' | 'FIELDWORK' | 'REPORTING' | 'FOLLOWUP';
+  children?: Array<{ ref: string; name: string }>;
+}
+
 // ─── System template seed data ────────────────────────────────────────────────
 
 interface SystemTemplateSeed {
   name: string;
   description: string;
   auditTypes: AuditType[];
+  sections: SectionDef[];
   papers: PaperDef[];
 }
 
@@ -211,6 +221,7 @@ export class AuditTemplatesService {
           description: seed.description,
           auditTypes:  seed.auditTypes as any,
           papers:      seed.papers     as any,
+          sections:    seed.sections   as any,
           isDefault:   true,
           isSystem:    true,
           createdById: userId,
@@ -245,6 +256,7 @@ export class AuditTemplatesService {
             description: seed.description,
             auditTypes:  seed.auditTypes as any,
             papers:      seed.papers     as any,
+            sections:    seed.sections   as any,
           },
         });
         updated++;
@@ -256,6 +268,7 @@ export class AuditTemplatesService {
             description:    seed.description,
             auditTypes:     seed.auditTypes as any,
             papers:         seed.papers     as any,
+            sections:       seed.sections   as any,
             isDefault:      true,
             isSystem:       true,
             createdById:    user.id,
@@ -328,6 +341,12 @@ export class AuditTemplatesService {
           AuditType.COMPLIANCE,
           AuditType.ESG,
           AuditType.BCP_DRP,
+        ],
+        sections: [
+          { ref: 'A', name: 'Planificación y Entendimiento del Negocio', phaseType: 'PLANNING' },
+          { ref: 'B', name: 'Ejecución y Pruebas de Campo',              phaseType: 'FIELDWORK' },
+          { ref: 'D', name: 'Hallazgos y Comunicaciones',                phaseType: 'REPORTING' },
+          { ref: 'E', name: 'Cierre e Informe de Auditoría',             phaseType: 'REPORTING' },
         ],
         papers: [
           // ── A — Planificación ───────────────────────────────────────────
@@ -424,6 +443,13 @@ export class AuditTemplatesService {
           'Incluye planificación, EEFF, sumarias, pruebas sustantivas, cierre e informe del auditor. ' +
           'Aplica a: Externa, Financiera.',
         auditTypes: [AuditType.EXTERNAL, AuditType.FINANCIAL],
+        sections: [
+          { ref: 'A', name: 'Planificación y Estrategia Global',      phaseType: 'PLANNING' },
+          { ref: 'B', name: 'Estados Financieros y Cédulas Sumarias', phaseType: 'FIELDWORK' },
+          { ref: 'C', name: 'Pruebas Sustantivas por Área',           phaseType: 'FIELDWORK' },
+          { ref: 'D', name: 'Cierre de la Auditoría',                 phaseType: 'REPORTING' },
+          { ref: 'E', name: 'Informe del Auditor Independiente',      phaseType: 'REPORTING' },
+        ],
         papers: [
           // ── A — Planificación ───────────────────────────────────────────
           { code: 'A-01', indexSection: 'A',
@@ -545,6 +571,14 @@ export class AuditTemplatesService {
           'Manual Corte de Cuentas SV, NTCI, LACAP y SAFI. ' +
           'Aplica a: Interna Gubernamental.',
         auditTypes: [AuditType.INTERNAL_GOVERNMENTAL],
+        sections: [
+          { ref: 'ACA', name: 'Archivo Corriente de Control Administrativo', phaseType: 'PLANNING' },
+          { ref: 'PL',  name: 'Planificación',                               phaseType: 'PLANNING' },
+          { ref: 'EJ',  name: 'Ejecución',                                   phaseType: 'FIELDWORK' },
+          { ref: 'COM', name: 'Hallazgos y Comunicaciones',                  phaseType: 'REPORTING' },
+          { ref: 'INF', name: 'Informe',                                     phaseType: 'REPORTING' },
+          { ref: 'SEG', name: 'Seguimiento de Recomendaciones',              phaseType: 'FOLLOWUP' },
+        ],
         papers: [
           // ── ACA — Archivo Corriente de Control Administrativo ────────────
           { code: 'ACA-01', indexSection: 'ACA',
@@ -640,6 +674,12 @@ export class AuditTemplatesService {
           'Incluye cadena de custodia, red flags, CAATs forenses e informe forense. ' +
           'Aplica a: Forense.',
         auditTypes: [AuditType.FORENSIC],
+        sections: [
+          { ref: 'A', name: 'Planificación e Investigación Inicial', phaseType: 'PLANNING' },
+          { ref: 'B', name: 'Investigación y Evidencia Forense',     phaseType: 'FIELDWORK' },
+          { ref: 'D', name: 'Hallazgos Forenses',                    phaseType: 'REPORTING' },
+          { ref: 'E', name: 'Informe Forense',                       phaseType: 'REPORTING' },
+        ],
         papers: [
           // ── A — Planificación ───────────────────────────────────────────
           { code: 'A-01', indexSection: 'A',
@@ -698,6 +738,12 @@ export class AuditTemplatesService {
           'NRP-23/NRP-32 (BCR/SSF El Salvador) y Ley de Ciberseguridad D.L. 143/2024. ' +
           'Aplica a: IT Security.',
         auditTypes: [AuditType.IT_SECURITY],
+        sections: [
+          { ref: 'A', name: 'Planificación del SGSI',                  phaseType: 'PLANNING' },
+          { ref: 'B', name: 'Evaluación Técnica de Controles',         phaseType: 'FIELDWORK' },
+          { ref: 'C', name: 'Cumplimiento Normativo',                  phaseType: 'FIELDWORK' },
+          { ref: 'D', name: 'Hallazgos e Informe de Seguridad',        phaseType: 'REPORTING' },
+        ],
         papers: [
           // ── A — Planificación ───────────────────────────────────────────
           { code: 'A-01', indexSection: 'A',
@@ -768,6 +814,12 @@ export class AuditTemplatesService {
           'según LCDA, NRP-36 y GAFI. Incluye DDC/KYC, PEPs, monitoreo, ROS y dictamen. ' +
           'Aplica a: AML.',
         auditTypes: [AuditType.AML],
+        sections: [
+          { ref: 'A', name: 'Planificación ALD/PLD',                    phaseType: 'PLANNING' },
+          { ref: 'B', name: 'Ejecución — Pruebas de Cumplimiento',      phaseType: 'FIELDWORK' },
+          { ref: 'C', name: 'Cumplimiento Normativo NRP-36',            phaseType: 'FIELDWORK' },
+          { ref: 'D', name: 'Informe ALD y Plan de Subsanación',        phaseType: 'REPORTING' },
+        ],
         papers: [
           // ── A — Planificación ───────────────────────────────────────────
           { code: 'A-01', indexSection: 'A',

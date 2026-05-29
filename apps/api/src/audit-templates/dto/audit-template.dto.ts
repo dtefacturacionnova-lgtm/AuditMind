@@ -5,6 +5,21 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AuditType, WorkingPaperType, WpKind } from '@prisma/client';
 import { Type } from 'class-transformer';
 
+export class SectionDefDto {
+  @ApiProperty({ example: 'A' })
+  @IsString()
+  ref: string;
+
+  @ApiProperty({ example: 'Planificación y Entendimiento del Negocio' })
+  @IsString()
+  name: string;
+
+  @ApiPropertyOptional({ example: 'PLANNING' })
+  @IsOptional()
+  @IsString()
+  phaseType?: string;
+}
+
 export class PaperDefDto {
   @ApiProperty({ example: 'A-01' })
   @IsString()
@@ -52,6 +67,13 @@ export class CreateAuditTemplateDto {
   @Type(() => PaperDefDto)
   papers: PaperDefDto[];
 
+  @ApiPropertyOptional({ type: [SectionDefDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SectionDefDto)
+  sections?: SectionDefDto[];
+
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
@@ -80,6 +102,13 @@ export class UpdateAuditTemplateDto {
   @ValidateNested({ each: true })
   @Type(() => PaperDefDto)
   papers?: PaperDefDto[];
+
+  @ApiPropertyOptional({ type: [SectionDefDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SectionDefDto)
+  sections?: SectionDefDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

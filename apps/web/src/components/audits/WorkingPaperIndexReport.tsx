@@ -641,20 +641,21 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
               {/* ─────────────────────────────────────────────────────── */}
               {/* SECCIÓN 2 — EQUIPO                                      */}
               {/* ─────────────────────────────────────────────────────── */}
-              {(audit!.team ?? []).length > 0 && (
-                <div style={{ padding: '0 32px 20px' }}>
-                  <SectionTitle n="2" label="Equipo Asignado" color="#0369a1" />
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
-                    <thead>
-                      <tr>
-                        <th style={TH} align="left">#</th>
-                        <th style={TH} align="left">Nombre</th>
-                        <th style={TH} align="left">Rol en la Auditoría</th>
-                        <th style={TH} align="left">Rol Sistema</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(audit!.team ?? []).map((m, i) => (
+              <div style={{ padding: '0 32px 20px' }}>
+                <SectionTitle n="2" label="Equipo Asignado" color="#0369a1" />
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
+                  <thead>
+                    <tr>
+                      <th style={TH} align="left">#</th>
+                      <th style={TH} align="left">Nombre</th>
+                      <th style={TH} align="left">Rol en la Auditoría</th>
+                      <th style={TH} align="left">Rol Sistema</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(audit!.team ?? []).length === 0
+                      ? <tr><td colSpan={4} style={{ ...TD, textAlign: 'center', color: C.grayLight, fontStyle: 'italic' }}>Sin miembros de equipo asignados</td></tr>
+                      : (audit!.team ?? []).map((m, i) => (
                         <tr key={m.id} style={{ background: i % 2 === 1 ? '#f9fafb' : '#fff' }}>
                           <td style={{ ...TD, color: C.grayMid, width: 30 }}>{i + 1}</td>
                           <td style={{ ...TD, fontWeight: 600, color: '#111827' }}>{m.user.name}</td>
@@ -666,11 +667,11 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
                             }}>{m.user.role}</span>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      ))
+                    }
+                  </tbody>
+                </table>
+              </div>
 
               {/* ─────────────────────────────────────────────────────── */}
               {/* SECCIÓN 3 — EXPEDIENTE                                  */}
@@ -712,24 +713,25 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
               {/* ─────────────────────────────────────────────────────── */}
               {/* SECCIÓN 4 — HALLAZGOS                                   */}
               {/* ─────────────────────────────────────────────────────── */}
-              {(findings ?? []).length > 0 && (
-                <div style={{ padding: '0 32px 20px' }}>
-                  <SectionTitle n="4" label="Hallazgos de Auditoría" color="#b45309" />
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
-                    <thead>
-                      <tr>
-                        <th style={TH} align="left">#</th>
-                        <th style={TH} align="left">Hallazgo</th>
-                        <th style={TH} align="center">Severidad</th>
-                        <th style={TH} align="center">Estado</th>
-                        <th style={TH} align="left">Responsable</th>
-                        <th style={TH} align="center">Vence</th>
-                        <th style={TH} align="center">Q.</th>
-                        <th style={TH} align="center">$</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(findings ?? []).map((f, i) => (
+              <div style={{ padding: '0 32px 20px' }}>
+                <SectionTitle n="4" label="Hallazgos de Auditoría" color="#b45309" />
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
+                  <thead>
+                    <tr>
+                      <th style={TH} align="left">#</th>
+                      <th style={TH} align="left">Hallazgo</th>
+                      <th style={TH} align="center">Severidad</th>
+                      <th style={TH} align="center">Estado</th>
+                      <th style={TH} align="left">Responsable</th>
+                      <th style={TH} align="center">Vence</th>
+                      <th style={TH} align="center">Q.</th>
+                      <th style={TH} align="center">$</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(findings ?? []).length === 0
+                      ? <tr><td colSpan={8} style={{ ...TD, textAlign: 'center', color: C.grayLight, fontStyle: 'italic' }}>Sin hallazgos registrados</td></tr>
+                      : (findings ?? []).map((f, i) => (
                         <tr key={f.id} style={{ background: i % 2 === 1 ? '#f9fafb' : '#fff' }}>
                           <td style={{ ...TD, color: C.grayMid, width: 24 }}>{i + 1}</td>
                           <td style={{ ...TD, maxWidth: 220 }}>
@@ -755,14 +757,12 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
                     </tbody>
                   </table>
                 </div>
-              )}
 
               {/* ─────────────────────────────────────────────────────── */}
               {/* SECCIÓN 5 — HORAS                                       */}
               {/* ─────────────────────────────────────────────────────── */}
-              {(timeEntries ?? []).length > 0 && (
-                <div style={{ padding: '0 32px 20px' }}>
-                  <SectionTitle n="5" label="Horas Registradas" color={C.violet} />
+              <div style={{ padding: '0 32px 20px' }}>
+                <SectionTitle n="5" label="Horas Registradas" color={C.violet} />
                   <div style={{ marginBottom: 10, display: 'flex', gap: 16 }}>
                     {[
                       { label: 'Horas registradas', value: `${totalHours.toFixed(1)} h` },
@@ -785,39 +785,42 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      {(timeEntries ?? []).map((e, i) => (
-                        <tr key={e.id} style={{ background: i % 2 === 1 ? '#f9fafb' : '#fff' }}>
-                          <td style={{ ...TD, whiteSpace: 'nowrap' }}>{fmtShort(e.workDate)}</td>
-                          <td style={{ ...TD, fontSize: 9, color: C.gray }}>{(e as any).user?.name ?? '—'}</td>
-                          <td style={{ ...TD, textAlign: 'center', fontWeight: 700, color: C.violet }}>{Number(e.hours).toFixed(1)}</td>
-                          <td style={{ ...TD, color: C.grayMid }}>{e.description ?? '—'}</td>
-                        </tr>
-                      ))}
+                      {(timeEntries ?? []).length === 0
+                        ? <tr><td colSpan={4} style={{ ...TD, textAlign: 'center', color: C.grayLight, fontStyle: 'italic' }}>Sin horas registradas</td></tr>
+                        : (timeEntries ?? []).map((e, i) => (
+                          <tr key={e.id} style={{ background: i % 2 === 1 ? '#f9fafb' : '#fff' }}>
+                            <td style={{ ...TD, whiteSpace: 'nowrap' }}>{fmtShort(e.workDate)}</td>
+                            <td style={{ ...TD, fontSize: 9, color: C.gray }}>{(e as any).user?.name ?? '—'}</td>
+                            <td style={{ ...TD, textAlign: 'center', fontWeight: 700, color: C.violet }}>{Number(e.hours).toFixed(1)}</td>
+                            <td style={{ ...TD, color: C.grayMid }}>{e.description ?? '—'}</td>
+                          </tr>
+                        ))
+                      }
                     </tbody>
                   </table>
                 </div>
-              )}
 
               {/* ─────────────────────────────────────────────────────── */}
               {/* SECCIÓN 6 — PBC                                         */}
               {/* ─────────────────────────────────────────────────────── */}
-              {(pbcItems ?? []).length > 0 && (
-                <div style={{ padding: '0 32px 20px' }}>
-                  <SectionTitle n="6" label="Portal de Clientes (PBC)" color="#0369a1" />
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
-                    <thead>
-                      <tr>
-                        <th style={TH} align="left">#</th>
-                        <th style={TH} align="left">Solicitud</th>
-                        <th style={TH} align="left">Solicitado a</th>
-                        <th style={TH} align="center">Estado</th>
-                        <th style={TH} align="center">Vence</th>
-                        <th style={TH} align="center">Enviado</th>
-                        <th style={TH} align="center">Arch.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(pbcItems ?? []).map((p, i) => (
+              <div style={{ padding: '0 32px 20px' }}>
+                <SectionTitle n="6" label="Portal de Clientes (PBC)" color="#0369a1" />
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
+                  <thead>
+                    <tr>
+                      <th style={TH} align="left">#</th>
+                      <th style={TH} align="left">Solicitud</th>
+                      <th style={TH} align="left">Solicitado a</th>
+                      <th style={TH} align="center">Estado</th>
+                      <th style={TH} align="center">Vence</th>
+                      <th style={TH} align="center">Enviado</th>
+                      <th style={TH} align="center">Arch.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(pbcItems ?? []).length === 0
+                      ? <tr><td colSpan={7} style={{ ...TD, textAlign: 'center', color: C.grayLight, fontStyle: 'italic' }}>Sin solicitudes PBC registradas</td></tr>
+                      : (pbcItems ?? []).map((p, i) => (
                         <tr key={p.id} style={{ background: i % 2 === 1 ? '#f9fafb' : '#fff' }}>
                           <td style={{ ...TD, color: C.grayMid, width: 24 }}>{i + 1}</td>
                           <td style={{ ...TD, maxWidth: 200 }}>
@@ -843,20 +846,18 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
                     </tbody>
                   </table>
                 </div>
-              )}
 
               {/* ─────────────────────────────────────────────────────── */}
               {/* SECCIÓN 7 — CONFIRMACIONES                              */}
               {/* ─────────────────────────────────────────────────────── */}
-              {(confirmations ?? []).length > 0 && (
-                <div style={{ padding: '0 32px 20px' }}>
-                  <SectionTitle n="7" label="Confirmaciones Externas (NIA 505)" color="#065f46" />
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
-                    <thead>
-                      <tr>
-                        <th style={TH} align="left">#</th>
-                        <th style={TH} align="left">Respondente</th>
-                        <th style={TH} align="left">Tipo</th>
+              <div style={{ padding: '0 32px 20px' }}>
+                <SectionTitle n="7" label="Confirmaciones Externas (NIA 505)" color="#065f46" />
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
+                  <thead>
+                    <tr>
+                      <th style={TH} align="left">#</th>
+                      <th style={TH} align="left">Respondente</th>
+                      <th style={TH} align="left">Tipo</th>
                         <th style={TH} align="center">Estado</th>
                         <th style={TH} align="right">Monto</th>
                         <th style={TH} align="right">Resp. Monto</th>
@@ -865,8 +866,10 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
                         <th style={TH} align="center">Recibida</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {(confirmations ?? []).map((c, i) => {
+                  <tbody>
+                    {(confirmations ?? []).length === 0
+                      ? <tr><td colSpan={9} style={{ ...TD, textAlign: 'center', color: C.grayLight, fontStyle: 'italic' }}>Sin confirmaciones externas registradas</td></tr>
+                      : (confirmations ?? []).map((c, i) => {
                         const diff = c.responseAmount != null && c.amount != null ? c.responseAmount - c.amount : null;
                         return (
                           <tr key={c.id} style={{ background: i % 2 === 1 ? '#f9fafb' : '#fff' }}>
@@ -890,82 +893,83 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
                             <td style={{ ...TD, textAlign: 'center', fontSize: 9, color: C.grayMid }}>{fmtShort(c.responseReceivedAt)}</td>
                           </tr>
                         );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      })
+                    }
+                  </tbody>
+                </table>
+              </div>
 
               {/* ─────────────────────────────────────────────────────── */}
               {/* APÉNDICE A — MATRIZ DE FIRMAS                           */}
               {/* ─────────────────────────────────────────────────────── */}
-              {(signOff ?? []).length > 0 && (
-                <div style={{ padding: '0 32px 20px' }}>
-                  <SectionTitle n="A" label="Matriz de Firmas" color={C.green} />
-                  {(() => {
-                    const grouped: Record<string, SignOffMatrixRow[]> = {};
-                    (signOff ?? []).forEach(r => {
-                      const sec = r.indexSection || 'Sin sección';
-                      if (!grouped[sec]) grouped[sec] = [];
-                      grouped[sec].push(r);
-                    });
-                    return (
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
-                        <thead>
-                          <tr style={{ background: '#f0fdf4' }}>
-                            <th style={{ ...TH, width: 70 }} align="left">Ref.</th>
-                            <th style={TH} align="left">Papel de Trabajo</th>
-                            <th style={{ ...TH, width: 80 }} align="center">Estado</th>
-                            <th style={{ ...TH, width: 100 }} align="left">Preparado por</th>
-                            <th style={{ ...TH, width: 100 }} align="left">Revisado por</th>
-                            <th style={{ ...TH, width: 100 }} align="left">Firmado (CAE)</th>
-                            <th style={{ ...TH, width: 30 }} align="center">Q.</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Object.entries(grouped).map(([section, rows]) => (
-                            <>
-                              <tr key={`sec-${section}`}>
-                                <td colSpan={7} style={{
-                                  padding: '5px 8px', background: '#f0fdf4',
-                                  fontSize: 9, fontWeight: 700, color: C.green,
-                                  borderTop: '1px solid #a7f3d0', borderBottom: '1px solid #a7f3d0',
-                                }}>Sección {section}</td>
+              <div style={{ padding: '0 32px 20px' }}>
+                <SectionTitle n="A" label="Matriz de Firmas" color={C.green} />
+                {(signOff ?? []).length === 0 ? (
+                  <p style={{ fontSize: 9, color: C.grayLight, fontStyle: 'italic', margin: '4px 0 0' }}>Sin firmas registradas en los papeles de trabajo</p>
+                ) : (() => {
+                  const grouped: Record<string, SignOffMatrixRow[]> = {};
+                  (signOff ?? []).forEach(r => {
+                    const sec = r.indexSection || 'Sin sección';
+                    if (!grouped[sec]) grouped[sec] = [];
+                    grouped[sec].push(r);
+                  });
+                  return (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
+                      <thead>
+                        <tr style={{ background: '#f0fdf4' }}>
+                          <th style={{ ...TH, width: 70 }} align="left">Ref.</th>
+                          <th style={TH} align="left">Papel de Trabajo</th>
+                          <th style={{ ...TH, width: 80 }} align="center">Estado</th>
+                          <th style={{ ...TH, width: 100 }} align="left">Preparado por</th>
+                          <th style={{ ...TH, width: 100 }} align="left">Revisado por</th>
+                          <th style={{ ...TH, width: 100 }} align="left">Firmado (CAE)</th>
+                          <th style={{ ...TH, width: 30 }} align="center">Q.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(grouped).map(([section, rows]) => (
+                          <>
+                            <tr key={`sec-${section}`}>
+                              <td colSpan={7} style={{
+                                padding: '5px 8px', background: '#f0fdf4',
+                                fontSize: 9, fontWeight: 700, color: C.green,
+                                borderTop: '1px solid #a7f3d0', borderBottom: '1px solid #a7f3d0',
+                              }}>Sección {section}</td>
+                            </tr>
+                            {rows.map((row, idx) => (
+                              <tr key={row.id} style={{ background: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
+                                <td style={{ ...TD, fontFamily: 'monospace', fontWeight: 700, fontSize: 9, color: C.blue }}>{row.code}</td>
+                                <td style={{ ...TD, maxWidth: 200, fontSize: 10 }}>{row.title}</td>
+                                <td style={{ ...TD, textAlign: 'center' }}><Badge status={row.status} /></td>
+                                <td style={TD}><SignCell name={row.preparedBy?.name} date={row.preparedAt} /></td>
+                                <td style={TD}><SignCell name={row.reviewedBy?.name} date={row.reviewedAt} /></td>
+                                <td style={TD}><SignCell name={row.signedOffBy?.name} date={row.signedOffAt} /></td>
+                                <td style={{ ...TD, textAlign: 'center' }}>
+                                  {row.qualityScore != null
+                                    ? <span style={{ fontSize: 9, fontWeight: 700, color: row.qualityScore >= 80 ? C.green : row.qualityScore >= 60 ? '#d97706' : '#dc2626' }}>{row.qualityScore}</span>
+                                    : <span style={{ color: '#d1d5db' }}>—</span>}
+                                </td>
                               </tr>
-                              {rows.map((row, idx) => (
-                                <tr key={row.id} style={{ background: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
-                                  <td style={{ ...TD, fontFamily: 'monospace', fontWeight: 700, fontSize: 9, color: C.blue }}>{row.code}</td>
-                                  <td style={{ ...TD, maxWidth: 200, fontSize: 10 }}>{row.title}</td>
-                                  <td style={{ ...TD, textAlign: 'center' }}><Badge status={row.status} /></td>
-                                  <td style={TD}><SignCell name={row.preparedBy?.name} date={row.preparedAt} /></td>
-                                  <td style={TD}><SignCell name={row.reviewedBy?.name} date={row.reviewedAt} /></td>
-                                  <td style={TD}><SignCell name={row.signedOffBy?.name} date={row.signedOffAt} /></td>
-                                  <td style={{ ...TD, textAlign: 'center' }}>
-                                    {row.qualityScore != null
-                                      ? <span style={{ fontSize: 9, fontWeight: 700, color: row.qualityScore >= 80 ? C.green : row.qualityScore >= 60 ? '#d97706' : '#dc2626' }}>{row.qualityScore}</span>
-                                      : <span style={{ color: '#d1d5db' }}>—</span>}
-                                  </td>
-                                </tr>
-                              ))}
-                            </>
-                          ))}
-                        </tbody>
-                      </table>
-                    );
-                  })()}
-                </div>
-              )}
+                            ))}
+                          </>
+                        ))}
+                      </tbody>
+                    </table>
+                  );
+                })()}
+              </div>
 
               {/* ─────────────────────────────────────────────────────── */}
               {/* APÉNDICE B — NOTAS DE REVISIÓN ABIERTAS                 */}
               {/* ─────────────────────────────────────────────────────── */}
               {(() => {
                 const withOpen = (papers ?? []).filter(p => (p.comments ?? []).some(c => !c.resolved));
-                if (withOpen.length === 0) return null;
                 return (
                   <div style={{ padding: '0 32px 20px' }}>
                     <SectionTitle n="B" label="Notas de Revisión Abiertas" color={C.indigo} />
-                    {withOpen.map(wp => {
+                    {withOpen.length === 0 ? (
+                      <p style={{ fontSize: 9, color: C.grayLight, fontStyle: 'italic', margin: '4px 0 0' }}>Sin notas de revisión abiertas — todos los comentarios fueron resueltos ✓</p>
+                    ) : withOpen.map(wp => {
                       const open = (wp.comments ?? []).filter(c => !c.resolved);
                       return (
                         <div key={wp.id} style={{ marginBottom: 12 }}>

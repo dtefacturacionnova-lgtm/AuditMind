@@ -503,6 +503,9 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
     ? `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`
     : null;
 
+  // State for inline Office viewer toggle
+  const [showOfficeViewer, setShowOfficeViewer] = useState(false);
+
   return (
     <div className="space-y-4 p-6 max-w-4xl">
       {/* Info card */}
@@ -519,63 +522,77 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
               </span>
               {wp.fileSize && <span>{fmtBytes(wp.fileSize)}</span>}
             </div>
+
             <div className="mt-4 flex flex-wrap gap-2">
-              {downloadUrl && (
-                <a
-                  href={downloadUrl}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                >
-                  <Download className="h-4 w-4" /> Descargar
-                </a>
-              )}
-              {officeViewerUrl && (
-                <a
-                  href={officeViewerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg bg-[#D83B01] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-                >
-                  <ExternalLink className="h-4 w-4" /> Abrir en Office Online
-                </a>
-              )}
-              {!officeViewerUrl && fileUrl && (
+              {/* Always show direct "Abrir" link for every file type */}
+              {fileUrl && (
                 <a
                   href={fileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                  className="flex items-center gap-2 rounded-lg bg-[#0F2D4A] px-4 py-2 text-sm font-medium text-white hover:bg-[#1a4a7a]"
                 >
-                  <ExternalLink className="h-4 w-4" /> Abrir en nueva pestaña
+                  <ExternalLink className="h-4 w-4" /> Abrir documento
                 </a>
+              )}
+
+              {/* Download with forced Content-Disposition */}
+              {downloadUrl && (
+                <a
+                  href={downloadUrl}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  <Download className="h-4 w-4" /> Descargar
+                </a>
+              )}
+
+              {/* Office Online — toggle inline viewer */}
+              {officeViewerUrl && (
+                <button
+                  onClick={() => setShowOfficeViewer(v => !v)}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium border transition-colors ${
+                    showOfficeViewer
+                      ? 'bg-orange-600 text-white border-orange-600 hover:bg-orange-700'
+                      : 'bg-white text-orange-700 border-orange-300 hover:bg-orange-50'
+                  }`}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  {showOfficeViewer ? 'Ocultar Office Online' : 'Ver en Office Online'}
+                </button>
               )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Preview zone */}
+      {/* ── Preview zone ── */}
+
+      {/* Image — inline preview always visible */}
       {isImage && fileUrl && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Vista previa</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={fileUrl}
             alt={wp.originalFilename ?? wp.title}
-            className="mx-auto max-h-[500px] w-auto rounded-xl object-contain"
+            className="mx-auto max-h-[600px] w-auto rounded-xl object-contain"
           />
         </div>
       )}
 
+      {/* PDF — inline iframe */}
       {isPdf && fileUrl && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Vista previa PDF</p>
           <iframe
-            src={`${fileUrl}#toolbar=0`}
+            src={`${fileUrl}#toolbar=1`}
             title={wp.originalFilename ?? wp.title}
-            className="h-[600px] w-full rounded-xl border border-slate-100"
+            className="h-[700px] w-full rounded-xl border border-slate-100"
           />
         </div>
       )}
 
+      {/* Audio */}
       {isAudio && fileUrl && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Reproducir audio</p>
@@ -584,6 +601,7 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
         </div>
       )}
 
+      {/* Video */}
       {isVideo && fileUrl && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Reproducir video</p>
@@ -592,22 +610,37 @@ function FilePaperView({ wp }: { wp: WorkingPaper }) {
         </div>
       )}
 
-      {isOffice && officeViewerUrl && (
+      {/* Office — inline viewer (toggled) */}
+      {isOffice && officeViewerUrl && showOfficeViewer && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Vista previa — Microsoft Office Online
-          </p>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Vista previa — Microsoft Office Online
+            </p>
+            <p className="text-[10px] text-slate-400">
+              Si no carga, usa <strong>Abrir documento</strong> arriba
+            </p>
+          </div>
           <iframe
             src={officeViewerUrl}
             title={wp.originalFilename ?? wp.title}
-            className="h-[700px] w-full rounded-xl border border-slate-100"
+            className="h-[750px] w-full rounded-xl border border-slate-100"
           />
         </div>
       )}
 
-      {!isImage && !isPdf && !isAudio && !isVideo && !isOffice && (
-        <div className="rounded-xl border border-slate-100 bg-slate-50 px-5 py-4 text-sm text-slate-500">
-          Usa el botón de descarga para abrir el archivo.
+      {/* Office — hint when viewer is hidden */}
+      {isOffice && !showOfficeViewer && fileUrl && (
+        <div className="rounded-xl border border-orange-100 bg-orange-50 px-5 py-3.5 flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
+            <FileText className="h-4 w-4 text-orange-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-orange-800">Documento {typeLabel}</p>
+            <p className="text-xs text-orange-600 mt-0.5">
+              Usa <strong>Abrir documento</strong> para abrirlo en el navegador, o activa <strong>Ver en Office Online</strong> para verlo aquí mismo.
+            </p>
+          </div>
         </div>
       )}
     </div>

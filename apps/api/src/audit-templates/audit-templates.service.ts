@@ -41,6 +41,9 @@ export class AuditTemplatesService {
   // ─── Read operations ───────────────────────────────────────────────────────
 
   async findAll(user: AuthUser, auditType?: AuditType) {
+    // Lazy-seed system templates on first access for this org
+    await this.ensureSystemTemplates(user.organizationId, user.id);
+
     const templates = await this.prisma.auditTemplate.findMany({
       where: {
         organizationId: user.organizationId,

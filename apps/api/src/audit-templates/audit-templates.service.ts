@@ -100,6 +100,7 @@ export class AuditTemplatesService {
         description:    dto.description ?? null,
         auditTypes:     dto.auditTypes  as any,
         papers:         dto.papers      as any,
+        sections:       dto.sections    as any ?? null,
         isDefault:      dto.isDefault   ?? false,
         isSystem:       false,
         createdById:    user.id,
@@ -130,6 +131,7 @@ export class AuditTemplatesService {
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.auditTypes  !== undefined && { auditTypes:  dto.auditTypes as any }),
         ...(dto.papers      !== undefined && { papers:      dto.papers     as any }),
+        ...(dto.sections    !== undefined && { sections:    dto.sections   as any }),
         ...(dto.isDefault   !== undefined && { isDefault:   dto.isDefault }),
       },
       include: {

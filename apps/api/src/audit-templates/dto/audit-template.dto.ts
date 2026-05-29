@@ -5,6 +5,16 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AuditType, WorkingPaperType, WpKind } from '@prisma/client';
 import { Type } from 'class-transformer';
 
+export class SectionChildDto {
+  @ApiProperty({ example: 'A1' })
+  @IsString()
+  ref: string;
+
+  @ApiProperty({ example: 'Subcarpeta' })
+  @IsString()
+  name: string;
+}
+
 export class SectionDefDto {
   @ApiProperty({ example: 'A' })
   @IsString()
@@ -18,6 +28,13 @@ export class SectionDefDto {
   @IsOptional()
   @IsString()
   phaseType?: string;
+
+  @ApiPropertyOptional({ type: [SectionChildDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SectionChildDto)
+  children?: SectionChildDto[];
 }
 
 export class PaperDefDto {

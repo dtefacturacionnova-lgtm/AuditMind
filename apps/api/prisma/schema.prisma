@@ -1107,6 +1107,11 @@ model WorkingPaper {
   // ─── Firma adicional (Gerente / CAE) ─────────────────────────────────────
   signedOffById   String?
   signedOffAt     DateTime?
+  // ─── F6.2 Sign-off matrix timestamps ─────────────────────────────────────
+  preparedAt      DateTime?          // Fecha firma preparador
+  reviewedAt      DateTime?          // Fecha firma revisor
+  // ─── F6.4 Retención y bloqueo ─────────────────────────────────────────────
+  retentionUntil  DateTime?          // Fecha hasta la que debe conservarse
   // ─── Campos existentes ───────────────────────────────────────────────────
   content         Json               @default("{}")
   conclusion      String?
@@ -1144,6 +1149,8 @@ model WorkingPaper {
   // ─── @mention references ─────────────────────────────────────────────────
   refsFromHere  PaperReference[]  @relation("RefSource")   // Este papel menciona a...
   refsToHere    PaperReference[]  @relation("RefTarget")   // Este papel es mencionado por...
+  // ─── F6.3 PBC links ───────────────────────────────────────────────────────
+  pbcLinks      PbcPaperLink[]
 
   @@index([auditId])
   @@index([auditId, status])
@@ -1323,11 +1330,28 @@ model PbcRequest {
   audit         Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
   organization  Organization @relation(fields: [organizationId], references: [id])
   messages      PbcMessage[]
+  paperLinks    PbcPaperLink[]
 
   @@index([auditId])
   @@index([organizationId])
   @@index([status, dueDate])
   @@map("pbc_requests")
+}
+
+// ─── F6.3 PBC ↔ Workpaper links ───────────────────────────────────────────────
+model PbcPaperLink {
+  id          String   @id @default(cuid())
+  pbcId       String
+  paperId     String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  pbc         PbcRequest   @relation(fields: [pbcId],   references: [id], onDelete: Cascade)
+  paper       WorkingPaper @relation(fields: [paperId],  references: [id], onDelete: Cascade)
+
+  @@unique([pbcId, paperId])
+  @@index([paperId])
+  @@map("pbc_paper_links")
 }
 
 model PbcMessage {

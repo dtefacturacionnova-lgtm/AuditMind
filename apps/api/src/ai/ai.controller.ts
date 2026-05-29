@@ -189,7 +189,7 @@ export class AiController {
         organizationId: user.organizationId,
       },
       include: {
-        auditEntity: { select: { name: true, type: true } },
+        auditEntity: { select: { name: true } },
         findings: {
           select: {
             id: true, title: true, severity: true, status: true,
@@ -215,10 +215,10 @@ export class AiController {
       startDate: a.startDate ? new Date(a.startDate).getFullYear().toString() : undefined,
       endDate:   a.endDate   ? new Date(a.endDate).getFullYear().toString()   : undefined,
       status: a.status,
-      riskLevel: a.riskLevel ?? undefined,
+      riskLevel: (a as any).riskLevel ?? undefined,
       entityName: (a as any).auditEntity?.name ?? (a as any).entityName ?? a.title,
       scope: a.scope ?? undefined,
-      findings: a.findings.map(f => ({
+      findings: ((a as any).findings as any[]).map((f: any) => ({
         id: f.id,
         title: f.title,
         severity: f.severity,

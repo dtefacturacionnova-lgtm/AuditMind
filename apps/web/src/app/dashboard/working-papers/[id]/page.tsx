@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import Link from 'next/link';
 import {
-  Bot, CheckCircle2, Clock, AlertCircle, Lock, Plus, Trash2,
+  Bot, CheckCircle2, Circle, Clock, AlertCircle, Lock, Plus, Trash2,
   MessageSquare, History, FileText, Network,
   Link2, Save, Sparkles, Loader2, X, Wand2,
   Brain, Star, Activity, AlertTriangle, RefreshCw, Zap,
@@ -33,6 +33,8 @@ import type { AiDraftConfig } from '@/components/working-papers/SectionField';
 import { apiClient }            from '@/lib/api-client';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import type { WorkingPaper, TickMarkEntry } from '@/hooks/useWorkingPapers';
+import { useSignOff, usePbcLinks, useLinkPbc, useUnlinkPbc } from '@/hooks/useWorkingPaperSignOff';
+import type { SignOffLevel } from '@/hooks/useWorkingPaperSignOff';
 
 // ─── Scriptorium Draft Modal ──────────────────────────────────────────────────
 
@@ -704,6 +706,201 @@ function LivePaperView() {
   );
 }
 
+// ─── F6.2 Sign-off panel ─────────────────────────────────────────────────────
+
+function SignOffPanel({ paperId, wp }: { paperId: string; wp: WorkingPaper }) {
+  const signOff = useSignOff(paperId);
+  const isLocked = wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED';
+
+  async function handleSign(level: SignOffLevel) {
+    try { await signOff.mutateAsync(level); } catch {}
+  }
+
+  const levels: Array<{
+    level: SignOffLevel;
+    label: string;
+    name?: string | null;
+    date?: string | null;
+    color: string;
+  }> = [
+    { level: 'prepare',  label: 'Preparado por',    name: (wp as any).preparedBy?.name,   date: (wp as any).preparedAt,  color: 'blue' },
+    { level: 'review',   label: 'Revisado por',     name: (wp as any).reviewedBy?.name,   date: (wp as any).reviewedAt,  color: 'indigo' },
+    { level: 'signoff',  label: 'Firmado por (CAE)',name: (wp as any).signedOffBy?.name,  date: (wp as any).signedOffAt, color: 'emerald' },
+  ];
+
+  const colorMap: Record<string, string> = {
+    blue:    'border-blue-200 bg-blue-50 text-blue-700',
+    indigo:  'border-indigo-200 bg-indigo-50 text-indigo-700',
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  };
+  const btnMap: Record<string, string> = {
+    blue:    'bg-blue-600 hover:bg-blue-700',
+    indigo:  'bg-indigo-600 hover:bg-indigo-700',
+    emerald: 'bg-emerald-600 hover:bg-emerald-700',
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+      <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Matriz de Firmas — Este Papel</p>
+      <div className="grid grid-cols-3 gap-3">
+        {levels.map(l => (
+          <div key={l.level} className={`rounded-lg border p-3 ${colorMap[l.color]}`}>
+            <p className="text-[10px] font-semibold uppercase tracking-wider opacity-70 mb-1">{l.label}</p>
+            {l.name ? (
+              <div>
+                <p className="text-xs font-bold">{l.name}</p>
+                {l.date && (
+                  <p className="text-[10px] opacity-60 mt-0.5">
+                    {new Date(l.date).toLocaleDateString('es', { day: '2-digit', month: 'short', year: '2-digit' })}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <p className="text-[10px] opacity-50">Sin firma</p>
+                {!isLocked && (
+                  <button
+                    onClick={() => handleSign(l.level)}
+                    disabled={signOff.isPending}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-white ${btnMap[l.color]} disabled:opacity-50`}
+                  >
+                    {signOff.isPending ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <CheckCircle2 className="h-2.5 w-2.5" />}
+                    Firmar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── F6.3 PBC links panel ─────────────────────────────────────────────────────
+
+const PBC_STATUS_COLORS: Record<string, string> = {
+  PENDING:   'bg-yellow-100 text-yellow-700',
+  SUBMITTED: 'bg-blue-100 text-blue-700',
+  ACCEPTED:  'bg-emerald-100 text-emerald-700',
+  REJECTED:  'bg-red-100 text-red-700',
+  OVERDUE:   'bg-red-50 text-red-600',
+};
+
+const PBC_STATUS_LABELS: Record<string, string> = {
+  PENDING:   'Pendiente',
+  SUBMITTED: 'Enviado',
+  ACCEPTED:  'Aceptado',
+  REJECTED:  'Rechazado',
+  OVERDUE:   'Vencido',
+};
+
+function PbcLinksPanel({ paperId }: { paperId: string }) {
+  const { data, isLoading } = usePbcLinks(paperId);
+  const linkPbc   = useLinkPbc(paperId);
+  const unlinkPbc = useUnlinkPbc(paperId);
+  const [showAvailable, setShowAvailable] = useState(false);
+
+  if (isLoading) return null;
+  if (!data) return null;
+
+  const { linkedItems, availableItems } = data;
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <Link2 className="h-4 w-4 text-violet-500" />
+          <p className="text-xs font-semibold text-slate-700">Evidencias PBC Vinculadas</p>
+          {linkedItems.length > 0 && (
+            <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">
+              {linkedItems.length}
+            </span>
+          )}
+        </div>
+        {availableItems.length > 0 && (
+          <button
+            onClick={() => setShowAvailable(v => !v)}
+            className="text-[11px] text-violet-600 hover:text-violet-800 font-medium"
+          >
+            {showAvailable ? 'Ocultar disponibles' : `+ Vincular (${availableItems.length})`}
+          </button>
+        )}
+      </div>
+
+      {linkedItems.length === 0 && !showAvailable && (
+        <div className="py-6 text-center">
+          <Link2 className="h-7 w-7 text-gray-200 mx-auto mb-1.5" />
+          <p className="text-xs text-gray-400">No hay solicitudes PBC vinculadas</p>
+          {availableItems.length > 0 && (
+            <button
+              onClick={() => setShowAvailable(true)}
+              className="text-xs text-violet-600 hover:underline mt-1"
+            >
+              Vincular evidencia disponible
+            </button>
+          )}
+        </div>
+      )}
+
+      {linkedItems.length > 0 && (
+        <div className="divide-y divide-slate-50">
+          {linkedItems.map(link => (
+            <div key={link.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-slate-700 truncate">{link.pbc.title}</p>
+                <p className="text-[10px] text-slate-400 truncate">{link.pbc.requestedToEmail}</p>
+              </div>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${PBC_STATUS_COLORS[link.pbc.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                {PBC_STATUS_LABELS[link.pbc.status] ?? link.pbc.status}
+              </span>
+              <button
+                onClick={() => unlinkPbc.mutateAsync(link.id)}
+                disabled={unlinkPbc.isPending}
+                className="text-slate-300 hover:text-red-400 transition-colors"
+                title="Desvincular"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showAvailable && availableItems.length > 0 && (
+        <div className="border-t border-slate-100">
+          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-4 py-2">
+            Disponibles para vincular
+          </p>
+          <div className="divide-y divide-slate-50 max-h-48 overflow-y-auto">
+            {availableItems.map(pbc => (
+              <div key={pbc.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-violet-50/30">
+                <Circle className="h-3.5 w-3.5 text-slate-200 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-slate-700 truncate">{pbc.title}</p>
+                  <p className="text-[10px] text-slate-400 truncate">{pbc.requestedToEmail}</p>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${PBC_STATUS_COLORS[pbc.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                  {PBC_STATUS_LABELS[pbc.status] ?? pbc.status}
+                </span>
+                <button
+                  onClick={() => linkPbc.mutateAsync(pbc.id)}
+                  disabled={linkPbc.isPending}
+                  className="flex items-center gap-1 text-[10px] font-medium text-violet-600 hover:text-violet-800 disabled:opacity-50"
+                >
+                  <Plus className="h-3 w-3" />
+                  Vincular
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 
 type TabKey = 'content' | 'sections' | 'graph' | 'review' | 'history' | 'file';
@@ -845,6 +1042,9 @@ export default function WpDetailPage() {
     },
   };
 
+  // F6.4 Lockdown — paper cannot be edited when SIGNED_OFF or CLOSED
+  const isLocked = wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED';
+
   // Determine which tabs to show
   const isFilePaper     = wpKind === 'FILE';
   const showSectionsTab = wpKind === 'SMART';
@@ -911,7 +1111,7 @@ export default function WpDetailPage() {
                     Borrador IA
                   </button>
                 )}
-                {dirty && (
+                {dirty && !isLocked && (
                   <button
                     onClick={handleSave}
                     disabled={updateWp.isPending}
@@ -920,6 +1120,11 @@ export default function WpDetailPage() {
                     <Save className="w-3 h-3" />
                     {updateWp.isPending ? 'Guardando…' : 'Guardar'}
                   </button>
+                )}
+                {isLocked && (
+                  <span className="flex items-center gap-1 text-[10px] text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
+                    <Lock className="w-2.5 h-2.5" /> Bloqueado
+                  </span>
                 )}
               </div>
             </div>
@@ -1010,6 +1215,24 @@ export default function WpDetailPage() {
                 )}
               </div>
             </div>
+
+            {/* F6.4 Lockdown banner */}
+            {(wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED') && (
+              <div className="mx-5 mb-4 flex items-center gap-2.5 rounded-xl bg-slate-50 border border-slate-200 px-4 py-2.5">
+                <Lock className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-700">
+                    Papel bloqueado — {wp.status === 'SIGNED_OFF' ? 'Firmado' : 'Cerrado'}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Este papel no puede modificarse.
+                    {(wp as any).retentionUntil && (
+                      <> Retención hasta: <strong>{formatDate((wp as any).retentionUntil)}</strong>.</>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Acciones de estado */}
             <div className="border-t border-gray-100 px-5 py-3 flex items-center gap-2 flex-wrap bg-gray-50/50">
@@ -1326,6 +1549,13 @@ export default function WpDetailPage() {
           {/* ── Tab: Revisión ── */}
           {effectiveTab === 'review' && (
             <div className="max-w-2xl space-y-4">
+
+              {/* F6.2 Sign-off panel */}
+              <SignOffPanel paperId={params.id} wp={wp} />
+
+              {/* F6.3 PBC links panel */}
+              <PbcLinksPanel paperId={params.id} />
+
               {/* Semantic quality gate — SMART and MASTER papers only */}
               {(wpKind === 'SMART' || wpKind === 'MASTER') && (
                 <QualityGatePanel paperId={params.id} existingScore={wp.qualityScore} />

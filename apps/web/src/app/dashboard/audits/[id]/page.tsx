@@ -7,7 +7,7 @@ import {
   AlertTriangle, Upload, BadgeCheck, Edit2, ChevronRight,
   TrendingUp, Target, Shield, Sparkles, Wand2, Loader2, X,
   ClipboardCopy, Check, ListChecks, Plus, Trash2, BarChart3,
-  CheckCircle2, Circle,
+  CheckCircle2, Circle, RotateCcw,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAudit, useUpdateAuditStatus } from '@/hooks/useAudits';
@@ -17,6 +17,8 @@ import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
 import { MinervaAuditPanel } from '@/components/audits/MinervaAuditPanel';
 import { ExpedienteTab } from '@/components/audits/ExpedienteTab';
+import { RollForwardModal } from '@/components/audits/RollForwardModal';
+import { SignOffMatrix }   from '@/components/audits/SignOffMatrix';
 
 const STATUS_STYLES: Record<string, string> = {
   PLANNING: 'bg-blue-100 text-blue-700 border border-blue-200',
@@ -45,7 +47,7 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours';
+type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff';
 
 function StatCard({ icon: Icon, label, value, color }: {
   icon: React.ElementType;
@@ -70,8 +72,9 @@ export default function AuditDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [showStatusModal, setShowStatusModal] = useState(false);
-  const [statusComment, setStatusComment] = useState('');
+  const [showStatusModal,    setShowStatusModal]    = useState(false);
+  const [statusComment,      setStatusComment]      = useState('');
+  const [showRollForward,    setShowRollForward]    = useState(false);
 
   const { data: audit, isLoading } = useAudit(id);
   const updateStatus = useUpdateAuditStatus();
@@ -116,6 +119,7 @@ export default function AuditDetailPage() {
     { key: 'hours',         label: '⏱ Horas' },
     { key: 'pbc',           label: 'PBC',              count: audit._count?.pbcRequests ?? 0 },
     { key: 'confirmations', label: 'Confirmaciones',   count: audit._count?.externalConfirmations ?? 0 },
+    { key: 'signoff',       label: '✍ Matriz de Firmas' },
   ];
 
   async function handleStatusChange(newStatus: string) {
@@ -176,6 +180,15 @@ export default function AuditDetailPage() {
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${STATUS_STYLES[audit.status] ?? ''}`}>
                   {STATUS_LABELS[audit.status] ?? audit.status}
                 </span>
+                {/* F6.1 Roll-forward */}
+                <button
+                  onClick={() => setShowRollForward(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors"
+                  title="Crear nueva auditoría copiando la estructura de esta"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Roll-forward
+                </button>
                 {nextStatuses.length > 0 && (
                   <button
                     onClick={() => setShowStatusModal(true)}
@@ -267,6 +280,10 @@ export default function AuditDetailPage() {
                   linkLabel="Ver en módulo de Confirmaciones"
                 />
               )}
+              {/* F6.2 Sign-off matrix */}
+              {activeTab === 'signoff' && (
+                <SignOffMatrix auditId={id} />
+              )}
             </div>
           </div>
         </div>
@@ -311,6 +328,17 @@ export default function AuditDetailPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* F6.1 Roll-forward modal */}
+      {showRollForward && (
+        <RollForwardModal
+          auditId={id}
+          sourceTitle={audit.title}
+          sourceStartDate={audit.startDate}
+          sourceEndDate={audit.endDate}
+          onClose={() => setShowRollForward(false)}
+        />
       )}
     </div>
   );

@@ -164,10 +164,19 @@ export class WorkingPapersService {
     return wp;
   }
 
+  private LOCKED_STATUSES: WorkingPaperStatus[] = [
+    WorkingPaperStatus.SIGNED_OFF,
+    WorkingPaperStatus.CLOSED,
+    WorkingPaperStatus.ARCHIVED,
+  ];
+
   async update(id: string, dto: UpdateWorkingPaperDto, user: AuthUser) {
     const wp = await this.findOne(id, user);
-    if (wp.status === WorkingPaperStatus.ARCHIVED) {
-      throw new BadRequestException('No se puede modificar un papel de trabajo archivado');
+    // F6.4 Lockdown: block edits on SIGNED_OFF, CLOSED, ARCHIVED papers
+    if (this.LOCKED_STATUSES.includes(wp.status as WorkingPaperStatus)) {
+      throw new BadRequestException(
+        `El papel "${wp.title}" está bloqueado (estado: ${wp.status}). No se permiten modificaciones.`,
+      );
     }
 
     // Snapshot version before updating
@@ -226,9 +235,14 @@ export class WorkingPapersService {
       });
     }
 
+    // F6.4 Set retention date when paper is closed (7 years default)
+    const retentionData = dto.status === WorkingPaperStatus.CLOSED
+      ? { retentionUntil: new Date(Date.now() + 7 * 365.25 * 24 * 3600 * 1000) }
+      : {};
+
     return this.prisma.workingPaper.update({
       where:   { id },
-      data:    { status: dto.status },
+      data:    { status: dto.status, ...retentionData },
       include: INCLUDE_FULL,
     });
   }
@@ -335,6 +349,123 @@ export class WorkingPapersService {
         id: true, version: true, changedAt: true, changedBy: true,
       },
     });
+  }
+
+  // ─── F6.2 Sign-off matrix ─────────────────────────────────────────────────────
+
+  async signOff(
+    id: string,
+    level: 'prepare' | 'review' | 'signoff',
+    user: AuthUser,
+  ) {
+    const wp = await this.findOne(id, user);
+
+    if (level === 'review' || level === 'signoff') {
+      const managerRoles: string[] = [
+        UserRole.AUDIT_MANAGER, UserRole.CAE, UserRole.SENIOR_AUDITOR,
+        UserRole.ADMIN, UserRole.SUPER_ADMIN,
+      ];
+      if (!managerRoles.includes(user.role)) {
+        throw new ForbiddenException('Solo gerentes o revisores pueden firmar en este nivel');
+      }
+    }
+
+    if (level === 'signoff') {
+      const signOffRoles: string[] = [UserRole.CAE, UserRole.AUDIT_MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN];
+      if (!signOffRoles.includes(user.role)) {
+        throw new ForbiddenException('Solo el CAE o Gerente de Auditoría pueden realizar la firma final');
+      }
+    }
+
+    const data: Record<string, unknown> =
+      level === 'prepare'  ? { preparedById:  user.id, preparedAt:  new Date() } :
+      level === 'review'   ? { reviewedById:  user.id, reviewedAt:  new Date() } :
+                             { signedOffById: user.id, signedOffAt: new Date() };
+
+    return this.prisma.workingPaper.update({
+      where:   { id },
+      data:    data as any,
+      include: INCLUDE_FULL,
+    });
+  }
+
+  async getSignOffMatrix(auditId: string, user: AuthUser) {
+    await this.assertAuditAccess(auditId, user);
+    return this.prisma.workingPaper.findMany({
+      where:   { auditId },
+      orderBy: [{ indexSection: 'asc' }, { code: 'asc' }],
+      select: {
+        id: true, code: true, indexSection: true, title: true, status: true, type: true,
+        preparedById: true, preparedAt:  true,
+        reviewedById: true, reviewedAt:  true,
+        signedOffById: true, signedOffAt: true,
+        preparedBy:   { select: { id: true, name: true } },
+        reviewedBy:   { select: { id: true, name: true } },
+        signedOffBy:  { select: { id: true, name: true } },
+        qualityScore: true,
+        _count: { select: { comments: true } },
+      },
+    });
+  }
+
+  // ─── F6.3 PBC ↔ Workpaper links ──────────────────────────────────────────────
+
+  async getPbcLinks(paperId: string, user: AuthUser) {
+    const wp = await this.findOne(paperId, user);
+    // Return all PBC requests for the same audit, marking which are linked
+    const [linked, allPbc] = await Promise.all([
+      this.prisma.pbcPaperLink.findMany({
+        where:   { paperId },
+        include: {
+          pbc: {
+            select: {
+              id: true, title: true, description: true,
+              requestedToEmail: true, status: true, fileUrls: true, submittedAt: true,
+            },
+          },
+        },
+      }),
+      this.prisma.pbcRequest.findMany({
+        where: { auditId: wp.auditId },
+        select: {
+          id: true, title: true, description: true,
+          requestedToEmail: true, status: true, fileUrls: true, submittedAt: true,
+        },
+      }),
+    ]);
+
+    const linkedIds = new Set(linked.map(l => l.pbcId));
+    return {
+      linkedItems: linked,
+      availableItems: allPbc.filter(p => !linkedIds.has(p.id)),
+    };
+  }
+
+  async linkPbc(paperId: string, pbcId: string, user: AuthUser) {
+    await this.findOne(paperId, user);
+    // Validate pbc belongs to same org
+    const pbc = await this.prisma.pbcRequest.findFirst({
+      where: { id: pbcId, audit: { organizationId: user.organizationId } },
+    });
+    if (!pbc) throw new NotFoundException('Solicitud PBC no encontrada');
+
+    return this.prisma.pbcPaperLink.upsert({
+      where:  { pbcId_paperId: { pbcId, paperId } },
+      create: { pbcId, paperId, createdById: user.id },
+      update: {},
+    });
+  }
+
+  async unlinkPbc(linkId: string, user: AuthUser) {
+    const link = await this.prisma.pbcPaperLink.findUnique({
+      where:   { id: linkId },
+      include: { paper: { include: { audit: { select: { organizationId: true } } } } },
+    });
+    if (!link) throw new NotFoundException('Vínculo no encontrado');
+    if (link.paper.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+
+    await this.prisma.pbcPaperLink.delete({ where: { id: linkId } });
+    return { deleted: true };
   }
 
   // ─── Master paper consolidation ───────────────────────────────────────────

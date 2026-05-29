@@ -249,6 +249,106 @@ export class AuditsService {
     });
   }
 
+  // ─── F6.1 Roll-forward ───────────────────────────────────────────────────────
+  async rollForward(
+    id: string,
+    dto: {
+      title: string;
+      startDate?: string;
+      endDate?: string;
+      carryOpenFindings?: boolean;
+    },
+    user: AuthUser,
+  ) {
+    const source = await this.findOne(id, user);
+
+    // Create new audit copying key attributes
+    const newAudit = await this.prisma.audit.create({
+      data: {
+        title:              dto.title,
+        type:               source.type,
+        subtype:            (source as any).subtype ?? null,
+        auditEntityId:      source.auditEntityId ?? undefined,
+        organizationId:     user.organizationId,
+        leadAuditorId:      user.id,
+        startDate:          dto.startDate ? new Date(dto.startDate) : null,
+        endDate:            dto.endDate   ? new Date(dto.endDate)   : null,
+        estimatedHours:     source.estimatedHours ?? 0,
+        scope:              source.scope ?? null,
+        objectives:         source.objectives ?? null,
+        materiality:        source.materiality ?? null,
+        materialityExecution:    source.materialityExecution ?? null,
+        materialityAccumulation: source.materialityAccumulation ?? null,
+        materialityBase:    source.materialityBase ?? null,
+        materialityBaseAmount:   source.materialityBaseAmount ?? null,
+        status:             AuditStatus.PLANNING,
+      },
+    });
+
+    // Add lead auditor to team
+    await this.prisma.auditTeam.upsert({
+      where:  { auditId_userId: { auditId: newAudit.id, userId: user.id } },
+      create: { auditId: newAudit.id, userId: user.id, role: 'LEAD' },
+      update: { role: 'LEAD' },
+    });
+
+    // Copy working paper structure (shell only — no content, reset status)
+    const sourcePapers = await this.prisma.workingPaper.findMany({
+      where: { auditId: id },
+      orderBy: [{ indexSection: 'asc' }, { code: 'asc' }],
+    });
+
+    for (const wp of sourcePapers) {
+      await this.prisma.workingPaper.create({
+        data: {
+          auditId:      newAudit.id,
+          code:         wp.code,
+          indexSection: wp.indexSection,
+          title:        wp.title,
+          type:         wp.type,
+          wpKind:       wp.wpKind,
+          paperCode:    wp.paperCode ?? null,
+          preparedById: user.id,
+          content:      {} as any,
+          tickMarks:    [] as any,
+          crossReferences: [] as any,
+          status:       'IN_PROGRESS' as any,
+          version:      1,
+          carryForward: true,  // marks these as rolled-forward
+          notesToReviewer: `Roll-forward desde auditoría anterior (${source.title})`,
+        },
+      });
+    }
+
+    // Optionally carry open/in-progress findings
+    if (dto.carryOpenFindings) {
+      const openFindings = await this.prisma.finding.findMany({
+        where: { auditId: id, status: { in: ['DRAFT', 'IN_REVIEW', 'APPROVED', 'REOPENED'] as any } },
+      });
+      for (const f of openFindings) {
+        await this.prisma.finding.create({
+          data: {
+            auditId:        newAudit.id,
+            organizationId: user.organizationId,
+            title:          `[CF] ${f.title}`,
+            severity:       f.severity,
+            status:         'DRAFT' as any,
+            condition:      f.condition || '(Carry-forward — completar)',
+            criteria:       f.criteria  || '(Carry-forward — completar)',
+            cause:          f.cause     || '(Carry-forward — completar)',
+            effect:         f.effect    || '(Carry-forward — completar)',
+            risk:           f.risk      || '(Carry-forward — completar)',
+            recommendation: f.recommendation || '(Carry-forward — completar)',
+            isRecurring:    true,
+            previousFindingId: f.id,
+          },
+        });
+      }
+    }
+
+    return this.findOne(newAudit.id, user);
+  }
+
   async getProgress(id: string, user: AuthUser) {
     const audit = await this.findOne(id, user);
     const [wpStats, findingStats, pbcStats] = await Promise.all([

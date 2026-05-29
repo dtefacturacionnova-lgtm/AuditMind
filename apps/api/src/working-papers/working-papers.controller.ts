@@ -2,6 +2,15 @@ import {
   Controller, Get, Post, Patch, Delete, Body, Param, Query,
   ParseIntPipe, DefaultValuePipe,
 } from '@nestjs/common';
+import { IsString, IsIn } from 'class-validator';
+
+class SignOffDto {
+  @IsString() @IsIn(['prepare', 'review', 'signoff']) level!: 'prepare' | 'review' | 'signoff';
+}
+
+class LinkPbcDto {
+  @IsString() pbcId!: string;
+}
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { WorkingPapersService } from './working-papers.service';
 import { CreateWorkingPaperDto, AddCommentDto, AddTickMarkEntryDto } from './dto/create-working-paper.dto';
@@ -272,5 +281,52 @@ export class WorkingPapersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.references.createReference(id, dto, user);
+  }
+
+  // ─── F6.2 Sign-off matrix ─────────────────────────────────────────────────────
+
+  @Post(':id/sign')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'F6.2 — Firmar papel de trabajo (prepare | review | signoff)' })
+  signOff(
+    @Param('id')   id:   string,
+    @Body()        dto:  SignOffDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.signOff(id, dto.level, user);
+  }
+
+  @Get('sign-off-matrix/:auditId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'F6.2 — Matriz de firmas de todos los papeles de una auditoría' })
+  getSignOffMatrix(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
+    return this.service.getSignOffMatrix(auditId, user);
+  }
+
+  // ─── F6.3 PBC ↔ Workpaper links ──────────────────────────────────────────────
+
+  @Get(':id/pbc-links')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'F6.3 — Listar solicitudes PBC vinculadas y disponibles para un papel' })
+  getPbcLinks(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.getPbcLinks(id, user);
+  }
+
+  @Post(':id/pbc-links')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'F6.3 — Vincular una solicitud PBC a este papel de trabajo' })
+  linkPbc(
+    @Param('id')   id:   string,
+    @Body()        dto:  LinkPbcDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.linkPbc(id, dto.pbcId, user);
+  }
+
+  @Delete('pbc-links/:linkId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'F6.3 — Desvincular solicitud PBC de papel de trabajo' })
+  unlinkPbc(@Param('linkId') linkId: string, @CurrentUser() user: AuthUser) {
+    return this.service.unlinkPbc(linkId, user);
   }
 }

@@ -2,6 +2,14 @@ import {
   Controller, Get, Post, Patch, Body, Param,
   Query, ParseIntPipe, DefaultValuePipe,
 } from '@nestjs/common';
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
+
+class RollForwardDto {
+  @IsString() title!: string;
+  @IsOptional() @IsString() startDate?: string;
+  @IsOptional() @IsString() endDate?: string;
+  @IsOptional() @IsBoolean() carryOpenFindings?: boolean;
+}
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuditsService } from './audits.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
@@ -79,5 +87,17 @@ export class AuditsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.updateStatus(id, dto, user);
+  }
+
+  // ─── F6.1 Roll-forward ────────────────────────────────────────────────────────
+  @Post(':id/roll-forward')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'F6.1 — Roll-forward: crea nueva auditoría copiando estructura de la anterior' })
+  rollForward(
+    @Param('id') id: string,
+    @Body() dto: RollForwardDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.rollForward(id, dto, user);
   }
 }

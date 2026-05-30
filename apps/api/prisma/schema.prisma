@@ -38,6 +38,7 @@ enum AuditType {
   BCP_CONTINUITY         // Continuidad del Negocio (ISO 22301:2019 + NRP-24)
   IT_SYSTEMS             // Sistemas de Información y BD (COBIT 2019 + D.L. 144/2024)
   AML                    // Prevención Lavado de Dinero y Activos (Ley LCDA + NRP-36 + GAFI)
+  FISCAL                 // Auditoría Fiscal (ISR / IVA / CVPCPA El Salvador)
 }
 
 enum AuditStatus {

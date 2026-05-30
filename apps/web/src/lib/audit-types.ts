@@ -35,6 +35,7 @@ export const AUDIT_TYPES: AuditTypeOption[] = [
   // ── Auditoría Especializada Regulatoria ───────────────────────────────────
   { value: 'AML',                   label: 'Prevención Lavado de Dinero (LCDA / NRP-36)' },
   { value: 'FORENSIC',              label: 'Forense / Examen Especial' },
+  { value: 'FISCAL',                label: 'Fiscal (ISR / IVA / CVPCPA El Salvador)' },
   { value: 'ESG',                   label: 'ESG / Sostenibilidad' },
 ];
 
@@ -136,6 +137,13 @@ export const AUDIT_SUBTYPES: Record<string, AuditSubtypeOption[]> = {
     { value: 'GOBERNANZA',  label: 'Gobernanza Corporativa' },
     { value: 'CARBONO',     label: 'Huella de Carbono / Net Zero' },
   ],
+  FISCAL: [
+    { value: 'ISR',              label: 'Impuesto Sobre la Renta (F971)' },
+    { value: 'IVA',              label: 'Impuesto al Valor Agregado' },
+    { value: 'PRECIOS_TRANSFER', label: 'Precios de Transferencia (F982)' },
+    { value: 'OBLIGACIONES',     label: 'Obligaciones Formales CT' },
+    { value: 'INTEGRAL',         label: 'Auditoría Fiscal Integral' },
+  ],
   FORENSIC: [
     { value: 'FRAUDE_CONTABLE', label: 'Fraude Contable' },
     { value: 'CORRUPCION',      label: 'Corrupción / Soborno' },
@@ -173,4 +181,5 @@ export const TYPE_BADGE: Record<string, string> = {
   BCP_DRP:               'bg-orange-100 text-orange-700',
   BCP_CONTINUITY:        'bg-orange-100 text-orange-700',
   AML:                   'bg-yellow-100 text-yellow-700',
+  FISCAL:                'bg-lime-100 text-lime-700',
 };

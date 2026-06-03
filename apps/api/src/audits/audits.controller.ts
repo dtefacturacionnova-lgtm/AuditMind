@@ -181,6 +181,21 @@ export class AuditsController {
     return this.service.getBenfordResult(tbId, user);
   }
 
+  // ─── PI.7d — AI Tests Orchestrator ────────────────────────────────────────
+  @Post(':id/run-ai-tests')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.7d — Ejecutar todas las pruebas IA disponibles sobre esta auditoría' })
+  runAiTests(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.runAiTests(id, user);
+  }
+
+  @Get(':id/ai-tests-report')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.7d — Obtener el último reporte de pruebas IA persistido' })
+  getAiTestsReport(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.getAiTestsReport(id, user);
+  }
+
   // ─── Papeles disponibles desde plantilla ─────────────────────────────────────
 
   @Get(':id/available-template-papers')

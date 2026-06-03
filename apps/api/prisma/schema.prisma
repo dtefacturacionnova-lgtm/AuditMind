@@ -952,6 +952,10 @@ model Audit {
   // Modelo de riesgo de auditoría (NIA 200)
   auditRiskModel          Json?       // { inherentRisk, controlRisk, detectionRisk, ... }
 
+  // PI.7d — Orquestador de pruebas IA
+  lastAiTestRunAt         DateTime?
+  lastAiTestSummary       Json?       // { ranAt, durationMs, tests: [{ kind, status, ... }], findingIds[], summary }
+
   createdAt               DateTime    @default(now())
   updatedAt               DateTime    @updatedAt
 

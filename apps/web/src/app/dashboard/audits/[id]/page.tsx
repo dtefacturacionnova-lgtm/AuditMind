@@ -21,6 +21,7 @@ import { RollForwardModal }          from '@/components/audits/RollForwardModal'
 import { SignOffMatrix }              from '@/components/audits/SignOffMatrix';
 import { TrialBalanceTab }            from '@/components/audits/TrialBalanceTab';
 import { PapersGraphView }            from '@/components/working-papers/PapersGraphView';
+import { AiTestsOrchestratorModal }   from '@/components/audits/AiTestsOrchestratorModal';
 import { WorkingPaperIndexReport }    from '@/components/audits/WorkingPaperIndexReport';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -79,6 +80,7 @@ export default function AuditDetailPage() {
   const [statusComment,      setStatusComment]      = useState('');
   const [showRollForward,    setShowRollForward]    = useState(false);
   const [showIndexReport,    setShowIndexReport]    = useState(false);
+  const [showAiTests,        setShowAiTests]        = useState(false);
 
   const { data: audit, isLoading } = useAudit(id);
   const updateStatus = useUpdateAuditStatus();
@@ -203,6 +205,15 @@ export default function AuditDetailPage() {
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   Roll-forward
+                </button>
+                {/* PI.7d — Orquestador de pruebas IA */}
+                <button
+                  onClick={() => setShowAiTests(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 text-violet-700 text-sm font-medium hover:bg-violet-100 transition-colors"
+                  title="Ejecutar todas las pruebas IA disponibles (Benford + COSO)"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Pruebas IA
                 </button>
                 {nextStatuses.length > 0 && (
                   <button
@@ -362,6 +373,14 @@ export default function AuditDetailPage() {
           sourceStartDate={audit.startDate}
           sourceEndDate={audit.endDate}
           onClose={() => setShowRollForward(false)}
+        />
+      )}
+
+      {/* PI.7d — AI Tests Orchestrator */}
+      {showAiTests && (
+        <AiTestsOrchestratorModal
+          auditId={id}
+          onClose={() => setShowAiTests(false)}
         />
       )}
 

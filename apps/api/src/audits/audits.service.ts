@@ -527,6 +527,198 @@ export class AuditsService {
     return { result, findingId, runAt: now.toISOString() };
   }
 
+  // ─── PI.7d — Orchestrator: run all available AI tests on an audit ────────
+  /**
+   * Iterates all data sources of the audit and runs every applicable AI test,
+   * persisting a consolidated report on Audit.lastAiTestSummary.
+   *
+   * Tests currently orchestrated:
+   *   - BENFORD on every Trial Balance with ≥50 accounts (PI.7b)
+   *   - COSO assessment on the first paperCode=PT-COSO paper if present (PI.7c)
+   *
+   * Each test is best-effort: failures are caught per-test so a single error
+   * does NOT block the rest. Returns the same summary that gets persisted.
+   */
+  async runAiTests(auditId: string, user: AuthUser) {
+    const audit = await this.findOne(auditId, user);
+
+    const ranAt = new Date();
+    const startMs = Date.now();
+    const tests: Array<{
+      kind:     'BENFORD' | 'COSO';
+      target:   string;            // tbId or paperId
+      label:    string;            // human-readable target
+      status:   'SUCCESS' | 'FAILED' | 'SKIPPED';
+      message:  string;
+      findingId?: string | null;
+      meta?:    Record<string, unknown>;
+    }> = [];
+    const findingIds: string[] = [];
+
+    // ── BENFORD on each Trial Balance ─────────────────────────────────────
+    const tbs = await this.prisma.trialBalance.findMany({
+      where:   { auditId },
+      select:  { id: true, filename: true, periodLabel: true, accounts: true },
+      orderBy: { importedAt: 'desc' },
+    });
+
+    for (const tb of tbs) {
+      const accountsCount = Array.isArray(tb.accounts) ? (tb.accounts as unknown[]).length : 0;
+      const label = `${tb.filename} (${tb.periodLabel})`;
+
+      if (accountsCount < 50) {
+        tests.push({
+          kind: 'BENFORD', target: tb.id, label, status: 'SKIPPED',
+          message: `Saltado: ${accountsCount} cuentas (mínimo 50 para Benford)`,
+        });
+        continue;
+      }
+
+      try {
+        const res = await this.runBenfordOnTrialBalance(tb.id, user);
+        if (res.findingId) findingIds.push(res.findingId);
+        tests.push({
+          kind: 'BENFORD', target: tb.id, label, status: 'SUCCESS',
+          message: `${res.result.conformity} · score ${res.result.risk_score}/100`,
+          findingId: res.findingId,
+          meta: {
+            conformity: res.result.conformity,
+            riskScore:  res.result.risk_score,
+            mad:        res.result.mad,
+          },
+        });
+      } catch (e) {
+        tests.push({
+          kind: 'BENFORD', target: tb.id, label, status: 'FAILED',
+          message: (e as Error).message?.slice(0, 200) ?? 'Error desconocido',
+        });
+      }
+    }
+
+    // ── COSO on first COSO paper ──────────────────────────────────────────
+    const cosoPaper = await this.prisma.workingPaper.findFirst({
+      where: {
+        auditId,
+        OR: [
+          { paperCode: 'PT-COSO' },
+          { code: { startsWith: 'A-06' } },
+          { title: { contains: 'COSO', mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, code: true, title: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (cosoPaper) {
+      const label = `${cosoPaper.code} — ${cosoPaper.title}`;
+      try {
+        const res = await this.aiService.cosoAssess({
+          auditTitle: audit.title,
+          auditType:  audit.type,
+          scope:      audit.scope ?? undefined,
+          entityContext:     await this.summarizePeerPaper(auditId, 'PT-A1'),
+          riskAssessment:    await this.summarizePeerPaper(auditId, 'PT-A2'),
+          controlEvaluation: await this.summarizePeerPaper(auditId, 'PT-A3'),
+          currentCosoNotes:  await this.summarizePeerPaper(auditId, undefined, cosoPaper.id),
+          findingsSummary:   await this.summarizeFindings(auditId),
+        }) as {
+          assessment: { overallScore: number; overallMaturity: string };
+          model: string; tokens_used: number;
+        };
+        tests.push({
+          kind: 'COSO', target: cosoPaper.id, label, status: 'SUCCESS',
+          message: `${res.assessment.overallMaturity} · score ${res.assessment.overallScore}/100`,
+          meta: {
+            overallScore:    res.assessment.overallScore,
+            overallMaturity: res.assessment.overallMaturity,
+            model:           res.model,
+            tokensUsed:      res.tokens_used,
+          },
+        });
+      } catch (e) {
+        tests.push({
+          kind: 'COSO', target: cosoPaper.id, label, status: 'FAILED',
+          message: (e as Error).message?.slice(0, 200) ?? 'Error desconocido',
+        });
+      }
+    } else {
+      tests.push({
+        kind: 'COSO', target: '', label: 'PT-COSO no encontrado', status: 'SKIPPED',
+        message: 'No hay papel COSO (A-06 / PT-COSO) en el expediente',
+      });
+    }
+
+    // ── Build summary ─────────────────────────────────────────────────────
+    const durationMs = Date.now() - startMs;
+    const summary = {
+      ranAt:        ranAt.toISOString(),
+      durationMs,
+      ranById:      user.id,
+      tests,
+      findingIds,
+      counts: {
+        total:     tests.length,
+        success:   tests.filter(t => t.status === 'SUCCESS').length,
+        failed:    tests.filter(t => t.status === 'FAILED').length,
+        skipped:   tests.filter(t => t.status === 'SKIPPED').length,
+        findingsCreated: findingIds.length,
+      },
+    };
+
+    await this.prisma.audit.update({
+      where: { id: auditId },
+      data: {
+        lastAiTestRunAt:   ranAt,
+        lastAiTestSummary: summary as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return summary;
+  }
+
+  async getAiTestsReport(auditId: string, user: AuthUser) {
+    const audit = await this.findOne(auditId, user);
+    return {
+      ranAt:   audit.lastAiTestRunAt?.toISOString() ?? null,
+      summary: audit.lastAiTestSummary,
+    };
+  }
+
+  private async summarizePeerPaper(
+    auditId: string,
+    paperCode?: string,
+    paperId?: string,
+  ): Promise<string> {
+    const wp = await this.prisma.workingPaper.findFirst({
+      where:  paperId ? { id: paperId } : { auditId, paperCode },
+      include: { sections: { orderBy: { sortOrder: 'asc' } } },
+    });
+    if (!wp) return '';
+    const sectionsText = wp.sections
+      .filter(s => s.value != null && String(s.value).trim().length > 0)
+      .slice(0, 10)
+      .map(s => `  • ${s.label}: ${String(s.value).slice(0, 350)}`)
+      .join('\n');
+    return [
+      `Papel: ${wp.code} — ${wp.title}`,
+      wp.narrative ? `Narrativa: ${wp.narrative.slice(0, 500)}` : '',
+      sectionsText ? `Secciones:\n${sectionsText}` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  private async summarizeFindings(auditId: string): Promise<string> {
+    const findings = await this.prisma.finding.findMany({
+      where:   { auditId },
+      orderBy: { createdAt: 'desc' },
+      take:    10,
+      select:  { title: true, severity: true, condition: true, status: true },
+    });
+    if (findings.length === 0) return '';
+    return findings
+      .map(f => `[${f.severity}] ${f.title} (${f.status}) — ${f.condition.slice(0, 200)}`)
+      .join('\n');
+  }
+
   async getBenfordResult(tbId: string, user: AuthUser) {
     const tb = await this.prisma.trialBalance.findUnique({
       where: { id: tbId },

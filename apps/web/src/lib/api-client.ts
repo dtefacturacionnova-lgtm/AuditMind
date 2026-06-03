@@ -59,4 +59,24 @@ export const apiClient = {
     if (res.status === 204) return undefined as T;
     return res.json();
   },
+  /** Download a binary response and trigger save dialog */
+  downloadFile: async (path: string, filename: string): Promise<void> => {
+    const token = await getAuthToken();
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => 'Download failed');
+      throw new Error(`Download error ${res.status}: ${err.slice(0, 120)}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
 };

@@ -257,11 +257,18 @@ function ReportContent({ id }: { id: string }) {
             </a>
           </div>
           <button
-            onClick={() => window.print()}
+            onClick={() => {
+              import('@/lib/api-client').then(m =>
+                m.apiClient.downloadFile(
+                  `/reports/audit/${id}/pdf`,
+                  `auditmind_informe_${id.slice(0, 8)}.pdf`,
+                ).catch(e => alert((e as Error).message))
+              );
+            }}
             className="flex items-center gap-2 px-3 py-1.5 bg-white text-[#0F2D4A] rounded-xl text-xs font-semibold hover:bg-blue-50 transition-colors"
           >
             <Printer className="w-4 h-4" />
-            PDF
+            Descargar PDF
           </button>
         </div>
       </div>

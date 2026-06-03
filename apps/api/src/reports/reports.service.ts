@@ -2,10 +2,76 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AuditStatus } from '@prisma/client';
+import { PdfService } from '../pdf/pdf.service';
+import { renderAuditReportBody, renderFindingBody } from '../pdf/pdf-templates';
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private pdf: PdfService,
+  ) {}
+
+  // ─── PDF — Audit report ─────────────────────────────────────────────────────
+  async generateAuditPdf(auditId: string, user: AuthUser): Promise<Buffer> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await this.getAuditReport(auditId, user);
+
+    const body = renderAuditReportBody({
+      audit: data,
+      findings: data.findings ?? [],
+      workingPapers: data.workingPapers ?? [],
+    });
+
+    return this.pdf.generateBranded({
+      title:    `Informe de Auditoría — ${data.code ?? data.id?.slice(0, 8) ?? ''}`,
+      subtitle: data.title,
+      body,
+      options:  { printPageNumbers: true, format: 'A4' },
+    });
+  }
+
+  async generateFindingPdf(findingId: string, user: AuthUser): Promise<Buffer> {
+    const finding = await this.prisma.finding.findFirst({
+      where:   { id: findingId, organizationId: user.organizationId },
+      include: { audit: { select: { id: true, title: true } } },
+    });
+    if (!finding) throw new NotFoundException('Hallazgo no encontrado');
+
+    const auditMeta = {
+      title: (finding as unknown as { audit: { title: string } }).audit.title,
+      code:  (finding as unknown as { audit: { id: string } }).audit.id.slice(0, 8),
+    };
+
+    const body = renderFindingBody({
+      finding: {
+        id:                 finding.id,
+        title:              finding.title,
+        severity:           finding.severity,
+        status:             finding.status,
+        condition:          finding.condition,
+        criteria:           finding.criteria,
+        cause:              finding.cause,
+        effect:             finding.effect,
+        risk:               finding.risk,
+        recommendation:     finding.recommendation,
+        managementResponse: finding.managementResponse,
+        isMaterial:         finding.isMaterial,
+        normativeReference: finding.normativeReference,
+        normativeArticle:   finding.normativeArticle,
+        effectAmount:       finding.effectAmount?.toString() ?? null,
+        dueDate:            finding.dueDate?.toISOString() ?? null,
+        audit:              auditMeta,
+      },
+    });
+
+    return this.pdf.generateBranded({
+      title:    finding.title,
+      subtitle: `Hallazgo · ${auditMeta.code} — ${auditMeta.title}`,
+      body,
+      options:  { printPageNumbers: true, format: 'A4' },
+    });
+  }
 
   // ─── Reporte completo de una auditoría ───────────────────────────────────────
   async getAuditReport(auditId: string, user: AuthUser) {

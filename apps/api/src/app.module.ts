@@ -28,6 +28,8 @@ import { AuditTemplatesModule } from './audit-templates/audit-templates.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
 import { StrategicModule } from './strategic/strategic.module';
 import { AuditProjectsModule } from './audit-projects/audit-projects.module';
+import { EmailModule } from './email/email.module';
+import { PdfModule } from './pdf/pdf.module';
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { AuditProjectsModule } from './audit-projects/audit-projects.module';
     ConfirmationsModule,
     PlansModule,
     NotificationsModule,
+    EmailModule,
+    PdfModule,
     ReportsModule,
     DashboardModule,
     AiModule,

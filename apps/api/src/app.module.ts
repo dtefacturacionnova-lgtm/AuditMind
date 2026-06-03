@@ -30,6 +30,7 @@ import { StrategicModule } from './strategic/strategic.module';
 import { AuditProjectsModule } from './audit-projects/audit-projects.module';
 import { EmailModule } from './email/email.module';
 import { PdfModule } from './pdf/pdf.module';
+import { FiscalModule } from './fiscal/fiscal.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { PdfModule } from './pdf/pdf.module';
     NotificationsModule,
     EmailModule,
     PdfModule,
+    FiscalModule,
     ReportsModule,
     DashboardModule,
     AiModule,

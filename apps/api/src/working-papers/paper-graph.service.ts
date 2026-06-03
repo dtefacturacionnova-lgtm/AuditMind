@@ -216,6 +216,86 @@ export class PaperGraphService {
     });
   }
 
+  // ─── PI.4: Full audit graph ──────────────────────────────────────────────
+
+  /**
+   * Return the complete knowledge graph for an entire audit:
+   * - All working papers as nodes (with code, title, wpKind, syncStatus, staleCount)
+   * - All PaperLinks as edges (sourceId → targetId)
+   * - Phase grouping (PLANNING / FIELDWORK / REPORTING / FOLLOWUP) from audit folders
+   */
+  async getAuditGraph(auditId: string, user: AuthUser) {
+    const audit = await this.prisma.audit.findUnique({
+      where:   { id: auditId },
+      select:  { id: true, title: true, organizationId: true },
+    });
+    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+
+    // 1. All papers in this audit with section counts
+    const papers = await this.prisma.workingPaper.findMany({
+      where:  { auditId },
+      select: {
+        id: true, code: true, title: true, indexSection: true,
+        wpKind: true, syncStatus: true, status: true, paperCode: true,
+        folder: { select: { id: true, name: true, phase: { select: { id: true, name: true, phaseType: true } } } },
+        sections: { select: { id: true, isStale: true } },
+        _count: { select: { sourceLinks: true, targetLinks: true } },
+      },
+      orderBy: [{ indexSection: 'asc' }, { code: 'asc' }],
+    });
+
+    // 2. All paper links within this audit (both endpoints must be in this audit)
+    const paperIds = papers.map(p => p.id);
+    const links = await this.prisma.paperLink.findMany({
+      where:  {
+        isActive: true,
+        sourceId: { in: paperIds },
+        targetId: { in: paperIds },
+      },
+      select: {
+        id: true, sourceId: true, targetId: true,
+        sourceField: true, targetField: true, mappingType: true,
+      },
+    });
+
+    // 3. Shape nodes for the frontend
+    const nodes = papers.map(p => ({
+      id:           p.id,
+      code:         p.code,
+      title:        p.title,
+      indexSection: p.indexSection,
+      wpKind:       p.wpKind,
+      syncStatus:   p.syncStatus,
+      status:       p.status,
+      paperCode:    p.paperCode,
+      phase:        p.folder?.phase?.name ?? p.indexSection ?? 'Sin fase',
+      phaseType:    p.folder?.phase?.phaseType ?? null,
+      folderName:   p.folder?.name ?? null,
+      // PI.2 — stale section count
+      staleCount:   p.sections.filter(s => s.isStale).length,
+      totalSections: p.sections.length,
+      // Graph metrics
+      outDegree:    p._count.sourceLinks,  // how many papers this feeds
+      inDegree:     p._count.targetLinks,  // how many papers feed this
+    }));
+
+    return {
+      auditId,
+      auditTitle: audit.title,
+      nodes,
+      edges: links,
+      stats: {
+        totalPapers:   nodes.length,
+        totalLinks:    links.length,
+        stalePapers:   nodes.filter(n => n.syncStatus === 'STALE').length,
+        syncedPapers:  nodes.filter(n => n.syncStatus === 'SYNCED').length,
+        masterPapers:  nodes.filter(n => n.wpKind === 'MASTER').length,
+        smartPapers:   nodes.filter(n => n.wpKind === 'SMART').length,
+      },
+    };
+  }
+
   // ─── Graph overview ──────────────────────────────────────────────────────
 
   /**

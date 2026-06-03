@@ -245,6 +245,13 @@ export class WorkingPapersController {
     return this.graphService.getGraphForPaper(id, user);
   }
 
+  @Get('audit-graph/:auditId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.4 — Grafo completo de papeles + links para toda una auditoría' })
+  getAuditGraph(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
+    return this.graphService.getAuditGraph(auditId, user);
+  }
+
   @Post(':id/links')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Crear un vínculo de datos entre dos papeles' })

@@ -20,6 +20,7 @@ import { ExpedienteTab } from '@/components/audits/ExpedienteTab';
 import { RollForwardModal }          from '@/components/audits/RollForwardModal';
 import { SignOffMatrix }              from '@/components/audits/SignOffMatrix';
 import { TrialBalanceTab }            from '@/components/audits/TrialBalanceTab';
+import { PapersGraphView }            from '@/components/working-papers/PapersGraphView';
 import { WorkingPaperIndexReport }    from '@/components/audits/WorkingPaperIndexReport';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -49,7 +50,7 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff' | 'trial-balance';
+type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff' | 'trial-balance' | 'graph';
 
 function StatCard({ icon: Icon, label, value, color }: {
   icon: React.ElementType;
@@ -124,6 +125,7 @@ export default function AuditDetailPage() {
     { key: 'confirmations', label: 'Confirmaciones',   count: audit._count?.externalConfirmations ?? 0 },
     { key: 'signoff',         label: '✍ Matriz de Firmas' },
     { key: 'trial-balance',  label: '📊 Balance' },
+    { key: 'graph',          label: '🕸️ Grafo' },
   ];
 
   async function handleStatusChange(newStatus: string) {
@@ -301,6 +303,10 @@ export default function AuditDetailPage() {
               {/* F6.7 Trial Balance */}
               {activeTab === 'trial-balance' && (
                 <TrialBalanceTab auditId={id} />
+              )}
+              {/* PI.4 — Mapa visual del grafo de conocimiento */}
+              {activeTab === 'graph' && (
+                <PapersGraphView auditId={id} />
               )}
             </div>
           </div>

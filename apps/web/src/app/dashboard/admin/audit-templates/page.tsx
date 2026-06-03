@@ -18,6 +18,7 @@ import {
   type AuditTemplate,
   type PaperDef,
   type SectionDef,
+  type PaperLinkDef,
   type CreateAuditTemplateData,
   type WorkingPaperType,
   type WpKind,
@@ -686,6 +687,159 @@ function TemplateViewModal({
   );
 }
 
+// ─── Links editor (PaperLinks knowledge graph) ────────────────────────────────
+
+function LinksEditor({
+  links,
+  papers,
+  onChange,
+}: {
+  links: PaperLinkDef[];
+  papers: PaperDef[];
+  onChange: (links: PaperLinkDef[]) => void;
+}) {
+  // Build paper choices (code or paperCode if defined)
+  const paperOptions = papers.map(p => ({
+    value: p.paperCode ?? p.code,
+    label: `${p.paperCode ?? p.code} — ${p.title.slice(0, 60)}`,
+  }));
+
+  const MAPPING_OPTIONS: { value: PaperLinkDef['mappingType']; label: string; color: string }[] = [
+    { value: 'DIRECT',       label: 'Directo (copia)',      color: 'bg-gray-100 text-gray-700 border-gray-300' },
+    { value: 'AGGREGATED',   label: 'Agregado (suma/cálculo)', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+    { value: 'AI_GENERATED', label: 'Generado por IA',       color: 'bg-violet-50 text-violet-700 border-violet-200' },
+  ];
+
+  function update(idx: number, field: keyof PaperLinkDef, value: string) {
+    onChange(links.map((l, i) => (i === idx ? { ...l, [field]: value } : l)));
+  }
+
+  function remove(idx: number) {
+    onChange(links.filter((_, i) => i !== idx));
+  }
+
+  function add() {
+    const fallbackSource = paperOptions[0]?.value ?? '';
+    const fallbackTarget = paperOptions[1]?.value ?? paperOptions[0]?.value ?? '';
+    onChange([
+      ...links,
+      {
+        sourceCode: fallbackSource,
+        targetCode: fallbackTarget,
+        sourceField: 'S1',
+        targetField: 'S1',
+        mappingType: 'DIRECT',
+        description: '',
+      },
+    ]);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg bg-violet-50 border border-violet-200 px-4 py-2.5 text-xs text-violet-800">
+        🕸️ Los vínculos forman el <strong>grafo de conocimiento</strong>: cuando una sección fuente cambia,
+        la sección destino se marca como desactualizada (PI.2). El mapa visual (PI.4) muestra estos flujos.
+      </div>
+
+      {links.length === 0 && (
+        <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-500">
+          Sin vínculos definidos. Pulsa <strong>Agregar vínculo</strong> para empezar.
+        </div>
+      )}
+
+      {links.map((link, idx) => (
+        <div key={idx} className="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">#{idx + 1}</span>
+            <select
+              value={link.mappingType ?? 'DIRECT'}
+              onChange={e => update(idx, 'mappingType', e.target.value)}
+              className="text-[11px] border border-slate-200 rounded-md px-2 py-1"
+            >
+              {MAPPING_OPTIONS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => remove(idx)}
+              className="ml-auto text-[11px] text-red-600 hover:text-red-700"
+              type="button"
+            >
+              Eliminar
+            </button>
+          </div>
+
+          <div className="grid grid-cols-12 gap-2">
+            {/* Source */}
+            <div className="col-span-5">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Fuente</label>
+              <select
+                value={link.sourceCode}
+                onChange={e => update(idx, 'sourceCode', e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5"
+              >
+                {paperOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+              </select>
+            </div>
+            <div className="col-span-1">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Sección</label>
+              <input
+                value={link.sourceField}
+                onChange={e => update(idx, 'sourceField', e.target.value)}
+                placeholder="S1"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 font-mono"
+              />
+            </div>
+
+            {/* Arrow */}
+            <div className="col-span-1 flex items-end justify-center pb-1.5 text-violet-500 font-bold">→</div>
+
+            {/* Target */}
+            <div className="col-span-4">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Destino</label>
+              <select
+                value={link.targetCode}
+                onChange={e => update(idx, 'targetCode', e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5"
+              >
+                {paperOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+              </select>
+            </div>
+            <div className="col-span-1">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Sección</label>
+              <input
+                value={link.targetField}
+                onChange={e => update(idx, 'targetField', e.target.value)}
+                placeholder="S1"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 font-mono"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Descripción (opcional)</label>
+            <input
+              value={link.description ?? ''}
+              onChange={e => update(idx, 'description', e.target.value)}
+              placeholder="Ej: Riesgos identificados → Filas de la matriz MRCI"
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5"
+            />
+          </div>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={add}
+        disabled={paperOptions.length < 1}
+        className="w-full rounded-xl border-2 border-dashed border-violet-300 px-4 py-3 text-xs font-semibold text-violet-600 hover:bg-violet-50 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        + Agregar vínculo
+      </button>
+    </div>
+  );
+}
+
 // ─── Template editor modal ────────────────────────────────────────────────────
 
 type EditorMode = 'create' | 'edit';
@@ -710,10 +864,13 @@ function TemplateEditorModal({
   const [sections, setSections]       = useState<SectionDef[]>(
     initial?.sections ? JSON.parse(JSON.stringify(initial.sections)) : [],
   );
+  const [links, setLinks]             = useState<PaperLinkDef[]>(
+    initial?.links ? JSON.parse(JSON.stringify(initial.links)) : [],
+  );
   const [isDefault, setIsDefault]     = useState(initial?.isDefault ?? false);
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
-  const [activeTab, setActiveTab]     = useState<'general' | 'structure' | 'papers'>('general');
+  const [activeTab, setActiveTab]     = useState<'general' | 'structure' | 'papers' | 'links'>('general');
 
   const isSystem = initial?.isSystem ?? false;
 
@@ -735,6 +892,7 @@ function TemplateEditorModal({
         auditTypes,
         papers,
         sections: sections.length > 0 ? sections : undefined,
+        links:    links.length    > 0 ? links    : undefined,
         isDefault,
       });
       onClose();
@@ -772,6 +930,7 @@ function TemplateEditorModal({
               { key: 'general',   label: 'General' },
               { key: 'structure', label: `Carpetas (${sections.length})` },
               { key: 'papers',    label: `Papeles (${papers.length})` },
+              { key: 'links',     label: `🕸️ Vínculos (${links.length})` },
             ] as const
           ).map(({ key, label }) => (
             <button
@@ -891,6 +1050,23 @@ function TemplateEditorModal({
                 sections={sections}
                 onChange={setPapers}
               />
+            </div>
+          )}
+
+          {/* ── Tab: Vínculos (Knowledge Graph) ── */}
+          {activeTab === 'links' && (
+            <div className="space-y-3">
+              {papers.length < 2 ? (
+                <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-2.5 text-xs text-blue-800">
+                  Tip: define al menos 2 papeles en la pestaña "Papeles" primero. Los vínculos conectan secciones de un papel fuente con secciones de un papel destino para construir el grafo de conocimiento (PI.2 cascade + PI.4 mapa visual).
+                </div>
+              ) : (
+                <LinksEditor
+                  links={links}
+                  papers={papers}
+                  onChange={setLinks}
+                />
+              )}
             </div>
           )}
         </div>

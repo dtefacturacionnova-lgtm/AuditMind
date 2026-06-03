@@ -33,6 +33,17 @@ export interface SectionDef {
   children?: Array<{ ref: string; name: string }>;
 }
 
+export type MappingType = 'DIRECT' | 'AGGREGATED' | 'AI_GENERATED';
+
+export interface PaperLinkDef {
+  sourceCode:  string;
+  targetCode:  string;
+  sourceField: string;
+  targetField: string;
+  mappingType?: MappingType;
+  description?: string;
+}
+
 export interface AuditTemplate {
   id: string;
   name: string;
@@ -40,6 +51,7 @@ export interface AuditTemplate {
   auditTypes: string[];
   papers: PaperDef[];
   sections?: SectionDef[];
+  links?: PaperLinkDef[];
   isDefault: boolean;
   isSystem: boolean;
   createdAt: string;
@@ -51,6 +63,7 @@ export interface CreateAuditTemplateData {
   auditTypes: string[];
   papers: PaperDef[];
   sections?: SectionDef[];
+  links?: PaperLinkDef[];
   isDefault?: boolean;
 }
 

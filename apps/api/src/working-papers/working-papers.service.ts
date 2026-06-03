@@ -74,15 +74,30 @@ export class WorkingPapersService {
 
   async create(dto: CreateWorkingPaperDto, user: AuthUser) {
     await this.assertAuditAccess(dto.auditId, user);
-    const code = await generateWpCode(this.prisma, dto.auditId, dto.indexSection);
+
+    // Resolve indexSection from folderId if not provided explicitly
+    let indexSection = dto.indexSection;
+    if (dto.folderId && !indexSection) {
+      const folder = await this.prisma.auditFolder.findUnique({
+        where:  { id: dto.folderId },
+        select: { ref: true },
+      });
+      if (folder) indexSection = folder.ref;
+    }
+    if (!indexSection) indexSection = 'A';
+
+    const code = dto.code ?? await generateWpCode(this.prisma, dto.auditId, indexSection);
 
     return this.prisma.workingPaper.create({
       data: {
         code,
         title:          dto.title,
         type:           dto.type,
-        indexSection:   dto.indexSection,
+        indexSection,
         auditId:        dto.auditId,
+        folderId:       dto.folderId ?? null,
+        wpKind:         dto.wpKind   ?? undefined,
+        paperCode:      dto.paperCode ?? null,
         preparedById:   user.id,
         reviewedById:   dto.reviewerId,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

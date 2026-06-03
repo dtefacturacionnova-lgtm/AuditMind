@@ -2,7 +2,7 @@ import {
   IsString, IsOptional, IsEnum, IsArray, IsBoolean, IsObject,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { WorkingPaperType, TickMark } from '@prisma/client';
+import { WorkingPaperType, TickMark, WpKind } from '@prisma/client';
 
 export class CreateWorkingPaperDto {
   @ApiProperty({ example: 'Evaluación de controles de caja' })
@@ -55,6 +55,28 @@ export class CreateWorkingPaperDto {
   @IsOptional()
   @IsBoolean()
   aiAssisted?: boolean;
+
+  // ─── Expediente: ubicación opcional en el árbol de carpetas ──────────────
+  @ApiPropertyOptional({ description: 'ID de la carpeta del expediente donde se ubica el papel' })
+  @IsOptional()
+  @IsString()
+  folderId?: string;
+
+  // ─── Intelligent Papers ─────────────────────────────────────────────────
+  @ApiPropertyOptional({ enum: WpKind, default: WpKind.STANDARD })
+  @IsOptional()
+  @IsEnum(WpKind)
+  wpKind?: WpKind;
+
+  @ApiPropertyOptional({ description: 'paperCode canónico (ej. PT-A1) para inicializar secciones template' })
+  @IsOptional()
+  @IsString()
+  paperCode?: string;
+
+  @ApiPropertyOptional({ description: 'Código específico (ej. B-12). Si no se da, se genera incremental por indexSection.' })
+  @IsOptional()
+  @IsString()
+  code?: string;
 }
 
 export class AddCommentDto {

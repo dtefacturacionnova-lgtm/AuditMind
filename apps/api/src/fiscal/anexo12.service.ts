@@ -49,13 +49,14 @@ export class Anexo12Service {
   constructor(private prisma: PrismaService) {}
 
   async generate(auditId: string, user: AuthUser): Promise<Anexo12Result> {
-    const audit = await this.prisma.audit.findUnique({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const audit: any = await this.prisma.audit.findUnique({
       where:   { id: auditId },
       include: {
-        auditEntity: { select: { name: true } },
+        auditEntity:  { select: { name: true } },
         organization: { select: { name: true } },
         findings: {
-          where:   { status: { in: ['APPROVED', 'IN_REVIEW', 'CLOSED', 'REOPENED', 'DRAFT'] } },
+          where:   { status: { in: ['APPROVED', 'IN_REVIEW', 'CLOSED', 'DRAFT'] } },
           orderBy: [{ severity: 'asc' }, { createdAt: 'asc' }],
           select:  {
             id: true, title: true, severity: true,

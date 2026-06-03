@@ -135,6 +135,11 @@ export interface CreateWpData {
   content?:       WorkingPaperContent;
   conclusion?:    string;
   crossReferences?: string[];
+  // PI-related
+  folderId?:      string;
+  wpKind?:        'STANDARD' | 'SMART' | 'MASTER' | 'LIVE' | 'FILE';
+  paperCode?:     string;
+  code?:          string;
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────

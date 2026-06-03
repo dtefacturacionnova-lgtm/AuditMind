@@ -97,6 +97,22 @@ export class AiController {
     return this.aiService.runCaats(type, payload);
   }
 
+  // ─── PI.7a — Muestreo estadístico NIA 530 ─────────────────────────────────
+  @Post('sampling/calculate/:method')
+  @ApiOperation({ summary: 'Calcular tamaño muestra (mus | attribute)' })
+  async calculateSampling(
+    @Param('method') method: 'mus' | 'attribute',
+    @Body() payload: Record<string, unknown>,
+  ) {
+    return this.aiService.calculateSampling(method, payload);
+  }
+
+  @Post('sampling/select')
+  @ApiOperation({ summary: 'Seleccionar registros de la muestra (RANDOM | SYSTEMATIC | MUS)' })
+  async selectSample(@Body() payload: Record<string, unknown>) {
+    return this.aiService.selectSample(payload);
+  }
+
   // ─── Scriptorium — Mejorar hallazgo ──────────────────────────────────────────
   @Post('scriptorium/improve-finding')
   @ApiOperation({ summary: 'Mejorar redacción de un hallazgo con Scriptorium IA' })

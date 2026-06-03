@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import agents, rag, health, analytics, connectors, scriptorium
+from app.routers import agents, rag, health, analytics, connectors, scriptorium, sampling
 
 
 @asynccontextmanager
@@ -36,3 +36,4 @@ app.include_router(rag.router, prefix="/rag", tags=["RAG Knowledge Base"])
 app.include_router(analytics.router, prefix="/analytics", tags=["CAATs Analytics"])
 app.include_router(connectors.router, prefix="/connectors", tags=["Conectores ETL"])
 app.include_router(scriptorium.router, prefix="/scriptorium", tags=["Scriptorium IA"])
+app.include_router(sampling.router)  # prefix /sampling viene del propio router

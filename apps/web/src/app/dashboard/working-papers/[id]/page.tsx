@@ -11,7 +11,7 @@ import {
   Brain, Star, Activity, AlertTriangle, RefreshCw, Zap,
   Folder, ChevronRight, Calendar, User, RotateCcw,
   Download, ExternalLink, FileSpreadsheet, Presentation, Music, Video,
-  Image as ImageIcon, ArrowLeft,
+  Image as ImageIcon, ArrowLeft, Calculator,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -29,6 +29,7 @@ import { QualityGatePanel }        from '@/components/working-papers/QualityGate
 import { LivePaperDashboard }      from '@/components/working-papers/LivePaperDashboard';
 import { CrossAuditSuggestions }   from '@/components/working-papers/CrossAuditSuggestions';
 import { PaperAgentPanel, PaperAgentButton, PAPER_AGENT_MAP, DEFAULT_AGENT } from '@/components/working-papers/PaperAgentPanel';
+import { SamplingCalculatorModal }  from '@/components/working-papers/SamplingCalculatorModal';
 import type { AiDraftConfig } from '@/components/working-papers/SectionField';
 import { apiClient }            from '@/lib/api-client';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
@@ -931,6 +932,7 @@ export default function WpDetailPage() {
   const [reviewAlert,     setReviewAlert] = useState(false);
   const [agentAutoMsg,    setAgentAutoMsg] = useState('');
   const [checkoutBanner,  setCheckoutBanner] = useState<string | null>(null);
+  const [showSampling,    setShowSampling]    = useState(false);
 
   // Initialize content from server data — use useEffect to avoid setState-during-render
   const [initialized, setInit] = useState(false);
@@ -1283,6 +1285,15 @@ export default function WpDetailPage() {
                   Volver al Índice
                 </Link>
               )}
+              {/* PI.7a — Calculadora de muestreo NIA 530 */}
+              <button
+                onClick={() => setShowSampling(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-violet-200 bg-violet-50 text-violet-700 text-xs font-medium rounded-lg hover:bg-violet-100 transition-colors"
+                title="Calcular tamaño de muestra (NIA 530)"
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                Muestreo
+              </button>
               {nextStatus && (
                 <button
                   onClick={() => handleStatusChange(nextStatus)}
@@ -1713,6 +1724,17 @@ export default function WpDetailPage() {
           }}
         />
       )}
+
+      {/* ── PI.7a Sampling Calculator Modal ── */}
+      <SamplingCalculatorModal
+        open={showSampling}
+        onClose={() => setShowSampling(false)}
+        onInsert={(text) => {
+          // Append the sampling result to the paper conclusion
+          setConclusion(prev => prev ? `${prev}\n\n${text}` : text);
+          setDirty(true);
+        }}
+      />
     </div>
   );
 }

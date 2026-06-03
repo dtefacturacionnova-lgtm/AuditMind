@@ -262,6 +262,50 @@ export class AiService {
     return res.json() as Promise<unknown>;
   }
 
+  // ─── PI.7a — Muestreo estadístico NIA 530 ────────────────────────────────────
+  async calculateSampling(
+    method: 'mus' | 'attribute',
+    payload: unknown,
+  ): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/sampling/calculate/${method}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-key': this.internalKey,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(
+        `Sampling calculation failed: ${err}`,
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+    return res.json() as Promise<unknown>;
+  }
+
+  async selectSample(payload: unknown): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/sampling/select`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-key': this.internalKey,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(
+        `Sample selection failed: ${err}`,
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+    return res.json() as Promise<unknown>;
+  }
+
   // ─── ATLAS — Análisis Multi-Año ───────────────────────────────────────────────
   async multiYearAnalysis(payload: {
     audits: Array<{

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Pencil, Bot, X, Check, Sparkles, Loader2, RefreshCw } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { Pencil, Bot, X, Check, Sparkles, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react';
 import type { MentionItem, PaperSection, SectionFieldType } from '@/hooks/useWorkingPaperGraph';
+import { useAssistSection, useConfirmSection } from '@/hooks/useWorkingPaperGraph';
 import { HighlightedMentions, MentionableTextarea } from './MentionableTextarea';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -97,49 +97,44 @@ export interface AiDraftConfig {
 // ─── Section AI Draft panel ───────────────────────────────────────────────────
 
 function SectionAiDraft({
+  paperId,
   section,
   config,
   onApply,
   onClose,
 }: {
+  paperId:  string;
   section:  PaperSection;
   config:   AiDraftConfig;
   onApply:  (value: string) => void;
   onClose:  () => void;
 }) {
-  const [draft,   setDraft]   = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
+  const [draft,      setDraft]      = useState<string | null>(null);
+  const [usedAI,     setUsedAI]     = useState(false);
+  const [error,      setError]      = useState('');
+  const [userPrompt, setUserPrompt] = useState('');
 
-  useEffect(() => { fetchDraft(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const assist = useAssistSection();
 
-  async function fetchDraft() {
-    setLoading(true);
-    setDraft(null);
+  useEffect(() => { fetchDraft(''); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function fetchDraft(extraPrompt: string) {
     setError('');
+    setDraft(null);
     try {
-      const currentVal = section.value ? `Contenido actual (mejora si es necesario): ${String(section.value)}` : 'La sección aún no tiene contenido.';
-      const prompt = [
-        `Redacta el contenido de la sección "${section.label}" para este papel de trabajo.`,
-        section.description ? `Descripción de la sección: ${section.description}` : '',
-        section.aiHint      ? `Pista: ${section.aiHint}` : '',
-        currentVal,
-        '\nResponde ÚNICAMENTE con el texto del campo, sin prefijos, títulos ni explicaciones adicionales.',
-      ].filter(Boolean).join('\n');
-
-      const res = await apiClient.post<{ response: string }>('/ai/chat', {
-        agentType: config.agentId,
-        message:   prompt,
-        context:   config.paperContext,
-        history:   [],
+      const res = await assist.mutateAsync({
+        paperId,
+        sectionKey: section.sectionKey,
+        userPrompt: extraPrompt || undefined,
       });
-      setDraft(res.response.trim());
+      setDraft(res.suggestion);
+      setUsedAI(res.usedAI);
     } catch (e: unknown) {
       setError((e as Error).message ?? 'Error al generar borrador');
-    } finally {
-      setLoading(false);
     }
   }
+
+  const loading = assist.isPending;
 
   return (
     <div className="mt-2 bg-violet-50 border border-violet-200 rounded-xl p-3 space-y-2">
@@ -152,6 +147,11 @@ function SectionAiDraft({
           <span className="text-[11px] font-semibold text-violet-700">
             {config.agentName} · Borrador IA
           </span>
+          {!usedAI && draft && (
+            <span className="text-[10px] text-amber-600 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">
+              Fallback (sin IA)
+            </span>
+          )}
         </div>
         <button onClick={onClose} className="p-0.5 rounded hover:bg-violet-200 text-violet-400">
           <X className="w-3.5 h-3.5" />
@@ -170,7 +170,7 @@ function SectionAiDraft({
               />
             ))}
           </div>
-          <span className="text-[11px] text-violet-500">Generando borrador…</span>
+          <span className="text-[11px] text-violet-500">Generando borrador con contexto…</span>
         </div>
       )}
 
@@ -182,9 +182,29 @@ function SectionAiDraft({
       {/* Draft preview */}
       {draft && !loading && (
         <>
-          <div className="bg-white border border-violet-200 rounded-lg px-3 py-2 max-h-44 overflow-y-auto">
+          <div className="bg-white border border-violet-200 rounded-lg px-3 py-2 max-h-56 overflow-y-auto">
             <p className="text-[12px] text-gray-700 leading-relaxed whitespace-pre-wrap">{draft}</p>
           </div>
+
+          {/* User refinement prompt */}
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={userPrompt}
+              onChange={e => setUserPrompt(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') fetchDraft(userPrompt); }}
+              placeholder="Refinar: ej. 'más enfoque en NIA 315', 'más conciso'..."
+              className="flex-1 text-[11px] border border-violet-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-400 bg-white"
+            />
+            <button
+              onClick={() => fetchDraft(userPrompt)}
+              disabled={loading}
+              className="px-2 py-1 bg-violet-100 text-violet-700 text-[11px] font-medium rounded-lg hover:bg-violet-200 disabled:opacity-50"
+            >
+              Refinar
+            </button>
+          </div>
+
           <div className="flex items-center gap-2">
             <button
               onClick={() => { onApply(draft); onClose(); }}
@@ -193,7 +213,7 @@ function SectionAiDraft({
               <Check className="w-3 h-3" /> Aplicar
             </button>
             <button
-              onClick={fetchDraft}
+              onClick={() => fetchDraft('')}
               className="flex items-center gap-1 px-3 py-1.5 border border-violet-200 text-violet-600 text-[11px] font-medium rounded-lg hover:bg-violet-100 transition-colors"
             >
               <RefreshCw className="w-3 h-3" /> Regenerar
@@ -351,11 +371,24 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
   const [overriding,   setOverride]  = useState(false);
   const [showAiDraft,  setAiDraft]   = useState(false);
 
-  // AI draft is available for text-like fields only
+  const confirmSection = useConfirmSection();
+
+  // PI.2 — section is stale (a source paper changed after this was filled)
+  const isStale = !!section.isStale;
+
+  // PI.3 — AI draft is available for any text-like field as long as we have paperId
   const canAiDraft =
-    !!aiDraftConfig &&
+    !!paperId &&
     !readonly &&
     (section.fieldType === 'TEXT' || section.fieldType === 'TEXTAREA');
+
+  // Use provided aiDraftConfig OR a sensible default for the new endpoint
+  const effectiveAiConfig: AiDraftConfig = aiDraftConfig ?? {
+    agentId:      'scriptorium',
+    agentName:    'Scriptorium',
+    agentColor:   'bg-violet-500',
+    paperContext: {},
+  };
 
   // Keep local value in sync with incoming section value
   const effectiveValue = editing ? localValue : section.value;
@@ -388,10 +421,12 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
     setOverride(false);
   }
 
-  // Auto-filled wrapper styles
-  const autoFilledWrap = section.isAutoFilled
-    ? 'bg-amber-50 border border-amber-200 rounded-xl p-3'
-    : '';
+  // Auto-filled / stale wrapper styles
+  const autoFilledWrap = isStale
+    ? 'bg-orange-50 border border-orange-300 rounded-xl p-3 ring-1 ring-orange-200'
+    : section.isAutoFilled
+      ? 'bg-amber-50 border border-amber-200 rounded-xl p-3'
+      : '';
 
   return (
     <div className="py-4 border-b border-gray-100 last:border-0">
@@ -406,6 +441,15 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
             <span className="flex items-center gap-1 text-[10px] text-amber-600 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">
               <Bot className="w-2.5 h-2.5" />
               de: {section.sourceRef ?? 'IA'}
+            </span>
+          )}
+          {isStale && (
+            <span
+              className="flex items-center gap-1 text-[10px] text-orange-700 bg-orange-100 border border-orange-300 px-1.5 py-0.5 rounded-full"
+              title={section.staleReason ?? 'Una fuente cambió'}
+            >
+              <AlertTriangle className="w-2.5 h-2.5" />
+              Desactualizado
             </span>
           )}
         </div>
@@ -459,10 +503,43 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
         <p className="text-[11px] text-gray-400 mb-2">{section.description}</p>
       )}
 
-      {section.aiHint && !editing && (
+      {section.aiHint && !editing && !isStale && (
         <p className="text-[11px] text-violet-500 italic mb-2">
           Sugerencia IA: {section.aiHint}
         </p>
+      )}
+
+      {/* PI.2 — Stale banner with reason + confirm button */}
+      {isStale && !readonly && paperId && (
+        <div className="mb-2 flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-lg px-2.5 py-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 text-orange-600 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-orange-800 font-medium">
+              {section.staleReason ?? 'Una fuente cambió después de redactar esta sección.'}
+            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                onClick={() => confirmSection.mutate({ paperId, sectionKey: section.sectionKey })}
+                disabled={confirmSection.isPending}
+                className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full hover:bg-emerald-100 disabled:opacity-50"
+                title="El valor actual sigue siendo correcto"
+              >
+                <ShieldCheck className="w-2.5 h-2.5" />
+                Confirmar vigencia
+              </button>
+              {canAiDraft && (
+                <button
+                  onClick={() => setAiDraft(true)}
+                  className="flex items-center gap-1 text-[10px] text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full hover:bg-violet-100"
+                  title="Regenerar con IA usando el contexto actualizado"
+                >
+                  <Sparkles className="w-2.5 h-2.5" />
+                  Regenerar con IA
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Value display / edit */}
@@ -551,10 +628,11 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
       </div>
 
       {/* AI Draft panel — shown below field when active */}
-      {showAiDraft && canAiDraft && aiDraftConfig && (
+      {showAiDraft && canAiDraft && paperId && (
         <SectionAiDraft
+          paperId={paperId}
           section={section}
-          config={aiDraftConfig}
+          config={effectiveAiConfig}
           onApply={(value) => {
             onSave(section.sectionKey, value);
             setLocal(value);

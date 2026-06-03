@@ -18,9 +18,13 @@ export class PaperGraphService {
 
   /**
    * Called when a section is updated in a SMART paper.
-   * Finds all PaperLinks where sourceId = paperId AND sourceField matches,
-   * marks each target paper as STALE (unless it is APPROVED).
-   * Emits `paper.stale` for each affected paper.
+   * PI.2 — Granular cascade invalidation:
+   *   - Finds all PaperLinks where sourceId = paperId AND sourceField matches.
+   *   - Marks ONLY the specific target sections (PaperSection.isStale = true),
+   *     not the entire target paper.
+   *   - The target paper's syncStatus is set to STALE as a banner flag
+   *     ("this paper has at least one stale section").
+   *   - Emits `paper.section.stale` for each affected target section.
    *
    * PCAOB/IAASB compliance: APPROVED papers are NEVER auto-rewritten.
    * Only the stale flag is set — the auditor must re-confirm.
@@ -32,8 +36,14 @@ export class PaperGraphService {
   ): Promise<void> {
     const links = await this.prisma.paperLink.findMany({
       where:   { sourceId: paperId, sourceField: { startsWith: sectionKey }, isActive: true },
-      include: { target: { select: { id: true, syncStatus: true, status: true } } },
+      include: {
+        target: { select: { id: true, syncStatus: true, status: true, code: true } },
+        source: { select: { code: true, title: true } },
+      },
     });
+
+    const now = new Date();
+    const affectedTargets = new Map<string, { paperId: string; sections: string[] }>();
 
     for (const link of links) {
       const target = link.target;
@@ -43,16 +53,48 @@ export class PaperGraphService {
         continue;
       }
 
-      if (target.syncStatus === SyncStatus.SYNCED) {
+      // Extract target section key from targetField (could be "S3" or "S3.someField")
+      const targetSectionKey = link.targetField.split('.')[0];
+
+      // Mark the specific target section as stale
+      const reason = `${link.source.code} · ${sectionKey} fue modificado`;
+      try {
+        await this.prisma.paperSection.updateMany({
+          where: { paperId: target.id, sectionKey: targetSectionKey },
+          data:  { isStale: true, staleSince: now, staleReason: reason },
+        });
+      } catch {
+        // section may not exist yet — ignore
+      }
+
+      // Aggregate affected sections per target paper for paper-level banner
+      const entry = affectedTargets.get(target.id) ?? { paperId: target.id, sections: [] };
+      if (!entry.sections.includes(targetSectionKey)) entry.sections.push(targetSectionKey);
+      affectedTargets.set(target.id, entry);
+
+      this.eventEmitter.emit('paper.section.stale', {
+        paperId:    target.id,
+        sectionKey: targetSectionKey,
+        sourceId:   paperId,
+        sourceSection: sectionKey,
+        reason,
+      });
+    }
+
+    // Update paper-level syncStatus banner (one update per affected paper)
+    for (const { paperId: tId } of affectedTargets.values()) {
+      const target = await this.prisma.workingPaper.findUnique({
+        where: { id: tId }, select: { syncStatus: true },
+      });
+      if (target && target.syncStatus === SyncStatus.SYNCED) {
         await this.prisma.workingPaper.update({
-          where: { id: target.id },
+          where: { id: tId },
           data:  { syncStatus: SyncStatus.STALE },
         });
-
         this.eventEmitter.emit('paper.stale', {
-          paperId:  target.id,
+          paperId: tId,
           sourceId: paperId,
-          reason:   `Sección ${sectionKey} del papel fuente fue modificada`,
+          reason:  `Una o más secciones desactualizadas por cambios en ${sectionKey}`,
         });
       }
     }

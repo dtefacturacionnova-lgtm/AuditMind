@@ -70,6 +70,10 @@ export interface WpPaperSection {
   sourceRef?:   string;
   sortOrder:    number;
   aiHint?:      string;
+  // PI.2 — Granular cascade invalidation
+  isStale?:     boolean;
+  staleSince?:  string;
+  staleReason?: string;
 }
 
 export interface WorkingPaper {

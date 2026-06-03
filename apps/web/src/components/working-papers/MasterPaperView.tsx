@@ -143,6 +143,12 @@ export function MasterPaperView({
 
   const isRegenerating = syncStatus === 'REGENERATING' || consolidate.isPending;
 
+  // PI.2 — count stale sections from the sections list (most accurate),
+  // falling back to staleCount prop if sections is empty
+  const computedStaleCount = sections.length > 0
+    ? sections.filter(s => s.isStale).length
+    : staleCount;
+
   // Find key sections for structured display
   const S2 = sections.find(s => s.sectionKey === 'S2');
   const S3 = sections.find(s => s.sectionKey === 'S3');
@@ -190,10 +196,9 @@ export function MasterPaperView({
             <div>
               <p className="text-sm font-semibold text-amber-800">Una fuente cambió</p>
               <p className="text-xs text-amber-600 mt-0.5">
-                {staleCount > 0
-                  ? `${staleCount} sección${staleCount !== 1 ? 'es' : ''} requiere${staleCount !== 1 ? 'n' : ''} regeneración.`
-                  : 'Uno o más papeles fuente se han actualizado.'}
-                {' '}¿Deseas reconsolidar?
+                {computedStaleCount > 0
+                  ? `${computedStaleCount} sección${computedStaleCount !== 1 ? 'es' : ''} desactualizada${computedStaleCount !== 1 ? 's' : ''} — revísalas individualmente o reconsolida el papel completo.`
+                  : 'Uno o más papeles fuente se han actualizado. ¿Deseas reconsolidar?'}
               </p>
             </div>
           </div>

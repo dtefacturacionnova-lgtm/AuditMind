@@ -32,6 +32,10 @@ export interface PaperSection {
   sourceRef?: string;
   sortOrder: number;
   aiHint?: string;
+  // PI.2 — Granular cascade invalidation
+  isStale?: boolean;
+  staleSince?: string;
+  staleReason?: string;
 }
 
 export interface WpRef {
@@ -119,6 +123,74 @@ export function useInitFromTemplate() {
       ),
     onSuccess: (_res, vars) => {
       qc.invalidateQueries({ queryKey: ['wp', vars.paperId, 'sections'] });
+    },
+  });
+}
+
+// ─── PI.3: AI section-by-section assistant ───────────────────────────────────
+
+export interface SectionAssistResponse {
+  suggestion: string;
+  usedAI:     boolean;
+}
+
+export function useAssistSection() {
+  return useMutation({
+    mutationFn: ({
+      paperId,
+      sectionKey,
+      userPrompt,
+    }: {
+      paperId: string;
+      sectionKey: string;
+      userPrompt?: string;
+    }) =>
+      apiClient.post<SectionAssistResponse>(
+        `/working-papers/${paperId}/sections/${sectionKey}/assist`,
+        { userPrompt },
+      ),
+  });
+}
+
+// ─── PI.2: Stale section management ──────────────────────────────────────────
+
+export interface StaleSection {
+  id:          string;
+  sectionKey:  string;
+  label:       string;
+  value:       unknown;
+  staleSince:  string;
+  staleReason: string;
+  sortOrder:   number;
+}
+
+export function useStaleSections(paperId: string, enabled = true) {
+  return useQuery<StaleSection[]>({
+    queryKey: ['wp', paperId, 'stale-sections'],
+    queryFn:  () => apiClient.get(`/working-papers/${paperId}/stale-sections`),
+    enabled:  !!paperId && enabled,
+    staleTime: 10_000,
+  });
+}
+
+export function useConfirmSection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      paperId,
+      sectionKey,
+    }: {
+      paperId: string;
+      sectionKey: string;
+    }) =>
+      apiClient.post<{ ok: boolean; remainingStale?: number; alreadyFresh?: boolean }>(
+        `/working-papers/${paperId}/sections/${sectionKey}/confirm`,
+        {},
+      ),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['wp', vars.paperId, 'sections'] });
+      qc.invalidateQueries({ queryKey: ['wp', vars.paperId, 'stale-sections'] });
+      qc.invalidateQueries({ queryKey: ['wp', vars.paperId] });
     },
   });
 }

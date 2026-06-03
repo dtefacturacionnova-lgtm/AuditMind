@@ -11,6 +11,10 @@ class SignOffDto {
 class LinkPbcDto {
   @IsString() pbcId!: string;
 }
+
+class AssistSectionDto {
+  @IsString() userPrompt?: string;
+}
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { WorkingPapersService } from './working-papers.service';
 import { CreateWorkingPaperDto, AddCommentDto, AddTickMarkEntryDto } from './dto/create-working-paper.dto';
@@ -198,6 +202,38 @@ export class WorkingPapersController {
     @CurrentUser()        user:        AuthUser,
   ) {
     return this.sectionsService.initFromTemplate(id, templateKey, user);
+  }
+
+  // ─── PI.3: AI assistant por sección ──────────────────────────────────────
+  @Post(':id/sections/:sectionKey/assist')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.3 — Pedir a la IA una sugerencia para una sección específica (no sobreescribe el valor)' })
+  assistSection(
+    @Param('id')         id:         string,
+    @Param('sectionKey') sectionKey: string,
+    @Body()              dto:        AssistSectionDto,
+    @CurrentUser()       user:       AuthUser,
+  ) {
+    return this.sectionsService.assistSection(id, sectionKey, user, dto.userPrompt);
+  }
+
+  // ─── PI.2: Cascade invalidation por sección ──────────────────────────────
+  @Get(':id/stale-sections')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.2 — Listar las secciones desactualizadas de un papel (con razón y timestamp)' })
+  getStaleSections(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.getStaleSections(id, user);
+  }
+
+  @Post(':id/sections/:sectionKey/confirm')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.2 — Confirmar que la sección sigue vigente (limpia flag isStale sin cambiar el valor)' })
+  confirmSection(
+    @Param('id')         id:         string,
+    @Param('sectionKey') sectionKey: string,
+    @CurrentUser()       user:       AuthUser,
+  ) {
+    return this.sectionsService.confirmSection(id, sectionKey, user);
   }
 
   // ─── Intelligent Papers: Graph ────────────────────────────────────────────

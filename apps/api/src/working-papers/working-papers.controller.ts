@@ -217,6 +217,14 @@ export class WorkingPapersController {
     return this.sectionsService.assistSection(id, sectionKey, user, dto.userPrompt);
   }
 
+  // ─── PI.7c: COSO 2013 auto-assessment ────────────────────────────────────
+  @Post(':id/coso-assess')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.7c — Generar evaluación COSO 2013 con IA usando contexto del expediente' })
+  runCosoAssess(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.runCosoAssess(id, user);
+  }
+
   // ─── PI.2: Cascade invalidation por sección ──────────────────────────────
   @Get(':id/stale-sections')
   @Roles(UserRole.AUDITOR)

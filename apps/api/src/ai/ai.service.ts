@@ -163,6 +163,23 @@ export class AiService {
     return res.json();
   }
 
+  // ─── PI.7c — COSO 2013 Auto-assessment ───────────────────────────────────────
+  async cosoAssess(payload: Record<string, unknown>): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/scriptorium/coso-assess`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-key': this.internalKey,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`COSO assess error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
   // ─── Scriptorium — Generar borrador de papel de trabajo ──────────────────────
   async generateWorkingPaper(payload: Record<string, unknown>): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/scriptorium/working-paper`, {

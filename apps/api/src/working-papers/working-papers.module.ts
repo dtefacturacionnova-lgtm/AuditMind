@@ -8,8 +8,10 @@ import { PaperQualityService } from './paper-quality.service';
 import { PaperLiveService } from './paper-live.service';
 import { CrossAuditLearningService } from './cross-audit-learning.service';
 import { PaperReferencesService } from './paper-references.service';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
+  imports: [AiModule],
   controllers: [WorkingPapersController],
   providers: [
     WorkingPapersService,

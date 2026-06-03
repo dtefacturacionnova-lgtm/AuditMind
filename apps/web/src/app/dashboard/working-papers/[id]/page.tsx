@@ -30,6 +30,7 @@ import { LivePaperDashboard }      from '@/components/working-papers/LivePaperDa
 import { CrossAuditSuggestions }   from '@/components/working-papers/CrossAuditSuggestions';
 import { PaperAgentPanel, PaperAgentButton, PAPER_AGENT_MAP, DEFAULT_AGENT } from '@/components/working-papers/PaperAgentPanel';
 import { SamplingCalculatorModal }  from '@/components/working-papers/SamplingCalculatorModal';
+import { CosoAssessmentPanel }      from '@/components/working-papers/CosoAssessmentPanel';
 import type { AiDraftConfig } from '@/components/working-papers/SectionField';
 import { apiClient }            from '@/lib/api-client';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
@@ -933,6 +934,7 @@ export default function WpDetailPage() {
   const [agentAutoMsg,    setAgentAutoMsg] = useState('');
   const [checkoutBanner,  setCheckoutBanner] = useState<string | null>(null);
   const [showSampling,    setShowSampling]    = useState(false);
+  const [showCoso,        setShowCoso]        = useState(false);
 
   // Initialize content from server data — use useEffect to avoid setState-during-render
   const [initialized, setInit] = useState(false);
@@ -1293,6 +1295,15 @@ export default function WpDetailPage() {
               >
                 <Calculator className="w-3.5 h-3.5" />
                 Muestreo
+              </button>
+              {/* PI.7c — Evaluación COSO 2013 asistida por IA */}
+              <button
+                onClick={() => setShowCoso(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-violet-200 bg-violet-50 text-violet-700 text-xs font-medium rounded-lg hover:bg-violet-100 transition-colors"
+                title="Evaluación COSO 2013 asistida por IA"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                COSO IA
               </button>
               {nextStatus && (
                 <button
@@ -1735,6 +1746,18 @@ export default function WpDetailPage() {
           setDirty(true);
         }}
       />
+
+      {/* ── PI.7c COSO Assessment Panel ── */}
+      {showCoso && (
+        <CosoAssessmentPanel
+          paperId={params.id as string}
+          onClose={() => setShowCoso(false)}
+          onInsert={(text) => {
+            setConclusion(prev => prev ? `${prev}\n\n${text}` : text);
+            setDirty(true);
+          }}
+        />
+      )}
     </div>
   );
 }

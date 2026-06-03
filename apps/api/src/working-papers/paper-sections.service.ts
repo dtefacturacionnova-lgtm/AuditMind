@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PaperGraphService } from './paper-graph.service';
 import { PAPER_TEMPLATES } from './paper-templates';
+import { AiService } from '../ai/ai.service';
 
 @Injectable()
 export class PaperSectionsService {
@@ -19,6 +20,7 @@ export class PaperSectionsService {
     private readonly prisma:       PrismaService,
     private readonly graphService: PaperGraphService,
     private readonly config:       ConfigService,
+    private readonly aiService:    AiService,
   ) {}
 
   // ─── Access guard ────────────────────────────────────────────────────────
@@ -227,6 +229,102 @@ export class PaperSectionsService {
         usedAI:     false,
       };
     }
+  }
+
+  // ─── PI.7c — COSO 2013 auto-assessment ───────────────────────────────────
+
+  /**
+   * Build context from related papers (PT-A1, PT-A2, PT-A3) + the current paper,
+   * then call the AI service to produce a structured COSO 2013 assessment.
+   *
+   * Returns the structured assessment — does NOT mutate the paper. The frontend
+   * lets the auditor pick which parts to apply.
+   */
+  async runCosoAssess(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    // Audit context
+    const audit = await this.prisma.audit.findUnique({
+      where:  { id: wp.auditId },
+      select: { title: true, scope: true, type: true, subtype: true },
+    });
+
+    // Gather peer papers from the same audit by paperCode (PT-A1, PT-A2, PT-A3)
+    const peers = await this.prisma.workingPaper.findMany({
+      where: {
+        auditId:   wp.auditId,
+        paperCode: { in: ['PT-A1', 'PT-A2', 'PT-A3'] },
+      },
+      include: { sections: { orderBy: { sortOrder: 'asc' } } },
+    });
+
+    const peerByCode = new Map<string, typeof peers[number]>();
+    for (const p of peers) {
+      if (p.paperCode) peerByCode.set(p.paperCode, p);
+    }
+
+    const summarizePaper = (p: (typeof peers)[number] | undefined): string => {
+      if (!p) return '';
+      const sectionsText = p.sections
+        .filter(s => s.value != null && String(s.value).trim().length > 0)
+        .slice(0, 12)
+        .map(s => `  • ${s.label}: ${this.valueToText(s.value).slice(0, 400)}`)
+        .join('\n');
+      return [
+        `Papel: ${p.code} — ${p.title}`,
+        p.narrative ? `Narrativa: ${p.narrative.slice(0, 600)}` : '',
+        sectionsText ? `Secciones:\n${sectionsText}` : '',
+      ].filter(Boolean).join('\n');
+    };
+
+    // Findings summary — last 10 findings of this audit
+    const findings = await this.prisma.finding.findMany({
+      where:  { auditId: wp.auditId },
+      orderBy: { createdAt: 'desc' },
+      take:    10,
+      select:  { title: true, severity: true, condition: true, status: true },
+    });
+    const findingsSummary = findings.length === 0
+      ? ''
+      : findings
+        .map(f => `[${f.severity}] ${f.title} (${f.status}) — ${f.condition.slice(0, 250)}`)
+        .join('\n');
+
+    // Current A-06 / COSO paper notes — own sections + narrative
+    const currentSections = await this.prisma.paperSection.findMany({
+      where: { paperId }, orderBy: { sortOrder: 'asc' },
+    });
+    const currentCosoNotes = [
+      wp.narrative ? `Narrativa actual: ${wp.narrative.slice(0, 600)}` : '',
+      ...currentSections
+        .filter(s => s.value != null && String(s.value).trim().length > 0)
+        .map(s => `${s.label}: ${this.valueToText(s.value).slice(0, 400)}`),
+    ].filter(Boolean).join('\n');
+
+    const payload = {
+      auditTitle:        audit?.title ?? wp.title,
+      auditType:         audit?.type,
+      scope:             audit?.scope ?? undefined,
+      entityContext:     summarizePaper(peerByCode.get('PT-A1')),
+      riskAssessment:    summarizePaper(peerByCode.get('PT-A2')),
+      controlEvaluation: summarizePaper(peerByCode.get('PT-A3')),
+      currentCosoNotes:  currentCosoNotes || undefined,
+      findingsSummary:   findingsSummary || undefined,
+    };
+
+    const aiResponse = await this.aiService.cosoAssess(payload) as {
+      assessment: unknown;
+      model:      string;
+      tokens_used: number;
+    };
+
+    return {
+      paperId,
+      assessment: aiResponse.assessment,
+      model:      aiResponse.model,
+      tokensUsed: aiResponse.tokens_used,
+      generatedAt: new Date().toISOString(),
+    };
   }
 
   // ─── PI.2: Per-section stale management ───────────────────────────────────

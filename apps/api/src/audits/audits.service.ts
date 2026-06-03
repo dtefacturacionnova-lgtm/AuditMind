@@ -5,8 +5,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
 import { AuthUser } from '../auth/jwt.strategy';
-import { AuditStatus, AuditType, UserRole } from '@prisma/client';
+import { AuditStatus, AuditType, Prisma, UserRole } from '@prisma/client';
 import { AuditIndexService } from './audit-index.service';
+import { AiService } from '../ai/ai.service';
 
 const AUDIT_RISK_TARGET = 0.05;
 
@@ -15,6 +16,7 @@ export class AuditsService {
   constructor(
     private prisma: PrismaService,
     private readonly auditIndex: AuditIndexService,
+    private readonly aiService: AiService,
   ) {}
 
   private computeMateriality(base: number, pct: number) {
@@ -436,6 +438,144 @@ export class AuditsService {
     if (tb.orgId !== user.organizationId) throw new ForbiddenException();
     await this.prisma.trialBalance.delete({ where: { id: tbId } });
     return { deleted: true };
+  }
+
+  // ─── PI.7b — Benford analysis on Trial Balance ────────────────────────────
+  /**
+   * Run the Benford analysis on a Trial Balance.
+   * - Extracts amounts from accounts[].balance | debit | credit (whichever is non-zero)
+   * - Calls ai-service /analytics/benford
+   * - Persists result on TrialBalance.benfordResult
+   * - If conformity is SUSPECT or NON_CONFORMING: auto-creates a Finding draft
+   */
+  async runBenfordOnTrialBalance(tbId: string, user: AuthUser) {
+    const tb = await this.prisma.trialBalance.findUnique({ where: { id: tbId } });
+    if (!tb) throw new NotFoundException('Balance no encontrado');
+    if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+
+    // Extract monetary amounts from accounts
+    interface TBAccount { code: string; name: string; balance?: number | string; debit?: number | string; credit?: number | string }
+    const accounts = (tb.accounts as unknown as TBAccount[]) ?? [];
+    const records: Array<{ code: string; name: string; amount: number }> = [];
+    const amounts: number[] = [];
+    for (const acc of accounts) {
+      const raw = acc.balance ?? acc.debit ?? acc.credit ?? 0;
+      const n = typeof raw === 'string' ? parseFloat(raw) : Number(raw);
+      if (Number.isFinite(n) && n !== 0) {
+        amounts.push(Math.abs(n));
+        records.push({ code: acc.code, name: acc.name, amount: n });
+      }
+    }
+
+    if (amounts.length < 50) {
+      throw new BadRequestException(
+        `Benford requiere mínimo 50 cuentas con saldo. El balance tiene ${amounts.length}.`,
+      );
+    }
+
+    // Call AI service via shared AiService
+    const result = await this.aiService.runCaats('benford', { amounts, records }) as {
+      total_records: number;
+      valid_records: number;
+      chi2_statistic: number;
+      chi2_pvalue: number;
+      mad: number;
+      conformity: 'CLOSE' | 'ACCEPTABLE' | 'SUSPECT' | 'NON_CONFORMING';
+      risk_score: number;
+      digits: Array<{ digit: number; observed_pct: number; expected_pct: number; deviation_pct: number; is_anomalous: boolean }>;
+      top_anomalous_amounts: Array<{ code: string; name: string; amount: number }>;
+      interpretation: string;
+    };
+
+    const now = new Date();
+    let findingId: string | null = null;
+
+    // Auto-create Finding draft if risk is significant
+    if (result.conformity === 'SUSPECT' || result.conformity === 'NON_CONFORMING') {
+      // Avoid duplicates: if previous benfordFindingId exists and is still DRAFT, update it; else create new
+      if (tb.benfordFindingId) {
+        const existing = await this.prisma.finding.findUnique({ where: { id: tb.benfordFindingId } });
+        if (existing && existing.status === 'DRAFT') {
+          findingId = existing.id;
+          await this.prisma.finding.update({
+            where: { id: existing.id },
+            data: this.buildBenfordFindingPayload(tb, result, user.organizationId),
+          });
+        }
+      }
+      if (!findingId) {
+        const f = await this.prisma.finding.create({
+          data: {
+            auditId:        tb.auditId,
+            organizationId: user.organizationId,
+            ...this.buildBenfordFindingPayload(tb, result, user.organizationId),
+          },
+        });
+        findingId = f.id;
+      }
+    }
+
+    await this.prisma.trialBalance.update({
+      where: { id: tbId },
+      data: {
+        benfordResult:    result as unknown as Prisma.InputJsonValue,
+        benfordRunAt:     now,
+        benfordFindingId: findingId,
+      },
+    });
+
+    return { result, findingId, runAt: now.toISOString() };
+  }
+
+  async getBenfordResult(tbId: string, user: AuthUser) {
+    const tb = await this.prisma.trialBalance.findUnique({
+      where: { id: tbId },
+      select: { orgId: true, benfordResult: true, benfordRunAt: true, benfordFindingId: true },
+    });
+    if (!tb) throw new NotFoundException('Balance no encontrado');
+    if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+    return {
+      result:    tb.benfordResult,
+      runAt:     tb.benfordRunAt?.toISOString() ?? null,
+      findingId: tb.benfordFindingId,
+    };
+  }
+
+  private buildBenfordFindingPayload(
+    tb: { id: string; periodLabel: string; filename: string; auditId: string },
+    result: {
+      conformity: string;
+      risk_score: number;
+      mad: number;
+      chi2_pvalue: number;
+      valid_records: number;
+      interpretation: string;
+      top_anomalous_amounts: Array<{ code: string; name: string; amount: number }>;
+    },
+    _organizationId: string,
+  ): Omit<Prisma.FindingUncheckedCreateInput, 'auditId' | 'organizationId'> {
+    const severity = result.conformity === 'NON_CONFORMING' ? 'HIGH' : 'MEDIUM';
+    const topAcc = result.top_anomalous_amounts.slice(0, 5)
+      .map(a => `  - ${a.code} ${a.name}: ${Number(a.amount).toLocaleString('es-CL')}`)
+      .join('\n');
+
+    return {
+      title:          `Análisis Benford — ${tb.periodLabel}: distribución ${result.conformity === 'NON_CONFORMING' ? 'NO CONFORME' : 'sospechosa'}`,
+      condition:      `El análisis de Ley de Benford aplicado a las cuentas del Balance "${tb.filename}" (período ${tb.periodLabel}) presenta una distribución del primer dígito ${result.conformity === 'NON_CONFORMING' ? 'NO conforme' : 'con desviaciones moderadas'} respecto a la distribución teórica esperada.\n\nMétricas:\n- Conformidad (escala Nigrini): ${result.conformity}\n- Score de riesgo: ${result.risk_score}/100\n- MAD (Mean Absolute Deviation): ${result.mad}\n- p-valor Chi²: ${result.chi2_pvalue}\n- Cuentas analizadas: ${result.valid_records}\n\nCuentas con mayor desviación:\n${topAcc}`,
+      criteria:       'Ley de Benford (1938) — los datos contables genuinos sin manipulación siguen una distribución logarítmica del primer dígito: 1 aparece ~30.1%, 2 ~17.6%, ..., 9 ~4.6%. NIA 240 — Responsabilidad del auditor frente al fraude. Metodología Nigrini para análisis forense de cifras contables.',
+      cause:          'A determinar mediante procedimientos de auditoría adicionales. Posibles causas: (a) datos generados artificialmente, (b) errores sistemáticos de captura, (c) límites de aprobación que distorsionan la distribución natural, (d) manipulación deliberada.',
+      effect:         result.conformity === 'NON_CONFORMING'
+        ? 'Alta probabilidad de manipulación de cifras contables o datos contaminados. Riesgo significativo de incorrección material por fraude (NIA 240). El dictamen sobre los estados financieros podría verse afectado si no se resuelve.'
+        : 'Riesgo moderado de manipulación o errores sistemáticos en las cifras contables. Requiere procedimientos sustantivos adicionales sobre las cuentas con mayor desviación.',
+      risk:           severity === 'HIGH' ? 'Alto — Riesgo de fraude potencial. Escalar al Comité de Auditoría.' : 'Moderado — Requiere procedimientos sustantivos adicionales.',
+      recommendation: `1. Realizar procedimientos sustantivos detallados sobre las cuentas con mayor desviación del primer dígito (ver lista).\n2. Indagar con la administración sobre el proceso de generación y aprobación de asientos contables.\n3. ${result.conformity === 'NON_CONFORMING' ? 'Considerar la ampliación del alcance a otros períodos y la posible necesidad de involucrar a especialistas forenses (ACFE).' : 'Aplicar muestreo dirigido a las cuentas anómalas y revisar evidencia de soporte.'}\n4. Documentar las conclusiones en un papel de trabajo dedicado.`,
+      severity:       severity as 'HIGH' | 'MEDIUM',
+      status:         'DRAFT',
+      aiDraftUsed:    true,
+      normativeReference: 'NIA 240 — Responsabilidades del auditor en la auditoría de estados financieros frente al fraude',
+      normativeArticle:   'NIA 240, párrafos 16-27 (factores de riesgo de fraude) y A24-A27 (técnicas analíticas)',
+      qualityScore:   60,
+    };
   }
 
   async getProgress(id: string, user: AuthUser) {

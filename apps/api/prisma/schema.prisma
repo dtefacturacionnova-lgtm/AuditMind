@@ -1410,6 +1410,11 @@ model TrialBalance {
   importedById String
   importedAt   DateTime @default(now())
 
+  // ─── PI.7b: Benford analysis (NIA 240 forensic) ───────────────────────────
+  benfordResult     Json?     // { conformity, risk_score, mad, chi2_*, digits[], top_anomalous_amounts[], interpretation }
+  benfordRunAt      DateTime?
+  benfordFindingId  String?   // Finding draft auto-generated when risk is high
+
   audit        Audit                    @relation(fields: [auditId], references: [id], onDelete: Cascade)
   paperLinks   TrialBalancePaperLink[]
 

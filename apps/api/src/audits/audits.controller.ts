@@ -166,6 +166,21 @@ export class AuditsController {
     return this.service.deleteTrialBalance(tbId, user);
   }
 
+  // ─── PI.7b — Benford analysis sobre Trial Balance ─────────────────────────
+  @Post('trial-balance/:tbId/benford')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.7b — Ejecutar análisis de Ley de Benford sobre los saldos del TB' })
+  runBenfordOnTrialBalance(@Param('tbId') tbId: string, @CurrentUser() user: AuthUser) {
+    return this.service.runBenfordOnTrialBalance(tbId, user);
+  }
+
+  @Get('trial-balance/:tbId/benford')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.7b — Obtener el último resultado Benford persistido' })
+  getBenfordResult(@Param('tbId') tbId: string, @CurrentUser() user: AuthUser) {
+    return this.service.getBenfordResult(tbId, user);
+  }
+
   // ─── Papeles disponibles desde plantilla ─────────────────────────────────────
 
   @Get(':id/available-template-papers')

@@ -12,6 +12,7 @@ import {
 } from '@/hooks/useTrialBalance';
 import { useWorkingPapersForAudit } from '@/hooks/useWorkingPapers';
 import { formatDate } from '@/lib/utils';
+import { BenfordPanel } from './BenfordPanel';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -166,6 +167,7 @@ function TrialBalanceDetail({ tbId, auditId, onBack }: { tbId: string; auditId: 
   const { data: tb, isLoading } = useTrialBalance(tbId);
   const [showLink, setShowLink] = useState(false);
   const [search,   setSearch]  = useState('');
+  const [innerTab, setInnerTab] = useState<'accounts' | 'benford'>('accounts');
 
   if (isLoading) return <div className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-slate-400" /></div>;
   if (!tb) return null;
@@ -198,6 +200,31 @@ function TrialBalanceDetail({ tbId, auditId, onBack }: { tbId: string; auditId: 
         </button>
       </div>
 
+      {/* Inner tabs */}
+      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+        <button
+          onClick={() => setInnerTab('accounts')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            innerTab === 'accounts' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+          }`}
+        >
+          📋 Cuentas
+        </button>
+        <button
+          onClick={() => setInnerTab('benford')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            innerTab === 'benford' ? 'bg-white text-violet-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+          }`}
+        >
+          📈 Análisis Benford
+        </button>
+      </div>
+
+      {/* Benford tab */}
+      {innerTab === 'benford' && <BenfordPanel tbId={tbId} auditId={auditId} />}
+
+      {/* Accounts tab content (unchanged) */}
+      {innerTab === 'accounts' && <>
       {/* KPI row */}
       <div className="grid grid-cols-4 gap-3">
         {[
@@ -276,6 +303,8 @@ function TrialBalanceDetail({ tbId, auditId, onBack }: { tbId: string; auditId: 
           </table>
         </div>
       </div>
+
+      </>}
 
       {showLink && (
         <LinkToPaperModal

@@ -1277,6 +1277,27 @@ model PaperReference {
   @@map("paper_references")
 }
 
+// ─── Fiscal SV — Padrón DGII (cache local de contribuyentes) ─────────────────
+model DgiiContribuyente {
+  id              String   @id @default(cuid())
+  organizationId  String   // multi-tenant: cada org carga su padrón
+  nit             String   // 14 dígitos (sin guiones)
+  nrc             String?  // 6 dígitos (Número Registro de Contribuyente)
+  nombre          String
+  giro            String?  // actividad económica CIIU
+  estado          String   // ACTIVO | SUSPENDIDO | CANCELADO | INSCRITO
+  categoria       String?  // PEQUEÑO | MEDIANO | GRANDE | INDIVIDUAL
+  fechaInscripcion DateTime?
+  fechaCambioEstado DateTime?
+  direccion       String?
+  importedAt      DateTime @default(now())
+
+  @@unique([organizationId, nit])
+  @@index([organizationId, nrc])
+  @@index([organizationId, estado])
+  @@map("dgii_contribuyentes")
+}
+
 model WorkingPaperVersion {
   id        String   @id @default(cuid())
   paperId   String

@@ -15,6 +15,10 @@ class LinkPbcDto {
 class AssistSectionDto {
   @IsString() userPrompt?: string;
 }
+
+class RestoreVersionDto {
+  @IsString() reason?: string;
+}
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { WorkingPapersService } from './working-papers.service';
 import { CreateWorkingPaperDto, AddCommentDto, AddTickMarkEntryDto } from './dto/create-working-paper.dto';
@@ -26,6 +30,7 @@ import { PaperQualityService } from './paper-quality.service';
 import { PaperLiveService } from './paper-live.service';
 import { CrossAuditLearningService } from './cross-audit-learning.service';
 import { PaperReferencesService } from './paper-references.service';
+import { PaperVersionsService } from './paper-versions.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -43,6 +48,7 @@ export class WorkingPapersController {
     private readonly liveService:      PaperLiveService,
     private readonly crossAudit:       CrossAuditLearningService,
     private readonly references:       PaperReferencesService,
+    private readonly versionsService:  PaperVersionsService,
   ) {}
 
   // ─── Listados ─────────────────────────────────────────────────────────────────
@@ -163,13 +169,50 @@ export class WorkingPapersController {
     return this.service.resolveComment(commentId, user);
   }
 
-  // ─── Version history ──────────────────────────────────────────────────────────
+  // ─── PI.5 — Version history MASTER ────────────────────────────────────────
 
   @Get(':id/versions')
   @Roles(UserRole.AUDITOR)
-  @ApiOperation({ summary: 'Historial de versiones del papel' })
-  getVersionHistory(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.service.getVersionHistory(id, user);
+  @ApiOperation({ summary: 'PI.5 — Historial de versiones con metadata (autor, razón, conteo cambios)' })
+  listVersions(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.versionsService.listVersions(id, user);
+  }
+
+  @Get(':id/versions/compare')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.5 — Diff word-level entre dos versiones (to=0 → versión actual del papel)' })
+  compareVersions(
+    @Param('id') id: string,
+    @Query('from') from: string,
+    @Query('to')   to:   string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const fromN = parseInt(from, 10);
+    const toN   = parseInt(to,   10);
+    return this.versionsService.compareVersions(id, fromN, toN, user);
+  }
+
+  @Get(':id/versions/:versionId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.5 — Obtener snapshot completo de una versión' })
+  getVersion(
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.versionsService.getVersion(id, versionId, user);
+  }
+
+  @Post(':id/versions/:versionId/restore')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'PI.5 — Restaurar el papel a un snapshot anterior (crea nueva versión)' })
+  restoreVersion(
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+    @Body() dto: RestoreVersionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.versionsService.restoreVersion(id, versionId, dto.reason, user);
   }
 
   // ─── Intelligent Papers: Sections ─────────────────────────────────────────

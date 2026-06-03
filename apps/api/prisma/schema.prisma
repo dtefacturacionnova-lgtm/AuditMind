@@ -1286,9 +1286,19 @@ model WorkingPaperVersion {
   changedAt DateTime @default(now())
   diff      Json?
 
+  // ─── PI.5 — Version history MASTER con diff ──────────────────────────────
+  narrative          String?    // Snapshot del narrative del MASTER en ese momento
+  sectionsSnapshot   Json?      // Array de secciones: [{ sectionKey, label, value, isAutoFilled }]
+  sourcePapersHashes Json?      // { paperCode: SHA-256(sectionsSnapshot) } — para detectar qué fuente cambió
+  reason             String?    // "PT-A1 modificó S3" | "Restauración de v2" | etc.
+  consolidatedById   String?    // userId que disparó la consolidación
+  parentVersionId    String?    // versionNumber de la versión que esta reemplaza
+  isRestore          Boolean    @default(false)  // true si esta versión fue creada por restore
+
   paper  WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 
   @@index([paperId])
+  @@index([paperId, version])
   @@map("working_paper_versions")
 }
 

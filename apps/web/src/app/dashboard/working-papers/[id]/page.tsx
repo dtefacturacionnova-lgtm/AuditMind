@@ -31,6 +31,7 @@ import { CrossAuditSuggestions }   from '@/components/working-papers/CrossAuditS
 import { PaperAgentPanel, PaperAgentButton, PAPER_AGENT_MAP, DEFAULT_AGENT } from '@/components/working-papers/PaperAgentPanel';
 import { SamplingCalculatorModal }  from '@/components/working-papers/SamplingCalculatorModal';
 import { CosoAssessmentPanel }      from '@/components/working-papers/CosoAssessmentPanel';
+import { VersionHistoryPanel }      from '@/components/working-papers/VersionHistoryPanel';
 import type { AiDraftConfig } from '@/components/working-papers/SectionField';
 import { apiClient }            from '@/lib/api-client';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
@@ -1677,37 +1678,9 @@ export default function WpDetailPage() {
             </div>
           )}
 
-          {/* ── Tab: Historial ── */}
+          {/* ── Tab: Historial — PI.5 con diff + restore ── */}
           {effectiveTab === 'history' && (
-            <div className="max-w-lg space-y-3">
-              {!versions || versions.length === 0 ? (
-                <div className="py-12 text-center bg-white rounded-2xl border border-gray-200">
-                  <History className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-                  <p className="text-sm text-gray-400">Sin historial de versiones</p>
-                  <p className="text-xs text-gray-300 mt-1">Las versiones anteriores aparecerán aquí al guardar cambios</p>
-                </div>
-              ) : (
-                <>
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-blue-700">v{wp.version} — Versión actual</p>
-                      <p className="text-xs text-blue-500 mt-0.5">{formatRelativeTime(wp.updatedAt)}</p>
-                    </div>
-                    <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">Actual</span>
-                  </div>
-
-                  {versions.map(v => (
-                    <div key={v.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">v{v.version}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{formatDate(v.changedAt)}</p>
-                      </div>
-                      <span className="text-xs text-gray-500">{formatRelativeTime(v.changedAt)}</span>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
+            <VersionHistoryPanel paperId={params.id as string} />
           )}
 
         </div>

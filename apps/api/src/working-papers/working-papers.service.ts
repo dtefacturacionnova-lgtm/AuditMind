@@ -604,6 +604,9 @@ export class WorkingPapersService {
       auditId:    wp.auditId,
       auditTitle,
       sourceData: sourcePapers,
+      // PI.5 — track who triggered the consolidation for version history
+      userId:     user.id,
+      reason:     wp.syncStatus === 'STALE' ? 'Re-consolidación tras cambios en fuentes' : 'Consolidación inicial',
     });
 
     return {

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SyncStatus } from '@prisma/client';
 
@@ -12,6 +13,9 @@ export interface PaperConsolidateEvent {
   auditId:    string;
   auditTitle: string;
   sourceData: SourcePaperData[];
+  // PI.5 — para registrar quién disparó la consolidación
+  userId?:    string;
+  reason?:    string;
 }
 
 export interface SourcePaperData {
@@ -62,10 +66,13 @@ export class PaperConsolidationService {
 
   @OnEvent('paper.consolidate', { async: true })
   async handleConsolidate(event: PaperConsolidateEvent): Promise<void> {
-    const { paperId, paperCode, auditTitle, sourceData } = event;
+    const { paperId, paperCode, auditTitle, sourceData, userId, reason } = event;
     this.logger.log(`[Consolidation] Starting: ${paperId} (${paperCode ?? 'no code'})`);
 
     try {
+      // ── PI.5: capture snapshot of current state BEFORE modifying ────────
+      await this.snapshotCurrentState(paperId, sourceData, userId, reason);
+
       // 1. Generate section content (AI or fallback)
       const sections = await this.generateSections(paperCode, sourceData, auditTitle);
 
@@ -83,6 +90,7 @@ export class PaperConsolidationService {
           syncStatus:   SyncStatus.SYNCED,
           lastSyncedAt: new Date(),
           aiAssisted:   true,
+          version:      { increment: 1 },
         },
       });
 
@@ -95,6 +103,71 @@ export class PaperConsolidationService {
         data:  { syncStatus: SyncStatus.STALE },
       }).catch(() => { /* ignore secondary failure */ });
     }
+  }
+
+  // ─── PI.5 — Snapshot for version history ─────────────────────────────────
+  /**
+   * Creates a WorkingPaperVersion row capturing the paper's state BEFORE
+   * the consolidation overwrites it. Also computes SHA-256 of each source
+   * paper's sections so we can later detect which source triggered a re-sync.
+   *
+   * Idempotent: if there's nothing to snapshot (DRAFT empty paper), skip.
+   */
+  private async snapshotCurrentState(
+    paperId:    string,
+    sourceData: SourcePaperData[],
+    userId?:    string,
+    reason?:    string,
+  ): Promise<void> {
+    const paper = await this.prisma.workingPaper.findUnique({
+      where:  { id: paperId },
+      select: { narrative: true, version: true, content: true },
+    });
+    if (!paper) return;
+
+    const sections = await this.prisma.paperSection.findMany({
+      where:   { paperId },
+      orderBy: { sortOrder: 'asc' },
+      select:  {
+        sectionKey: true, label: true, value: true,
+        isAutoFilled: true, sourceRef: true,
+      },
+    });
+
+    // Skip snapshot if paper has no real content yet (first consolidation)
+    const hasContent = (paper.narrative && paper.narrative.length > 10) ||
+                       sections.some(s => s.value && String(s.value).trim().length > 0);
+    if (!hasContent) {
+      this.logger.debug(`[Consolidation] Skipping snapshot — paper ${paperId} is empty`);
+      return;
+    }
+
+    // Compute SHA-256 of each source paper's effective content
+    const sourceHashes: Record<string, string> = {};
+    for (const src of sourceData) {
+      const key = src.paperCode ?? src.paperId;
+      const payload = JSON.stringify(
+        src.sections.map(s => ({ k: s.sectionKey, v: s.value ?? '' })),
+      );
+      sourceHashes[key] = createHash('sha256').update(payload).digest('hex').slice(0, 16);
+    }
+
+    await this.prisma.workingPaperVersion.create({
+      data: {
+        paperId,
+        version:            paper.version,
+        content:            (paper.content ?? {}) as object,
+        narrative:          paper.narrative ?? null,
+        sectionsSnapshot:   sections as unknown as object,
+        sourcePapersHashes: sourceHashes,
+        reason:             reason ?? null,
+        consolidatedById:   userId ?? null,
+        changedBy:          userId ?? 'system',
+        isRestore:          false,
+      },
+    });
+
+    this.logger.log(`[Consolidation] Snapshot v${paper.version} saved for ${paperId}`);
   }
 
   // ─── Section generation ───────────────────────────────────────────────────

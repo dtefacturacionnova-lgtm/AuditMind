@@ -8,6 +8,7 @@ import { PaperQualityService } from './paper-quality.service';
 import { PaperLiveService } from './paper-live.service';
 import { CrossAuditLearningService } from './cross-audit-learning.service';
 import { PaperReferencesService } from './paper-references.service';
+import { PaperVersionsService } from './paper-versions.service';
 import { AiModule } from '../ai/ai.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { AiModule } from '../ai/ai.module';
     PaperLiveService,              // Sprint 3: LIVE paper dashboard
     CrossAuditLearningService,     // Sprint 3: Cross-audit learning
     PaperReferencesService,        // Gap 3: @mention references
+    PaperVersionsService,          // PI.5: Version history + diff + restore
   ],
   exports: [
     WorkingPapersService,
@@ -32,6 +34,7 @@ import { AiModule } from '../ai/ai.module';
     PaperLiveService,
     CrossAuditLearningService,
     PaperReferencesService,
+    PaperVersionsService,
   ],
 })
 export class WorkingPapersModule {}

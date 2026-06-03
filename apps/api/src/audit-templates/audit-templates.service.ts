@@ -30,6 +30,17 @@ interface SectionDef {
   children?: Array<{ ref: string; name: string }>;
 }
 
+// ─── PaperLinkDef — directed edge between papers in the knowledge graph ─────
+
+interface PaperLinkDef {
+  sourceCode:  string;   // code o paperCode del papel fuente
+  targetCode:  string;
+  sourceField: string;   // "S3" o "S3.field"
+  targetField: string;
+  mappingType?: 'DIRECT' | 'AGGREGATED' | 'AI_GENERATED';
+  description?: string;
+}
+
 // ─── System template seed data ────────────────────────────────────────────────
 
 interface SystemTemplateSeed {
@@ -38,6 +49,7 @@ interface SystemTemplateSeed {
   auditTypes: AuditType[];
   sections: SectionDef[];
   papers: PaperDef[];
+  links?: PaperLinkDef[];
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -101,6 +113,7 @@ export class AuditTemplatesService {
         auditTypes:     dto.auditTypes  as any,
         papers:         dto.papers      as any,
         sections:       dto.sections    as any ?? null,
+        links:          dto.links       as any ?? null,
         isDefault:      dto.isDefault   ?? false,
         isSystem:       false,
         createdById:    user.id,
@@ -132,6 +145,7 @@ export class AuditTemplatesService {
         ...(dto.auditTypes  !== undefined && { auditTypes:  dto.auditTypes as any }),
         ...(dto.papers      !== undefined && { papers:      dto.papers     as any }),
         ...(dto.sections    !== undefined && { sections:    dto.sections   as any }),
+        ...(dto.links       !== undefined && { links:       dto.links      as any }),
         ...(dto.isDefault   !== undefined && { isDefault:   dto.isDefault }),
       },
       include: {
@@ -224,6 +238,7 @@ export class AuditTemplatesService {
           auditTypes:  seed.auditTypes as any,
           papers:      seed.papers     as any,
           sections:    seed.sections   as any,
+          links:       (seed.links ?? null) as any,
           isDefault:   true,
           isSystem:    true,
           createdById: userId,
@@ -259,6 +274,7 @@ export class AuditTemplatesService {
             auditTypes:  seed.auditTypes as any,
             papers:      seed.papers     as any,
             sections:    seed.sections   as any,
+            links:       (seed.links ?? null) as any,
           },
         });
         updated++;
@@ -271,6 +287,7 @@ export class AuditTemplatesService {
             auditTypes:     seed.auditTypes as any,
             papers:         seed.papers     as any,
             sections:       seed.sections   as any,
+            links:          (seed.links ?? null) as any,
             isDefault:      true,
             isSystem:       true,
             createdById:    user.id,
@@ -463,6 +480,36 @@ export class AuditTemplatesService {
             title:  'Plan de Seguimiento de Recomendaciones',
             type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },
         ],
+        // ─── Grafo de conocimiento NOGAI/IIA ─────────────────────────────────
+        links: [
+          // Entendimiento del negocio alimenta riesgos, materialidad y memo
+          { sourceCode: 'A-02', targetCode: 'A-03', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Áreas/procesos al evaluar RI' },
+          { sourceCode: 'A-02', targetCode: 'A-08', sourceField: 'S1', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Entendimiento → Memorando' },
+          // Riesgo inherente alimenta materialidad, MRCI, memo y programa
+          { sourceCode: 'A-03', targetCode: 'A-07', sourceField: 'S5', targetField: 'S1', mappingType: 'DIRECT',       description: 'Riesgos identificados → Matriz MRCI' },
+          { sourceCode: 'A-03', targetCode: 'A-08', sourceField: 'S8', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'RI global → Sección RI del Memo' },
+          { sourceCode: 'A-03', targetCode: 'A-09', sourceField: 'S5', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Riesgos → Priorización del programa' },
+          // Controles alimentan MRCI, memo y programa
+          { sourceCode: 'A-04', targetCode: 'A-07', sourceField: 'S3', targetField: 'S2', mappingType: 'DIRECT',       description: 'Controles evaluados → MRCI' },
+          { sourceCode: 'A-04', targetCode: 'A-08', sourceField: 'S5', targetField: 'S5', mappingType: 'AI_GENERATED', description: 'RC → Enfoque del Memo' },
+          { sourceCode: 'A-04', targetCode: 'A-09', sourceField: 'S5', targetField: 'S2', mappingType: 'AGGREGATED',   description: 'RC → Tipo de pruebas en Programa' },
+          // Materialidad alimenta memo y programa
+          { sourceCode: 'A-05', targetCode: 'A-08', sourceField: 'S3', targetField: 'S4', mappingType: 'DIRECT',       description: 'Materialidad → Sección del Memo' },
+          { sourceCode: 'A-05', targetCode: 'A-09', sourceField: 'S4', targetField: 'S3', mappingType: 'AGGREGATED',   description: 'Materialidad → Tamaños muestra Programa' },
+          // COSO alimenta el A-04 (evaluación de controles)
+          { sourceCode: 'A-06', targetCode: 'A-04', sourceField: 'S7', targetField: 'S2', mappingType: 'DIRECT',       description: 'COSO global → Resultado por área' },
+          { sourceCode: 'A-06', targetCode: 'A-08', sourceField: 'S7', targetField: 'S6', mappingType: 'AI_GENERATED', description: 'COSO → Conclusión SCI del Memo' },
+          // MRCI alimenta programa y hallazgos
+          { sourceCode: 'A-07', targetCode: 'A-09', sourceField: 'S6', targetField: 'S1', mappingType: 'DIRECT',       description: 'MRCI → Procedimientos del Programa' },
+          { sourceCode: 'A-07', targetCode: 'D-00', sourceField: 'S5', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'MRCI → Hallazgos consolidados' },
+          // Programa alimenta papeles de ejecución y memo
+          { sourceCode: 'A-09', targetCode: 'B-01', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Procedimientos → Cuestionario' },
+          { sourceCode: 'A-09', targetCode: 'B-02', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Procedimientos → Pruebas sustantivas' },
+          { sourceCode: 'A-09', targetCode: 'B-03', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Procedimientos → CAATs' },
+          // Hallazgos consolidados → informe
+          { sourceCode: 'D-00', targetCode: 'E-02', sourceField: 'S1', targetField: 'S4', mappingType: 'AGGREGATED',   description: 'Hallazgos → Sección Hallazgos del Informe' },
+          { sourceCode: 'D-00', targetCode: 'E-01', sourceField: 'S1', targetField: 'S1', mappingType: 'AI_GENERATED', description: 'Hallazgos → Conclusión del proyecto' },
+        ],
       },
 
       // ═══════════════════════════════════════════════════════════════════════
@@ -635,6 +682,36 @@ export class AuditTemplatesService {
             title:  'Informe Final con Firma Digital del Socio / CP',
             type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },
         ],
+        // ─── Grafo NIA/ISA ───────────────────────────────────────────────────
+        links: [
+          // Entendimiento → riesgos, memo
+          { sourceCode: 'A-03', targetCode: 'A-05', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Entidad → Aserciones de riesgo' },
+          { sourceCode: 'A-03', targetCode: 'A-07', sourceField: 'S1', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Entendimiento → Memo' },
+          // Control interno → riesgos
+          { sourceCode: 'A-04', targetCode: 'A-05', sourceField: 'S3', targetField: 'S2', mappingType: 'DIRECT',       description: 'CI → RIM' },
+          { sourceCode: 'A-04', targetCode: 'A-07', sourceField: 'S3', targetField: 'S5', mappingType: 'AI_GENERATED', description: 'CI → Enfoque del Memo' },
+          // Riesgos → memo, programa
+          { sourceCode: 'A-05', targetCode: 'A-07', sourceField: 'S4', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Riesgos → Sección RI del Memo' },
+          { sourceCode: 'A-05', targetCode: 'A-08', sourceField: 'S4', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Riesgos → Procedimientos' },
+          // Materialidad → memo, programa, sumarias, cierre
+          { sourceCode: 'A-06', targetCode: 'A-07', sourceField: 'S3', targetField: 'S4', mappingType: 'DIRECT',       description: 'Materialidad → Memo' },
+          { sourceCode: 'A-06', targetCode: 'A-08', sourceField: 'S4', targetField: 'S2', mappingType: 'AGGREGATED',   description: 'ME → Tamaños muestra' },
+          { sourceCode: 'A-06', targetCode: 'D-02', sourceField: 'S3', targetField: 'S2', mappingType: 'DIRECT',       description: 'MG → Cédula final de diferencias' },
+          // EEFF (B-00) alimenta sumarias y diferencias
+          { sourceCode: 'B-00', targetCode: 'B-01', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'EEFF → Activos sumaria' },
+          { sourceCode: 'B-00', targetCode: 'B-02', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'EEFF → Pasivos sumaria' },
+          { sourceCode: 'B-00', targetCode: 'B-03', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'EEFF → Patrimonio sumaria' },
+          { sourceCode: 'B-00', targetCode: 'B-04', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'EEFF → Ingresos/Costos sumaria' },
+          // Programa → pruebas C-*
+          { sourceCode: 'A-08', targetCode: 'C-01', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Programa → Caja/Bancos' },
+          { sourceCode: 'A-08', targetCode: 'C-02', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Programa → CxC' },
+          { sourceCode: 'A-08', targetCode: 'C-03', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Programa → Inventarios' },
+          // Ajustes B-05 → cédula final
+          { sourceCode: 'B-05', targetCode: 'D-02', sourceField: 'S1', targetField: 'S3', mappingType: 'AGGREGATED',   description: 'Ajustes → Cédula final NIA 450' },
+          // Carta debilidades alimenta informe
+          { sourceCode: 'D-04', targetCode: 'E-01', sourceField: 'S1', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Debilidades → KAM del Informe' },
+          { sourceCode: 'D-02', targetCode: 'E-01', sourceField: 'S1', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Diferencias → Opinión del Informe' },
+        ],
       },
 
       // ═══════════════════════════════════════════════════════════════════════
@@ -759,6 +836,24 @@ export class AuditTemplatesService {
           { code: 'SEG-01', indexSection: 'SEG',
             title:  'Plan de Implementación de Recomendaciones (NAIG Art. 61-62)',
             type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },
+        ],
+        // ─── Grafo NAIG ───────────────────────────────────────────────────────
+        links: [
+          { sourceCode: 'PL-01', targetCode: 'PL-08', sourceField: 'S1', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Análisis general → Memorando gubernamental' },
+          { sourceCode: 'PL-02', targetCode: 'PL-03', sourceField: 'S7', targetField: 'S2', mappingType: 'DIRECT',       description: 'SCI → Riesgos por componente' },
+          { sourceCode: 'PL-03', targetCode: 'PL-08', sourceField: 'S5', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Riesgos → Memo' },
+          { sourceCode: 'PL-03', targetCode: 'PL-09', sourceField: 'S5', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Riesgos → Programa' },
+          { sourceCode: 'PL-04', targetCode: 'PL-08', sourceField: 'S1', targetField: 'S5', mappingType: 'DIRECT',       description: 'Recomendaciones previas → Memo' },
+          { sourceCode: 'PL-06', targetCode: 'PL-08', sourceField: 'S3', targetField: 'S4', mappingType: 'DIRECT',       description: 'Materialidad → Memo' },
+          { sourceCode: 'PL-06', targetCode: 'PL-09', sourceField: 'S3', targetField: 'S2', mappingType: 'AGGREGATED',   description: 'Materialidad → Tamaños muestra' },
+          { sourceCode: 'PL-09', targetCode: 'EJ-F01',  sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',     description: 'Programa → Ejecución presupuestaria' },
+          { sourceCode: 'PL-09', targetCode: 'EJ-LC01', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',     description: 'Programa → LACAP' },
+          { sourceCode: 'PL-09', targetCode: 'EJ-NM01', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',     description: 'Programa → Nómina' },
+          { sourceCode: 'EJ-F01',  targetCode: 'COM-RH',  sourceField: 'S5', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Hallazgos EP → Consolidado' },
+          { sourceCode: 'EJ-LC01', targetCode: 'COM-RH',  sourceField: 'S5', targetField: 'S2', mappingType: 'AGGREGATED', description: 'Hallazgos LACAP → Consolidado' },
+          { sourceCode: 'EJ-NM01', targetCode: 'COM-RH',  sourceField: 'S5', targetField: 'S3', mappingType: 'AGGREGATED', description: 'Hallazgos nómina → Consolidado' },
+          { sourceCode: 'COM-RH',  targetCode: 'INF-01',  sourceField: 'S1', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Hallazgos → Informe NAIG' },
+          { sourceCode: 'COM-H01', targetCode: 'SEG-01',  sourceField: 'S5', targetField: 'S1', mappingType: 'DIRECT',     description: 'Hallazgos individuales → Plan seguimiento' },
         ],
       },
 
@@ -898,6 +993,24 @@ export class AuditTemplatesService {
             title:  'Anexos Técnicos al Informe — Evidencia Digital y CAATs',
             type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },
         ],
+        // ─── Grafo Forense (ACFE + NIA 240) ──────────────────────────────────
+        links: [
+          { sourceCode: 'A-03', targetCode: 'A-04', sourceField: 'S2', targetField: 'S1', mappingType: 'DIRECT',       description: 'Denuncia → Hipótesis de fraude' },
+          { sourceCode: 'A-04', targetCode: 'A-05', sourceField: 'S1', targetField: 'S2', mappingType: 'AGGREGATED',   description: 'Hipótesis → Plan de investigación' },
+          { sourceCode: 'A-04', targetCode: 'A-06', sourceField: 'S2', targetField: 'S1', mappingType: 'DIRECT',       description: 'Hipótesis → Triángulo del fraude' },
+          { sourceCode: 'A-05', targetCode: 'A-07', sourceField: 'S2', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Plan → Memo de planificación' },
+          { sourceCode: 'A-06', targetCode: 'A-07', sourceField: 'S6', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Riesgo fraude → Memo' },
+          { sourceCode: 'A-07', targetCode: 'B-CAA-01', sourceField: 'S2', targetField: 'S1', mappingType: 'DIRECT',   description: 'Memo → Programa CAATs' },
+          { sourceCode: 'B-EVD-04', targetCode: 'B-TXN-04', sourceField: 'S1', targetField: 'S2', mappingType: 'DIRECT', description: 'Hash de evidencia → Cuantificación' },
+          { sourceCode: 'B-CAA-02', targetCode: 'B-TXN-01', sourceField: 'S1', targetField: 'S2', mappingType: 'AGGREGATED', description: 'Benford → Rastreo de flujos' },
+          { sourceCode: 'B-CAA-04', targetCode: 'B-TXN-01', sourceField: 'S1', targetField: 'S2', mappingType: 'AGGREGATED', description: 'Anomalías → Rastreo de flujos' },
+          { sourceCode: 'B-INT-03', targetCode: 'B-INT-04', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',   description: 'Entrevistas → Análisis declaraciones' },
+          { sourceCode: 'B-TXN-04', targetCode: 'D-01', sourceField: 'S1', targetField: 'S2', mappingType: 'AGGREGATED', description: 'Perjuicio cuantificado → Hallazgos' },
+          { sourceCode: 'B-INT-04', targetCode: 'D-03', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Declaraciones → Matriz responsabilidades' },
+          { sourceCode: 'D-01', targetCode: 'E-01',   sourceField: 'S1', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Hallazgos → Borrador Informe Forense' },
+          { sourceCode: 'D-02', targetCode: 'E-01',   sourceField: 'S1', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Controles fallidos → Informe' },
+          { sourceCode: 'D-03', targetCode: 'E-01',   sourceField: 'S1', targetField: 'S4', mappingType: 'DIRECT',       description: 'Responsabilidades → Informe' },
+        ],
       },
 
       // ═══════════════════════════════════════════════════════════════════════
@@ -1036,6 +1149,25 @@ export class AuditTemplatesService {
             type:     WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.MASTER,
             paperCode: 'PT-MEMO' },
         ],
+        // ─── Grafo IT Security (ISO 27001 + NRP-23/32 + D.L. 143) ────────────
+        links: [
+          { sourceCode: 'A-02', targetCode: 'A-03', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Activos → Análisis de riesgos' },
+          { sourceCode: 'A-02', targetCode: 'A-04', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Activos → Anexo A' },
+          { sourceCode: 'A-03', targetCode: 'A-04', sourceField: 'S2', targetField: 'S2', mappingType: 'AGGREGATED',   description: 'Riesgos → Selección de controles' },
+          { sourceCode: 'A-03', targetCode: 'A-05', sourceField: 'S2', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Riesgos → Memo SGSI' },
+          { sourceCode: 'A-04', targetCode: 'A-06', sourceField: 'S2', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Anexo A → Programa' },
+          { sourceCode: 'A-06', targetCode: 'B-IAM-01',    sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT', description: 'Programa → IAM' },
+          { sourceCode: 'A-06', targetCode: 'B-VULN-01',   sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT', description: 'Programa → Vulnerabilidades' },
+          { sourceCode: 'A-06', targetCode: 'B-PENTEST-01', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT', description: 'Programa → Pentest' },
+          { sourceCode: 'A-06', targetCode: 'B-BCP-01',    sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT', description: 'Programa → BCP' },
+          { sourceCode: 'B-VULN-01', targetCode: 'B-PENTEST-02', sourceField: 'S2', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Vulns → Plan remediación' },
+          { sourceCode: 'B-INC-02',  targetCode: 'C-CIBER-02',   sourceField: 'S2', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Log incidentes → Plazos D.L. 143' },
+          { sourceCode: 'C-NRP-01',  targetCode: 'D-01', sourceField: 'S3', targetField: 'S2', mappingType: 'AGGREGATED', description: 'Incumplimientos NRP-23 → Hallazgos' },
+          { sourceCode: 'C-NRP-02',  targetCode: 'D-01', sourceField: 'S3', targetField: 'S3', mappingType: 'AGGREGATED', description: 'Incumplimientos NRP-32 → Hallazgos' },
+          { sourceCode: 'C-CIBER-01', targetCode: 'D-01', sourceField: 'S3', targetField: 'S4', mappingType: 'AGGREGATED', description: 'D.L. 143 → Hallazgos' },
+          { sourceCode: 'C-COBIT-01', targetCode: 'D-01', sourceField: 'S2', targetField: 'S5', mappingType: 'AGGREGATED', description: 'COBIT → Hallazgos' },
+          { sourceCode: 'D-01', targetCode: 'D-02', sourceField: 'S1', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Hallazgos → Informe SGSI' },
+        ],
       },
 
       // ═══════════════════════════════════════════════════════════════════════
@@ -1164,6 +1296,28 @@ export class AuditTemplatesService {
           { code: 'D-02', indexSection: 'D',
             title:  'Resumen de Incumplimientos, Observaciones y Plan de Subsanación',
             type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.MASTER },
+        ],
+        // ─── Grafo AML/PLD (LCDA + NRP-36 + GAFI) ────────────────────────────
+        links: [
+          { sourceCode: 'A-02', targetCode: 'A-03', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Perfil sujeto obligado → Riesgos LA/FT' },
+          { sourceCode: 'A-03', targetCode: 'A-04', sourceField: 'S5', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'ERI → 3 líneas de defensa' },
+          { sourceCode: 'A-03', targetCode: 'A-05', sourceField: 'S5', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'ERI → Memo ALD' },
+          { sourceCode: 'A-04', targetCode: 'A-05', sourceField: 'S4', targetField: 'S4', mappingType: 'AI_GENERATED', description: 'Controles → Memo enfoque' },
+          { sourceCode: 'A-05', targetCode: 'A-06', sourceField: 'S2', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Memo → Programa' },
+          { sourceCode: 'A-06', targetCode: 'B-DDC-01', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',   description: 'Programa → DDC' },
+          { sourceCode: 'A-06', targetCode: 'B-PEPS-01', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',  description: 'Programa → PEPs' },
+          { sourceCode: 'A-06', targetCode: 'B-MON-01', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',   description: 'Programa → Monitoreo' },
+          { sourceCode: 'A-06', targetCode: 'B-ROS-01', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',   description: 'Programa → ROS' },
+          { sourceCode: 'B-DDC-01', targetCode: 'B-DDC-02', sourceField: 'S2', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Clientes alto riesgo → EDD' },
+          { sourceCode: 'B-MON-01', targetCode: 'B-ROS-01', sourceField: 'S3', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Alertas → ROS' },
+          { sourceCode: 'B-MON-02', targetCode: 'B-ROS-02', sourceField: 'S2', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Efectividad monitoreo → Calidad ROS' },
+          { sourceCode: 'B-OFC-01', targetCode: 'B-OFC-02', sourceField: 'S2', targetField: 'S1', mappingType: 'DIRECT',     description: 'Oficial → Estructura Comité' },
+          { sourceCode: 'B-PROD-01', targetCode: 'A-03', sourceField: 'S2', targetField: 'S6', mappingType: 'AGGREGATED', description: 'Productos alto riesgo → Re-evaluación ERI' },
+          { sourceCode: 'B-DDC-01', targetCode: 'C-01', sourceField: 'S3', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Hallazgos DDC → Checklist NRP-36' },
+          { sourceCode: 'B-MON-01', targetCode: 'C-01', sourceField: 'S4', targetField: 'S2', mappingType: 'AGGREGATED', description: 'Hallazgos monitoreo → Checklist NRP-36' },
+          { sourceCode: 'C-01', targetCode: 'D-01', sourceField: 'S1', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Cumplimiento NRP-36 → Informe ALD' },
+          { sourceCode: 'C-02', targetCode: 'D-01', sourceField: 'S1', targetField: 'S4', mappingType: 'AI_GENERATED', description: 'GAFI → Informe ALD' },
+          { sourceCode: 'D-01', targetCode: 'D-02', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Informe → Plan subsanación' },
         ],
       },
 
@@ -1422,6 +1576,40 @@ export class AuditTemplatesService {
           { code: 'D-06', indexSection: 'D',
             title:  'Plan de Subsanación de Incumplimientos Identificados',
             type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },
+        ],
+        // ─── Grafo Fiscal SV (CT/DGII/CVPCPA) ────────────────────────────────
+        links: [
+          // Planificación
+          { sourceCode: 'A-01', targetCode: 'A-02', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Entendimiento → SCI tributario' },
+          { sourceCode: 'A-01', targetCode: 'A-05', sourceField: 'S2', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Entendimiento → Memo' },
+          { sourceCode: 'A-02', targetCode: 'A-03', sourceField: 'S7', targetField: 'S1', mappingType: 'DIRECT',       description: 'SCI → Score riesgo por impuesto' },
+          { sourceCode: 'A-03', targetCode: 'A-04', sourceField: 'S7', targetField: 'S6', mappingType: 'AGGREGATED',   description: 'Riesgo → Análisis fraude fiscal' },
+          { sourceCode: 'A-03', targetCode: 'A-05', sourceField: 'S7', targetField: 'S4', mappingType: 'AI_GENERATED', description: 'Riesgo → Memo enfoque' },
+          { sourceCode: 'A-03', targetCode: 'A-06', sourceField: 'S7', targetField: 'S2', mappingType: 'AGGREGATED',   description: 'Riesgo → Programa intensidad' },
+          { sourceCode: 'A-04', targetCode: 'A-05', sourceField: 'S6', targetField: 'S5', mappingType: 'AI_GENERATED', description: 'Fraude → Memo áreas énfasis' },
+          // ISR
+          { sourceCode: 'ISR-01', targetCode: 'ISR-04', sourceField: 'S2', targetField: 'S1', mappingType: 'DIRECT',     description: 'Ingresos → Conciliación' },
+          { sourceCode: 'ISR-02', targetCode: 'ISR-03', sourceField: 'S5', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Gastos rechazados → No deducibles' },
+          { sourceCode: 'ISR-03', targetCode: 'ISR-04', sourceField: 'S1', targetField: 'S2', mappingType: 'DIRECT',     description: 'No deducibles → Conciliación' },
+          { sourceCode: 'ISR-05', targetCode: 'ISR-04', sourceField: 'S2', targetField: 'S4', mappingType: 'DIRECT',     description: 'Depreciaciones → Conciliación' },
+          { sourceCode: 'ISR-06', targetCode: 'ISR-04', sourceField: 'S2', targetField: 'S5', mappingType: 'DIRECT',     description: 'Reservas → Conciliación' },
+          { sourceCode: 'ISR-04', targetCode: 'D-03',  sourceField: 'S7', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Diferencia ISR → Cédula de diferencias' },
+          { sourceCode: 'ISR-08', targetCode: 'D-03',  sourceField: 'S2', targetField: 'S4', mappingType: 'AGGREGATED', description: 'Retenciones → Cédula' },
+          // IVA
+          { sourceCode: 'IVA-01', targetCode: 'D-03', sourceField: 'S5', targetField: 'S2', mappingType: 'AGGREGATED', description: 'Débito fiscal → Cédula' },
+          { sourceCode: 'IVA-02', targetCode: 'D-03', sourceField: 'S5', targetField: 'S3', mappingType: 'AGGREGATED', description: 'Crédito fiscal → Cédula' },
+          { sourceCode: 'IVA-02', targetCode: 'AF-03', sourceField: 'S2', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Crédito → Análisis evasión' },
+          // CAATs Fiscales
+          { sourceCode: 'AF-05', targetCode: 'AF-01', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED', description: 'CAATs → Red flags' },
+          { sourceCode: 'AF-05', targetCode: 'IVA-01', sourceField: 'S1', targetField: 'S2', mappingType: 'AGGREGATED', description: 'CAATs → Cruce ventas' },
+          { sourceCode: 'AF-05', targetCode: 'IVA-02', sourceField: 'S2', targetField: 'S1', mappingType: 'AGGREGATED', description: 'CAATs → Cruce compras' },
+          { sourceCode: 'AF-01', targetCode: 'D-01',  sourceField: 'S6', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Red flags → Hallazgos' },
+          // Comunicación
+          { sourceCode: 'D-01', targetCode: 'D-02', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Hallazgos → Anexo 12' },
+          { sourceCode: 'D-03', targetCode: 'D-04', sourceField: 'S1', targetField: 'S7', mappingType: 'AI_GENERATED', description: 'Diferencias → Informe Fiscal' },
+          { sourceCode: 'D-02', targetCode: 'D-04', sourceField: 'S1', targetField: 'S10', mappingType: 'DIRECT',      description: 'Anexo 12 → Informe' },
+          { sourceCode: 'D-04', targetCode: 'D-05', sourceField: 'S9', targetField: 'S1', mappingType: 'DIRECT',       description: 'Informe → Dictamen' },
+          { sourceCode: 'D-01', targetCode: 'D-06', sourceField: 'S6', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Hallazgos → Plan subsanación' },
         ],
       },
     ];

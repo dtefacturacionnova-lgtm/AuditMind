@@ -1,9 +1,37 @@
 import {
-  IsString, IsOptional, IsBoolean, IsArray, IsEnum, ValidateNested,
+  IsString, IsOptional, IsBoolean, IsArray, IsEnum, ValidateNested, IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AuditType, WorkingPaperType, WpKind } from '@prisma/client';
 import { Type } from 'class-transformer';
+
+export class PaperLinkDefDto {
+  @ApiProperty({ example: 'A-02', description: 'code o paperCode del papel fuente' })
+  @IsString()
+  sourceCode: string;
+
+  @ApiProperty({ example: 'A-04', description: 'code o paperCode del papel destino' })
+  @IsString()
+  targetCode: string;
+
+  @ApiProperty({ example: 'S3', description: 'Clave de sección fuente' })
+  @IsString()
+  sourceField: string;
+
+  @ApiProperty({ example: 'S2', description: 'Clave de sección destino' })
+  @IsString()
+  targetField: string;
+
+  @ApiPropertyOptional({ enum: ['DIRECT', 'AGGREGATED', 'AI_GENERATED'] })
+  @IsOptional()
+  @IsIn(['DIRECT', 'AGGREGATED', 'AI_GENERATED'])
+  mappingType?: 'DIRECT' | 'AGGREGATED' | 'AI_GENERATED';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
 
 export class SectionChildDto {
   @ApiProperty({ example: 'A1' })
@@ -91,6 +119,13 @@ export class CreateAuditTemplateDto {
   @Type(() => SectionDefDto)
   sections?: SectionDefDto[];
 
+  @ApiPropertyOptional({ type: [PaperLinkDefDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PaperLinkDefDto)
+  links?: PaperLinkDefDto[];
+
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
@@ -126,6 +161,13 @@ export class UpdateAuditTemplateDto {
   @ValidateNested({ each: true })
   @Type(() => SectionDefDto)
   sections?: SectionDefDto[];
+
+  @ApiPropertyOptional({ type: [PaperLinkDefDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PaperLinkDefDto)
+  links?: PaperLinkDefDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

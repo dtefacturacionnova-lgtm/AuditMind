@@ -963,7 +963,90 @@ export class AuditIndexService {
       }
     }
 
+    // ─── Instantiate PaperLinks from template (knowledge graph) ────────────
+    if (templateId) {
+      try {
+        const tpl = await this.prisma.auditTemplate.findUnique({
+          where: { id: templateId },
+          select: { links: true },
+        });
+        const linkDefs = (tpl?.links ?? []) as unknown as Array<{
+          sourceCode: string; targetCode: string;
+          sourceField: string; targetField: string;
+          mappingType?: 'DIRECT' | 'AGGREGATED' | 'AI_GENERATED';
+          description?: string;
+        }>;
+        if (Array.isArray(linkDefs) && linkDefs.length > 0) {
+          await this._instantiatePaperLinks(auditId, linkDefs);
+          this.logger.log(`[AuditIndex] Instanciados ${linkDefs.length} PaperLinks desde plantilla`);
+        }
+      } catch (err) {
+        this.logger.error(`[AuditIndex] PaperLinks instantiation failed: ${String(err)}`);
+      }
+    }
+
     this.logger.log(`[AuditIndex] Scaffold complete for audit ${auditId}`);
+  }
+
+  /**
+   * Instantiate PaperLinks from template definitions.
+   * Maps each {sourceCode, targetCode} pair to actual WorkingPaper.id values
+   * for this specific audit. Resolves codes by matching either `paperCode`
+   * (preferred — e.g. "PT-A1") or `code` (e.g. "A-02").
+   * Skips links where either endpoint cannot be resolved.
+   */
+  private async _instantiatePaperLinks(
+    auditId:  string,
+    linkDefs: Array<{
+      sourceCode: string; targetCode: string;
+      sourceField: string; targetField: string;
+      mappingType?: 'DIRECT' | 'AGGREGATED' | 'AI_GENERATED';
+      description?: string;
+    }>,
+  ): Promise<void> {
+    const papers = await this.prisma.workingPaper.findMany({
+      where:  { auditId },
+      select: { id: true, code: true, paperCode: true },
+    });
+
+    // Build lookup: any code → paperId (paperCode takes precedence over code)
+    const byCode = new Map<string, string>();
+    for (const p of papers) {
+      byCode.set(p.code, p.id);
+      if (p.paperCode) byCode.set(p.paperCode, p.id);
+    }
+
+    const toCreate: Array<{
+      sourceId: string; targetId: string;
+      sourceField: string; targetField: string;
+      mappingType: 'DIRECT' | 'AGGREGATED' | 'AI_GENERATED';
+      description: string | null; isActive: boolean;
+    }> = [];
+
+    let skipped = 0;
+    for (const def of linkDefs) {
+      const sourceId = byCode.get(def.sourceCode);
+      const targetId = byCode.get(def.targetCode);
+      if (!sourceId || !targetId) {
+        skipped++;
+        continue;
+      }
+      toCreate.push({
+        sourceId, targetId,
+        sourceField: def.sourceField,
+        targetField: def.targetField,
+        mappingType: def.mappingType ?? 'DIRECT',
+        description: def.description ?? null,
+        isActive:    true,
+      });
+    }
+
+    if (toCreate.length > 0) {
+      await this.prisma.paperLink.createMany({ data: toCreate, skipDuplicates: true });
+    }
+    if (skipped > 0) {
+      this.logger.warn(`[AuditIndex] ${skipped} PaperLinks skipped (codes no resueltos)`);
+    }
   }
 
   /**

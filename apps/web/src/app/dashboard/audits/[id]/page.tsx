@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -76,6 +76,12 @@ export default function AuditDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+
+  // Leer ?tab= de la URL al montar (ej. "Volver al Índice" → tab=expediente)
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t) setActiveTab(t as Tab);
+  }, []);
   const [showStatusModal,    setShowStatusModal]    = useState(false);
   const [statusComment,      setStatusComment]      = useState('');
   const [showRollForward,    setShowRollForward]    = useState(false);

@@ -36,6 +36,17 @@ export interface PaperSection {
   isStale?: boolean;
   staleSince?: string;
   staleReason?: string;
+  // Documentos de soporte de la sección
+  attachments?: SectionAttachment[];
+}
+
+export interface SectionAttachment {
+  id: string;
+  filename: string;
+  url: string;
+  mimeType?: string;
+  size?: number;
+  uploadedAt: string;
 }
 
 export interface WpRef {
@@ -394,6 +405,28 @@ export function useRemoveAttachment() {
   return useMutation({
     mutationFn: ({ paperId, procedureId, attachmentId }: { paperId: string; procedureId: string; attachmentId: string }) =>
       apiClient.delete(`/working-papers/${paperId}/procedures/${procedureId}/attachments/${attachmentId}`),
+    onSuccess: (_res, vars) => qc.invalidateQueries({ queryKey: ['wp', vars.paperId] }),
+  });
+}
+
+// Adjuntar archivo a una SECCIÓN
+export function useAttachToSection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, sectionKey, file }: { paperId: string; sectionKey: string; file: File }) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return apiClient.postForm(`/working-papers/${paperId}/sections/${sectionKey}/attachments`, fd);
+    },
+    onSuccess: (_res, vars) => qc.invalidateQueries({ queryKey: ['wp', vars.paperId] }),
+  });
+}
+
+export function useRemoveSectionAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, sectionKey, attachmentId }: { paperId: string; sectionKey: string; attachmentId: string }) =>
+      apiClient.delete(`/working-papers/${paperId}/sections/${sectionKey}/attachments/${attachmentId}`),
     onSuccess: (_res, vars) => qc.invalidateQueries({ queryKey: ['wp', vars.paperId] }),
   });
 }

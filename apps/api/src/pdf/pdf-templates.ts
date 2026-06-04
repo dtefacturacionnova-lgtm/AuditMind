@@ -267,7 +267,9 @@ export interface WorkingPaperReportData {
     preparedAt?: string | null;
     reviewedAt?: string | null;
     audit: { title: string };
-    sections?: Array<{ sectionKey: string; label: string; value: unknown; fieldType: string }>;
+    sections?: Array<{ sectionKey: string; label: string; value: unknown; fieldType: string;
+      attachments?: Array<{ filename: string; url: string; size?: number }>;
+    }>;
     content?: { procedures?: Array<{
       title?: string; statement?: string; procedure?: string; development?: string; area?: string; niaRef?: string;
       attachments?: Array<{ filename: string; url: string; size?: number }>;
@@ -299,10 +301,20 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
         } else {
           valStr = `<span class="pre-wrap">${esc(String(val))}</span>`;
         }
+        const sAtts = s.attachments ?? [];
+        const attsHtml = sAtts.length > 0
+          ? `<div style="margin-top: 1.5mm;">
+               <p class="text-small text-muted" style="margin: 0 0 0.5mm 0;">📎 Documentos de soporte:</p>
+               <ul style="margin: 0; padding-left: 5mm;">
+                 ${sAtts.map(a => `<li class="text-small">${esc(a.filename)}</li>`).join('')}
+               </ul>
+             </div>`
+          : '';
         return `
           <div class="no-break" style="margin-bottom: 4mm;">
             <h3 style="margin-bottom: 1mm;">${esc(s.label)}</h3>
             <div>${valStr}</div>
+            ${attsHtml}
           </div>`;
       }).join('')
     : '<p class="text-muted text-small">Este papel no tiene secciones estructuradas.</p>';

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Pencil, Bot, X, Check, Sparkles, RefreshCw, AlertTriangle, ShieldCheck } from 'lucide-react';
-import type { MentionItem, PaperSection, SectionFieldType } from '@/hooks/useWorkingPaperGraph';
-import { useAssistSection, useConfirmSection } from '@/hooks/useWorkingPaperGraph';
+import { useState, useEffect, useRef } from 'react';
+import { Pencil, Bot, X, Check, Sparkles, RefreshCw, AlertTriangle, ShieldCheck, Paperclip, Upload, Trash2, FileText, Loader2 } from 'lucide-react';
+import type { MentionItem, PaperSection, SectionAttachment, SectionFieldType } from '@/hooks/useWorkingPaperGraph';
+import { useAssistSection, useConfirmSection, useAttachToSection, useRemoveSectionAttachment } from '@/hooks/useWorkingPaperGraph';
 import { HighlightedMentions, MentionableTextarea } from './MentionableTextarea';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -365,6 +365,112 @@ export interface SectionFieldProps {
   aiDraftConfig?:   AiDraftConfig;
 }
 
+// ─── Section attachments (support documents) ───────────────────────────────────
+
+function formatBytes(n?: number): string {
+  if (!n || n <= 0) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function SectionAttachments({
+  paperId,
+  sectionKey,
+  attachments,
+  readonly,
+}: {
+  paperId: string;
+  sectionKey: string;
+  attachments: SectionAttachment[];
+  readonly: boolean;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const attach = useAttachToSection();
+  const remove = useRemoveSectionAttachment();
+  const [open, setOpen] = useState(attachments.length > 0);
+
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    attach.mutate({ paperId, sectionKey, file });
+    if (fileRef.current) fileRef.current.value = '';
+  }
+
+  if (readonly && attachments.length === 0) return null;
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-700 transition-colors"
+      >
+        <Paperclip className="w-3 h-3" />
+        Documentos de soporte
+        {attachments.length > 0 && (
+          <span className="ml-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium">
+            {attachments.length}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="mt-1.5 space-y-1">
+          {attachments.map(att => (
+            <div
+              key={att.id}
+              className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5"
+            >
+              <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <a
+                href={att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 min-w-0 truncate text-[11px] text-blue-600 hover:underline"
+                title={att.filename}
+              >
+                {att.filename}
+              </a>
+              {att.size ? <span className="text-[10px] text-gray-400 shrink-0">{formatBytes(att.size)}</span> : null}
+              {!readonly && (
+                <button
+                  onClick={() => remove.mutate({ paperId, sectionKey, attachmentId: att.id })}
+                  disabled={remove.isPending}
+                  className="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50 shrink-0"
+                  title="Quitar adjunto"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+
+          {!readonly && (
+            <>
+              <input ref={fileRef} type="file" className="hidden" onChange={onPick} />
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={attach.isPending}
+                className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 hover:border-gray-400 rounded-lg px-2 py-1.5 w-full justify-center transition-colors disabled:opacity-50"
+              >
+                {attach.isPending ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" /> Subiendo…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-3 h-3" /> Adjuntar documento
+                  </>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SectionField({ section, readonly = false, onSave, paperId, mentionItems, onMentionSelect, aiDraftConfig }: SectionFieldProps) {
   const [editing,      setEditing]   = useState(false);
   const [localValue,   setLocal]     = useState<unknown>(section.value);
@@ -639,6 +745,16 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
             setAiDraft(false);
           }}
           onClose={() => setAiDraft(false)}
+        />
+      )}
+
+      {/* Documentos de soporte de la sección — consistente con procedimientos */}
+      {paperId && !editing && (
+        <SectionAttachments
+          paperId={paperId}
+          sectionKey={section.sectionKey}
+          attachments={section.attachments ?? []}
+          readonly={readonly}
         />
       )}
     </div>

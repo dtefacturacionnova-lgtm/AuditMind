@@ -303,6 +303,68 @@ export class WorkingPapersService {
     }));
   }
 
+  // ─── Adjuntar archivo de soporte a una SECCIÓN ─────────────────────────────
+  async attachToSection(
+    paperId: string,
+    sectionKey: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    user: AuthUser,
+  ) {
+    await this.findOne(paperId, user); // access guard
+
+    const section = await this.prisma.paperSection.findFirst({
+      where: { paperId, sectionKey },
+    });
+    if (!section) throw new NotFoundException('Sección no encontrada');
+
+    const safeName = file.originalname.replace(/[^\w.\-]/g, '_');
+    const path = `sections/${paperId}/${sectionKey}/${Date.now()}_${safeName}`;
+    const { error: upErr } = await this.supabaseAdmin.storage
+      .from('audit-files')
+      .upload(path, file.buffer, {
+        contentType: file.mimetype || 'application/octet-stream',
+        cacheControl: '3600',
+        upsert: false,
+      });
+    if (upErr) throw new BadRequestException(`Error al subir archivo: ${upErr.message}`);
+
+    const { data: urlData } = this.supabaseAdmin.storage.from('audit-files').getPublicUrl(path);
+
+    const attachment = {
+      id:        `att_${Date.now().toString(36)}`,
+      filename:  file.originalname,
+      url:       urlData.publicUrl,
+      mimeType:  file.mimetype,
+      size:      file.size,
+      uploadedAt: new Date().toISOString(),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const attachments = Array.isArray(section.attachments) ? (section.attachments as any[]) : [];
+    attachments.push(attachment);
+
+    await this.prisma.paperSection.update({
+      where: { id: section.id },
+      data:  { attachments: attachments as Prisma.InputJsonValue },
+    });
+    return attachment;
+  }
+
+  async removeSectionAttachment(paperId: string, sectionKey: string, attachmentId: string, user: AuthUser) {
+    await this.findOne(paperId, user);
+    const section = await this.prisma.paperSection.findFirst({ where: { paperId, sectionKey } });
+    if (!section) throw new NotFoundException('Sección no encontrada');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const attachments = (Array.isArray(section.attachments) ? (section.attachments as any[]) : [])
+      .filter(a => a.id !== attachmentId);
+
+    await this.prisma.paperSection.update({
+      where: { id: section.id },
+      data:  { attachments: attachments as Prisma.InputJsonValue },
+    });
+    return { removed: true };
+  }
+
   // ─── F3: Adjuntar archivo de soporte a un procedimiento ────────────────────
   async attachToProcedure(
     id: string,

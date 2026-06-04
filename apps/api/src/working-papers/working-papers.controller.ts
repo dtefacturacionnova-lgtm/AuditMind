@@ -430,6 +430,33 @@ export class WorkingPapersController {
     return this.service.removeProcedure(id, procedureId, user);
   }
 
+  // ─── Adjuntar archivo de soporte a una SECCIÓN ─────────────────────────────
+  @Post(':id/sections/:sectionKey/attachments')
+  @Roles(UserRole.AUDITOR)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Subir un documento de soporte a una sección (máx 25MB)' })
+  attachToSection(
+    @Param('id') id: string,
+    @Param('sectionKey') sectionKey: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) throw new Error('No se recibió archivo');
+    return this.service.attachToSection(id, sectionKey, file, user);
+  }
+
+  @Delete(':id/sections/:sectionKey/attachments/:attachmentId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Quitar un documento de soporte de una sección' })
+  removeSectionAttachment(
+    @Param('id') id: string,
+    @Param('sectionKey') sectionKey: string,
+    @Param('attachmentId') attachmentId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.removeSectionAttachment(id, sectionKey, attachmentId, user);
+  }
+
   // ─── F3: Adjuntar archivo de soporte a un procedimiento ────────────────────
   @Post(':id/procedures/:procedureId/attachments')
   @Roles(UserRole.AUDITOR)
@@ -540,6 +567,7 @@ export class WorkingPapersController {
         audit:        { title: w.audit?.title ?? '' },
         sections:     (w.sections ?? []).map((s: Record<string, unknown>) => ({
           sectionKey: s.sectionKey, label: s.label, value: s.value, fieldType: s.fieldType,
+          attachments: Array.isArray(s.attachments) ? s.attachments : [],
         })),
         content:      w.content,
         // Grafo

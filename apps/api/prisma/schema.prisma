@@ -1240,6 +1240,7 @@ model PaperSection {
   sourceRef    String?   // "paperId::sectionKey" origen si isAutoFilled = true
   sortOrder    Int       @default(0)
   aiHint       String?   // Contexto para el agente IA al generar esta sección
+  attachments  Json?     // [{ id, filename, url, mimeType, size, uploadedAt }] — documentos de soporte
   // ─── PI.2 Granular cascade invalidation ──────────────────────────────────
   isStale      Boolean   @default(false)   // true = la fuente cambió, requiere revisión
   staleSince   DateTime?                   // cuándo se marcó stale

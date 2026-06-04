@@ -258,6 +258,8 @@ export interface WorkingPaperReportData {
     wpKind: string;
     status: string;
     indexSection: string;
+    qualityScore?: number | null;
+    version?: number;
     conclusion?: string | null;
     narrative?: string | null;
     preparedBy?: { name: string } | null;
@@ -267,6 +269,10 @@ export interface WorkingPaperReportData {
     audit: { title: string };
     sections?: Array<{ sectionKey: string; label: string; value: unknown; fieldType: string }>;
     content?: { procedures?: Array<{ title?: string; statement?: string; procedure?: string; development?: string; area?: string; niaRef?: string }> };
+    sourceLinks?: Array<{ targetCode?: string; targetTitle?: string; sourceField?: string; targetField?: string; mappingType?: string }>;
+    targetLinks?: Array<{ sourceCode?: string; sourceTitle?: string; sourceField?: string; targetField?: string; mappingType?: string }>;
+    comments?: Array<{ content: string; createdAt?: string | null; resolved?: boolean }>;
+    versions?: Array<{ version: number; changedAt?: string; changedBy?: string; reason?: string | null; wordCount?: number }>;
   };
 }
 
@@ -311,6 +317,63 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
         </div>`).join('')
     : '';
 
+  // ── Grafo de conocimiento ──
+  const sourceLinks = wp.sourceLinks ?? [];
+  const targetLinks = wp.targetLinks ?? [];
+  const graphHtml = (sourceLinks.length > 0 || targetLinks.length > 0) ? `
+    <div class="page-break"></div>
+    <h1>Grafo de Conocimiento</h1>
+    <p class="text-small text-muted">Flujo de datos entre este papel y otros papeles del expediente.</p>
+    ${targetLinks.length > 0 ? `
+      <h2>Este papel recibe de (fuentes)</h2>
+      <table>
+        <thead><tr><th>Papel fuente</th><th>Campo origen → destino</th><th>Tipo</th></tr></thead>
+        <tbody>${targetLinks.map(l => `
+          <tr><td>${esc(l.sourceCode ?? '')} ${esc(l.sourceTitle ?? '')}</td>
+              <td class="text-small">${esc(l.sourceField ?? '')} → ${esc(l.targetField ?? '')}</td>
+              <td class="text-small">${esc(l.mappingType ?? 'DIRECT')}</td></tr>`).join('')}</tbody>
+      </table>` : ''}
+    ${sourceLinks.length > 0 ? `
+      <h2>Este papel alimenta a (dependientes)</h2>
+      <table>
+        <thead><tr><th>Papel destino</th><th>Campo origen → destino</th><th>Tipo</th></tr></thead>
+        <tbody>${sourceLinks.map(l => `
+          <tr><td>${esc(l.targetCode ?? '')} ${esc(l.targetTitle ?? '')}</td>
+              <td class="text-small">${esc(l.sourceField ?? '')} → ${esc(l.targetField ?? '')}</td>
+              <td class="text-small">${esc(l.mappingType ?? 'DIRECT')}</td></tr>`).join('')}</tbody>
+      </table>` : ''}
+  ` : '';
+
+  // ── Revisión (comentarios) ──
+  const comments = wp.comments ?? [];
+  const reviewHtml = comments.length > 0 ? `
+    <div class="page-break"></div>
+    <h1>Notas de Revisión</h1>
+    <table>
+      <thead><tr><th style="width: 26mm;">Fecha</th><th>Comentario</th><th style="width: 22mm;">Estado</th></tr></thead>
+      <tbody>${comments.map(c => `
+        <tr><td class="text-small">${c.createdAt ? fmtDate(c.createdAt) : '—'}</td>
+            <td class="pre-wrap">${esc(c.content)}</td>
+            <td class="text-small">${c.resolved ? '<span class="badge badge-low">Resuelto</span>' : '<span class="badge badge-medium">Abierto</span>'}</td></tr>`).join('')}</tbody>
+    </table>
+  ` : '';
+
+  // ── Historial de versiones ──
+  const versions = wp.versions ?? [];
+  const historyHtml = versions.length > 0 ? `
+    <div class="page-break"></div>
+    <h1>Historial de Versiones</h1>
+    <p class="text-small text-muted">NIA 230 — Trazabilidad de la documentación de auditoría.</p>
+    <table>
+      <thead><tr><th style="width: 14mm;">Versión</th><th style="width: 28mm;">Fecha</th><th style="width: 34mm;">Autor</th><th>Razón</th></tr></thead>
+      <tbody>${versions.map(v => `
+        <tr><td style="font-weight: 600;">v${v.version}</td>
+            <td class="text-small">${v.changedAt ? fmtDate(v.changedAt) : '—'}</td>
+            <td class="text-small">${esc(v.changedBy ?? '—')}</td>
+            <td class="text-small">${esc(v.reason ?? '—')}</td></tr>`).join('')}</tbody>
+    </table>
+  ` : '';
+
   return `
     <div class="meta-strip">
       <div class="grid-2">
@@ -318,11 +381,13 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
           <div><span class="kv-label">Código:</span> ${esc(wp.paperCode ?? wp.code)}</div>
           <div><span class="kv-label">Auditoría:</span> ${esc(wp.audit.title)}</div>
           <div><span class="kv-label">Sección:</span> ${esc(wp.indexSection)}</div>
+          <div><span class="kv-label">Elaborado por:</span> ${esc(wp.preparedBy?.name ?? 'Sin asignar')}</div>
         </div>
         <div class="kv">
-          <div><span class="kv-label">Tipo:</span> ${esc(wp.type)}</div>
-          <div><span class="kv-label">Clase:</span> ${esc(wp.wpKind)}</div>
-          <div><span class="kv-label">Estado:</span> ${esc(wp.status)}</div>
+          <div><span class="kv-label">Tipo:</span> ${esc(wp.type)} · ${esc(wp.wpKind)}</div>
+          <div><span class="kv-label">Estado:</span> ${esc(wp.status)}${wp.version ? ` · v${wp.version}` : ''}</div>
+          <div><span class="kv-label">Revisado por:</span> ${esc(wp.reviewedBy?.name ?? 'Sin asignar')}</div>
+          ${wp.qualityScore != null ? `<div><span class="kv-label">Calidad:</span> ${wp.qualityScore}/100</div>` : ''}
         </div>
       </div>
     </div>
@@ -335,6 +400,10 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
     ${proceduresHtml ? `<h2>Procedimientos</h2>${proceduresHtml}` : ''}
 
     ${wp.conclusion ? `<h2>Conclusión</h2><blockquote class="pre-wrap">${esc(wp.conclusion)}</blockquote>` : ''}
+
+    ${graphHtml}
+    ${reviewHtml}
+    ${historyHtml}
 
     <div class="signature-block">
       <div class="grid-2">

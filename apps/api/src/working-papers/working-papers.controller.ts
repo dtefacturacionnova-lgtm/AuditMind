@@ -510,6 +510,10 @@ export class WorkingPapersController {
     const wp = await this.service.findOne(id, user);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = wp as any;
+
+    // Versiones (PI.5) para la hoja de Historial
+    const versions = await this.versionsService.listVersions(id, user).catch(() => []);
+
     const body = renderWorkingPaperBody({
       paper: {
         code:         w.code,
@@ -519,17 +523,38 @@ export class WorkingPapersController {
         wpKind:       w.wpKind,
         status:       w.status,
         indexSection: w.indexSection,
+        qualityScore: w.qualityScore,
         conclusion:   w.conclusion,
         narrative:    w.narrative,
         preparedBy:   w.preparedBy ? { name: w.preparedBy.name } : null,
         reviewedBy:   w.reviewedBy ? { name: w.reviewedBy.name } : null,
         preparedAt:   w.preparedAt?.toISOString?.() ?? null,
         reviewedAt:   w.reviewedAt?.toISOString?.() ?? null,
+        version:      w.version,
         audit:        { title: w.audit?.title ?? '' },
         sections:     (w.sections ?? []).map((s: Record<string, unknown>) => ({
           sectionKey: s.sectionKey, label: s.label, value: s.value, fieldType: s.fieldType,
         })),
         content:      w.content,
+        // Grafo
+        sourceLinks:  (w.sourceLinks ?? []).map((l: Record<string, any>) => ({
+          targetCode: l.target?.code, targetTitle: l.target?.title,
+          sourceField: l.sourceField, targetField: l.targetField, mappingType: l.mappingType,
+        })),
+        targetLinks:  (w.targetLinks ?? []).map((l: Record<string, any>) => ({
+          sourceCode: l.source?.code, sourceTitle: l.source?.title,
+          sourceField: l.sourceField, targetField: l.targetField, mappingType: l.mappingType,
+        })),
+        // Revisión
+        comments:     (w.comments ?? []).map((c: Record<string, any>) => ({
+          content: c.content, createdAt: c.createdAt?.toISOString?.() ?? null, resolved: c.resolved,
+        })),
+        // Historial
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        versions:     (versions as any[]).map(v => ({
+          version: v.version, changedAt: v.changedAt, changedBy: v.changedBy,
+          reason: v.reason, wordCount: v.wordCount,
+        })),
       },
     });
 

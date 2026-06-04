@@ -59,16 +59,21 @@ export class AuditFoldersService {
     auditId: string,
     user: AuthUser,
     templateId?: string,
-  ): Promise<void> {
+  ): Promise<{ created: boolean; phases: number; folders: number; orphansLinked: number }> {
     await this.verifyAuditAccess(auditId, user);
 
-    // Verificar que no tenga fases ya creadas
+    // IDEMPOTENTE: si ya hay fases, intentar enlazar huérfanos y devolver OK
     const existing = await this.prisma.auditPhase.count({ where: { auditId } });
-    if (existing > 0) throw new BadRequestException('El expediente ya fue inicializado');
+    if (existing > 0) {
+      const orphansLinked = await this.linkOrphanPapersToFolders(auditId);
+      return { created: false, phases: existing, folders: 0, orphansLinked };
+    }
 
     // Obtener estructura: desde DB (templateId o default) o fallback hardcoded
     const structure = await this.indexTemplates.getStructureForInit(templateId, user);
 
+    let phaseCount = 0;
+    let folderCount = 0;
     for (const tplPhase of structure) {
       const phase = await this.prisma.auditPhase.create({
         data: {
@@ -78,6 +83,7 @@ export class AuditFoldersService {
           order: tplPhase.order,
         },
       });
+      phaseCount++;
 
       for (const folder of tplPhase.folders) {
         const parentFolder = await this.prisma.auditFolder.create({
@@ -90,6 +96,7 @@ export class AuditFoldersService {
             createdById: user.id,
           },
         });
+        folderCount++;
 
         if ('children' in folder && folder.children) {
           for (const child of folder.children) {
@@ -104,10 +111,16 @@ export class AuditFoldersService {
                 createdById: user.id,
               },
             });
+            folderCount++;
           }
         }
       }
     }
+
+    // Link orphan papers (created earlier by scaffold) to their folders
+    const orphansLinked = await this.linkOrphanPapersToFolders(auditId);
+
+    return { created: true, phases: phaseCount, folders: folderCount, orphansLinked };
   }
 
   // ─── Inicializar expediente (desde secciones de AuditTemplate) ──────────
@@ -119,11 +132,15 @@ export class AuditFoldersService {
   async initializeFromAuditTemplateSections(
     auditId:  string,
     user:     AuthUser,
-  ): Promise<void> {
+  ): Promise<{ created: boolean; phases: number; folders: number; orphansLinked: number }> {
     await this.verifyAuditAccess(auditId, user);
 
     const existing = await this.prisma.auditPhase.count({ where: { auditId } });
-    if (existing > 0) throw new BadRequestException('El expediente ya fue inicializado');
+    if (existing > 0) {
+      // IDEMPOTENTE: en lugar de error, intentamos linkar papeles huérfanos y devolvemos OK
+      const orphansLinked = await this.linkOrphanPapersToFolders(auditId);
+      return { created: false, phases: existing, folders: 0, orphansLinked };
+    }
 
     const audit = await this.prisma.audit.findFirst({
       where: { id: auditId, organizationId: user.organizationId },
@@ -138,7 +155,10 @@ export class AuditFoldersService {
       select: { sections: true },
     });
     if (!template?.sections) {
-      throw new BadRequestException('La plantilla no tiene estructura de carpetas definida — usa una Plantilla de Índice');
+      throw new BadRequestException(
+        'La plantilla no tiene estructura de carpetas definida. ' +
+        'Usa "Elegir plantilla e inicializar" con una Plantilla de Índice clásica (IIA Estándar / En Blanco).',
+      );
     }
 
     interface SectionDef {
@@ -165,6 +185,8 @@ export class AuditFoldersService {
     };
 
     let order = 0;
+    let phaseCount = 0;
+    let folderCount = 0;
     for (const phaseType of phaseOrder) {
       const phaseSections = phaseGroups.get(phaseType)!;
       const phase = await this.prisma.auditPhase.create({
@@ -175,6 +197,7 @@ export class AuditFoldersService {
           order: order++,
         },
       });
+      phaseCount++;
 
       for (const [si, section] of phaseSections.entries()) {
         const folder = await this.prisma.auditFolder.create({
@@ -184,6 +207,7 @@ export class AuditFoldersService {
             sortOrder: si, createdById: user.id,
           },
         });
+        folderCount++;
         if (section.children?.length) {
           for (const [ci, child] of section.children.entries()) {
             await this.prisma.auditFolder.create({
@@ -193,10 +217,55 @@ export class AuditFoldersService {
                 sortOrder: ci, createdById: user.id,
               },
             });
+            folderCount++;
           }
         }
       }
     }
+
+    // Link any orphan papers (created earlier by scaffold) to their folders
+    const orphansLinked = await this.linkOrphanPapersToFolders(auditId);
+
+    return { created: true, phases: phaseCount, folders: folderCount, orphansLinked };
+  }
+
+  // ─── Link papeles huérfanos creados por scaffold a su folder correspondiente ────
+  /**
+   * Cuando una auditoría se crea con scaffoldMode='FULL', el AuditIndexService
+   * crea WorkingPapers con un indexSection (ej. 'A', 'B-DDC') pero sin folderId.
+   * Después de crear la estructura de carpetas, este método engancha cada
+   * papel huérfano (folderId=null) a su folder que coincide por ref.
+   *
+   * Resuelve casos:
+   * 1. indexSection coincide exactamente con folder.ref → directo
+   * 2. indexSection coincide con un subfolder hijo (ej. 'B-DDC') → usa ese
+   * 3. Sin match → queda huérfano (no error)
+   */
+  private async linkOrphanPapersToFolders(auditId: string): Promise<number> {
+    const orphans = await this.prisma.workingPaper.findMany({
+      where:  { auditId, folderId: null },
+      select: { id: true, indexSection: true },
+    });
+    if (orphans.length === 0) return 0;
+
+    const folders = await this.prisma.auditFolder.findMany({
+      where:  { auditId },
+      select: { id: true, ref: true },
+    });
+    const byRef = new Map<string, string>();
+    for (const f of folders) byRef.set(f.ref, f.id);
+
+    let linked = 0;
+    for (const wp of orphans) {
+      const folderId = byRef.get(wp.indexSection);
+      if (!folderId) continue;
+      await this.prisma.workingPaper.update({
+        where: { id: wp.id },
+        data:  { folderId },
+      });
+      linked++;
+    }
+    return linked;
   }
 
   // ─── Obtener expediente completo (fases + carpetas + conteos) ────────────

@@ -372,6 +372,17 @@ export class WorkingPapersController {
     return this.service.appendProcedure(id, dto, user);
   }
 
+  @Delete(':id/procedures/:procedureId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Quitar un procedimiento del papel' })
+  removeProcedure(
+    @Param('id') id: string,
+    @Param('procedureId') procedureId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.removeProcedure(id, procedureId, user);
+  }
+
   // ─── Gap 3: @mention references ───────────────────────────────────────────
 
   @Get('mention-index/:auditId')

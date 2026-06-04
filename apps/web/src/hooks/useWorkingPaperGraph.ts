@@ -322,6 +322,20 @@ export function useAppendProcedure() {
   });
 }
 
+// Quitar un procedimiento del papel
+export function useRemoveProcedure() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, procedureId }: { paperId: string; procedureId: string }) =>
+      apiClient.delete<{ removed: boolean; total: number }>(
+        `/working-papers/${paperId}/procedures/${procedureId}`,
+      ),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['wp', vars.paperId] });
+    },
+  });
+}
+
 // ─── Gap 3: @mention references ──────────────────────────────────────────────
 
 export interface MentionSection {

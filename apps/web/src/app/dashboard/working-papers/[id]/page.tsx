@@ -28,6 +28,7 @@ import { PaperGraphPanel }         from '@/components/working-papers/PaperGraphP
 import { QualityGatePanel }        from '@/components/working-papers/QualityGatePanel';
 import { LivePaperDashboard }      from '@/components/working-papers/LivePaperDashboard';
 import { CrossAuditSuggestions }   from '@/components/working-papers/CrossAuditSuggestions';
+import { PaperProceduresPanel, type AppliedProcedure } from '@/components/working-papers/PaperProceduresPanel';
 import { PaperAgentPanel, PaperAgentButton, PAPER_AGENT_MAP, DEFAULT_AGENT } from '@/components/working-papers/PaperAgentPanel';
 import { SamplingCalculatorModal }  from '@/components/working-papers/SamplingCalculatorModal';
 import { CosoAssessmentPanel }      from '@/components/working-papers/CosoAssessmentPanel';
@@ -1598,6 +1599,11 @@ export default function WpDetailPage() {
                 paperCode={wp.paperCode}
                 readonly={wp.status === 'APPROVED'}
                 aiDraftConfig={wp.status !== 'APPROVED' ? aiDraftConfig : undefined}
+              />
+              <PaperProceduresPanel
+                paperId={params.id}
+                procedures={(wp.content as { procedures?: AppliedProcedure[] })?.procedures ?? []}
+                readonly={wp.status === 'APPROVED'}
               />
               <CrossAuditSuggestions auditId={wp.auditId} paperId={params.id} />
             </div>

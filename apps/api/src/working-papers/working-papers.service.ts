@@ -217,6 +217,21 @@ export class WorkingPapersService {
     return { added: !exists, total: procedures.length, procedures };
   }
 
+  async removeProcedure(id: string, procedureId: string, user: AuthUser) {
+    const wp = await this.findOne(id, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    const procedures: Array<{ id: string }> = Array.isArray(content.procedures) ? content.procedures : [];
+    const filtered = procedures.filter(p => p.id !== procedureId);
+
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { content: { ...content, procedures: filtered } as Prisma.InputJsonValue },
+    });
+
+    return { removed: filtered.length < procedures.length, total: filtered.length };
+  }
+
   private LOCKED_STATUSES: WorkingPaperStatus[] = [
     WorkingPaperStatus.SIGNED_OFF,
     WorkingPaperStatus.CLOSED,

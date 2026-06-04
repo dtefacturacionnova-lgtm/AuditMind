@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -31,7 +31,7 @@ const WP_KINDS = [
   { value: 'FILE',     label: 'Archivo',   icon: Paperclip, description: 'Solo archivo adjunto sin contenido propio',                     color: 'bg-amber-50 border-amber-400 text-amber-700' },
 ] as const;
 
-export default function NewWorkingPaperPage() {
+function NewWorkingPaperInner() {
   const router = useRouter();
   const params = useSearchParams();
   const auditId  = params.get('auditId')  ?? '';
@@ -271,5 +271,23 @@ export default function NewWorkingPaperPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Wrapper con Suspense (Next.js 15 exige Suspense para useSearchParams) ─────
+export default function NewWorkingPaperPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col h-screen bg-[#F0F4F8]">
+          <Header />
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+          </div>
+        </div>
+      }
+    >
+      <NewWorkingPaperInner />
+    </Suspense>
   );
 }

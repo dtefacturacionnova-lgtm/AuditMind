@@ -2,11 +2,15 @@
  * PdfService — generación de PDF server-side con Puppeteer
  *
  * - Reutiliza una instancia de browser para evitar el overhead de cold start.
- * - Cualquier error de generación se loguea y lanza para que el caller maneje.
+ * - Puppeteer es OPCIONAL: si no está instalado o falla el launch (ej. Railway
+ *   sin Chromium), el servicio sigue vivo y el endpoint PDF responde 503 claro
+ *   sin romper el resto del backend.
  * - Templates HTML se mantienen separados en pdf-templates.ts.
  */
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import puppeteer, { Browser } from 'puppeteer';
+import { Injectable, Logger, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Browser = any;
 
 export interface PdfOptions {
   /** "A4" por defecto */
@@ -30,15 +34,33 @@ export class PdfService implements OnModuleDestroy {
     if (this.browser && this.browser.connected) return this.browser;
 
     if (!this.launchPromise) {
-      this.launchPromise = puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-        ],
-      });
+      this.launchPromise = (async () => {
+        try {
+          // Dynamic import — puppeteer is OPTIONAL.
+          // If the package is missing or Chromium can't launch (e.g. Railway
+          // without proper buildpack), we throw a clear 503 instead of
+          // crashing the whole server at startup.
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const puppeteer = require('puppeteer');
+          return await puppeteer.launch({
+            headless: true,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+            ],
+          });
+        } catch (err) {
+          this.logger.error(
+            `[PDF] Puppeteer no disponible. ` +
+            `Causa: ${(err as Error).message}`,
+          );
+          throw new ServiceUnavailableException(
+            'El servicio de PDF no está disponible. Puppeteer/Chromium no se pudo iniciar.',
+          );
+        }
+      })();
     }
 
     this.browser = await this.launchPromise;

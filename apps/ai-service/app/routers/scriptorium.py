@@ -67,6 +67,22 @@ class WorkingPaperRequest(BaseModel):
     context: Optional[str] = None
 
 
+class ImproveTextRequest(BaseModel):
+    text: str
+    fieldType: Optional[str] = None     # 'title' | 'statement' | 'development'
+    paperTitle: Optional[str] = None
+    paperType: Optional[str] = None
+
+
+class DraftProcedureRequest(BaseModel):
+    title: Optional[str] = None
+    statement: Optional[str] = None
+    paperTitle: Optional[str] = None
+    paperType: Optional[str] = None
+    paperCode: Optional[str] = None
+    auditType: Optional[str] = None
+
+
 class CosoAssessRequest(BaseModel):
     auditTitle: str
     auditType: Optional[str] = None
@@ -537,6 +553,115 @@ IMPORTANTE: solo el JSON, sin texto fuera del objeto. Sin markdown.
 
     return {
         "assessment": parsed,
+        "model": result["model"],
+        "tokens_used": result["input_tokens"] + result["output_tokens"],
+    }
+
+
+# ─── Procedimientos enriquecidos — mejorar redacción + generar desarrollo ──────
+
+@router.post("/improve-procedure-text")
+async def improve_procedure_text(
+    request: ImproveTextRequest,
+    x_internal_key: str | None = Header(default=None),
+):
+    """
+    Mejora la redacción de un texto de procedimiento (título, enunciado o desarrollo)
+    con lenguaje técnico-profesional de auditoría, manteniendo el sentido original.
+    """
+    verify_internal_key(x_internal_key)
+
+    if not request.text or not request.text.strip():
+        raise HTTPException(status_code=400, detail="El texto a mejorar está vacío")
+
+    field_guidance = {
+        "title":       "Es un TÍTULO corto de procedimiento (máx 8 palabras, sin punto final).",
+        "statement":   "Es el ENUNCIADO del procedimiento: qué se va a ejecutar. Usa verbos de acción (verificar, recalcular, confirmar, indagar). 1-2 oraciones claras.",
+        "development": "Es el DESARROLLO/EJECUCIÓN del procedimiento: cómo se ejecutó y qué se obtuvo. Lenguaje formal de papel de trabajo, en pasado.",
+    }
+    guidance = field_guidance.get(request.fieldType or "", "Mejora la redacción profesional.")
+
+    system_prompt = (
+        "Eres SCRIPTORIUM, redactor experto de papeles de trabajo de auditoría. "
+        "Mejoras la redacción manteniendo SIEMPRE el sentido y los hechos originales. "
+        "No inventas datos. Respondes solo con el texto mejorado, sin comillas ni explicaciones."
+    )
+
+    context = ""
+    if request.paperTitle or request.paperType:
+        context = f"\nContexto del papel: {request.paperTitle or ''} ({request.paperType or ''})."
+
+    user_message = (
+        f"Mejora la redacción del siguiente texto.\n{guidance}{context}\n\n"
+        f"TEXTO ORIGINAL:\n{request.text}\n\n"
+        f"Responde SOLO con el texto mejorado."
+    )
+
+    result = await chat_with_agent(
+        agent_type="SCRIPTORIUM",
+        system_prompt=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+        max_tokens=1200,
+        override_complexity=TaskComplexity.STANDARD,
+    )
+
+    improved = (result["content"] or "").strip().strip('"')
+    return {
+        "improved": improved,
+        "original": request.text,
+        "model": result["model"],
+        "tokens_used": result["input_tokens"] + result["output_tokens"],
+    }
+
+
+@router.post("/draft-procedure")
+async def draft_procedure(
+    request: DraftProcedureRequest,
+    x_internal_key: str | None = Header(default=None),
+):
+    """
+    Genera el DESARROLLO de un procedimiento a partir del título + enunciado,
+    contextualizado al papel de trabajo donde se ubica.
+    """
+    verify_internal_key(x_internal_key)
+
+    if not (request.title or request.statement):
+        raise HTTPException(status_code=400, detail="Se requiere al menos título o enunciado")
+
+    system_prompt = (
+        "Eres SCRIPTORIUM, auditor experto que redacta el desarrollo de procedimientos "
+        "de auditoría en papeles de trabajo. Redactas el desarrollo de forma profesional, "
+        "específica y ejecutable, siguiendo NIA. No inventas resultados concretos: dejas "
+        "marcadores claros [completar con resultado] donde el auditor debe documentar la evidencia."
+    )
+
+    user_message = f"""Redacta el DESARROLLO de este procedimiento de auditoría.
+
+PAPEL DE TRABAJO: {request.paperCode or ''} {request.paperTitle or ''} (tipo: {request.paperType or request.auditType or 'general'})
+TÍTULO DEL PROCEDIMIENTO: {request.title or '(sin título)'}
+ENUNCIADO: {request.statement or '(sin enunciado)'}
+
+Redacta un desarrollo de 3-5 oraciones que describa:
+1. Cómo se ejecuta el procedimiento (pasos concretos)
+2. Qué evidencia/documentación se revisa
+3. Qué se concluye o verifica
+
+Usa lenguaje formal de papel de trabajo. Inserta marcadores [completar...] donde el auditor
+debe poner datos específicos (montos, fechas, muestras, resultados).
+
+Responde SOLO con el texto del desarrollo, sin encabezados ni comillas."""
+
+    result = await chat_with_agent(
+        agent_type="SCRIPTORIUM",
+        system_prompt=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+        max_tokens=1500,
+        override_complexity=TaskComplexity.STANDARD,
+    )
+
+    development = (result["content"] or "").strip().strip('"')
+    return {
+        "development": development,
         "model": result["model"],
         "tokens_used": result["input_tokens"] + result["output_tokens"],
     }

@@ -163,6 +163,33 @@ export class AiService {
     return res.json();
   }
 
+  // ─── Procedimientos — mejorar redacción + generar desarrollo ──────────────────
+  async improveProcedureText(payload: Record<string, unknown>): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/scriptorium/improve-procedure-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': this.internalKey },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`Improve text error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
+  async draftProcedure(payload: Record<string, unknown>): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/scriptorium/draft-procedure`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': this.internalKey },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`Draft procedure error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
   // ─── PI.7c — COSO 2013 Auto-assessment ───────────────────────────────────────
   async cosoAssess(payload: Record<string, unknown>): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/scriptorium/coso-assess`, {

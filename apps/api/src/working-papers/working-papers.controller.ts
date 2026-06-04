@@ -21,9 +21,36 @@ class RestoreVersionDto {
 }
 
 class AppendProcedureDto {
-  @IsString() procedure!: string;
+  @IsOptional() @IsString() procedure?: string;   // legacy (sugerencias)
+  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() statement?: string;
+  @IsOptional() @IsString() development?: string;
   @IsOptional() @IsString() area?: string;
   @IsOptional() @IsString() niaRef?: string;
+}
+
+class UpdateProcedureDto {
+  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() statement?: string;
+  @IsOptional() @IsString() development?: string;
+  @IsOptional() @IsString() area?: string;
+  @IsOptional() @IsString() niaRef?: string;
+}
+
+class ImproveTextDto {
+  @IsString() text!: string;
+  @IsOptional() @IsString() fieldType?: string;
+  @IsOptional() @IsString() paperTitle?: string;
+  @IsOptional() @IsString() paperType?: string;
+}
+
+class DraftProcedureDto {
+  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() statement?: string;
+  @IsOptional() @IsString() paperTitle?: string;
+  @IsOptional() @IsString() paperType?: string;
+  @IsOptional() @IsString() paperCode?: string;
+  @IsOptional() @IsString() auditType?: string;
 }
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { WorkingPapersService } from './working-papers.service';
@@ -37,6 +64,7 @@ import { PaperLiveService } from './paper-live.service';
 import { CrossAuditLearningService } from './cross-audit-learning.service';
 import { PaperReferencesService } from './paper-references.service';
 import { PaperVersionsService } from './paper-versions.service';
+import { AiService } from '../ai/ai.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -55,6 +83,7 @@ export class WorkingPapersController {
     private readonly crossAudit:       CrossAuditLearningService,
     private readonly references:       PaperReferencesService,
     private readonly versionsService:  PaperVersionsService,
+    private readonly aiService:        AiService,
   ) {}
 
   // ─── Listados ─────────────────────────────────────────────────────────────────
@@ -372,6 +401,18 @@ export class WorkingPapersController {
     return this.service.appendProcedure(id, dto, user);
   }
 
+  @Patch(':id/procedures/:procedureId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Actualizar campos de un procedimiento (title/statement/development)' })
+  updateProcedure(
+    @Param('id') id: string,
+    @Param('procedureId') procedureId: string,
+    @Body() dto: UpdateProcedureDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.updateProcedure(id, procedureId, dto, user);
+  }
+
   @Delete(':id/procedures/:procedureId')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Quitar un procedimiento del papel' })
@@ -381,6 +422,22 @@ export class WorkingPapersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.removeProcedure(id, procedureId, user);
+  }
+
+  // ─── IA: mejorar redacción de un texto de procedimiento ────────────────────
+  @Post('ai/improve-text')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Mejorar la redacción de un texto (título/enunciado/desarrollo) con IA' })
+  improveText(@Body() body: ImproveTextDto) {
+    return this.aiService.improveProcedureText({ ...body });
+  }
+
+  // ─── IA: generar desarrollo de un procedimiento ────────────────────────────
+  @Post('ai/draft-procedure')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Generar el desarrollo de un procedimiento con IA (desde título + enunciado)' })
+  draftProcedure(@Body() body: DraftProcedureDto) {
+    return this.aiService.draftProcedure({ ...body });
   }
 
   // ─── Gap 3: @mention references ───────────────────────────────────────────

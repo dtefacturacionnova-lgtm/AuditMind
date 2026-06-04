@@ -179,33 +179,41 @@ export class WorkingPapersService {
     return wp;
   }
 
-  // ─── Agregar procedimiento sugerido al papel ───────────────────────────────
+  // ─── Procedimientos enriquecidos del papel ─────────────────────────────────
   /**
-   * Añade un procedimiento (de las sugerencias IA cross-audit) al array
-   * content.procedures[] del papel. Crea el array si no existe.
-   * Devuelve la lista actualizada de procedimientos.
+   * Estructura de un procedimiento (content.procedures[]):
+   *   { id, title, statement, development, area, niaRef, addedAt }
+   * - title: título corto (negrita)
+   * - statement: enunciado del procedimiento (qué se hace)
+   * - development: desarrollo / ejecución (lo que el auditor documenta)
    */
   async appendProcedure(
     id: string,
-    dto: { procedure: string; area?: string; niaRef?: string },
+    dto: { procedure?: string; title?: string; statement?: string; development?: string; area?: string; niaRef?: string },
     user: AuthUser,
   ) {
     const wp = await this.findOne(id, user);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const content = (wp.content ?? {}) as Record<string, any>;
-    const procedures: Array<{ id: string; area: string; procedure: string; niaRef?: string; addedAt: string }> =
-      Array.isArray(content.procedures) ? content.procedures : [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const procedures: any[] = Array.isArray(content.procedures) ? content.procedures : [];
 
-    // Evitar duplicados exactos
-    const exists = procedures.some(p => p.procedure === dto.procedure);
-    if (!exists) {
+    // Compatibilidad: si llega 'procedure' (legacy de sugerencias), lo mapeamos a statement
+    const statement = dto.statement ?? dto.procedure ?? '';
+    const title = dto.title ?? (dto.area ? `${dto.area}` : 'Procedimiento');
+
+    // Evitar duplicados exactos por statement
+    const exists = procedures.some(p => (p.statement ?? p.procedure) === statement);
+    if (!exists && statement.trim()) {
       procedures.push({
-        id:        `proc_${procedures.length + 1}_${Date.now().toString(36)}`,
-        area:      dto.area ?? 'General',
-        procedure: dto.procedure,
-        niaRef:    dto.niaRef,
-        addedAt:   new Date().toISOString(),
+        id:          `proc_${procedures.length + 1}_${Date.now().toString(36)}`,
+        title,
+        statement,
+        development: dto.development ?? '',
+        area:        dto.area ?? 'General',
+        niaRef:      dto.niaRef,
+        addedAt:     new Date().toISOString(),
       });
     }
 
@@ -215,6 +223,40 @@ export class WorkingPapersService {
     });
 
     return { added: !exists, total: procedures.length, procedures };
+  }
+
+  /** Actualizar campos de un procedimiento existente (title/statement/development). */
+  async updateProcedure(
+    id: string,
+    procedureId: string,
+    dto: { title?: string; statement?: string; development?: string; area?: string; niaRef?: string },
+    user: AuthUser,
+  ) {
+    const wp = await this.findOne(id, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const procedures: any[] = Array.isArray(content.procedures) ? content.procedures : [];
+
+    const idx = procedures.findIndex(p => p.id === procedureId);
+    if (idx === -1) throw new NotFoundException('Procedimiento no encontrado');
+
+    procedures[idx] = {
+      ...procedures[idx],
+      ...(dto.title       !== undefined && { title:       dto.title }),
+      ...(dto.statement   !== undefined && { statement:   dto.statement }),
+      ...(dto.development !== undefined && { development: dto.development }),
+      ...(dto.area        !== undefined && { area:        dto.area }),
+      ...(dto.niaRef      !== undefined && { niaRef:      dto.niaRef }),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { content: { ...content, procedures } as Prisma.InputJsonValue },
+    });
+
+    return procedures[idx];
   }
 
   async removeProcedure(id: string, procedureId: string, user: AuthUser) {

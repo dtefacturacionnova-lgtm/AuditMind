@@ -336,6 +336,44 @@ export function useRemoveProcedure() {
   });
 }
 
+// Actualizar campos de un procedimiento
+export function useUpdateProcedure() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, procedureId, ...fields }: {
+      paperId: string; procedureId: string;
+      title?: string; statement?: string; development?: string; area?: string; niaRef?: string;
+    }) =>
+      apiClient.patch(`/working-papers/${paperId}/procedures/${procedureId}`, fields),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['wp', vars.paperId] });
+    },
+  });
+}
+
+// IA: mejorar redacción de un texto
+export function useImproveText() {
+  return useMutation({
+    mutationFn: (body: { text: string; fieldType?: string; paperTitle?: string; paperType?: string }) =>
+      apiClient.post<{ improved: string; original: string }>(
+        `/working-papers/ai/improve-text`, body,
+      ),
+  });
+}
+
+// IA: generar desarrollo de un procedimiento
+export function useDraftProcedure() {
+  return useMutation({
+    mutationFn: (body: {
+      title?: string; statement?: string;
+      paperTitle?: string; paperType?: string; paperCode?: string; auditType?: string;
+    }) =>
+      apiClient.post<{ development: string }>(
+        `/working-papers/ai/draft-procedure`, body,
+      ),
+  });
+}
+
 // ─── Gap 3: @mention references ──────────────────────────────────────────────
 
 export interface MentionSection {

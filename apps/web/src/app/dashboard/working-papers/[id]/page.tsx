@@ -1602,6 +1602,9 @@ export default function WpDetailPage() {
               />
               <PaperProceduresPanel
                 paperId={params.id}
+                paperTitle={wp.title}
+                paperType={wp.type}
+                paperCode={wp.paperCode}
                 procedures={(wp.content as { procedures?: AppliedProcedure[] })?.procedures ?? []}
                 readonly={wp.status === 'APPROVED'}
               />

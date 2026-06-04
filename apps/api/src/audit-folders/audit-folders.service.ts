@@ -146,27 +146,36 @@ export class AuditFoldersService {
       where: { id: auditId, organizationId: user.organizationId },
       select: { templateId: true },
     });
-    if (!audit?.templateId) {
-      throw new BadRequestException('Esta auditoría no tiene plantilla de auditoría asignada');
-    }
-
-    const template = await this.prisma.auditTemplate.findFirst({
-      where: { id: audit.templateId },
-      select: { sections: true },
-    });
-    if (!template?.sections) {
-      throw new BadRequestException(
-        'La plantilla no tiene estructura de carpetas definida. ' +
-        'Usa "Elegir plantilla e inicializar" con una Plantilla de Índice clásica (IIA Estándar / En Blanco).',
-      );
-    }
 
     interface SectionDef {
       ref: string; name: string;
       phaseType?: string;
       children?: Array<{ ref: string; name: string }>;
     }
-    const sections = template.sections as unknown as SectionDef[];
+
+    // 1. Try to get sections from the AuditTemplate
+    let sections: SectionDef[] | null = null;
+    if (audit?.templateId) {
+      const template = await this.prisma.auditTemplate.findFirst({
+        where: { id: audit.templateId },
+        select: { sections: true },
+      });
+      if (template?.sections && Array.isArray(template.sections) && (template.sections as unknown[]).length > 0) {
+        sections = template.sections as unknown as SectionDef[];
+      }
+    }
+
+    // 2. FALLBACK: if the template has no sections, derive the folder structure
+    //    from the indexSection values of the papers that already exist in the
+    //    audit (created by scaffold). This guarantees the button always works.
+    if (!sections || sections.length === 0) {
+      sections = await this.deriveSectionsFromPapers(auditId);
+    }
+
+    // 3. Last resort: a single root folder so the user can build manually
+    if (!sections || sections.length === 0) {
+      sections = [{ ref: 'A', name: 'Expediente', phaseType: 'PLANNING' }];
+    }
 
     // Group sections by phaseType (preserving insertion order)
     const phaseGroups = new Map<string, SectionDef[]>();
@@ -227,6 +236,70 @@ export class AuditFoldersService {
     const orphansLinked = await this.linkOrphanPapersToFolders(auditId);
 
     return { created: true, phases: phaseCount, folders: folderCount, orphansLinked };
+  }
+
+  // ─── Derivar estructura de carpetas desde los papeles existentes ──────────
+  /**
+   * Cuando la plantilla de auditoría no tiene `sections` definidas, derivamos
+   * la estructura de carpetas agrupando los WorkingPapers por su indexSection.
+   *
+   * Soporta jerarquía de 2 niveles por convención de naming:
+   *   - "A"      → carpeta raíz A
+   *   - "B-DDC"  → subcarpeta DDC dentro de la carpeta raíz B
+   *
+   * El phaseType se infiere por el prefijo de la letra (A→PLANNING, etc.)
+   * de forma conservadora — todo va a PLANNING si no se reconoce.
+   */
+  private async deriveSectionsFromPapers(auditId: string): Promise<Array<{
+    ref: string; name: string; phaseType?: string;
+    children?: Array<{ ref: string; name: string }>;
+  }>> {
+    const papers = await this.prisma.workingPaper.findMany({
+      where:  { auditId },
+      select: { indexSection: true },
+    });
+    if (papers.length === 0) return [];
+
+    // Phase inference by root letter (NIA/NOGAI convention)
+    const PHASE_BY_ROOT: Record<string, string> = {
+      A: 'PLANNING', B: 'FIELDWORK', C: 'FIELDWORK',
+      D: 'REPORTING', E: 'REPORTING', F: 'FOLLOWUP',
+    };
+
+    // Collect unique refs, split root vs child by "-"
+    const rootMap = new Map<string, Set<string>>();  // root → set of child refs
+    for (const p of papers) {
+      const idx = (p.indexSection ?? '').trim();
+      if (!idx) continue;
+      const dashPos = idx.indexOf('-');
+      if (dashPos > 0) {
+        const root = idx.slice(0, dashPos);
+        if (!rootMap.has(root)) rootMap.set(root, new Set());
+        rootMap.get(root)!.add(idx);          // full child ref e.g. "B-DDC"
+      } else {
+        if (!rootMap.has(idx)) rootMap.set(idx, new Set());
+      }
+    }
+
+    const sections: Array<{
+      ref: string; name: string; phaseType?: string;
+      children?: Array<{ ref: string; name: string }>;
+    }> = [];
+
+    for (const [root, childRefs] of Array.from(rootMap.entries()).sort()) {
+      const children = Array.from(childRefs).sort().map(cr => ({
+        ref:  cr,
+        name: cr,                              // use the ref as name (e.g. "B-DDC")
+      }));
+      sections.push({
+        ref:       root,
+        name:      `Sección ${root}`,
+        phaseType: PHASE_BY_ROOT[root.charAt(0).toUpperCase()] ?? 'PLANNING',
+        ...(children.length > 0 ? { children } : {}),
+      });
+    }
+
+    return sections;
   }
 
   // ─── Link papeles huérfanos creados por scaffold a su folder correspondiente ────

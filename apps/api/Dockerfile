@@ -2,8 +2,18 @@ FROM node:22-slim
 
 WORKDIR /app
 
-# Install OpenSSL (required by Prisma engine on Debian)
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# Install OpenSSL (Prisma) + Chromium del sistema (para PDF con puppeteer-core)
+# puppeteer-core NO descarga Chromium; usamos el binario del sistema.
+RUN apt-get update -y && apt-get install -y \
+    openssl \
+    chromium \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/*
+
+# Ruta del Chromium del sistema para puppeteer-core
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Copy package.json (lockfile is at monorepo root, not available here)
 COPY package.json ./

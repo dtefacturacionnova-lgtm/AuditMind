@@ -246,3 +246,109 @@ export function renderFindingBody(data: FindingReportData): string {
     </div>
   `;
 }
+
+// ─── Working paper (papel de trabajo inteligente) ─────────────────────────────
+
+export interface WorkingPaperReportData {
+  paper: {
+    code: string;
+    paperCode?: string | null;
+    title: string;
+    type: string;
+    wpKind: string;
+    status: string;
+    indexSection: string;
+    conclusion?: string | null;
+    narrative?: string | null;
+    preparedBy?: { name: string } | null;
+    reviewedBy?: { name: string } | null;
+    preparedAt?: string | null;
+    reviewedAt?: string | null;
+    audit: { title: string };
+    sections?: Array<{ sectionKey: string; label: string; value: unknown; fieldType: string }>;
+    content?: { procedures?: Array<{ title?: string; statement?: string; procedure?: string; development?: string; area?: string; niaRef?: string }> };
+  };
+}
+
+export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
+  const wp = data.paper;
+
+  // Sections
+  const sectionsHtml = (wp.sections ?? []).length > 0
+    ? (wp.sections ?? []).map(s => {
+        const val = s.value;
+        let valStr = '';
+        if (val === null || val === undefined || val === '') {
+          valStr = '<span class="text-muted text-small">— Sin completar —</span>';
+        } else if (typeof val === 'object') {
+          valStr = `<pre class="pre-wrap text-small">${esc(JSON.stringify(val, null, 2))}</pre>`;
+        } else {
+          valStr = `<span class="pre-wrap">${esc(String(val))}</span>`;
+        }
+        return `
+          <div class="no-break" style="margin-bottom: 4mm;">
+            <h3 style="margin-bottom: 1mm;">${esc(s.label)}</h3>
+            <div>${valStr}</div>
+          </div>`;
+      }).join('')
+    : '<p class="text-muted text-small">Este papel no tiene secciones estructuradas.</p>';
+
+  // Procedures
+  const procedures = wp.content?.procedures ?? [];
+  const proceduresHtml = procedures.length > 0
+    ? procedures.map((p, i) => `
+        <div class="no-break" style="margin-bottom: 5mm; border: 1px solid #E2E8F0; border-radius: 3mm; padding: 4mm;">
+          <h3 style="margin: 0 0 1.5mm 0;">
+            ${i + 1}. ${esc(p.title ?? p.area ?? 'Procedimiento')}
+            ${p.niaRef ? `<span style="font-size: 8pt; color: #2C5282; background: #BEE3F8; padding: 0.5mm 1.5mm; border-radius: 2mm; margin-left: 2mm;">${esc(p.niaRef)}</span>` : ''}
+          </h3>
+          <p class="pre-wrap" style="margin: 0 0 2mm 0;">${esc(p.statement ?? p.procedure ?? '')}</p>
+          ${p.development ? `
+            <div style="background: #F7FAFC; border-left: 2px solid #0F2D4A; padding: 2mm 3mm; margin-top: 2mm;">
+              <p style="font-size: 8pt; font-weight: 600; color: #718096; text-transform: uppercase; margin: 0 0 1mm 0;">Desarrollo</p>
+              <p class="pre-wrap text-small" style="margin: 0;">${esc(p.development)}</p>
+            </div>` : ''}
+        </div>`).join('')
+    : '';
+
+  return `
+    <div class="meta-strip">
+      <div class="grid-2">
+        <div class="kv">
+          <div><span class="kv-label">Código:</span> ${esc(wp.paperCode ?? wp.code)}</div>
+          <div><span class="kv-label">Auditoría:</span> ${esc(wp.audit.title)}</div>
+          <div><span class="kv-label">Sección:</span> ${esc(wp.indexSection)}</div>
+        </div>
+        <div class="kv">
+          <div><span class="kv-label">Tipo:</span> ${esc(wp.type)}</div>
+          <div><span class="kv-label">Clase:</span> ${esc(wp.wpKind)}</div>
+          <div><span class="kv-label">Estado:</span> ${esc(wp.status)}</div>
+        </div>
+      </div>
+    </div>
+
+    ${wp.narrative ? `<h2>Narrativa</h2><p class="pre-wrap">${esc(wp.narrative)}</p>` : ''}
+
+    <h2>Secciones del Papel</h2>
+    ${sectionsHtml}
+
+    ${proceduresHtml ? `<h2>Procedimientos</h2>${proceduresHtml}` : ''}
+
+    ${wp.conclusion ? `<h2>Conclusión</h2><blockquote class="pre-wrap">${esc(wp.conclusion)}</blockquote>` : ''}
+
+    <div class="signature-block">
+      <div class="grid-2">
+        <div>
+          <span class="signature-line"></span><br/>
+          <span class="text-small text-muted">Preparado por: ${esc(wp.preparedBy?.name ?? '________________')}</span>
+          ${wp.preparedAt ? `<br/><span class="text-small text-muted">${fmtDate(wp.preparedAt)}</span>` : ''}
+        </div>
+        <div>
+          <span class="signature-line"></span><br/>
+          <span class="text-small text-muted">Revisado por: ${esc(wp.reviewedBy?.name ?? '________________')}</span>
+          ${wp.reviewedAt ? `<br/><span class="text-small text-muted">${fmtDate(wp.reviewedAt)}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}

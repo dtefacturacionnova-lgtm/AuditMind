@@ -36,14 +36,36 @@ export class PdfService implements OnModuleDestroy {
     if (!this.launchPromise) {
       this.launchPromise = (async () => {
         try {
-          // Dynamic import — puppeteer is OPTIONAL.
-          // If the package is missing or Chromium can't launch (e.g. Railway
-          // without proper buildpack), we throw a clear 503 instead of
-          // crashing the whole server at startup.
+          // puppeteer-core NO trae Chromium — usamos el binario del sistema.
+          // Railway: instalado vía Dockerfile (apt chromium) + PUPPETEER_EXECUTABLE_PATH.
+          // Local: el dev puede setear PUPPETEER_EXECUTABLE_PATH a su Chrome.
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const puppeteer = require('puppeteer');
+          const puppeteer = require('puppeteer-core');
+
+          // Resolver el ejecutable de Chromium
+          const candidates = [
+            process.env.PUPPETEER_EXECUTABLE_PATH,
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/google-chrome',
+            // Windows (dev local)
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+          ].filter(Boolean) as string[];
+
+          let executablePath = candidates[0];
+          // En entornos no-Docker, intentar encontrar uno que exista
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const fs = require('fs');
+            for (const c of candidates) {
+              if (c && fs.existsSync(c)) { executablePath = c; break; }
+            }
+          } catch { /* ignore */ }
+
           return await puppeteer.launch({
             headless: true,
+            executablePath,
             args: [
               '--no-sandbox',
               '--disable-setuid-sandbox',
@@ -52,12 +74,9 @@ export class PdfService implements OnModuleDestroy {
             ],
           });
         } catch (err) {
-          this.logger.error(
-            `[PDF] Puppeteer no disponible. ` +
-            `Causa: ${(err as Error).message}`,
-          );
+          this.logger.error(`[PDF] Chromium no disponible. Causa: ${(err as Error).message}`);
           throw new ServiceUnavailableException(
-            'El servicio de PDF no está disponible. Puppeteer/Chromium no se pudo iniciar.',
+            'El servicio de PDF no está disponible (Chromium no se pudo iniciar).',
           );
         }
       })();

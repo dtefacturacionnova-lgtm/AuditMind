@@ -65,6 +65,10 @@ import { CrossAuditLearningService } from './cross-audit-learning.service';
 import { PaperReferencesService } from './paper-references.service';
 import { PaperVersionsService } from './paper-versions.service';
 import { AiService } from '../ai/ai.service';
+import { PdfService } from '../pdf/pdf.service';
+import { renderWorkingPaperBody } from '../pdf/pdf-templates';
+import type { Response } from 'express';
+import { Res } from '@nestjs/common';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -84,6 +88,7 @@ export class WorkingPapersController {
     private readonly references:       PaperReferencesService,
     private readonly versionsService:  PaperVersionsService,
     private readonly aiService:        AiService,
+    private readonly pdfService:       PdfService,
   ) {}
 
   // ─── Listados ─────────────────────────────────────────────────────────────────
@@ -438,6 +443,55 @@ export class WorkingPapersController {
   @ApiOperation({ summary: 'Generar el desarrollo de un procedimiento con IA (desde título + enunciado)' })
   draftProcedure(@Body() body: DraftProcedureDto) {
     return this.aiService.draftProcedure({ ...body });
+  }
+
+  // ─── PDF profesional del papel de trabajo ──────────────────────────────────
+  @Get(':id/pdf')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Descargar el papel de trabajo completo en PDF profesional' })
+  async getPaperPdf(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Res() res: Response,
+  ) {
+    const wp = await this.service.findOne(id, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = wp as any;
+    const body = renderWorkingPaperBody({
+      paper: {
+        code:         w.code,
+        paperCode:    w.paperCode,
+        title:        w.title,
+        type:         w.type,
+        wpKind:       w.wpKind,
+        status:       w.status,
+        indexSection: w.indexSection,
+        conclusion:   w.conclusion,
+        narrative:    w.narrative,
+        preparedBy:   w.preparedBy ? { name: w.preparedBy.name } : null,
+        reviewedBy:   w.reviewedBy ? { name: w.reviewedBy.name } : null,
+        preparedAt:   w.preparedAt?.toISOString?.() ?? null,
+        reviewedAt:   w.reviewedAt?.toISOString?.() ?? null,
+        audit:        { title: w.audit?.title ?? '' },
+        sections:     (w.sections ?? []).map((s: Record<string, unknown>) => ({
+          sectionKey: s.sectionKey, label: s.label, value: s.value, fieldType: s.fieldType,
+        })),
+        content:      w.content,
+      },
+    });
+
+    const pdf = await this.pdfService.generateBranded({
+      title:    `${w.paperCode ?? w.code} — ${w.title}`,
+      subtitle: `Papel de Trabajo · ${w.audit?.title ?? ''}`,
+      body,
+      options:  { printPageNumbers: true, format: 'A4' },
+    });
+
+    const filename = `auditmind_papel_${(w.paperCode ?? w.code ?? id).replace(/[^\w-]/g, '_')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
   }
 
   // ─── Gap 3: @mention references ───────────────────────────────────────────

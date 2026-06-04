@@ -936,6 +936,7 @@ export default function WpDetailPage() {
   const [agentAutoMsg,    setAgentAutoMsg] = useState('');
   const [checkoutBanner,  setCheckoutBanner] = useState<string | null>(null);
   const [showSampling,    setShowSampling]    = useState(false);
+  const [downloadingPdf,  setDownloadingPdf]  = useState(false);
   const [showCoso,        setShowCoso]        = useState(false);
 
   // Initialize content from server data — use useEffect to avoid setState-during-render
@@ -981,6 +982,31 @@ export default function WpDetailPage() {
     await updateWp.mutateAsync({ content, conclusion });
     setDirty(false);
   };
+
+  async function handleDownloadPdf() {
+    setDownloadingPdf(true);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token ?? '';
+      const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+      const res = await fetch(`${base}/working-papers/${params.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('No se pudo generar el PDF del papel');
+      const blob = await res.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `auditmind_papel_${(wp?.paperCode ?? wp?.code ?? params.id)}.pdf`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   const handleStatusChange = async (next: WpStatus) => {
     if (!wp) return;
@@ -1306,6 +1332,16 @@ export default function WpDetailPage() {
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 COSO IA
+              </button>
+              {/* Fase 2 — Descargar PDF del papel */}
+              <button
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 bg-slate-50 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
+                title="Descargar este papel en PDF profesional"
+              >
+                {downloadingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                PDF
               </button>
               {nextStatus && (
                 <button

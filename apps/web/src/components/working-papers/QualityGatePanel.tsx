@@ -75,10 +75,12 @@ function IssueRow({ issue }: { issue: QualityCheckResult['issues'][0] }) {
 interface QualityGatePanelProps {
   paperId:      string;
   existingScore?: number;
+  existingReport?: QualityCheckResult | null;
 }
 
-export function QualityGatePanel({ paperId, existingScore }: QualityGatePanelProps) {
-  const [result, setResult]     = useState<QualityCheckResult | null>(null);
+export function QualityGatePanel({ paperId, existingScore, existingReport }: QualityGatePanelProps) {
+  // Inicializa con el reporte persistido si existe (para que sobreviva recargas)
+  const [result, setResult]     = useState<QualityCheckResult | null>(existingReport ?? null);
   const [expanded, setExpanded] = useState(false);
   const check = useQualityCheck();
 

@@ -1155,6 +1155,8 @@ model WorkingPaper {
   preparedById    String?
   reviewedById    String?
   qualityScore    Int?               // 0-100
+  qualityReport   Json?              // reporte completo del Quality Gate (issues, strengths, recommendation, level)
+  qualityCheckedAt DateTime?
   version         Int                @default(1)
   tickMarks       Json               @default("[]")
   crossReferences Json               @default("[]")

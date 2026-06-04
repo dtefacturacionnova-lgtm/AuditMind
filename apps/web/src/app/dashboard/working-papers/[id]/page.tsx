@@ -1666,7 +1666,11 @@ export default function WpDetailPage() {
 
               {/* Semantic quality gate — SMART and MASTER papers only */}
               {(wpKind === 'SMART' || wpKind === 'MASTER') && (
-                <QualityGatePanel paperId={params.id} existingScore={wp.qualityScore} />
+                <QualityGatePanel
+                  paperId={params.id}
+                  existingScore={wp.qualityScore}
+                  existingReport={(wp as { qualityReport?: import('@/hooks/useWorkingPaperGraph').QualityCheckResult }).qualityReport ?? null}
+                />
               )}
 
               {comments.length === 0 && (

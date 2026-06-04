@@ -84,7 +84,7 @@ export class PaperQualityService {
       try {
         const aiResult = await this.callGemini(apiKey, sections, wp.audit.title, wp.paperCode);
         const merged = this.mergeResults(ruleScore, ruleIssues, aiResult, sections);
-        await this.persistScore(paperId, merged.score);
+        await this.persistScore(paperId, merged.score, merged);
         return merged;
       } catch (err) {
         this.logger.warn('[QualityCheck] Gemini unavailable, using rule-based only', String(err));
@@ -93,7 +93,7 @@ export class PaperQualityService {
 
     // Rule-based fallback
     const result = this.buildResult(paperId, ruleScore, ruleIssues, false);
-    await this.persistScore(paperId, result.score);
+    await this.persistScore(paperId, result.score, result);
     return result;
   }
 
@@ -308,10 +308,17 @@ Solo el JSON, sin markdown.`;
     return 'INSUFICIENTE';
   }
 
-  private async persistScore(paperId: string, score: number): Promise<void> {
+  private async persistScore(paperId: string, score: number, report?: unknown): Promise<void> {
     await this.prisma.workingPaper.update({
       where: { id: paperId },
-      data:  { qualityScore: score },
+      data:  {
+        qualityScore: score,
+        ...(report !== undefined && {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          qualityReport: report as any,
+          qualityCheckedAt: new Date(),
+        }),
+      },
     }).catch(() => { /* non-critical */ });
   }
 }

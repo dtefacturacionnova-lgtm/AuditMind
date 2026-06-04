@@ -121,7 +121,13 @@ function AttachmentsAndRefs({
 
   const attachments = proc.attachments ?? [];
   const crossRefs   = proc.crossRefs ?? [];
-  const refOptions  = papers.filter(p => p.id !== paperId && !crossRefs.some(r => r.paperId === p.id));
+  // Solo papeles reales de la auditoría (excluye el actual, los ya vinculados
+  // y los papeles tipo FILE que son solo adjuntos sin contenido de trabajo)
+  const refOptions  = papers.filter(p =>
+    p.id !== paperId &&
+    (p as { wpKind?: string }).wpKind !== 'FILE' &&
+    !crossRefs.some(r => r.paperId === p.id),
+  );
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -131,82 +137,78 @@ function AttachmentsAndRefs({
   }
 
   return (
-    <div className="mt-2 pl-5 space-y-2">
-      {/* Attachments */}
-      {(attachments.length > 0 || !readonly) && (
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Paperclip className="w-3 h-3 text-gray-400" />
-            <span className="text-[10px] font-semibold text-gray-500 uppercase">Soportes</span>
-            {!readonly && (
-              <>
-                <input ref={fileInput} type="file" className="hidden" onChange={onFile} />
-                <button
-                  onClick={() => fileInput.current?.click()}
-                  disabled={attach.isPending}
-                  className="text-[10px] text-violet-600 hover:text-violet-700 disabled:opacity-50 flex items-center gap-0.5"
-                >
-                  {attach.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Plus className="w-2.5 h-2.5" />}
-                  Adjuntar
-                </button>
-              </>
-            )}
-          </div>
-          <div className="space-y-1">
-            {attachments.map(a => (
-              <div key={a.id} className="flex items-center gap-2 text-xs bg-gray-50 rounded-lg px-2 py-1">
-                <FileText className="w-3 h-3 text-gray-400 shrink-0" />
-                <a href={a.url} target="_blank" rel="noopener noreferrer"
-                  className="text-gray-700 hover:text-violet-600 truncate flex-1">{a.filename}</a>
-                <span className="text-[10px] text-gray-400">{(a.size / 1024).toFixed(0)} KB</span>
-                {!readonly && (
-                  <button onClick={() => rmAttach.mutate({ paperId, procedureId: proc.id, attachmentId: a.id })}
-                    className="text-gray-300 hover:text-red-500"><X className="w-3 h-3" /></button>
-                )}
-              </div>
-            ))}
-            {attachments.length === 0 && <p className="text-[10px] text-gray-400 italic">Sin documentos adjuntos.</p>}
-          </div>
-        </div>
-      )}
-
-      {/* Cross references */}
-      {(crossRefs.length > 0 || (!readonly && auditId)) && (
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Link2 className="w-3 h-3 text-gray-400" />
-            <span className="text-[10px] font-semibold text-gray-500 uppercase">Referencias cruzadas</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5 items-center">
-            {crossRefs.map(r => (
-              <span key={r.paperId} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full">
-                <Link href={`/dashboard/working-papers/${r.paperId}`} className="hover:underline flex items-center gap-0.5">
-                  {r.code} <ExternalLink className="w-2.5 h-2.5" />
-                </Link>
-                {!readonly && (
-                  <button onClick={() => rmRef.mutate({ paperId, procedureId: proc.id, targetPaperId: r.paperId })}
-                    className="text-blue-300 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
-                )}
-              </span>
-            ))}
-            {!readonly && auditId && refOptions.length > 0 && (
-              <select
-                value=""
-                onChange={e => { if (e.target.value) addRef.mutate({ paperId, procedureId: proc.id, targetPaperId: e.target.value }); }}
-                className="text-[10px] border border-gray-200 rounded-lg px-1.5 py-0.5 bg-white"
+    <div className="mt-2 pl-5 space-y-2.5 pt-2 border-t border-dashed border-gray-100">
+      {/* Attachments — siempre visible */}
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <Paperclip className="w-3 h-3 text-gray-400" />
+          <span className="text-[10px] font-semibold text-gray-500 uppercase">Soportes</span>
+          {!readonly && (
+            <>
+              <input ref={fileInput} type="file" className="hidden" onChange={onFile} />
+              <button
+                onClick={() => fileInput.current?.click()}
+                disabled={attach.isPending}
+                className="text-[10px] text-violet-600 hover:text-violet-700 disabled:opacity-50 flex items-center gap-0.5"
               >
-                <option value="">+ Vincular papel…</option>
-                {refOptions.map(p => (
-                  <option key={p.id} value={p.id}>{(p.paperCode ?? p.code)} — {p.title.slice(0, 40)}</option>
-                ))}
-              </select>
-            )}
-            {crossRefs.length === 0 && (readonly || !auditId) && (
-              <p className="text-[10px] text-gray-400 italic">Sin referencias.</p>
-            )}
-          </div>
+                {attach.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Plus className="w-2.5 h-2.5" />}
+                Adjuntar
+              </button>
+            </>
+          )}
         </div>
-      )}
+        <div className="space-y-1">
+          {attachments.map(a => (
+            <div key={a.id} className="flex items-center gap-2 text-xs bg-gray-50 rounded-lg px-2 py-1">
+              <FileText className="w-3 h-3 text-gray-400 shrink-0" />
+              <a href={a.url} target="_blank" rel="noopener noreferrer"
+                className="text-gray-700 hover:text-violet-600 truncate flex-1">{a.filename}</a>
+              <span className="text-[10px] text-gray-400">{(a.size / 1024).toFixed(0)} KB</span>
+              {!readonly && (
+                <button onClick={() => rmAttach.mutate({ paperId, procedureId: proc.id, attachmentId: a.id })}
+                  className="text-gray-300 hover:text-red-500"><X className="w-3 h-3" /></button>
+              )}
+            </div>
+          ))}
+          {attachments.length === 0 && <p className="text-[10px] text-gray-400 italic">Sin documentos adjuntos.</p>}
+        </div>
+      </div>
+
+      {/* Cross references — siempre visible */}
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <Link2 className="w-3 h-3 text-gray-400" />
+          <span className="text-[10px] font-semibold text-gray-500 uppercase">Referencias cruzadas</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {crossRefs.map(r => (
+            <span key={r.paperId} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full">
+              <Link href={`/dashboard/working-papers/${r.paperId}`} className="hover:underline flex items-center gap-0.5">
+                {r.code} <ExternalLink className="w-2.5 h-2.5" />
+              </Link>
+              {!readonly && (
+                <button onClick={() => rmRef.mutate({ paperId, procedureId: proc.id, targetPaperId: r.paperId })}
+                  className="text-blue-300 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+              )}
+            </span>
+          ))}
+          {!readonly && auditId && refOptions.length > 0 && (
+            <select
+              value=""
+              onChange={e => { if (e.target.value) addRef.mutate({ paperId, procedureId: proc.id, targetPaperId: e.target.value }); }}
+              className="text-[10px] border border-gray-200 rounded-lg px-1.5 py-0.5 bg-white"
+            >
+              <option value="">+ Vincular papel…</option>
+              {refOptions.map(p => (
+                <option key={p.id} value={p.id}>{(p.paperCode ?? p.code)} — {p.title.slice(0, 40)}</option>
+              ))}
+            </select>
+          )}
+          {crossRefs.length === 0 && refOptions.length === 0 && (
+            <p className="text-[10px] text-gray-400 italic">Sin papeles para referenciar.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

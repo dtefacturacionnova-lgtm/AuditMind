@@ -5,7 +5,7 @@ import { PAPER_TEMPLATES } from '../working-papers/paper-templates';
 
 // ─── Paper definition within an index ────────────────────────────────────────
 
-interface PaperDef {
+export interface PaperDef {
   code:         string;           // A-01, B-00, etc.
   indexSection: string;           // A | B | C | D | E
   title:        string;

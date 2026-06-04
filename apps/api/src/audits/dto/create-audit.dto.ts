@@ -1,6 +1,6 @@
 import {
   IsString, IsOptional, IsEnum, IsDateString, IsNumber,
-  IsUUID, IsBoolean, IsArray, Min, Max, ValidateNested,
+  IsBoolean, IsArray, Min, Max, ValidateNested,
   IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -49,8 +49,8 @@ export class CreateAuditDto {
   @IsString()
   subtype?: string;
 
-  @ApiProperty({ example: 'unit-uuid' })
-  @IsUUID()
+  @ApiProperty({ example: 'unit-cuid-here' })
+  @IsString()
   auditableUnitId: string;
 
   @ApiProperty({ example: '2026-03-01' })
@@ -99,10 +99,10 @@ export class CreateAuditDto {
   @IsBoolean()
   isInvestigationMode?: boolean;
 
-  @ApiPropertyOptional({ example: ['user-uuid-1', 'user-uuid-2'] })
+  @ApiPropertyOptional({ example: ['user-cuid-1', 'user-cuid-2'] })
   @IsOptional()
   @IsArray()
-  @IsUUID('all', { each: true })
+  @IsString({ each: true })
   teamMemberIds?: string[];
 
   @ApiPropertyOptional({ description: 'ID de la plantilla AuditTemplate a usar en el scaffold' })

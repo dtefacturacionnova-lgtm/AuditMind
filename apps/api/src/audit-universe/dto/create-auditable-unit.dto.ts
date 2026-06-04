@@ -1,5 +1,5 @@
 import {
-  IsString, IsOptional, IsNumber, IsUUID,
+  IsString, IsOptional, IsNumber,
   Min, Max, IsArray, IsBoolean,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -41,9 +41,9 @@ export class CreateAuditableUnitDto {
   @Max(100)
   riskScore?: number;
 
-  @ApiPropertyOptional({ example: 'user-uuid' })
+  @ApiPropertyOptional({ example: 'user-cuid' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   responsibleId?: string;
 
   @ApiPropertyOptional({ example: ['FINANCIAL', 'COMPLIANCE'] })

@@ -230,7 +230,7 @@ function AddProcedureForm({
 
   async function handleAdd() {
     if (!statement.trim() && !title.trim()) return;
-    await append.mutateAsync({ paperId, title, statement, development, area: title || 'General' } as never);
+    await append.mutateAsync({ paperId, title, statement, development, area: title || 'General' });
     onDone();
   }
 

@@ -514,6 +514,12 @@ export class WorkingPapersController {
     // Versiones (PI.5) para la hoja de Historial
     const versions = await this.versionsService.listVersions(id, user).catch(() => []);
 
+    // Firmante (signed off) + PBC links para la hoja de Revisión
+    const pbcLinks = await this.service.getPbcLinksForPdf(id).catch(() => []);
+    const signedOffName = w.signedOffById
+      ? await this.service.getUserName(w.signedOffById).catch(() => null)
+      : null;
+
     const body = renderWorkingPaperBody({
       paper: {
         code:         w.code,
@@ -555,6 +561,18 @@ export class WorkingPapersController {
           version: v.version, changedAt: v.changedAt, changedBy: v.changedBy,
           reason: v.reason, wordCount: v.wordCount,
         })),
+        // Revisión enriquecida
+        qualityReport: w.qualityReport ?? null,
+        signOff: {
+          preparedByName:  w.preparedBy?.name ?? null,
+          preparedAt:      w.preparedAt?.toISOString?.() ?? null,
+          reviewedByName:  w.reviewedBy?.name ?? null,
+          reviewedAt:      w.reviewedAt?.toISOString?.() ?? null,
+          signedOffByName: signedOffName,
+          signedOffAt:     w.signedOffAt?.toISOString?.() ?? null,
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        pbcLinks: (pbcLinks as any[]).map(p => ({ code: p.code, title: p.title, status: p.status })),
       },
     });
 

@@ -268,11 +268,19 @@ export interface WorkingPaperReportData {
     reviewedAt?: string | null;
     audit: { title: string };
     sections?: Array<{ sectionKey: string; label: string; value: unknown; fieldType: string }>;
-    content?: { procedures?: Array<{ title?: string; statement?: string; procedure?: string; development?: string; area?: string; niaRef?: string }> };
+    content?: { procedures?: Array<{
+      title?: string; statement?: string; procedure?: string; development?: string; area?: string; niaRef?: string;
+      attachments?: Array<{ filename: string; url: string; size?: number }>;
+      crossRefs?: Array<{ code: string; title: string }>;
+    }> };
     sourceLinks?: Array<{ targetCode?: string; targetTitle?: string; sourceField?: string; targetField?: string; mappingType?: string }>;
     targetLinks?: Array<{ sourceCode?: string; sourceTitle?: string; sourceField?: string; targetField?: string; mappingType?: string }>;
     comments?: Array<{ content: string; createdAt?: string | null; resolved?: boolean }>;
     versions?: Array<{ version: number; changedAt?: string; changedBy?: string; reason?: string | null; wordCount?: number }>;
+    // Revisión enriquecida
+    qualityReport?: { score?: number; level?: string; recommendation?: string; issues?: Array<{ section?: string; type?: string; message: string }>; strengths?: string[] } | null;
+    signOff?: { preparedByName?: string | null; preparedAt?: string | null; reviewedByName?: string | null; reviewedAt?: string | null; signedOffByName?: string | null; signedOffAt?: string | null };
+    pbcLinks?: Array<{ code?: string; title?: string; status?: string }>;
   };
 }
 
@@ -302,7 +310,10 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
   // Procedures
   const procedures = wp.content?.procedures ?? [];
   const proceduresHtml = procedures.length > 0
-    ? procedures.map((p, i) => `
+    ? procedures.map((p, i) => {
+        const atts = p.attachments ?? [];
+        const refs = p.crossRefs ?? [];
+        return `
         <div class="no-break" style="margin-bottom: 5mm; border: 1px solid #E2E8F0; border-radius: 3mm; padding: 4mm;">
           <h3 style="margin: 0 0 1.5mm 0;">
             ${i + 1}. ${esc(p.title ?? p.area ?? 'Procedimiento')}
@@ -314,7 +325,20 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
               <p style="font-size: 8pt; font-weight: 600; color: #718096; text-transform: uppercase; margin: 0 0 1mm 0;">Desarrollo</p>
               <p class="pre-wrap text-small" style="margin: 0;">${esc(p.development)}</p>
             </div>` : ''}
-        </div>`).join('')
+          ${atts.length > 0 ? `
+            <div style="margin-top: 2mm;">
+              <p style="font-size: 8pt; font-weight: 600; color: #718096; text-transform: uppercase; margin: 0 0 1mm 0;">📎 Soportes adjuntos</p>
+              <ul style="margin: 0; padding-left: 5mm; font-size: 9pt;">
+                ${atts.map(a => `<li>${esc(a.filename)}${a.size ? ` <span class="text-muted">(${(a.size / 1024).toFixed(0)} KB)</span>` : ''}</li>`).join('')}
+              </ul>
+            </div>` : ''}
+          ${refs.length > 0 ? `
+            <div style="margin-top: 2mm;">
+              <p style="font-size: 8pt; font-weight: 600; color: #718096; text-transform: uppercase; margin: 0 0 1mm 0;">🔗 Referencias cruzadas</p>
+              <p style="margin: 0; font-size: 9pt;">${refs.map(r => `<span style="background: #EBF8FF; color: #2C5282; padding: 0.5mm 1.5mm; border-radius: 2mm; margin-right: 1.5mm;">${esc(r.code)} — ${esc(r.title)}</span>`).join('')}</p>
+            </div>` : ''}
+        </div>`;
+      }).join('')
     : '';
 
   // ── Grafo de conocimiento ──
@@ -344,18 +368,65 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
       </table>` : ''}
   ` : '';
 
-  // ── Revisión (comentarios) ──
+  // ── Revisión (matriz de firmas + quality gate + comentarios + PBC) ──
   const comments = wp.comments ?? [];
-  const reviewHtml = comments.length > 0 ? `
+  const qr = wp.qualityReport;
+  const so = wp.signOff;
+  const pbcLinks = wp.pbcLinks ?? [];
+  const hasReviewContent = comments.length > 0 || qr || so || pbcLinks.length > 0;
+
+  const reviewHtml = hasReviewContent ? `
     <div class="page-break"></div>
-    <h1>Notas de Revisión</h1>
-    <table>
-      <thead><tr><th style="width: 26mm;">Fecha</th><th>Comentario</th><th style="width: 22mm;">Estado</th></tr></thead>
-      <tbody>${comments.map(c => `
-        <tr><td class="text-small">${c.createdAt ? fmtDate(c.createdAt) : '—'}</td>
-            <td class="pre-wrap">${esc(c.content)}</td>
-            <td class="text-small">${c.resolved ? '<span class="badge badge-low">Resuelto</span>' : '<span class="badge badge-medium">Abierto</span>'}</td></tr>`).join('')}</tbody>
-    </table>
+    <h1>Revisión y Control de Calidad</h1>
+
+    ${so ? `
+      <h2>Matriz de Firmas</h2>
+      <table>
+        <thead><tr><th>Rol</th><th>Responsable</th><th style="width: 32mm;">Fecha</th></tr></thead>
+        <tbody>
+          <tr><td>Preparado por</td><td>${esc(so.preparedByName ?? '—')}</td><td class="text-small">${so.preparedAt ? fmtDate(so.preparedAt) : 'Sin firma'}</td></tr>
+          <tr><td>Revisado por</td><td>${esc(so.reviewedByName ?? '—')}</td><td class="text-small">${so.reviewedAt ? fmtDate(so.reviewedAt) : 'Sin firma'}</td></tr>
+          <tr><td>Firmado por (CAE/Socio)</td><td>${esc(so.signedOffByName ?? '—')}</td><td class="text-small">${so.signedOffAt ? fmtDate(so.signedOffAt) : 'Sin firma'}</td></tr>
+        </tbody>
+      </table>` : ''}
+
+    ${qr ? `
+      <h2>Gate de Calidad Semántica</h2>
+      <div class="meta-strip">
+        <div class="kv">
+          <div><span class="kv-label">Puntaje:</span> ${qr.score ?? '—'}/100 ${qr.level ? `· <strong>${esc(qr.level)}</strong>` : ''}</div>
+          ${qr.recommendation ? `<div style="margin-top: 1mm;"><span class="kv-label">Recomendación:</span> ${esc(qr.recommendation)}</div>` : ''}
+        </div>
+      </div>
+      ${(qr.issues ?? []).length > 0 ? `
+        <h3>Observaciones (${qr.issues!.length})</h3>
+        <table>
+          <thead><tr><th style="width: 40mm;">Sección</th><th style="width: 28mm;">Tipo</th><th>Descripción</th></tr></thead>
+          <tbody>${qr.issues!.map(iss => `
+            <tr><td>${esc(iss.section ?? '—')}</td><td class="text-small">${esc(iss.type ?? '')}</td><td class="pre-wrap text-small">${esc(iss.message)}</td></tr>`).join('')}</tbody>
+        </table>` : ''}
+      ${(qr.strengths ?? []).length > 0 ? `
+        <h3>Fortalezas</h3>
+        <ul style="font-size: 9.5pt;">${qr.strengths!.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
+    ` : ''}
+
+    ${pbcLinks.length > 0 ? `
+      <h2>Evidencias PBC Vinculadas</h2>
+      <table>
+        <thead><tr><th style="width: 20mm;">Código</th><th>Solicitud</th><th style="width: 24mm;">Estado</th></tr></thead>
+        <tbody>${pbcLinks.map(p => `
+          <tr><td class="text-small">${esc(p.code ?? '')}</td><td>${esc(p.title ?? '')}</td><td class="text-small">${esc(p.status ?? '')}</td></tr>`).join('')}</tbody>
+      </table>` : ''}
+
+    ${comments.length > 0 ? `
+      <h2>Notas de Revisión</h2>
+      <table>
+        <thead><tr><th style="width: 26mm;">Fecha</th><th>Comentario</th><th style="width: 22mm;">Estado</th></tr></thead>
+        <tbody>${comments.map(c => `
+          <tr><td class="text-small">${c.createdAt ? fmtDate(c.createdAt) : '—'}</td>
+              <td class="pre-wrap">${esc(c.content)}</td>
+              <td class="text-small">${c.resolved ? '<span class="badge badge-low">Resuelto</span>' : '<span class="badge badge-medium">Abierto</span>'}</td></tr>`).join('')}</tbody>
+      </table>` : ''}
   ` : '';
 
   // ── Historial de versiones ──

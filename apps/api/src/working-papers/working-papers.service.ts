@@ -282,6 +282,27 @@ export class WorkingPapersService {
     return { removed: filtered.length < procedures.length, total: filtered.length };
   }
 
+  // ─── Helpers para el PDF (revisión) ────────────────────────────────────────
+  async getUserName(userId: string): Promise<string | null> {
+    const u = await this.prisma.user.findUnique({
+      where: { id: userId }, select: { name: true },
+    });
+    return u?.name ?? null;
+  }
+
+  async getPbcLinksForPdf(paperId: string): Promise<Array<{ code: string; title: string; status: string }>> {
+    const links = await this.prisma.pbcPaperLink.findMany({
+      where:   { paperId },
+      include: { pbc: { select: { id: true, title: true, status: true } } },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return links.map((l: any) => ({
+      code:   l.pbc?.id?.slice(0, 8) ?? '',
+      title:  l.pbc?.title ?? '',
+      status: l.pbc?.status ?? '',
+    }));
+  }
+
   // ─── F3: Adjuntar archivo de soporte a un procedimiento ────────────────────
   async attachToProcedure(
     id: string,

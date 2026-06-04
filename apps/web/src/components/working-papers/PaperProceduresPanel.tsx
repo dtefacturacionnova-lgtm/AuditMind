@@ -3,12 +3,23 @@
 import { useState } from 'react';
 import {
   ListChecks, Trash2, Loader2, Plus, Sparkles, Wand2, Save, X, Pencil, ChevronDown, ChevronRight,
+  Paperclip, Link2, ExternalLink, FileText,
 } from 'lucide-react';
+import Link from 'next/link';
+import { useRef } from 'react';
 import {
   useRemoveProcedure, useAppendProcedure, useUpdateProcedure,
   useImproveText, useDraftProcedure,
+  useAttachToProcedure, useRemoveAttachment, useAddCrossRef, useRemoveCrossRef,
 } from '@/hooks/useWorkingPaperGraph';
+import { useWorkingPapersForAudit } from '@/hooks/useWorkingPapers';
 
+export interface ProcedureAttachment {
+  id: string; filename: string; url: string; mimeType: string; size: number; uploadedAt: string;
+}
+export interface ProcedureCrossRef {
+  paperId: string; code: string; title: string;
+}
 export interface AppliedProcedure {
   id:          string;
   title?:      string;
@@ -18,10 +29,13 @@ export interface AppliedProcedure {
   area:        string;
   niaRef?:     string;
   addedAt:     string;
+  attachments?: ProcedureAttachment[];
+  crossRefs?:   ProcedureCrossRef[];
 }
 
 interface PaperProceduresPanelProps {
   paperId:    string;
+  auditId?:   string;
   paperTitle?: string;
   paperType?: string;
   paperCode?: string | null;
@@ -88,12 +102,122 @@ function AiTextarea({
 
 // ─── Procedure card (view + edit) ────────────────────────────────────────────
 
+// ─── Attachments + cross-refs sub-panel ──────────────────────────────────────
+
+function AttachmentsAndRefs({
+  paperId, proc, auditId, readonly,
+}: {
+  paperId: string;
+  proc: AppliedProcedure;
+  auditId?: string;
+  readonly: boolean;
+}) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const attach    = useAttachToProcedure();
+  const rmAttach  = useRemoveAttachment();
+  const addRef    = useAddCrossRef();
+  const rmRef     = useRemoveCrossRef();
+  const { data: papers = [] } = useWorkingPapersForAudit(auditId ?? '');
+
+  const attachments = proc.attachments ?? [];
+  const crossRefs   = proc.crossRefs ?? [];
+  const refOptions  = papers.filter(p => p.id !== paperId && !crossRefs.some(r => r.paperId === p.id));
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await attach.mutateAsync({ paperId, procedureId: proc.id, file });
+    if (fileInput.current) fileInput.current.value = '';
+  }
+
+  return (
+    <div className="mt-2 pl-5 space-y-2">
+      {/* Attachments */}
+      {(attachments.length > 0 || !readonly) && (
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Paperclip className="w-3 h-3 text-gray-400" />
+            <span className="text-[10px] font-semibold text-gray-500 uppercase">Soportes</span>
+            {!readonly && (
+              <>
+                <input ref={fileInput} type="file" className="hidden" onChange={onFile} />
+                <button
+                  onClick={() => fileInput.current?.click()}
+                  disabled={attach.isPending}
+                  className="text-[10px] text-violet-600 hover:text-violet-700 disabled:opacity-50 flex items-center gap-0.5"
+                >
+                  {attach.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Plus className="w-2.5 h-2.5" />}
+                  Adjuntar
+                </button>
+              </>
+            )}
+          </div>
+          <div className="space-y-1">
+            {attachments.map(a => (
+              <div key={a.id} className="flex items-center gap-2 text-xs bg-gray-50 rounded-lg px-2 py-1">
+                <FileText className="w-3 h-3 text-gray-400 shrink-0" />
+                <a href={a.url} target="_blank" rel="noopener noreferrer"
+                  className="text-gray-700 hover:text-violet-600 truncate flex-1">{a.filename}</a>
+                <span className="text-[10px] text-gray-400">{(a.size / 1024).toFixed(0)} KB</span>
+                {!readonly && (
+                  <button onClick={() => rmAttach.mutate({ paperId, procedureId: proc.id, attachmentId: a.id })}
+                    className="text-gray-300 hover:text-red-500"><X className="w-3 h-3" /></button>
+                )}
+              </div>
+            ))}
+            {attachments.length === 0 && <p className="text-[10px] text-gray-400 italic">Sin documentos adjuntos.</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Cross references */}
+      {(crossRefs.length > 0 || (!readonly && auditId)) && (
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Link2 className="w-3 h-3 text-gray-400" />
+            <span className="text-[10px] font-semibold text-gray-500 uppercase">Referencias cruzadas</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {crossRefs.map(r => (
+              <span key={r.paperId} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full">
+                <Link href={`/dashboard/working-papers/${r.paperId}`} className="hover:underline flex items-center gap-0.5">
+                  {r.code} <ExternalLink className="w-2.5 h-2.5" />
+                </Link>
+                {!readonly && (
+                  <button onClick={() => rmRef.mutate({ paperId, procedureId: proc.id, targetPaperId: r.paperId })}
+                    className="text-blue-300 hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                )}
+              </span>
+            ))}
+            {!readonly && auditId && refOptions.length > 0 && (
+              <select
+                value=""
+                onChange={e => { if (e.target.value) addRef.mutate({ paperId, procedureId: proc.id, targetPaperId: e.target.value }); }}
+                className="text-[10px] border border-gray-200 rounded-lg px-1.5 py-0.5 bg-white"
+              >
+                <option value="">+ Vincular papel…</option>
+                {refOptions.map(p => (
+                  <option key={p.id} value={p.id}>{(p.paperCode ?? p.code)} — {p.title.slice(0, 40)}</option>
+                ))}
+              </select>
+            )}
+            {crossRefs.length === 0 && (readonly || !auditId) && (
+              <p className="text-[10px] text-gray-400 italic">Sin referencias.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProcedureCard({
-  paperId, proc, index, paperTitle, paperType, paperCode, readonly,
+  paperId, proc, index, auditId, paperTitle, paperType, paperCode, readonly,
 }: {
   paperId: string;
   proc: AppliedProcedure;
   index: number;
+  auditId?: string;
   paperTitle?: string;
   paperType?: string;
   paperCode?: string | null;
@@ -182,17 +306,20 @@ function ProcedureCard({
               )}
             </button>
             {open && (
-              <div className="mt-1.5 pl-5 space-y-2">
-                <p className="text-sm text-gray-700 leading-relaxed">{displayStatement}</p>
-                {proc.development ? (
-                  <div className="bg-gray-50 border border-gray-100 rounded-lg p-2.5">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Desarrollo</p>
-                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{proc.development}</p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 italic">Sin desarrollo aún — edita para documentar la ejecución.</p>
-                )}
-              </div>
+              <>
+                <div className="mt-1.5 pl-5 space-y-2">
+                  <p className="text-sm text-gray-700 leading-relaxed">{displayStatement}</p>
+                  {proc.development ? (
+                    <div className="bg-gray-50 border border-gray-100 rounded-lg p-2.5">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Desarrollo</p>
+                      <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{proc.development}</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">Sin desarrollo aún — edita para documentar la ejecución.</p>
+                  )}
+                </div>
+                <AttachmentsAndRefs paperId={paperId} proc={proc} auditId={auditId} readonly={readonly} />
+              </>
             )}
           </div>
         )}
@@ -280,7 +407,7 @@ function AddProcedureForm({
 // ─── Main panel ──────────────────────────────────────────────────────────────
 
 export function PaperProceduresPanel({
-  paperId, paperTitle, paperType, paperCode, procedures, readonly = false,
+  paperId, auditId, paperTitle, paperType, paperCode, procedures, readonly = false,
 }: PaperProceduresPanelProps) {
   const [adding, setAdding] = useState(false);
 
@@ -322,6 +449,7 @@ export function PaperProceduresPanel({
             paperId={paperId}
             proc={p}
             index={i}
+            auditId={auditId}
             paperTitle={paperTitle}
             paperType={paperType}
             paperCode={paperCode}

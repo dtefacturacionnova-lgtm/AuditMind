@@ -10,6 +10,7 @@ import { UpdateWorkingPaperDto, UpdateWorkingPaperStatusDto } from './dto/update
 import { AuthUser } from '../auth/jwt.strategy';
 import { WorkingPaperStatus, UserRole, TickMark, WpKind, SyncStatus, Prisma } from '@prisma/client';
 import { PaperGraphService } from './paper-graph.service';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 async function generateWpCode(
   prisma: PrismaService,
@@ -48,11 +49,18 @@ const INCLUDE_FULL = {
 
 @Injectable()
 export class WorkingPapersService {
+  private readonly supabaseAdmin: SupabaseClient;
+
   constructor(
     private readonly prisma:        PrismaService,
     private readonly paperGraph:    PaperGraphService,
     private readonly eventEmitter:  EventEmitter2,
-  ) {}
+  ) {
+    this.supabaseAdmin = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+  }
 
   private async assertAuditAccess(auditId: string, user: AuthUser) {
     const audit = await this.prisma.audit.findFirst({
@@ -272,6 +280,132 @@ export class WorkingPapersService {
     });
 
     return { removed: filtered.length < procedures.length, total: filtered.length };
+  }
+
+  // ─── F3: Adjuntar archivo de soporte a un procedimiento ────────────────────
+  async attachToProcedure(
+    id: string,
+    procedureId: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    user: AuthUser,
+  ) {
+    const wp = await this.findOne(id, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const procedures: any[] = Array.isArray(content.procedures) ? content.procedures : [];
+    const idx = procedures.findIndex(p => p.id === procedureId);
+    if (idx === -1) throw new NotFoundException('Procedimiento no encontrado');
+
+    // Upload to Supabase Storage
+    const safeName = file.originalname.replace(/[^\w.\-]/g, '_');
+    const path = `procedures/${id}/${procedureId}/${Date.now()}_${safeName}`;
+    const { error: upErr } = await this.supabaseAdmin.storage
+      .from('audit-files')
+      .upload(path, file.buffer, {
+        contentType: file.mimetype || 'application/octet-stream',
+        cacheControl: '3600',
+        upsert: false,
+      });
+    if (upErr) throw new BadRequestException(`Error al subir archivo: ${upErr.message}`);
+
+    const { data: urlData } = this.supabaseAdmin.storage.from('audit-files').getPublicUrl(path);
+
+    const attachment = {
+      id:        `att_${Date.now().toString(36)}`,
+      filename:  file.originalname,
+      url:       urlData.publicUrl,
+      mimeType:  file.mimetype,
+      size:      file.size,
+      uploadedAt: new Date().toISOString(),
+    };
+    procedures[idx].attachments = [...(procedures[idx].attachments ?? []), attachment];
+
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { content: { ...content, procedures } as Prisma.InputJsonValue },
+    });
+
+    return attachment;
+  }
+
+  async removeAttachment(id: string, procedureId: string, attachmentId: string, user: AuthUser) {
+    const wp = await this.findOne(id, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const procedures: any[] = Array.isArray(content.procedures) ? content.procedures : [];
+    const idx = procedures.findIndex(p => p.id === procedureId);
+    if (idx === -1) throw new NotFoundException('Procedimiento no encontrado');
+
+    procedures[idx].attachments = (procedures[idx].attachments ?? []).filter(
+      (a: { id: string }) => a.id !== attachmentId,
+    );
+
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { content: { ...content, procedures } as Prisma.InputJsonValue },
+    });
+    return { removed: true };
+  }
+
+  // ─── F3: Referencias cruzadas — vincular procedimiento con otro papel ──────
+  async addCrossRefToProcedure(
+    id: string,
+    procedureId: string,
+    targetPaperId: string,
+    user: AuthUser,
+  ) {
+    const wp = await this.findOne(id, user);
+
+    const target = await this.prisma.workingPaper.findFirst({
+      where:   { id: targetPaperId, auditId: wp.auditId },
+      select:  { id: true, code: true, paperCode: true, title: true },
+    });
+    if (!target) throw new NotFoundException('Papel destino no encontrado en esta auditoría');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const procedures: any[] = Array.isArray(content.procedures) ? content.procedures : [];
+    const idx = procedures.findIndex(p => p.id === procedureId);
+    if (idx === -1) throw new NotFoundException('Procedimiento no encontrado');
+
+    const crossRefs = procedures[idx].crossRefs ?? [];
+    if (!crossRefs.some((r: { paperId: string }) => r.paperId === target.id)) {
+      crossRefs.push({
+        paperId: target.id,
+        code:    target.paperCode ?? target.code,
+        title:   target.title,
+      });
+    }
+    procedures[idx].crossRefs = crossRefs;
+
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { content: { ...content, procedures } as Prisma.InputJsonValue },
+    });
+    return procedures[idx].crossRefs;
+  }
+
+  async removeCrossRefFromProcedure(id: string, procedureId: string, targetPaperId: string, user: AuthUser) {
+    const wp = await this.findOne(id, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const procedures: any[] = Array.isArray(content.procedures) ? content.procedures : [];
+    const idx = procedures.findIndex(p => p.id === procedureId);
+    if (idx === -1) throw new NotFoundException('Procedimiento no encontrado');
+
+    procedures[idx].crossRefs = (procedures[idx].crossRefs ?? []).filter(
+      (r: { paperId: string }) => r.paperId !== targetPaperId,
+    );
+
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { content: { ...content, procedures } as Prisma.InputJsonValue },
+    });
+    return { removed: true };
   }
 
   private LOCKED_STATUSES: WorkingPaperStatus[] = [

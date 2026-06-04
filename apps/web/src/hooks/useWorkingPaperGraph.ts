@@ -376,6 +376,47 @@ export function useDraftProcedure() {
   });
 }
 
+// F3: Adjuntar archivo a un procedimiento
+export function useAttachToProcedure() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, procedureId, file }: { paperId: string; procedureId: string; file: File }) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return apiClient.postForm(`/working-papers/${paperId}/procedures/${procedureId}/attachments`, fd);
+    },
+    onSuccess: (_res, vars) => qc.invalidateQueries({ queryKey: ['wp', vars.paperId] }),
+  });
+}
+
+export function useRemoveAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, procedureId, attachmentId }: { paperId: string; procedureId: string; attachmentId: string }) =>
+      apiClient.delete(`/working-papers/${paperId}/procedures/${procedureId}/attachments/${attachmentId}`),
+    onSuccess: (_res, vars) => qc.invalidateQueries({ queryKey: ['wp', vars.paperId] }),
+  });
+}
+
+// F3: Referencias cruzadas en procedimientos
+export function useAddCrossRef() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, procedureId, targetPaperId }: { paperId: string; procedureId: string; targetPaperId: string }) =>
+      apiClient.post(`/working-papers/${paperId}/procedures/${procedureId}/cross-refs`, { targetPaperId }),
+    onSuccess: (_res, vars) => qc.invalidateQueries({ queryKey: ['wp', vars.paperId] }),
+  });
+}
+
+export function useRemoveCrossRef() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, procedureId, targetPaperId }: { paperId: string; procedureId: string; targetPaperId: string }) =>
+      apiClient.delete(`/working-papers/${paperId}/procedures/${procedureId}/cross-refs/${targetPaperId}`),
+    onSuccess: (_res, vars) => qc.invalidateQueries({ queryKey: ['wp', vars.paperId] }),
+  });
+}
+
 // ─── Gap 3: @mention references ──────────────────────────────────────────────
 
 export interface MentionSection {

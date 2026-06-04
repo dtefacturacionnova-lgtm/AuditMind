@@ -1638,6 +1638,7 @@ export default function WpDetailPage() {
               />
               <PaperProceduresPanel
                 paperId={params.id}
+                auditId={wp.auditId}
                 paperTitle={wp.title}
                 paperType={wp.type}
                 paperCode={wp.paperCode}

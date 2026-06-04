@@ -68,7 +68,8 @@ import { AiService } from '../ai/ai.service';
 import { PdfService } from '../pdf/pdf.service';
 import { renderWorkingPaperBody } from '../pdf/pdf-templates';
 import type { Response } from 'express';
-import { Res } from '@nestjs/common';
+import { Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -427,6 +428,58 @@ export class WorkingPapersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.removeProcedure(id, procedureId, user);
+  }
+
+  // ─── F3: Adjuntar archivo de soporte a un procedimiento ────────────────────
+  @Post(':id/procedures/:procedureId/attachments')
+  @Roles(UserRole.AUDITOR)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Subir un documento de soporte a un procedimiento (máx 25MB)' })
+  attachToProcedure(
+    @Param('id') id: string,
+    @Param('procedureId') procedureId: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) throw new Error('No se recibió archivo');
+    return this.service.attachToProcedure(id, procedureId, file, user);
+  }
+
+  @Delete(':id/procedures/:procedureId/attachments/:attachmentId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Quitar un documento de soporte de un procedimiento' })
+  removeAttachment(
+    @Param('id') id: string,
+    @Param('procedureId') procedureId: string,
+    @Param('attachmentId') attachmentId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.removeAttachment(id, procedureId, attachmentId, user);
+  }
+
+  // ─── F3: Referencias cruzadas — vincular procedimiento con otro papel ──────
+  @Post(':id/procedures/:procedureId/cross-refs')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Vincular un procedimiento con otro papel de trabajo (referencia cruzada)' })
+  addCrossRef(
+    @Param('id') id: string,
+    @Param('procedureId') procedureId: string,
+    @Body() body: { targetPaperId: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.addCrossRefToProcedure(id, procedureId, body.targetPaperId, user);
+  }
+
+  @Delete(':id/procedures/:procedureId/cross-refs/:targetPaperId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Quitar una referencia cruzada de un procedimiento' })
+  removeCrossRef(
+    @Param('id') id: string,
+    @Param('procedureId') procedureId: string,
+    @Param('targetPaperId') targetPaperId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.removeCrossRefFromProcedure(id, procedureId, targetPaperId, user);
   }
 
   // ─── IA: mejorar redacción de un texto de procedimiento ────────────────────

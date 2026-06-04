@@ -14,24 +14,38 @@ import type { AiDraftConfig } from './SectionField';
 
 // ─── Template key selector ────────────────────────────────────────────────────
 
+// Las claves DEBEN coincidir con PAPER_TEMPLATES del backend (paperCode).
+// Ver apps/api/src/working-papers/paper-templates.ts
 const AVAILABLE_TEMPLATES = [
-  { key: 'PLANNING_UNDERSTANDING', label: 'Entendimiento del Negocio' },
-  { key: 'RISK_ASSESSMENT',        label: 'Evaluación de Riesgos' },
-  { key: 'INTERNAL_CONTROL',       label: 'Evaluación de Control Interno' },
-  { key: 'SUBSTANTIVE_TEST',       label: 'Prueba Sustantiva' },
-  { key: 'MATERIALITY',            label: 'Materialidad' },
-  { key: 'PLANNING_MEMO',          label: 'Memorando de Planificación' },
-  { key: 'AUDIT_PROGRAM',          label: 'Programa de Auditoría' },
+  { key: 'PT-A1',       label: 'Entendimiento del Negocio (PT-A1)' },
+  { key: 'PT-A2',       label: 'Evaluación de Riesgo Inherente (PT-A2)' },
+  { key: 'PT-A3',       label: 'Evaluación de Control Interno (PT-A3)' },
+  { key: 'PT-A4',       label: 'Materialidad (PT-A4)' },
+  { key: 'PT-COSO',     label: 'Evaluación COSO 2013 (PT-COSO)' },
+  { key: 'PT-MEMO',     label: 'Memorando de Planificación (PT-MEMO)' },
+  { key: 'PT-PROG',     label: 'Programa de Auditoría (PT-PROG)' },
+  { key: 'PT-EEFF',     label: 'Estados Financieros / Cédula Madre (PT-EEFF)' },
+  { key: 'PT-DIFS',     label: 'Cédula de Diferencias (PT-DIFS)' },
+  { key: 'PT-GOV-HAL',  label: 'Hallazgo Gubernamental (PT-GOV-HAL)' },
+  { key: 'PT-SEC-RISK', label: 'Riesgo de Seguridad TI (PT-SEC-RISK)' },
+  { key: 'PT-BIA',      label: 'Análisis de Impacto al Negocio (PT-BIA)' },
+  { key: 'PT-AML-RISK', label: 'Riesgo LA/FT — AML (PT-AML-RISK)' },
 ];
 
 function InitFromTemplatePanel({
   paperId,
+  defaultKey,
   onDone,
 }: {
   paperId: string;
+  defaultKey?: string;
   onDone: () => void;
 }) {
-  const [selected, setSelected] = useState('');
+  // Pre-select the paper's own paperCode if it matches an available template
+  const initialKey = defaultKey && AVAILABLE_TEMPLATES.some(t => t.key === defaultKey)
+    ? defaultKey
+    : '';
+  const [selected, setSelected] = useState(initialKey);
   const initMutation = useInitFromTemplate();
 
   async function handleInit() {
@@ -111,6 +125,7 @@ function SectionProgressBar({ filled, total }: { filled: number; total: number }
 interface SmartPaperSectionsProps {
   paperId:        string;
   auditId:        string;
+  paperCode?:     string | null;
   readonly?:      boolean;
   aiDraftConfig?: AiDraftConfig;
 }
@@ -118,6 +133,7 @@ interface SmartPaperSectionsProps {
 export function SmartPaperSections({
   paperId,
   auditId,
+  paperCode,
   readonly = false,
   aiDraftConfig,
 }: SmartPaperSectionsProps) {
@@ -147,6 +163,7 @@ export function SmartPaperSections({
     return (
       <InitFromTemplatePanel
         paperId={paperId}
+        defaultKey={paperCode ?? undefined}
         onDone={() => { /* query will auto-refresh */ }}
       />
     );

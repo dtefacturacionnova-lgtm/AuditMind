@@ -1595,6 +1595,7 @@ export default function WpDetailPage() {
               <SmartPaperSections
                 paperId={params.id}
                 auditId={wp.auditId}
+                paperCode={wp.paperCode}
                 readonly={wp.status === 'APPROVED'}
                 aiDraftConfig={wp.status !== 'APPROVED' ? aiDraftConfig : undefined}
               />

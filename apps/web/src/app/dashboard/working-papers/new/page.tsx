@@ -37,7 +37,7 @@ export default function NewWorkingPaperPage() {
   const auditId  = params.get('auditId')  ?? '';
   const folderId = params.get('folderId') ?? '';
 
-  const { data: audit, isLoading: auditLoading } = useAudit(auditId);
+  const { data: audit, isLoading: auditLoading, isError: auditError } = useAudit(auditId);
   const create = useCreateWorkingPaper();
 
   const [title,     setTitle]     = useState('');
@@ -72,12 +72,34 @@ export default function NewWorkingPaperPage() {
     );
   }
 
-  if (auditLoading) {
+  if (auditLoading && !auditError) {
     return (
       <div className="flex flex-col h-screen bg-[#F0F4F8]">
         <Header />
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
           <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+          <p className="text-xs text-gray-500">Cargando auditoría…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If audit not found or errored, still allow creating with the auditId we have
+  if (auditError || !audit) {
+    return (
+      <div className="flex flex-col h-screen bg-[#F0F4F8]">
+        <Header />
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 max-w-md mx-auto text-center px-6">
+          <AlertTriangle className="w-10 h-10 text-amber-500" />
+          <p className="text-sm text-gray-700 font-semibold">Auditoría no encontrada</p>
+          <p className="text-xs text-gray-500">
+            El identificador <code className="bg-gray-100 px-1.5 py-0.5 rounded">{auditId}</code> no corresponde a ninguna auditoría existente.
+            Es posible que el enlace sea de prueba o que la auditoría haya sido eliminada.
+          </p>
+          <div className="flex gap-2 mt-2">
+            <Link href="/dashboard/audits" className="text-xs text-blue-600 hover:underline">Ir al listado</Link>
+            <button onClick={() => router.back()} className="text-xs text-gray-500 hover:text-gray-800">Volver</button>
+          </div>
         </div>
       </div>
     );

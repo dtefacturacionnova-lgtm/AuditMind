@@ -1,12 +1,15 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { getAgentSystemPrompt } from './agent-prompts';
 
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private readonly aiServiceUrl: string;
   private readonly internalKey: string;
+  private readonly geminiEndpoint =
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   constructor(
     private config: ConfigService,
@@ -49,10 +52,8 @@ export class AiService {
       if (!res.ok) {
         const errorText = await res.text();
         this.logger.error(`AI service error ${res.status}: ${errorText}`);
-        throw new HttpException(
-          `AI service error: ${res.status}`,
-          HttpStatus.BAD_GATEWAY,
-        );
+        // El microservicio respondió con error → intentamos el fallback Gemini
+        return this.chatGeminiFallback(agentType, message, history, context);
       }
 
       const data = await res.json() as {
@@ -69,9 +70,79 @@ export class AiService {
       };
     } catch (err: unknown) {
       if (err instanceof HttpException) throw err;
-      this.logger.error('Failed to reach AI service', err);
+      // El microservicio no está disponible (no desplegado / caído) →
+      // respondemos el chat llamando a Gemini directamente desde NestJS.
+      this.logger.warn(`AI service unreachable, using Gemini fallback: ${String(err)}`);
+      return this.chatGeminiFallback(agentType, message, history, context);
+    }
+  }
+
+  /**
+   * Fallback nativo de NestJS para el chat de agentes cuando el microservicio
+   * Python (ai-service) no está disponible. Arma el system prompt del agente
+   * + contexto y llama a Gemini 2.5 Flash, igual que el resto de asistentes IA
+   * del backend. Mantiene la conversación multiturno.
+   */
+  private async chatGeminiFallback(
+    agentType: string,
+    message: string,
+    history: { role: string; content: string }[],
+    context: Record<string, unknown>,
+  ): Promise<{ response: string; model: string }> {
+    const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
+    if (!apiKey) {
       throw new HttpException(
-        'El servicio de IA no está disponible. Asegúrate de que el AI Service está corriendo en puerto 3003.',
+        'El asistente de IA no está configurado (falta GEMINI_API_KEY).',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    const systemPrompt = getAgentSystemPrompt(agentType, context ?? {});
+
+    // Convierte el historial al formato de Gemini (assistant → model).
+    const contents = [
+      ...history.map(m => ({
+        role:  m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      })),
+      { role: 'user', parts: [{ text: message }] },
+    ];
+
+    try {
+      const res = await fetch(`${this.geminiEndpoint}?key=${apiKey}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: { temperature: 0.6, maxOutputTokens: 1400 },
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.text();
+        this.logger.error(`Gemini fallback HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+        throw new Error(`Gemini HTTP ${res.status}`);
+      }
+
+      const data = await res.json() as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        error?: { message: string };
+      };
+      if (data.error) throw new Error(`Gemini error: ${data.error.message}`);
+
+      const text = (data.candidates?.[0]?.content?.parts ?? [])
+        .map(p => p.text ?? '')
+        .join('')
+        .trim();
+      if (!text) throw new Error('Gemini devolvió respuesta vacía');
+
+      return { response: text, model: 'gemini-2.5-flash (fallback)' };
+    } catch (err) {
+      this.logger.error('Gemini fallback falló', err as Error);
+      throw new HttpException(
+        'El asistente de IA no está disponible en este momento. Intenta de nuevo en unos minutos.',
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }

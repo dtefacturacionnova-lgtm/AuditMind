@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Delete, Body, Param, Query,
   ParseIntPipe, DefaultValuePipe,
 } from '@nestjs/common';
-import { IsString, IsIn } from 'class-validator';
+import { IsString, IsIn, IsOptional } from 'class-validator';
 
 class SignOffDto {
   @IsString() @IsIn(['prepare', 'review', 'signoff']) level!: 'prepare' | 'review' | 'signoff';
@@ -13,11 +13,11 @@ class LinkPbcDto {
 }
 
 class AssistSectionDto {
-  @IsString() userPrompt?: string;
+  @IsOptional() @IsString() userPrompt?: string;
 }
 
 class RestoreVersionDto {
-  @IsString() reason?: string;
+  @IsOptional() @IsString() reason?: string;
 }
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { WorkingPapersService } from './working-papers.service';

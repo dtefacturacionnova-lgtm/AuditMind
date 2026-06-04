@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import {
   Sparkles, Loader2, ChevronDown, ChevronUp, BookMarked,
   TrendingUp, Lightbulb, CheckCircle2, AlertTriangle,
@@ -27,10 +27,28 @@ function SuggestionCard({
   onApply,
 }: {
   suggestion: AiProcedureSuggestion;
-  onApply:    (procedure: string, area: string) => void;
+  onApply?:   (procedure: string, area: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [applied, setApplied] = useState(false);
   const pCfg = PRIORITY_CONFIG[suggestion.priority];
+
+  async function handleApply(e: MouseEvent) {
+    e.stopPropagation();
+    const text = `[${suggestion.area}${suggestion.niaRef ? ` · ${suggestion.niaRef}` : ''}]\n${suggestion.procedure}`;
+    // If a parent provided onApply, use it; otherwise copy to clipboard
+    if (onApply) {
+      onApply(suggestion.procedure, suggestion.area);
+    } else {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        /* clipboard may be blocked — still show feedback */
+      }
+    }
+    setApplied(true);
+    setTimeout(() => setApplied(false), 2500);
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -73,11 +91,15 @@ function SuggestionCard({
 
           {/* Apply button */}
           <button
-            onClick={(e) => { e.stopPropagation(); onApply(suggestion.procedure, suggestion.area); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-violet-600 rounded-lg hover:bg-violet-700 transition-colors"
+            onClick={handleApply}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+              applied
+                ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                : 'text-white bg-violet-600 hover:bg-violet-700'
+            }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            Aplicar al programa
+            {applied ? '✓ Copiado al portapapeles' : 'Aplicar al programa'}
           </button>
         </div>
       )}
@@ -181,7 +203,7 @@ export function CrossAuditSuggestions({ auditId, onApply }: CrossAuditSuggestion
               <SuggestionCard
                 key={sug.id}
                 suggestion={sug}
-                onApply={onApply ?? (() => {})}
+                onApply={onApply}
               />
             ))}
           </div>

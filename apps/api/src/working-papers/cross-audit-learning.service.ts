@@ -54,6 +54,7 @@ export class CrossAuditLearningService {
   async generateSuggestions(
     auditId: string,
     user:    AuthUser,
+    paperId?: string,
   ): Promise<CrossAuditSuggestionsResult> {
     // Validate access
     const audit = await this.prisma.audit.findUnique({
@@ -64,6 +65,18 @@ export class CrossAuditLearningService {
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
     if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+
+    // ─── Contexto del papel actual (para contextualizar las sugerencias) ──
+    let paperContext: { paperCode: string | null; title: string; type: string } | null = null;
+    if (paperId) {
+      const wp = await this.prisma.workingPaper.findUnique({
+        where:  { id: paperId },
+        select: { paperCode: true, title: true, type: true },
+      });
+      if (wp) {
+        paperContext = { paperCode: wp.paperCode, title: wp.title, type: wp.type };
+      }
+    }
 
     const entityId = audit.auditEntityId;
     const entityName = audit.auditEntity?.name ?? audit.title;
@@ -135,11 +148,13 @@ export class CrossAuditLearningService {
     let suggestions: AiProcedureSuggestion[];
     let aiGenerated = false;
 
-    if (apiKey && (pastFindings.length > 0 || smartSections.length > 0)) {
+    // Corre Gemini si hay historial, secciones, O contexto de papel (para que
+    // un papel nuevo sin historial reciba sugerencias relevantes a su tipo).
+    if (apiKey && (pastFindings.length > 0 || smartSections.length > 0 || paperContext)) {
       try {
         suggestions = await this.callGemini(
           apiKey, audit, entityName, sector,
-          pastFindings, smartSections, recurringAreas,
+          pastFindings, smartSections, recurringAreas, paperContext,
         );
         aiGenerated = true;
       } catch (err) {
@@ -205,6 +220,7 @@ export class CrossAuditLearningService {
     pastFindings:   Array<{ title: string; severity: string; condition: string | null; recommendation: string | null }>,
     smartSections:  Array<{ sectionKey: string; label: string; value: unknown; paper: { paperCode: string | null; title: string } }>,
     recurringAreas: string[],
+    paperContext:   { paperCode: string | null; title: string; type: string } | null,
   ): Promise<AiProcedureSuggestion[]> {
     const findingsSummary = pastFindings.slice(0, 15).map((f, i) =>
       `${i + 1}. [${f.severity}] ${f.title}${f.condition ? ` — ${f.condition.slice(0, 150)}` : ''}`
@@ -218,13 +234,22 @@ export class CrossAuditLearningService {
       ? `Áreas con hallazgos recurrentes: ${recurringAreas.join(', ')}`
       : 'Sin historial previo de hallazgos en esta entidad.';
 
+    // Bloque de foco del papel actual (cuando se invoca desde un papel)
+    const paperFocusBlock = paperContext
+      ? `\n🎯 PAPEL DE TRABAJO ACTUAL (enfoca las sugerencias a ESTE papel):
+- Código: ${paperContext.paperCode ?? '—'}
+- Título: ${paperContext.title}
+- Tipo: ${paperContext.type}
+Las sugerencias DEBEN ser procedimientos directamente ejecutables en el contexto de este papel específico. Por ejemplo, si el papel es de Entendimiento del Negocio, sugiere procedimientos de indagación y análisis del entorno; si es de Evaluación de Controles, sugiere pruebas de diseño y efectividad de controles; si es de Pruebas Sustantivas, sugiere recálculos, confirmaciones y muestreos.\n`
+      : '';
+
     const prompt = `Eres un auditor experto en aprendizaje cruzado entre auditorías. Con base en el historial de hallazgos y el contexto actual, sugiere procedimientos de auditoría específicos.
 
 AUDITORÍA ACTUAL:
 - Entidad: ${entityName} ${sector ? `(sector: ${sector})` : ''}
 - Tipo: ${audit.type}
 - Título: ${audit.title}
-
+${paperFocusBlock}
 ${areasText}
 
 HALLAZGOS DE AUDITORÍAS ANTERIORES (${pastFindings.length} total):
@@ -233,7 +258,7 @@ ${findingsSummary || 'Sin hallazgos históricos disponibles.'}
 CONTEXTO DE PAPELES ACTUALES:
 ${sectionsSummary || 'Sin secciones completadas aún.'}
 
-Genera 6-8 procedimientos de auditoría específicos y accionables, priorizando las áreas con mayor historial de hallazgos.
+Genera 6-8 procedimientos de auditoría específicos y accionables${paperContext ? ', RELEVANTES AL PAPEL DE TRABAJO ACTUAL indicado arriba' : ', priorizando las áreas con mayor historial de hallazgos'}.
 
 Responde EXCLUSIVAMENTE con un JSON array:
 [

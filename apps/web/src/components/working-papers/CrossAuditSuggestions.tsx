@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import {
   useAiSuggestions,
+  useAppendProcedure,
   type CrossAuditSuggestionsResult,
   type AiProcedureSuggestion,
   type SuggestionPriority,
@@ -25,26 +26,24 @@ const PRIORITY_CONFIG: Record<SuggestionPriority, { label: string; color: string
 function SuggestionCard({
   suggestion,
   onApply,
+  canApplyToPaper,
 }: {
   suggestion: AiProcedureSuggestion;
-  onApply?:   (procedure: string, area: string) => void;
+  onApply:    (procedure: string, area: string, niaRef?: string) => Promise<void> | void;
+  canApplyToPaper: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [busy, setBusy] = useState(false);
   const pCfg = PRIORITY_CONFIG[suggestion.priority];
 
   async function handleApply(e: MouseEvent) {
     e.stopPropagation();
-    const text = `[${suggestion.area}${suggestion.niaRef ? ` · ${suggestion.niaRef}` : ''}]\n${suggestion.procedure}`;
-    // If a parent provided onApply, use it; otherwise copy to clipboard
-    if (onApply) {
-      onApply(suggestion.procedure, suggestion.area);
-    } else {
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch {
-        /* clipboard may be blocked — still show feedback */
-      }
+    setBusy(true);
+    try {
+      await onApply(suggestion.procedure, suggestion.area, suggestion.niaRef);
+    } finally {
+      setBusy(false);
     }
     setApplied(true);
     setTimeout(() => setApplied(false), 2500);
@@ -92,14 +91,17 @@ function SuggestionCard({
           {/* Apply button */}
           <button
             onClick={handleApply}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+            disabled={busy}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors disabled:opacity-60 ${
               applied
                 ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
                 : 'text-white bg-violet-600 hover:bg-violet-700'
             }`}
           >
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            {applied ? '✓ Copiado al portapapeles' : 'Aplicar al programa'}
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+            {applied
+              ? (canApplyToPaper ? '✓ Agregado al papel' : '✓ Copiado')
+              : (canApplyToPaper ? 'Aplicar al papel' : 'Copiar procedimiento')}
           </button>
         </div>
       )}
@@ -111,17 +113,30 @@ function SuggestionCard({
 
 interface CrossAuditSuggestionsProps {
   auditId:  string;
+  paperId?: string;
   onApply?: (procedure: string, area: string) => void;
 }
 
-export function CrossAuditSuggestions({ auditId, onApply }: CrossAuditSuggestionsProps) {
+export function CrossAuditSuggestions({ auditId, paperId, onApply }: CrossAuditSuggestionsProps) {
   const [result, setResult]     = useState<CrossAuditSuggestionsResult | null>(null);
   const [filterPriority, setFilter] = useState<SuggestionPriority | 'ALL'>('ALL');
   const generate = useAiSuggestions();
+  const append   = useAppendProcedure();
 
   async function handleGenerate() {
-    const res = await generate.mutateAsync(auditId);
+    const res = await generate.mutateAsync({ auditId, paperId });
     setResult(res);
+  }
+
+  // Aplicar = agregar al papel actual (si hay paperId) o delegar al padre
+  async function handleApplyToPaper(procedure: string, area: string, niaRef?: string) {
+    if (onApply) {
+      onApply(procedure, area);
+      return;
+    }
+    if (paperId) {
+      await append.mutateAsync({ paperId, procedure, area, niaRef });
+    }
   }
 
   const filtered = result?.suggestions.filter(
@@ -203,7 +218,16 @@ export function CrossAuditSuggestions({ auditId, onApply }: CrossAuditSuggestion
               <SuggestionCard
                 key={sug.id}
                 suggestion={sug}
-                onApply={onApply}
+                canApplyToPaper={!!paperId || !!onApply}
+                onApply={async (procedure, area, niaRef) => {
+                  if (onApply || paperId) {
+                    await handleApplyToPaper(procedure, area, niaRef);
+                  } else {
+                    // Sin papel ni handler → fallback clipboard
+                    const text = `[${area}${niaRef ? ` · ${niaRef}` : ''}]\n${procedure}`;
+                    try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+                  }
+                }}
               />
             ))}
           </div>

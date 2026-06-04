@@ -8,7 +8,7 @@ import {
 } from './dto/create-working-paper.dto';
 import { UpdateWorkingPaperDto, UpdateWorkingPaperStatusDto } from './dto/update-working-paper.dto';
 import { AuthUser } from '../auth/jwt.strategy';
-import { WorkingPaperStatus, UserRole, TickMark, WpKind, SyncStatus } from '@prisma/client';
+import { WorkingPaperStatus, UserRole, TickMark, WpKind, SyncStatus, Prisma } from '@prisma/client';
 import { PaperGraphService } from './paper-graph.service';
 
 async function generateWpCode(
@@ -177,6 +177,44 @@ export class WorkingPapersService {
     if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
     if (wp.audit.organizationId !== user.organizationId) throw new ForbiddenException();
     return wp;
+  }
+
+  // ─── Agregar procedimiento sugerido al papel ───────────────────────────────
+  /**
+   * Añade un procedimiento (de las sugerencias IA cross-audit) al array
+   * content.procedures[] del papel. Crea el array si no existe.
+   * Devuelve la lista actualizada de procedimientos.
+   */
+  async appendProcedure(
+    id: string,
+    dto: { procedure: string; area?: string; niaRef?: string },
+    user: AuthUser,
+  ) {
+    const wp = await this.findOne(id, user);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    const procedures: Array<{ id: string; area: string; procedure: string; niaRef?: string; addedAt: string }> =
+      Array.isArray(content.procedures) ? content.procedures : [];
+
+    // Evitar duplicados exactos
+    const exists = procedures.some(p => p.procedure === dto.procedure);
+    if (!exists) {
+      procedures.push({
+        id:        `proc_${procedures.length + 1}_${Date.now().toString(36)}`,
+        area:      dto.area ?? 'General',
+        procedure: dto.procedure,
+        niaRef:    dto.niaRef,
+        addedAt:   new Date().toISOString(),
+      });
+    }
+
+    await this.prisma.workingPaper.update({
+      where: { id },
+      data:  { content: { ...content, procedures } as Prisma.InputJsonValue },
+    });
+
+    return { added: !exists, total: procedures.length, procedures };
   }
 
   private LOCKED_STATUSES: WorkingPaperStatus[] = [

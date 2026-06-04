@@ -1599,7 +1599,7 @@ export default function WpDetailPage() {
                 readonly={wp.status === 'APPROVED'}
                 aiDraftConfig={wp.status !== 'APPROVED' ? aiDraftConfig : undefined}
               />
-              <CrossAuditSuggestions auditId={wp.auditId} />
+              <CrossAuditSuggestions auditId={wp.auditId} paperId={params.id} />
             </div>
           )}
 

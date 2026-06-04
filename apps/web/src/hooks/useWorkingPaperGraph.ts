@@ -297,11 +297,28 @@ export interface CrossAuditSuggestionsResult {
 
 export function useAiSuggestions() {
   return useMutation({
-    mutationFn: (auditId: string) =>
+    mutationFn: ({ auditId, paperId }: { auditId: string; paperId?: string }) =>
       apiClient.post<CrossAuditSuggestionsResult>(
         `/working-papers/by-audit/${auditId}/ai-suggestions`,
-        {},
+        { paperId },
       ),
+  });
+}
+
+// Aplicar un procedimiento sugerido al papel actual
+export function useAppendProcedure() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, procedure, area, niaRef }: {
+      paperId: string; procedure: string; area?: string; niaRef?: string;
+    }) =>
+      apiClient.post<{ added: boolean; total: number }>(
+        `/working-papers/${paperId}/append-procedure`,
+        { procedure, area, niaRef },
+      ),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['wp', vars.paperId] });
+    },
   });
 }
 

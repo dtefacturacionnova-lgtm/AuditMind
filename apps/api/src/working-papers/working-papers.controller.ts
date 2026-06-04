@@ -19,6 +19,12 @@ class AssistSectionDto {
 class RestoreVersionDto {
   @IsOptional() @IsString() reason?: string;
 }
+
+class AppendProcedureDto {
+  @IsString() procedure!: string;
+  @IsOptional() @IsString() area?: string;
+  @IsOptional() @IsString() niaRef?: string;
+}
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { WorkingPapersService } from './working-papers.service';
 import { CreateWorkingPaperDto, AddCommentDto, AddTickMarkEntryDto } from './dto/create-working-paper.dto';
@@ -345,9 +351,25 @@ export class WorkingPapersController {
 
   @Post('by-audit/:auditId/ai-suggestions')
   @Roles(UserRole.AUDITOR)
-  @ApiOperation({ summary: 'Generar sugerencias de procedimientos IA basadas en el historial de hallazgos de la entidad' })
-  generateAiSuggestions(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
-    return this.crossAudit.generateSuggestions(auditId, user);
+  @ApiOperation({ summary: 'Generar sugerencias de procedimientos IA (opcionalmente contextualizadas a un papel)' })
+  generateAiSuggestions(
+    @Param('auditId') auditId: string,
+    @Body() body: { paperId?: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.crossAudit.generateSuggestions(auditId, user, body?.paperId);
+  }
+
+  // ─── Aplicar un procedimiento sugerido al papel actual ─────────────────────
+  @Post(':id/append-procedure')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Agregar un procedimiento (de las sugerencias IA) a la sección de procedimientos del papel' })
+  appendProcedure(
+    @Param('id') id: string,
+    @Body() dto: AppendProcedureDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.appendProcedure(id, dto, user);
   }
 
   // ─── Gap 3: @mention references ───────────────────────────────────────────

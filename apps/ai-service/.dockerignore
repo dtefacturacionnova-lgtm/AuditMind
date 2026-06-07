@@ -1,0 +1,33 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dev logs
+uvicorn_*.txt
+*.log
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.bat
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Tests
+.pytest_cache/
+htmlcov/
+.coverage

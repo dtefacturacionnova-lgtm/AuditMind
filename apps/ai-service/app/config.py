@@ -28,8 +28,9 @@ class Settings(BaseSettings):
     # Internal API key — used by NestJS to call FastAPI (replaces JWT re-verification)
     INTERNAL_API_KEY: str = "auditmind-internal-2026-xK9mP3qR"
 
-    # JWT
-    SUPABASE_JWT_SECRET: str
+    # JWT — actualmente no se usa (auth via INTERNAL_API_KEY entre NestJS y ai-service)
+    # Se mantiene para compatibilidad futura con verificación directa de tokens Supabase.
+    SUPABASE_JWT_SECRET: str = ""
 
     class Config:
         env_file = ".env"

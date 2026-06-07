@@ -1322,16 +1322,23 @@ export class AuditTemplatesService {
       },
 
       // ═══════════════════════════════════════════════════════════════════════
-      // 7. Auditoría Fiscal El Salvador (CT Arts. 129-138 / DGII / CVPCPA) — 47 papeles
+      // 7. Auditoría Fiscal El Salvador v6.1 — NACOT 2018 como norma rectora — 53 papeles
       //    Secciones: APF · A · ISR · IVA · OF · AF · D
+      //    v6.1: NACOT 2018 central + Independencia/Calidad/Carta de Encargo (CIEPC),
+      //          Riesgo de Incumplimiento (NIA 315), AML (LCLDA), Precios de Transferencia
+      //          (OCDE/BEPS), Dictamen Semestral Zonas Francas/SSII y Dictamen NACOT Anexo 1.
       // ═══════════════════════════════════════════════════════════════════════
       {
         name: 'Auditoría Fiscal El Salvador (CT/DGII)',
         description:
-          'Índice completo de Auditoría Fiscal según Código Tributario Arts. 129-138 SV. ' +
-          'Cubre ISR (F11), IVA (F07), Pago a Cuenta (F14), Precios de Transferencia (F982), ' +
-          'Obligaciones Formales (DTE/libros) y Dictamen Fiscal SDF. ' +
-          'Aplica a: Fiscal.',
+          'Índice completo de Auditoría Fiscal El Salvador v6.1. NORMA TÉCNICA RECTORA: NACOT 2018 ' +
+          '(Norma para el Aseguramiento sobre el Cumplimiento de Obligaciones Tributarias, CVPCPA), ' +
+          'que rige ética e independencia (CIEPC), control de calidad, aceptación del encargo, ' +
+          'planificación, ejecución, documentación y el Dictamen (Anexo 1, 3 tipos de opinión). ' +
+          'Marco legal: Código Tributario Arts. 129-138, LISR, Ley IVA; NIA supletoriamente. ' +
+          'Cubre ISR (F11), IVA (F07), Pago a Cuenta (F14), Precios de Transferencia OCDE/BEPS (F982), ' +
+          'AML/LCLDA, Dictamen Semestral Zonas Francas/Servicios Internacionales, Obligaciones Formales ' +
+          '(DTE/libros) y Dictamen Fiscal SDF. Aplica a: Fiscal.',
         auditTypes: [AuditType.FISCAL],
         sections: [
           { ref: 'APF', name: 'Archivo Permanente Fiscal',                 phaseType: 'PLANNING',
@@ -1343,6 +1350,8 @@ export class AuditTemplatesService {
               { ref: 'APF-05', name: 'Informes de Auditoría Fiscal Anteriores' },
               { ref: 'APF-06', name: 'Historial de Requerimientos DGII' },
               { ref: 'APF-07', name: 'Acuerdos Especiales y Resoluciones' },
+              { ref: 'APF-08', name: 'Independencia — NACOT Sec. 2 / CIEPC' },
+              { ref: 'APF-09', name: 'Control de Calidad del Encargo — NACOT Sec. 3' },
             ],
           },
           { ref: 'A', name: 'Planificación Fiscal',                        phaseType: 'PLANNING' },
@@ -1387,6 +1396,9 @@ export class AuditTemplatesService {
               { ref: 'AF-03', name: 'Evasión IVA — Compras sin CCF Válido' },
               { ref: 'AF-04', name: 'Precios de Transferencia — Paraísos Fiscales' },
               { ref: 'AF-05', name: 'CAATs Fiscales — 100% de Transacciones' },
+              { ref: 'AF-06', name: 'Anti-Lavado de Activos — LCLDA / Reforma 2024' },
+              { ref: 'AF-07', name: 'Precios de Transferencia — Análisis Completo OCDE/BEPS' },
+              { ref: 'AF-08', name: 'Dictamen Semestral — Zonas Francas / Servicios Internacionales' },
             ],
           },
           { ref: 'D', name: 'Comunicación, Dictamen e Informe Fiscal',     phaseType: 'REPORTING' },
@@ -1400,8 +1412,9 @@ export class AuditTemplatesService {
             title:  'Credencial CVPCPA Vigente del Auditor y Socio Firmante',
             type:   WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.STANDARD },
           { code: 'APF-03', indexSection: 'APF-03',
-            title:  'Términos del Encargo / Carta de Entendimiento con el Contribuyente',
-            type:   WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.STANDARD },
+            title:    'Carta de Encargo Fiscal — Términos del Encargo NACOT Sección 4',
+            type:     WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART,
+            paperCode: 'PT-FISC-ENCARGO' },
           { code: 'APF-04', indexSection: 'APF-04',
             title:  'Organigrama del Contribuyente y Áreas Involucradas',
             type:   WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.STANDARD },
@@ -1414,6 +1427,14 @@ export class AuditTemplatesService {
           { code: 'APF-07', indexSection: 'APF-07',
             title:  'Historial de Requerimientos de la DGII al Contribuyente',
             type:   WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.STANDARD },
+          { code: 'APF-08', indexSection: 'APF-08',
+            title:    'Evaluación de Independencia del Auditor Fiscal — NACOT Sección 2 / CIEPC 2018',
+            type:     WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART,
+            paperCode: 'PT-FISC-INDEP' },
+          { code: 'APF-09', indexSection: 'APF-09',
+            title:    'Control de Calidad del Encargo Fiscal — NACOT Sección 3',
+            type:     WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART,
+            paperCode: 'PT-FISC-QC' },
           // ── A — Planificación Fiscal (7 papeles) ─────────────────────────
           { code: 'A-01', indexSection: 'A',
             title:    'Entendimiento del Contribuyente y Contexto Fiscal — NIT, Giro, ERP (Art. 131 CT)',
@@ -1424,9 +1445,9 @@ export class AuditTemplatesService {
             type:     WorkingPaperType.CONTROL_EVALUATION, wpKind: WpKind.SMART,
             paperCode: 'PT-A3' },
           { code: 'A-03', indexSection: 'A',
-            title:    'Evaluación de Riesgo Fiscal — ISR / IVA / Retenciones / Precios Transferencia',
+            title:    'Evaluación del Riesgo de Incumplimiento Fiscal — NIA 315 + NACOT Sección 5',
             type:     WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART,
-            paperCode: 'PT-A2' },
+            paperCode: 'PT-FISC-RISK' },
           { code: 'A-04', indexSection: 'A',
             title:    'Evaluación de Riesgo de Fraude Fiscal — Indicadores ACFE + NIA 240',
             type:     WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART,
@@ -1554,6 +1575,18 @@ export class AuditTemplatesService {
             title:    'CAATs Fiscales — Análisis del 100% de Transacciones (Agente Argus)',
             type:     WorkingPaperType.DATA_ANALYSIS, wpKind: WpKind.SMART,
             paperCode: 'PT-B4' },
+          { code: 'AF-06', indexSection: 'AF-06',
+            title:    'Análisis de Indicadores de Lavado de Activos — LCLDA / Reforma 2024 / FATF',
+            type:     WorkingPaperType.DATA_ANALYSIS, wpKind: WpKind.SMART,
+            paperCode: 'PT-FISC-AML' },
+          { code: 'AF-07', indexSection: 'AF-07',
+            title:    'Precios de Transferencia — Análisis Completo OCDE (5 Métodos / BEPS) — Art. 199-A CT',
+            type:     WorkingPaperType.NORMATIVE_ANALYSIS, wpKind: WpKind.SMART,
+            paperCode: 'PT-FISC-PT' },
+          { code: 'AF-08', indexSection: 'AF-08',
+            title:    'Dictamen Semestral — Régimen de Zona Franca y Servicios Internacionales (Art. 47.f Ley SSII)',
+            type:     WorkingPaperType.NORMATIVE_ANALYSIS, wpKind: WpKind.SMART,
+            paperCode: 'PT-FISC-ZF' },
           // ── D — Comunicación y Dictamen (6 papeles) ─────────────────────
           { code: 'D-01', indexSection: 'D',
             title:    'Hallazgo Fiscal — Incumplimiento Formal y/o Sustantivo',
@@ -1571,8 +1604,9 @@ export class AuditTemplatesService {
             type:     WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.MASTER,
             paperCode: 'PT-MEMO' },
           { code: 'D-05', indexSection: 'D',
-            title:  'Dictamen Fiscal — Versión Final para Carga en SDF (Plazo 31 de Mayo)',
-            type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },
+            title:    'Dictamen Fiscal — Modelo Oficial NACOT Anexo 1 (3 Tipos de Opinión) — SDF 31 de Mayo',
+            type:     WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.MASTER,
+            paperCode: 'PT-FISC-DICT' },
           { code: 'D-06', indexSection: 'D',
             title:  'Plan de Subsanación de Incumplimientos Identificados',
             type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },
@@ -1608,8 +1642,25 @@ export class AuditTemplatesService {
           { sourceCode: 'D-01', targetCode: 'D-02', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Hallazgos → Anexo 12' },
           { sourceCode: 'D-03', targetCode: 'D-04', sourceField: 'S1', targetField: 'S7', mappingType: 'AI_GENERATED', description: 'Diferencias → Informe Fiscal' },
           { sourceCode: 'D-02', targetCode: 'D-04', sourceField: 'S1', targetField: 'S10', mappingType: 'DIRECT',      description: 'Anexo 12 → Informe' },
-          { sourceCode: 'D-04', targetCode: 'D-05', sourceField: 'S9', targetField: 'S1', mappingType: 'DIRECT',       description: 'Informe → Dictamen' },
+          { sourceCode: 'D-04', targetCode: 'D-05', sourceField: 'S9', targetField: 'S3', mappingType: 'DIRECT',       description: 'Informe → Dictamen NACOT' },
           { sourceCode: 'D-01', targetCode: 'D-06', sourceField: 'S6', targetField: 'S1', mappingType: 'AGGREGATED', description: 'Hallazgos → Plan subsanación' },
+          // ── v6.1 NACOT — Aceptación, Independencia y Control de Calidad ──────
+          { sourceCode: 'APF-08', targetCode: 'APF-09', sourceField: 'S5', targetField: 'S1', mappingType: 'DIRECT',       description: 'Independencia → Control de Calidad' },
+          { sourceCode: 'APF-08', targetCode: 'APF-03', sourceField: 'S5', targetField: 'S5', mappingType: 'DIRECT',       description: 'Independencia → Carta de Encargo' },
+          { sourceCode: 'APF-08', targetCode: 'D-05',   sourceField: 'S6', targetField: 'S5', mappingType: 'AI_GENERATED', description: 'Independencia → Dictamen (declaración)' },
+          { sourceCode: 'APF-09', targetCode: 'D-05',   sourceField: 'S6', targetField: 'S7', mappingType: 'DIRECT',       description: 'Control de Calidad aprueba → Dictamen' },
+          { sourceCode: 'APF-03', targetCode: 'A-01',   sourceField: 'S2', targetField: 'S1', mappingType: 'AI_GENERATED', description: 'Carta de Encargo → Entendimiento' },
+          // ── v6.1 — Riesgo de Incumplimiento alimenta programa y memo ────────
+          { sourceCode: 'A-03',  targetCode: 'A-06',   sourceField: 'S8', targetField: 'S2', mappingType: 'AGGREGATED',   description: 'Respuesta planeada → Programa intensidad' },
+          // ── v6.1 — AML y Precios de Transferencia OCDE ──────────────────────
+          { sourceCode: 'AF-06', targetCode: 'AF-07',  sourceField: 'S3', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Paraísos fiscales (AML) → Precios de Transferencia' },
+          { sourceCode: 'AF-06', targetCode: 'AF-01',  sourceField: 'S2', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Indicadores AML → Red flags' },
+          { sourceCode: 'AF-07', targetCode: 'ISR-04', sourceField: 'S8', targetField: 'S2', mappingType: 'DIRECT',       description: 'Ajuste PT → Conciliación fiscal' },
+          { sourceCode: 'AF-07', targetCode: 'D-03',   sourceField: 'S8', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Ajuste PT → Cédula de diferencias' },
+          // ── v6.1 — Dictamen semestral Zonas Francas integra al anual ────────
+          { sourceCode: 'AF-08', targetCode: 'D-05',   sourceField: 'S6', targetField: 'S3', mappingType: 'AI_GENERATED', description: 'Dictamen semestral → Dictamen anual' },
+          // ── v6.1 — Cédula de diferencias sugiere tipo de opinión ────────────
+          { sourceCode: 'D-03',  targetCode: 'D-05',   sourceField: 'S1', targetField: 'S7', mappingType: 'AI_GENERATED', description: 'Diferencias → Tipo de opinión NACOT' },
         ],
       },
     ];

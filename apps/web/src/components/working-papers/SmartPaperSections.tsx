@@ -30,6 +30,15 @@ const AVAILABLE_TEMPLATES = [
   { key: 'PT-SEC-RISK', label: 'Riesgo de Seguridad TI (PT-SEC-RISK)' },
   { key: 'PT-BIA',      label: 'Análisis de Impacto al Negocio (PT-BIA)' },
   { key: 'PT-AML-RISK', label: 'Riesgo LA/FT — AML (PT-AML-RISK)' },
+  // ── Fiscal El Salvador v6.1 — NACOT 2018 ──
+  { key: 'PT-FISC-INDEP',   label: 'Fiscal · Independencia NACOT/CIEPC (PT-FISC-INDEP)' },
+  { key: 'PT-FISC-QC',      label: 'Fiscal · Control de Calidad del Encargo (PT-FISC-QC)' },
+  { key: 'PT-FISC-ENCARGO', label: 'Fiscal · Carta de Encargo NACOT (PT-FISC-ENCARGO)' },
+  { key: 'PT-FISC-RISK',    label: 'Fiscal · Riesgo de Incumplimiento NIA315+NACOT (PT-FISC-RISK)' },
+  { key: 'PT-FISC-AML',     label: 'Fiscal · Anti-Lavado LCLDA (PT-FISC-AML)' },
+  { key: 'PT-FISC-PT',      label: 'Fiscal · Precios de Transferencia OCDE (PT-FISC-PT)' },
+  { key: 'PT-FISC-ZF',      label: 'Fiscal · Dictamen Semestral Zona Franca (PT-FISC-ZF)' },
+  { key: 'PT-FISC-DICT',    label: 'Fiscal · Dictamen NACOT Anexo 1 (PT-FISC-DICT)' },
 ];
 
 function InitFromTemplatePanel({

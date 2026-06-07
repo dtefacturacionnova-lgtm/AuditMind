@@ -1295,4 +1295,408 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       aiHint:      'Auto-calculado: (áreas con procedimientos asignados / total áreas RI) × 100. Meta ≥ 90%.',
     },
   ],
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PLANTILLAS FISCALES — Auditoría Fiscal El Salvador v6.1 (NACOT 2018)
+  //  La NACOT 2018 es la NORMA TÉCNICA RECTORA del encargo fiscal salvadoreño.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // PT-FISC-INDEP: Evaluación de Independencia — NACOT Sección 2 / CIEPC 2018 [SMART]
+  'PT-FISC-INDEP': [
+    {
+      sectionKey: 'S1', label: 'Tipo de Amenaza a Evaluar (CIEPC + NACOT Sec. 2)',
+      description: 'Interés propio, autorevisión, abogacía, familiaridad e intimidación frente al contribuyente.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 1,
+      aiHint: 'Columnas: Amenaza | ¿Existe? (Sí/No) | Descripción del hecho observado | Nivel (Alto/Medio/Bajo). Evalúa las 5 amenazas del CIEPC.',
+    },
+    {
+      sectionKey: 'S2', label: 'Servicios Prohibidos para el Mismo Cliente',
+      description: 'Preparación de declaraciones que luego se dictaminan, representación ante DGII, registro contable.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      aiHint: 'Identifica si la firma prestó al mismo cliente servicios incompatibles con dictaminar (autorevisión/abogacía).',
+    },
+    {
+      sectionKey: 'S3', label: 'Evaluación de Honorarios',
+      description: 'Si los honorarios del cliente superan el 15% de los ingresos de la firma → amenaza de interés propio.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'Indica honorarios del encargo, % sobre ingresos totales de la firma y si supera el umbral del 15%.',
+    },
+    {
+      sectionKey: 'S4', label: 'Salvaguardas Aplicadas',
+      description: 'Medidas para eliminar o reducir las amenazas a un nivel aceptable según el CIEPC 2018.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Para cada amenaza identificada, documenta la salvaguarda concreta aplicada.',
+    },
+    {
+      sectionKey: 'S5', label: 'Conclusión sobre el Encargo',
+      description: 'El encargo puede aceptarse / debe rechazarse / continúa con salvaguardas.',
+      fieldType: FieldType.ENUM_SELECT, isRequired: true, isAutoFilled: false, sortOrder: 5,
+      options: ['Aceptable', 'Aceptable con salvaguardas', 'Debe rechazarse'],
+      aiHint: 'Concluye con base en las amenazas y salvaguardas evaluadas.',
+    },
+    {
+      sectionKey: 'S6', label: 'Declaración de Independencia del Equipo',
+      description: 'Firma de cada miembro del equipo auditor declarando independencia respecto del contribuyente.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Lista cada miembro del equipo con su declaración de independencia para firma digital.',
+    },
+  ],
+
+  // PT-FISC-QC: Control de Calidad del Encargo — NACOT Sección 3 [SMART]
+  'PT-FISC-QC': [
+    {
+      sectionKey: 'S1', label: 'Aplicabilidad de la Revisión de Calidad',
+      description: 'Grandes Contribuyentes, ingresos > $5,000,000, riesgo de fraude o incumplimientos previos significativos.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 1,
+      aiHint: 'Determina si el encargo requiere revisión de calidad según los criterios de alto riesgo de la NACOT Sec. 3.',
+    },
+    {
+      sectionKey: 'S2', label: 'Revisor de Calidad Designado',
+      description: 'Persona que NO participó en el encargo — nombre, cargo y fecha de designación.',
+      fieldType: FieldType.TEXT, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      aiHint: 'Nombre, cargo y carné CVPCPA del revisor independiente del encargo.',
+    },
+    {
+      sectionKey: 'S3', label: 'Áreas de Revisión de Calidad',
+      description: 'Competencias del equipo, evaluación de riesgos, suficiencia de evidencia, clasificación de hallazgos, estructura del dictamen.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'Columnas: Área de revisión | ¿Conforme? (Sí/No) | Observación. Cubre las 6 áreas críticas de la NACOT.',
+    },
+    {
+      sectionKey: 'S4', label: 'Puntos Observados por el Revisor',
+      description: 'Aspectos que el revisor identificó para corrección antes de la firma del dictamen.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Lista los puntos observados que deben corregirse antes de emitir el dictamen.',
+    },
+    {
+      sectionKey: 'S5', label: 'Respuesta del Equipo del Encargo',
+      description: 'Correcciones realizadas a los puntos observados por el revisor de calidad.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Documenta cómo el equipo resolvió cada punto observado.',
+    },
+    {
+      sectionKey: 'S6', label: 'Aprobación del Dictamen',
+      description: 'El revisor de calidad autoriza (o no) la firma del dictamen fiscal.',
+      fieldType: FieldType.ENUM_SELECT, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      options: ['Aprobado para firma', 'Pendiente de correcciones', 'No aprobado'],
+      aiHint: 'El dictamen (AF-D5) no puede firmarse hasta que esta sección esté Aprobada.',
+    },
+  ],
+
+  // PT-FISC-ENCARGO: Carta de Encargo Fiscal — Términos NACOT Sección 4 [SMART]
+  'PT-FISC-ENCARGO': [
+    {
+      sectionKey: 'S1', label: 'Identificación de las Partes',
+      description: 'Contribuyente (nombre, NIT, NRC) y firma auditora (razón social, carné CVPCPA del socio).',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 1,
+      aiHint: 'Datos completos del contribuyente y de la firma auditora firmante.',
+    },
+    {
+      sectionKey: 'S2', label: 'Naturaleza del Encargo',
+      description: 'Aseguramiento sobre el cumplimiento de obligaciones tributarias según la NACOT 2018.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      aiHint: 'Describe el encargo de aseguramiento sobre cumplimiento tributario bajo la NACOT.',
+    },
+    {
+      sectionKey: 'S3', label: 'Período Cubierto',
+      description: 'Ejercicio fiscal del 01/01/XXXX al 31/12/XXXX.',
+      fieldType: FieldType.TEXT, isRequired: true, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'Período fiscal exacto cubierto por el dictamen.',
+    },
+    {
+      sectionKey: 'S4', label: 'Criterios de Evaluación',
+      description: 'Código Tributario, LISR, Ley IVA y demás leyes tributarias vigentes en el período.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Marco legal tributario que sirve de criterio para el examen.',
+    },
+    {
+      sectionKey: 'S5', label: 'Responsabilidades de la Firma',
+      description: 'Realizar el encargo según la NACOT, NIA supletoriamente y el CIEPC.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Responsabilidades de la firma auditora conforme a la NACOT Sec. 4.',
+    },
+    {
+      sectionKey: 'S6', label: 'Responsabilidades del Contribuyente',
+      description: 'Acceso irrestricto a la información, carga en el SDF antes del 30 de abril, veracidad, rectificación.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Obligaciones del contribuyente, incluida la carga oportuna de EF y anexos en el SDF.',
+    },
+    {
+      sectionKey: 'S7', label: 'Honorarios y Forma de Pago',
+      description: 'Honorarios pactados por el encargo y condiciones de pago.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 7,
+      aiHint: 'Monto de honorarios y forma de pago.',
+    },
+    {
+      sectionKey: 'S8', label: 'Plazo de Entrega',
+      description: 'El Dictamen e Informe Fiscal se presenta en el SDF a más tardar el 31 de mayo.',
+      fieldType: FieldType.TEXT, isRequired: true, isAutoFilled: false, sortOrder: 8,
+      aiHint: 'Fecha límite de presentación en el SDF (31 de mayo).',
+    },
+    {
+      sectionKey: 'S9', label: 'Limitaciones al Alcance',
+      description: 'Si el contribuyente restringe el acceso a información, se comunicará en el dictamen.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 9,
+      aiHint: 'Documenta posibles limitaciones al alcance y su tratamiento en el dictamen.',
+    },
+    {
+      sectionKey: 'S10', label: 'Firmas',
+      description: 'Representante legal del contribuyente + socio firmante de la firma auditora.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 10,
+      aiHint: 'Bloque de firmas de ambas partes.',
+    },
+  ],
+
+  // PT-FISC-RISK: Riesgo de Incumplimiento Fiscal — NIA 315 + NACOT Sección 5 [SMART]
+  'PT-FISC-RISK': [
+    {
+      sectionKey: 'S1', label: 'Riesgo Inherente de Incumplimiento por Impuesto',
+      description: 'Factores específicos por impuesto: ISR, IVA, Retenciones ISR y Obligaciones Formales (DTE).',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 1,
+      aiHint: 'Columnas: Impuesto | Factores de riesgo inherente | Nivel (Alto/Medio/Bajo). Cubre ISR, IVA, Retenciones y Obligaciones Formales.',
+    },
+    {
+      sectionKey: 'S2', label: 'Riesgo de Control Tributario',
+      description: 'Evaluación del SCI sobre los procesos fiscales (proviene de A-02 / SCI Tributario).',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: true, sourceRef: 'A-02::S7', sortOrder: 2,
+      aiHint: 'Sintetiza la evaluación del control interno tributario y su efecto en el riesgo.',
+    },
+    {
+      sectionKey: 'S3', label: 'Riesgo de Incumplimiento Significativo (NACOT)',
+      description: 'Áreas donde el incumplimiento sería material conforme a la NACOT Sección 5.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'Identifica las áreas de incumplimiento significativo según la materialidad fiscal.',
+    },
+    {
+      sectionKey: 'S4', label: 'Historial de Incumplimientos',
+      description: 'Fiscalizaciones anteriores de la DGII, requerimientos recibidos y multas pagadas.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Resume el historial de fiscalizaciones, requerimientos y sanciones del contribuyente.',
+    },
+    {
+      sectionKey: 'S5', label: 'Factores Externos',
+      description: 'Cambios normativos en el período que el contribuyente debía implementar.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Cambios legales/reglamentarios del período relevantes para el cumplimiento.',
+    },
+    {
+      sectionKey: 'S6', label: 'Riesgo de Fraude Fiscal (NIA 240 adaptada)',
+      description: 'Indicadores de evasión intencional vs. error involuntario.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Evalúa indicadores de fraude/evasión intencional; si son altos, activa procedimientos forenses.',
+    },
+    {
+      sectionKey: 'S7', label: 'Score de Riesgo por Impuesto',
+      description: 'Alto / Medio / Bajo por impuesto — determina la intensidad de los procedimientos.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 7,
+      aiHint: 'Columnas: Impuesto | Score (Alto/Medio/Bajo) | Justificación. Alimenta la intensidad del Programa Fiscal.',
+    },
+    {
+      sectionKey: 'S8', label: 'Respuesta Planeada',
+      description: 'Procedimientos específicos por área de riesgo Alto — alimenta el Programa de Auditoría Fiscal.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 8,
+      aiHint: 'Define la respuesta de auditoría por cada área de riesgo Alto identificada.',
+    },
+  ],
+
+  // PT-FISC-AML: Indicadores de Lavado de Activos — LCLDA / Reforma 2024 / FATF [SMART]
+  'PT-FISC-AML': [
+    {
+      sectionKey: 'S1', label: 'Identificación del Contribuyente como Sujeto Obligado',
+      description: '¿El contribuyente es sujeto obligado de reporte bajo la LCLDA?',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 1,
+      aiHint: 'Determina si el contribuyente es sujeto obligado bajo la LCLDA reformada 2024.',
+    },
+    {
+      sectionKey: 'S2', label: 'Indicadores de Lavado en Operaciones',
+      description: 'Efectivo significativo sin justificación, contrapartes de alto riesgo (FATF), smurfing, ingresos inconsistentes, listas de sanciones.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      aiHint: 'Columnas: Indicador | ¿Detectado? (Sí/No) | Operación/Evidencia | Riesgo. Aplica las 40 recomendaciones FATF/GAFI.',
+    },
+    {
+      sectionKey: 'S3', label: 'Operaciones con Paraísos Fiscales',
+      description: 'Transacciones con jurisdicciones de baja tributación — se vinculan al PT de Precios de Transferencia.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'Lista operaciones con paraísos fiscales; activa el análisis de Precios de Transferencia (AF-07).',
+    },
+    {
+      sectionKey: 'S4', label: 'Verificación del Programa AML del Contribuyente',
+      description: 'Oficial de Cumplimiento registrado en la UIF, ROS presentados, políticas KYC documentadas.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Si es sujeto obligado, verifica Oficial de Cumplimiento, ROS y políticas KYC.',
+    },
+    {
+      sectionKey: 'S5', label: 'Obligaciones del Auditor Fiscal bajo la LCLDA',
+      description: 'Reportar a la UIF ante indicadores claros de lavado; prohibición de tipping-off (no alertar al cliente).',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Documenta las obligaciones de reporte del auditor y el cumplimiento de la prohibición de tipping-off.',
+    },
+    {
+      sectionKey: 'S6', label: 'Nivel de Riesgo AML',
+      description: 'Bajo / Medio / Alto — si es Alto, documenta indicadores y acciones tomadas.',
+      fieldType: FieldType.ENUM_SELECT, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      options: ['Bajo', 'Medio', 'Alto'],
+      aiHint: 'Concluye el nivel de riesgo AML del contribuyente.',
+    },
+  ],
+
+  // PT-FISC-PT: Precios de Transferencia — Art. 199-A CT / OCDE / BEPS [SMART]
+  'PT-FISC-PT': [
+    {
+      sectionKey: 'S1', label: 'Identificación de Partes Relacionadas (Art. 199-A/B CT)',
+      description: 'Participación ≥ 25%, subsidiarias/matrices/hermanas, paraísos fiscales, posición gerencial clave.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 1,
+      aiHint: 'Columnas: Parte relacionada | Tipo de relación | País | ¿Paraíso fiscal?. Aplica los criterios del Art. 199-A/B CT.',
+    },
+    {
+      sectionKey: 'S2', label: 'Inventario de Operaciones Intercompany',
+      description: 'Todas las transacciones con partes relacionadas: bienes, servicios, préstamos, intangibles, garantías.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      aiHint: 'Columnas: Operación | Tipo | Monto | Parte relacionada. Inventario completo del período.',
+    },
+    {
+      sectionKey: 'S3', label: 'Verificación del Estudio de Precios de Transferencia',
+      description: 'Existencia del estudio, preparación por especialista, método apropiado y rango arm\'s length actualizado.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'Evalúa existencia, calidad y vigencia del estudio de precios de transferencia.',
+    },
+    {
+      sectionKey: 'S4', label: 'Los 5 Métodos OCDE — Método Aplicado',
+      description: 'CUP, Precio de Reventa (RPM), Costo Adicionado (CPM), Margen Neto (TNMM), Distribución de Utilidades (PS).',
+      fieldType: FieldType.ENUM_SELECT, isRequired: true, isAutoFilled: false, sortOrder: 4,
+      options: ['CUP (Precio Comparable No Controlado)', 'RPM (Precio de Reventa)', 'CPM (Costo Adicionado)', 'TNMM (Margen Neto)', 'PS (Distribución de Utilidades)'],
+      aiHint: 'Verifica que el método seleccionado sea el más apropiado según las Directrices OCDE 2022.',
+    },
+    {
+      sectionKey: 'S5', label: 'Análisis de Comparabilidad',
+      description: 'Empresas o transacciones comparables usadas en el estudio.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Resume los comparables seleccionados y su pertinencia.',
+    },
+    {
+      sectionKey: 'S6', label: 'Ajustes de Comparabilidad',
+      description: 'Ajustes por diferencias en funciones, activos y riesgos (análisis FAR).',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Documenta los ajustes de comparabilidad aplicados.',
+    },
+    {
+      sectionKey: 'S7', label: 'Conclusión — Principio de Plena Competencia',
+      description: '¿Las operaciones intercompany cumplen el principio de plena competencia (arm\'s length)?',
+      fieldType: FieldType.ENUM_SELECT, isRequired: true, isAutoFilled: false, sortOrder: 7,
+      options: ['Cumple plena competencia', 'No cumple — requiere ajuste'],
+      aiHint: 'Concluye si los precios pactados están dentro del rango de plena competencia.',
+    },
+    {
+      sectionKey: 'S8', label: 'Cuantificación del Ajuste al ISR',
+      description: 'Si los precios no son de mercado → ajuste al ISR (Art. 199-C: tasa especial 25% para paraísos).',
+      fieldType: FieldType.CURRENCY, isRequired: false, isAutoFilled: false, sortOrder: 8,
+      aiHint: 'Monto del ajuste al ISR por operaciones fuera de mercado. Alimenta la conciliación fiscal y la cédula de diferencias.',
+    },
+    {
+      sectionKey: 'S9', label: 'Informe F982 — Presentación Oportuna',
+      description: 'Verificación de la presentación oportuna del Informe de Operaciones con Sujetos Relacionados.',
+      fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 9,
+      aiHint: 'Indica si el F982 fue presentado oportunamente ante la DGII.',
+    },
+  ],
+
+  // PT-FISC-ZF: Dictamen Semestral — Zona Franca / Servicios Internacionales [SMART]
+  'PT-FISC-ZF': [
+    {
+      sectionKey: 'S1', label: 'Aplicabilidad del Régimen',
+      description: '¿El contribuyente opera bajo régimen de Zona Franca / Parque de Servicios Internacionales?',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 1,
+      aiHint: 'Determina si aplica el dictamen semestral especial del régimen.',
+    },
+    {
+      sectionKey: 'S2', label: 'Período del Dictamen Semestral',
+      description: '1er semestre (ene-jun) → SDF antes del 31 ago; 2do semestre (jul-dic) → antes del 28 feb siguiente.',
+      fieldType: FieldType.ENUM_SELECT, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      options: ['1er semestre (ene-jun)', '2do semestre (jul-dic)'],
+      aiHint: 'Selecciona el semestre dictaminado y su fecha límite de presentación en el SDF.',
+    },
+    {
+      sectionKey: 'S3', label: 'Verificación de Requisitos para Mantener el Régimen',
+      description: 'Mínimo de empleados, actividades autorizadas (MEPYD), % de exportaciones, reportes al MEPYD y DGII.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'Columnas: Requisito | ¿Cumple? (Sí/No) | Evidencia. Verifica las condiciones de permanencia del régimen.',
+    },
+    {
+      sectionKey: 'S4', label: 'Análisis Fiscal del Régimen de Exención',
+      description: 'Operaciones exentas autorizadas, límite de mercado local, IVA tasa cero en exportaciones y devoluciones.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Verifica que las operaciones exentas correspondan a lo autorizado y el tratamiento del mercado local.',
+    },
+    {
+      sectionKey: 'S5', label: 'Cumplimiento de Obligaciones Formales del Régimen',
+      description: 'Reportes mensuales de divisas al BCR, informes trimestrales al MEPYD, declaraciones de importación de insumos.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Verifica los reportes especiales al BCR, MEPYD y DGA exigidos por el régimen.',
+    },
+    {
+      sectionKey: 'S6', label: 'Dictamen Semestral',
+      description: 'Estructura del dictamen usando el modelo del SDF para semestrales.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Redacta el dictamen semestral conforme al modelo SDF. Integra resultados al dictamen anual (AF-D5).',
+    },
+  ],
+
+  // PT-FISC-DICT: Dictamen Fiscal — Modelo Oficial NACOT Anexo 1 [MASTER]
+  'PT-FISC-DICT': [
+    {
+      sectionKey: 'S1', label: 'Título',
+      description: '"Dictamen Fiscal" — obligatorio según la NACOT.',
+      fieldType: FieldType.TEXT, isRequired: true, isAutoFilled: false, sortOrder: 1,
+      aiHint: 'Título exacto: "Dictamen Fiscal".',
+    },
+    {
+      sectionKey: 'S2', label: 'Destinatario',
+      description: '"A los accionistas (o propietario) de [nombre del contribuyente]".',
+      fieldType: FieldType.TEXT, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      aiHint: 'Destinatario conforme al modelo del Anexo 1 de la NACOT.',
+    },
+    {
+      sectionKey: 'S3', label: 'Párrafo Introductorio',
+      description: 'Examen del cumplimiento de obligaciones tributarias del ejercicio del 01/01 al 31/12 de 20XX.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'Redacta el párrafo introductorio según el modelo NACOT Anexo 1.',
+    },
+    {
+      sectionKey: 'S4', label: 'Responsabilidad de la Administración',
+      description: 'El contribuyente es responsable del cumplimiento y del mantenimiento de los registros que lo sustentan.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Párrafo de responsabilidad de la administración del contribuyente.',
+    },
+    {
+      sectionKey: 'S5', label: 'Responsabilidad de la Firma Auditora',
+      description: 'Examen conforme a la NACOT; incluye declaración de independencia según el CIEPC.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: true, sourceRef: 'APF-08::S5', sortOrder: 5,
+      aiHint: 'Párrafo de responsabilidad de la firma; incorpora la declaración de independencia (de APF-08).',
+    },
+    {
+      sectionKey: 'S6', label: 'Criterios',
+      description: 'Código Tributario, LISR, Ley IVA y demás disposiciones tributarias vigentes.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Marco legal usado como criterio del examen.',
+    },
+    {
+      sectionKey: 'S7', label: 'Párrafo de Opinión (3 tipos NACOT)',
+      description: 'Opinión de cumplimiento / con salvedad / de incumplimiento — según la NACOT (NO existe abstención).',
+      fieldType: FieldType.ENUM_SELECT, isRequired: true, isAutoFilled: false, sortOrder: 7,
+      options: ['Opinión de cumplimiento', 'Opinión con salvedad', 'Opinión de incumplimiento'],
+      aiHint: 'El tipo de opinión lo sugiere el semáforo de la Cédula de Diferencias (D-03). Si es con salvedad, pre-redacta el incumplimiento con referencia legal.',
+    },
+    {
+      sectionKey: 'S8', label: 'Firma',
+      description: 'Nombre del socio/auditor, número de carné CVPCPA, firma, sello, ciudad y fecha.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 8,
+      aiHint: 'Bloque de firma con carné CVPCPA vigente del auditor firmante.',
+    },
+    {
+      sectionKey: 'S9', label: 'Nota — Referencia al Anexo 12',
+      description: 'Si hay incumplimientos formales o sustantivos, referencia al Anexo 12 del Informe Fiscal.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 9,
+      aiHint: 'Incluye la nota de referencia al Anexo 12 cuando existan incumplimientos.',
+    },
+  ],
 };

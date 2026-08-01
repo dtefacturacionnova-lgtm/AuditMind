@@ -1,0 +1,25 @@
+name: Deploy to VPS (auditoria.ianovatechsystems.com)
+
+on:
+  workflow_dispatch:
+
+# Solo manual — NO push automático para no interferir con Railway (que hace auto-deploy
+# de apps/api y apps/ai-service desde el mismo repo).
+
+jobs:
+  deploy:
+    name: SSH deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          # next build puede tomar >2 min; nohup + log para que SSH no cierre la conexión
+          script: |
+            cd /home/deploy/auditmind && ./deploy/deploy.sh

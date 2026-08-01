@@ -1,0 +1,26 @@
+# Normalizar fin de línea: LF en el repo, conversión automática en Windows
+* text=auto
+
+# Scripts bash siempre con LF (fallan en Linux si tienen CRLF)
+*.sh text eol=lf
+deploy/*.sh text eol=lf
+*.cjs text eol=lf
+
+# Archivos que deben permanecer en CRLF en Windows
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binarios sin conversión
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.zip binary
+*.gz binary

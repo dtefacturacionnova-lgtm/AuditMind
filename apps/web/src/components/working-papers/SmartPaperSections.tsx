@@ -8,9 +8,12 @@ import {
   useInitFromTemplate,
   useMentionIndex,
   useCreateReference,
+  usePropagateTrialBalance,
 } from '@/hooks/useWorkingPaperGraph';
 import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
+import { TrialBalanceImporter, AccountClassifier } from './TrialBalancePanel';
+import { MaterialidadPanel } from './MaterialidadPanel';
 
 // ─── Template key selector ────────────────────────────────────────────────────
 
@@ -39,6 +42,23 @@ const AVAILABLE_TEMPLATES = [
   { key: 'PT-FISC-PT',      label: 'Fiscal · Precios de Transferencia OCDE (PT-FISC-PT)' },
   { key: 'PT-FISC-ZF',      label: 'Fiscal · Dictamen Semestral Zona Franca (PT-FISC-ZF)' },
   { key: 'PT-FISC-DICT',    label: 'Fiscal · Dictamen NACOT Anexo 1 (PT-FISC-DICT)' },
+  // ── Auditoría Financiera Externa v1.0 — Lead Schedules Automáticos ──────
+  { key: 'PT-FIN-B00', label: 'Fin.Ext · EEFF Importación + Clasificador de Cuentas (PT-FIN-B00)' },
+  { key: 'PT-FIN-B01', label: 'Fin.Ext · Cédula Sumaria Activos Corrientes (PT-FIN-B01)'          },
+  { key: 'PT-FIN-B02', label: 'Fin.Ext · Cédula Sumaria Activos No Corrientes (PT-FIN-B02)'       },
+  { key: 'PT-FIN-B03', label: 'Fin.Ext · Cédula Sumaria Pasivos Corrientes (PT-FIN-B03)'          },
+  { key: 'PT-FIN-B04', label: 'Fin.Ext · Cédula Sumaria Pasivos No Corrientes (PT-FIN-B04)'       },
+  { key: 'PT-FIN-B05', label: 'Fin.Ext · Cédula Sumaria Patrimonio (PT-FIN-B05)'                  },
+  { key: 'PT-FIN-B06', label: 'Fin.Ext · Cédula Sumaria Resultados P&G (PT-FIN-B06)'              },
+  { key: 'PT-FIN-B07', label: 'Fin.Ext · Análisis de Variaciones NIA 520 (PT-FIN-B07)'            },
+  { key: 'PT-FIN-B08', label: 'Fin.Ext · Cédula Diferencias + Semáforo Opinión NIA 450 (PT-FIN-B08)' },
+  { key: 'PT-FIN-B09',    label: 'Fin.Ext · Libro de AJEs con Base Técnica NIIF (PT-FIN-B09)'                    },
+  // ── Ejecución (C papers) ────────────────────────────────────────────────────────────────────
+  { key: 'PT-FIN-C-SUST', label: 'Fin.Ext · Prueba Sustantiva de Ejecución — C-01..C-12, C-14 (PT-FIN-C-SUST)' },
+  { key: 'PT-FIN-C-NORM', label: 'Fin.Ext · Análisis Normativo de Ejecución — C-13, C-15 (PT-FIN-C-NORM)'      },
+  // ── Cierre e Informe ────────────────────────────────────────────────────────────────────────
+  { key: 'PT-FIN-DICT',   label: 'Fin.Ext · Dictamen del Auditor Independiente NIA 700-720 (PT-FIN-DICT)'      },
+  { key: 'PT-FIN-D02CI',  label: 'Fin.Ext · Carta de Debilidades Control Interno NIA 265 (PT-FIN-D02CI)'       },
 ];
 
 function InitFromTemplatePanel({
@@ -147,8 +167,9 @@ export function SmartPaperSections({
   aiDraftConfig,
 }: SmartPaperSectionsProps) {
   const { data: sections, isLoading, error } = usePaperSections(paperId);
-  const updateSection    = useUpdateSection();
-  const createReference  = useCreateReference();
+  const updateSection       = useUpdateSection();
+  const createReference     = useCreateReference();
+  const propagateTrialBal   = usePropagateTrialBalance();
   const { data: mentionItems = [] } = useMentionIndex(auditId);
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
@@ -182,6 +203,9 @@ export function SmartPaperSections({
   const required = sorted.filter(s => s.isRequired);
   const filled = required.filter(s => s.value !== null && s.value !== undefined && s.value !== '');
 
+  // Lookup helpers for PT-FIN-B00 specialized rendering
+  const s1Section = sorted.find(s => s.sectionKey === 'S1');
+
   async function handleSave(sectionKey: string, value: unknown) {
     setSavingKey(sectionKey);
     try {
@@ -209,28 +233,73 @@ export function SmartPaperSections({
         </div>
       )}
 
+      {/* PT-A4 — Panel de materialidad: auto-calcula MG/ME/UAE desde S1b × S2 */}
+      {paperCode === 'PT-A4' && (
+        <MaterialidadPanel
+          sections={sorted}
+          readonly={readonly}
+          onSave={handleSave}
+        />
+      )}
+
       {/* Sections */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-5 divide-y divide-gray-100">
-        {sorted.map(section => (
-          <SectionField
-            key={section.sectionKey}
-            section={section}
-            readonly={readonly}
-            onSave={handleSave}
-            paperId={paperId}
-            mentionItems={mentionItems}
-            aiDraftConfig={aiDraftConfig}
-            onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
-              // Fire-and-forget: persist the @mention reference
-              void createReference.mutateAsync({
-                paperId,
-                sourceSectionKey: sectionKey,
-                targetPaperId,
-                targetSectionKey,
-              });
-            }}
-          />
-        ))}
+        {sorted.map(section => {
+          // PT-FIN-B00: S1 → importador de balance, S2 → clasificador de cuentas
+          if (paperCode === 'PT-FIN-B00') {
+            if (section.sectionKey === 'S1') {
+              return (
+                <TrialBalanceImporter
+                  key="S1"
+                  section={section}
+                  readonly={readonly}
+                  onSave={handleSave}
+                />
+              );
+            }
+            if (section.sectionKey === 'S2' && s1Section) {
+              return (
+                <AccountClassifier
+                  key={`classifier-${Array.isArray(s1Section.value) ? (s1Section.value as unknown[]).length : 0}`}
+                  s1Section={s1Section}
+                  s2Section={section}
+                  readonly={readonly}
+                  onSave={handleSave}
+                  onPropagate={
+                    !readonly
+                      ? () => propagateTrialBal.mutateAsync(paperId)
+                      : undefined
+                  }
+                />
+              );
+            }
+          }
+
+          // PT-A4: S1..S5 son renderizados por MaterialidadPanel — se omiten aquí
+          if (paperCode === 'PT-A4' && ['S1', 'S1b', 'S2', 'S3', 'S4', 'S5'].includes(section.sectionKey)) {
+            return null;
+          }
+
+          return (
+            <SectionField
+              key={section.sectionKey}
+              section={section}
+              readonly={readonly}
+              onSave={handleSave}
+              paperId={paperId}
+              mentionItems={mentionItems}
+              aiDraftConfig={aiDraftConfig}
+              onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                void createReference.mutateAsync({
+                  paperId,
+                  sourceSectionKey: sectionKey,
+                  targetPaperId,
+                  targetSectionKey,
+                });
+              }}
+            />
+          );
+        })}
       </div>
     </div>
   );

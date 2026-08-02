@@ -118,6 +118,22 @@ export function useConsolidatePaper() {
   });
 }
 
+// Auditoría Financiera: propagar B-00 S2 → B-01..B-06 S1 (determinista)
+export function usePropagateTrialBalance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ propagated: number; total: number; message: string }>(
+        `/working-papers/${paperId}/propagate-trial-balance`,
+        {},
+      ),
+    onSuccess: () => {
+      // Invalidate all paper sections in the cache — lead schedules just changed
+      qc.invalidateQueries({ queryKey: ['wp'] });
+    },
+  });
+}
+
 export function useInitFromTemplate() {
   const qc = useQueryClient();
   return useMutation({

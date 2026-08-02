@@ -277,6 +277,13 @@ export class WorkingPapersController {
     return this.sectionsService.updateSection(id, sectionKey, dto.value, user);
   }
 
+  @Post(':id/propagate-trial-balance')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Propagar totales de B-00 S2 (Clasificador) a cédulas sumarias B-01..B-06 (determinista, sin IA)' })
+  propagateTrialBalance(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateTrialBalance(id, user);
+  }
+
   @Post(':id/sections/init/:templateKey')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Inicializar secciones de un papel desde una plantilla (PT-A1, PT-A2, PT-A4, PT-MEMO, PT-PROG)' })

@@ -501,4 +501,118 @@ INSTRUCCIONES DE REDACCIÓN:
 
     return score;
   }
+
+  // ─── Auditoría Financiera: propagación determinista de balances ───────────
+
+  /**
+   * Propaga los totales del Clasificador de Cuentas (B-00 S2) a las Cédulas Sumarias
+   * B-01..B-06 (sección S1 de cada una) de forma determinista — sin IA.
+   *
+   * Mapa sub-sumaria → paperCode:
+   *   B-01a..d → PT-FIN-B01 (Activos Corrientes)
+   *   B-02a..c → PT-FIN-B02 (Activos No Corrientes)
+   *   B-03a..c → PT-FIN-B03 (Pasivos Corrientes)
+   *   B-04a..b → PT-FIN-B04 (Pasivos No Corrientes)
+   *   B-05a    → PT-FIN-B05 (Patrimonio)
+   *   B-06a..d → PT-FIN-B06 (Resultados P&G)
+   */
+  async propagateTrialBalance(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-FIN-B00') {
+      throw new BadRequestException(
+        'Solo el papel PT-FIN-B00 puede propagar balances a las cédulas sumarias',
+      );
+    }
+
+    const s2 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S2' } },
+    });
+
+    if (!s2?.value || !Array.isArray(s2.value) || (s2.value as unknown[]).length === 0) {
+      throw new BadRequestException(
+        'S2 (Clasificador de Cuentas) está vacío — guarde la clasificación antes de propagar',
+      );
+    }
+
+    type MappingRow = {
+      cuenta: string; descripcion: string;
+      saldo_actual: number; saldo_anterior: number; saldo_anterior2: number;
+      sub_sumaria: string; grupo: string;
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mapping = s2.value as unknown as MappingRow[];
+
+    // Prefijo de sub-sumaria → código de papel lead schedule
+    const SUB_TO_PAPER: Record<string, string> = {
+      'B-01': 'PT-FIN-B01',
+      'B-02': 'PT-FIN-B02',
+      'B-03': 'PT-FIN-B03',
+      'B-04': 'PT-FIN-B04',
+      'B-05': 'PT-FIN-B05',
+      'B-06': 'PT-FIN-B06',
+    };
+
+    // Agregar por sub-sumaria
+    const bySubSumaria: Record<string, { sub_sumaria: string; grupo: string; saldo_actual: number; saldo_anterior: number; saldo_anterior2: number; n_cuentas: number }> = {};
+    for (const m of mapping) {
+      const key = m.sub_sumaria;
+      if (!bySubSumaria[key]) {
+        bySubSumaria[key] = { sub_sumaria: key, grupo: m.grupo, saldo_actual: 0, saldo_anterior: 0, saldo_anterior2: 0, n_cuentas: 0 };
+      }
+      bySubSumaria[key].saldo_actual    += m.saldo_actual   ?? 0;
+      bySubSumaria[key].saldo_anterior  += m.saldo_anterior ?? 0;
+      bySubSumaria[key].saldo_anterior2 += m.saldo_anterior2 ?? 0;
+      bySubSumaria[key].n_cuentas++;
+    }
+
+    // Agrupar por lead schedule
+    const byLeadSchedule: Record<string, typeof bySubSumaria[string][]> = {};
+    for (const [sub, data] of Object.entries(bySubSumaria)) {
+      if (sub === 'SIN_ASIGNAR') continue;
+      const prefix = sub.substring(0, 4); // 'B-01', 'B-02', …
+      const paperCode = SUB_TO_PAPER[prefix];
+      if (!paperCode) continue;
+      if (!byLeadSchedule[paperCode]) byLeadSchedule[paperCode] = [];
+      byLeadSchedule[paperCode].push(data);
+    }
+
+    const targetPaperCodes = Object.keys(byLeadSchedule);
+    if (!targetPaperCodes.length) {
+      return { propagated: 0, message: 'No hay sub-sumarias asignadas para propagar' };
+    }
+
+    // Buscar los papeles de cédulas sumarias en la misma auditoría
+    const leadSchedulePapers = await this.prisma.workingPaper.findMany({
+      where:   { auditId: wp.auditId, paperCode: { in: targetPaperCodes } },
+      include: { sections: { where: { sectionKey: 'S1' } } },
+    });
+
+    let propagated = 0;
+    for (const lsPaper of leadSchedulePapers) {
+      if (!lsPaper.paperCode) continue;
+      const sectionData = byLeadSchedule[lsPaper.paperCode];
+      if (!sectionData?.length) continue;
+
+      const s1Section = lsPaper.sections.find(s => s.sectionKey === 'S1');
+      if (!s1Section) continue;
+
+      // Escribir la tabla de totales como MATRIX JSON en S1
+      const sortedData = [...sectionData].sort((a, b) => a.sub_sumaria.localeCompare(b.sub_sumaria));
+      await this.prisma.paperSection.update({
+        where: { paperId_sectionKey: { paperId: lsPaper.id, sectionKey: 'S1' } },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data:  { value: sortedData as any, isStale: false, staleSince: null, staleReason: null },
+      });
+
+      await this.graphService.onSectionUpdated(lsPaper.id, 'S1', sortedData);
+      propagated++;
+    }
+
+    return {
+      propagated,
+      total:   targetPaperCodes.length,
+      message: `${propagated} de ${targetPaperCodes.length} cédulas sumarias actualizadas`,
+    };
+  }
 }

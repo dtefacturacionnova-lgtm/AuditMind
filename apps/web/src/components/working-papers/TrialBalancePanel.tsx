@@ -3,8 +3,10 @@
 import { useState, useRef } from 'react';
 import {
   Upload, RefreshCw, CheckCircle2, AlertCircle, Table2, Tag,
+  BarChart3, Loader2, Save,
 } from 'lucide-react';
 import type { PaperSection } from '@/hooks/useWorkingPaperGraph';
+import { useMaterialidadByAudit } from '@/hooks/useWorkingPaperGraph';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -317,6 +319,18 @@ export function TrialBalanceImporter({
   );
 }
 
+// ── Types: semáforo ──────────────────────────────────────────────────────────
+
+export interface SemaforoRow {
+  cuenta:       string;
+  descripcion:  string;
+  saldo_actual: number;
+  pct_total:    number;
+  sub_sumaria:  string;
+  semaforo:     'ROJO' | 'AMARILLO' | 'VERDE';
+  enfoque:      string;
+}
+
 // ── AccountClassifier — sección S2 ───────────────────────────────────────────
 
 export function AccountClassifier({
@@ -571,6 +585,248 @@ export function AccountClassifier({
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// ── AccountSemaforo — sección S6 ─────────────────────────────────────────────
+
+const SEMAFORO_ORDER: Record<string, number> = { ROJO: 0, AMARILLO: 1, VERDE: 2 };
+
+function semaforoEmoji(s: SemaforoRow['semaforo']) {
+  return s === 'ROJO' ? '🔴' : s === 'AMARILLO' ? '🟡' : '🟢';
+}
+
+function semaforoLabel(s: SemaforoRow['semaforo']) {
+  return s === 'ROJO' ? 'Alto — >MG' : s === 'AMARILLO' ? 'Moderado — ME..MG' : 'Bajo — <ME';
+}
+
+function semaforoBadge(s: SemaforoRow['semaforo']) {
+  const base = 'text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap';
+  if (s === 'ROJO')     return `${base} bg-red-100 text-red-700`;
+  if (s === 'AMARILLO') return `${base} bg-amber-100 text-amber-700`;
+  return `${base} bg-emerald-100 text-emerald-700`;
+}
+
+export function AccountSemaforo({
+  s1Section,
+  s2Section,
+  s6Section,
+  auditId,
+  readonly,
+  onSave,
+}: {
+  s1Section:  PaperSection;
+  s2Section:  PaperSection | undefined;
+  s6Section:  PaperSection;
+  auditId:    string;
+  readonly:   boolean;
+  onSave:     (key: string, value: unknown) => void | Promise<void>;
+}) {
+  const { data: mat, isLoading: matLoading } = useMaterialidadByAudit(auditId);
+  const [preview, setPreview] = useState<SemaforoRow[] | null>(null);
+  const [saving,  setSaving]  = useState(false);
+
+  const s1Rows   = safeParseArray<TrialBalanceRow>(s1Section.value);
+  const s2Rows   = safeParseArray<AccountMappingRow>(s2Section?.value);
+  const saved    = safeParseArray<SemaforoRow>(s6Section.value);
+  const display  = preview ?? saved;
+
+  const totalAbs = s1Rows.reduce((sum, r) => sum + Math.abs(r.saldo_actual), 0);
+
+  const mg  = mat?.mg  ?? null;
+  const me  = mat?.me  ?? null;
+
+  function computeSemaforo() {
+    const rows: SemaforoRow[] = s1Rows.map(r => {
+      const abs      = Math.abs(r.saldo_actual);
+      const s2match  = s2Rows.find(m => m.cuenta === r.cuenta);
+      const sub      = s2match?.sub_sumaria ?? 'SIN_ASIGNAR';
+      const pct      = totalAbs > 0 ? (abs / totalAbs) * 100 : 0;
+
+      let semaforo: SemaforoRow['semaforo'];
+      let enfoque: string;
+
+      if (mg !== null && abs > mg) {
+        semaforo = 'ROJO';
+        enfoque  = 'Pruebas sustantivas extensas (100% o muestra representativa)';
+      } else if (me !== null && abs >= me) {
+        semaforo = 'AMARILLO';
+        enfoque  = 'Analíticas + pruebas sustantivas focalizadas';
+      } else {
+        semaforo = 'VERDE';
+        enfoque  = 'Procedimientos analíticos suficientes';
+      }
+
+      return { cuenta: r.cuenta, descripcion: r.descripcion, saldo_actual: r.saldo_actual, pct_total: pct, sub_sumaria: sub, semaforo, enfoque };
+    });
+
+    rows.sort((a, b) => {
+      const d = SEMAFORO_ORDER[a.semaforo] - SEMAFORO_ORDER[b.semaforo];
+      return d !== 0 ? d : Math.abs(b.saldo_actual) - Math.abs(a.saldo_actual);
+    });
+
+    setPreview(rows);
+  }
+
+  async function handleSave() {
+    if (!preview) return;
+    setSaving(true);
+    try {
+      await Promise.resolve(onSave('S6', preview));
+      setPreview(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const rojos    = display.filter(r => r.semaforo === 'ROJO').length;
+  const amarillos = display.filter(r => r.semaforo === 'AMARILLO').length;
+  const verdes   = display.filter(r => r.semaforo === 'VERDE').length;
+
+  const noBalance      = s1Rows.length === 0;
+  const noMaterialidad = !matLoading && (mg === null || me === null);
+
+  return (
+    <div className="py-4 border-b border-gray-100">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+            {s6Section.label}
+            {s6Section.isRequired && <span className="text-red-500 ml-0.5">*</span>}
+          </p>
+          {s6Section.description && (
+            <p className="text-[11px] text-gray-400 mt-0.5">{s6Section.description}</p>
+          )}
+        </div>
+        {!readonly && !noBalance && !noMaterialidad && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={computeSemaforo}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Calcular semáforo
+            </button>
+            {preview && (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                {saving ? 'Guardando…' : 'Guardar S6'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* MG/ME chip strip */}
+      {mat && (mg !== null || me !== null) && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Desde A-06 PT-A4:</span>
+          {mg !== null && (
+            <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-700">
+              MG {fmtN(mg)}
+            </span>
+          )}
+          {me !== null && (
+            <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700">
+              ME {fmtN(me)}
+            </span>
+          )}
+          {mat.uae !== null && (
+            <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
+              UAE {fmtN(mat.uae)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Warnings */}
+      {matLoading && (
+        <div className="flex items-center gap-2 text-xs text-blue-600 mb-3">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando materialidad…
+        </div>
+      )}
+      {noBalance && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700 mb-3">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          Importe el balance de comprobación en S1 primero.
+        </div>
+      )}
+      {!noBalance && noMaterialidad && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700 mb-3">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          Complete el papel <strong>A-06 PT-A4 — Materialidad</strong> (MG y ME) antes de calcular el semáforo.
+        </div>
+      )}
+
+      {/* Preview banner */}
+      {preview && (
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3 text-xs text-blue-700">
+          <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+          Vista previa calculada — {preview.length} cuentas. Presione &quot;Guardar S6&quot; para confirmar.
+        </div>
+      )}
+
+      {/* Summary chips */}
+      {display.length > 0 && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Resumen:</span>
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-700">
+            🔴 {rojos} cuenta{rojos !== 1 ? 's' : ''} &gt; MG
+          </span>
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700">
+            🟡 {amarillos} ME–MG
+          </span>
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
+            🟢 {verdes} &lt; ME
+          </span>
+        </div>
+      )}
+
+      {/* Semaphore table */}
+      {display.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                <th className="px-3 py-2 text-center font-semibold w-14">Riesgo</th>
+                <th className="px-3 py-2 text-left font-semibold">Cuenta</th>
+                <th className="px-3 py-2 text-left font-semibold">Descripción</th>
+                <th className="px-3 py-2 text-right font-semibold">Saldo Actual</th>
+                <th className="px-3 py-2 text-right font-semibold">% Total</th>
+                <th className="px-3 py-2 text-left font-semibold">Sub-Sumaria</th>
+                <th className="px-3 py-2 text-left font-semibold">Enfoque</th>
+              </tr>
+            </thead>
+            <tbody>
+              {display.map((row, i) => (
+                <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                  <td className="px-3 py-1.5 text-center">
+                    <span className={semaforoBadge(row.semaforo)}>
+                      {semaforoEmoji(row.semaforo)} {semaforoLabel(row.semaforo)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-gray-700">{row.cuenta}</td>
+                  <td className="px-3 py-1.5 text-gray-700">{row.descripcion}</td>
+                  <td className={`px-3 py-1.5 text-right font-mono ${row.saldo_actual < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                    {fmtN(row.saldo_actual)}
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-mono text-gray-500">
+                    {row.pct_total.toFixed(1)}%
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-gray-600">{row.sub_sumaria}</td>
+                  <td className="px-3 py-1.5 text-gray-500 text-[11px]">{row.enfoque}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

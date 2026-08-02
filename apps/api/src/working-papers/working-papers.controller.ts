@@ -132,6 +132,13 @@ export class WorkingPapersController {
     return this.service.getIndex(auditId, user);
   }
 
+  @Get('audit-materialidad/:auditId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Obtener MG/ME/UAE del papel PT-A4 para una auditoría (para semáforo B-00 S6)' })
+  getMaterialidad(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.getMaterialidadByAudit(auditId, user);
+  }
+
   // ─── Paper CRUD ───────────────────────────────────────────────────────────────
 
   @Get(':id')

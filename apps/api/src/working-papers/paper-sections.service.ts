@@ -615,4 +615,36 @@ INSTRUCCIONES DE REDACCIÓN:
       message: `${propagated} de ${targetPaperCodes.length} cédulas sumarias actualizadas`,
     };
   }
+
+  // ─── Auditoría Financiera: MG/ME/UAE cross-paper ────────────────────────────
+
+  /**
+   * Busca el papel PT-A4 de la auditoría y devuelve MG (S3), ME (S4) y UAE (S5).
+   * Usado por el semáforo de cuentas de B-00 S6.
+   */
+  async getMaterialidadByAudit(auditId: string, user: AuthUser) {
+    // Verify org membership via any paper in the audit
+    const sample = await this.prisma.workingPaper.findFirst({
+      where:   { auditId, audit: { organizationId: user.organizationId } },
+      select:  { id: true },
+    });
+    if (!sample) throw new ForbiddenException();
+
+    const paper = await this.prisma.workingPaper.findFirst({
+      where:   { auditId, paperCode: 'PT-A4' },
+      include: { sections: { where: { sectionKey: { in: ['S3', 'S4', 'S5'] } } } },
+    });
+    if (!paper) return { mg: null, me: null, uae: null, paperId: null };
+
+    const s3 = paper.sections.find(s => s.sectionKey === 'S3');
+    const s4 = paper.sections.find(s => s.sectionKey === 'S4');
+    const s5 = paper.sections.find(s => s.sectionKey === 'S5');
+
+    return {
+      mg:      s3?.value != null ? Number(s3.value) : null,
+      me:      s4?.value != null ? Number(s4.value) : null,
+      uae:     s5?.value != null ? Number(s5.value) : null,
+      paperId: paper.id,
+    };
+  }
 }

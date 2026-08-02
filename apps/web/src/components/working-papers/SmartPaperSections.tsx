@@ -12,7 +12,7 @@ import {
 } from '@/hooks/useWorkingPaperGraph';
 import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
-import { TrialBalanceImporter, AccountClassifier } from './TrialBalancePanel';
+import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './TrialBalancePanel';
 import { MaterialidadPanel } from './MaterialidadPanel';
 
 // ─── Template key selector ────────────────────────────────────────────────────
@@ -205,6 +205,7 @@ export function SmartPaperSections({
 
   // Lookup helpers for PT-FIN-B00 specialized rendering
   const s1Section = sorted.find(s => s.sectionKey === 'S1');
+  const s2Section = sorted.find(s => s.sectionKey === 'S2');
 
   async function handleSave(sectionKey: string, value: unknown) {
     setSavingKey(sectionKey);
@@ -270,6 +271,19 @@ export function SmartPaperSections({
                       ? () => propagateTrialBal.mutateAsync(paperId)
                       : undefined
                   }
+                />
+              );
+            }
+            if (section.sectionKey === 'S6' && s1Section) {
+              return (
+                <AccountSemaforo
+                  key="S6"
+                  s1Section={s1Section}
+                  s2Section={s2Section}
+                  s6Section={section}
+                  auditId={auditId}
+                  readonly={readonly}
+                  onSave={handleSave}
                 />
               );
             }

@@ -332,6 +332,24 @@ export function useAiSuggestions() {
   });
 }
 
+// ─── Auditoría Financiera: materialidad cross-paper ───────────────────────────
+
+export interface MaterialidadValues {
+  mg:      number | null;
+  me:      number | null;
+  uae:     number | null;
+  paperId: string | null;
+}
+
+export function useMaterialidadByAudit(auditId: string) {
+  return useQuery<MaterialidadValues>({
+    queryKey: ['materialidad', auditId],
+    queryFn:  () => apiClient.get(`/working-papers/audit-materialidad/${auditId}`),
+    enabled:  !!auditId,
+    staleTime: 60_000,
+  });
+}
+
 // Aplicar un procedimiento sugerido al papel actual
 export function useAppendProcedure() {
   const qc = useQueryClient();

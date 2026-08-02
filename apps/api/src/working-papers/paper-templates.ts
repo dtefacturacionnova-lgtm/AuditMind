@@ -1699,4 +1699,568 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       aiHint: 'Incluye la nota de referencia al Anexo 12 cuando existan incumplimientos.',
     },
   ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B00: EEFF — Importación, Clasificador de Cuentas y Cédula Madre
+  // Papel inteligente especial: fuente de todos los B-01 a B-06
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B00': [
+    {
+      sectionKey:  'S0',
+      label:       'Fuente de Datos',
+      description: 'Selecciona el método de importación del balance de comprobación.',
+      fieldType:   FieldType.ENUM_SELECT,
+      options:     ['EXCEL_CLIENTE', 'ERP_DIRECTO', 'API_SISTEMA_CONTABLE', 'DIGITACION_MANUAL'],
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   0,
+      aiHint:      'EXCEL_CLIENTE: el contador entrega el archivo. ERP_DIRECTO: Agente Vulcano extrae del sistema. API: conexión REST. DIGITACION_MANUAL: tabla editable para clientes sin sistema digital.',
+    },
+    {
+      sectionKey:  'S1',
+      label:       'Balance de Comprobación Importado',
+      description: 'Tabla de todas las cuentas: código, nombre, saldo actual, anterior, hace 2 períodos, variación $ y %, referencia a sub-sumaria y estado.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Código | Nombre | Saldo Actual | Saldo Año-1 | Saldo Año-2 | Var$ | Var% | Supera ME (🔴>MG / 🟡ME-MG / 🟢<ME) | Sub-sumaria (B-01a..B-06d) | Estado (Pendiente/En proceso/Auditada). Al importar Excel: mapear col A=código, col B=nombre, col C=saldo corriente.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Clasificador de Cuentas — Mapeo a Sub-sumarias',
+      description: 'Asigna cada cuenta importada a su sub-sumaria correspondiente. El sistema propone la asignación por rango de código; el auditor puede ajustar.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Columnas: Código | Nombre | Saldo | Sub-sumaria asignada | Nivel (GRUPO/CUENTA/SUBCUENTA) | ¿Nuevo vs período anterior?. Rangos por defecto SV: 1100-1199→B-01a Caja/Bancos, 1200-1299→B-01b CxC, 1300-1399→B-01c Inventarios, resto AC→B-01d, 1500-1799→B-02a Activos Fijos, 1800-1899→B-02b Intangibles, 1900-1999→B-02c InvLP, 2000-2499→B-03a CxP, 2500-2599→B-03b ObligBC, 2600-2699→B-03c Impuestos, resto PC→B-03d, 2700-2999→B-04 PNC, 3000-3999→B-05 Patrimonio, 4000-4999→B-06a Ingresos, 5000-5999→B-06b CostoVentas, 6000-6999→B-06c GastosOp, resto→B-06d. Mapeo persiste para el siguiente encargo del mismo cliente.',
+    },
+    {
+      sectionKey:  'S3',
+      label:       'Verificación de Cuadre — Activos = Pasivos + Patrimonio',
+      description: 'Confirmación automática del cuadre del balance al cierre del período.',
+      fieldType:   FieldType.BOOLEAN,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   3,
+      aiHint:      'true = balance cuadra (Σ Activos = Σ Pasivos + Σ Patrimonio). false = hay diferencia — documentar monto de descuadre y solicitar reconciliación al cliente antes de propagar saldos a sumarias.',
+    },
+    {
+      sectionKey:  'S4',
+      label:       'Totales por Grupo y Sub-sumaria',
+      description: 'Totalización automática del balance clasificado: totales por cada sub-sumaria (B-01a..B-06d) y por sumaria principal (B-01..B-06), con cuadre en cascada.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   4,
+      aiHint:      'Estructura: Fila por sub-sumaria (B-01a Caja/Bancos, B-01b CxC…) con columnas: Sub-sumaria | Total Actual | Total Año-1 | Total Año-2 | Var$ | Var% | Subtotal sumaria padre (B-01, B-02…). Verificar: Σ B-01a+B-01b+B-01c+B-01d = Total B-01 y así para cada grupo. Σ B-01+B-02 = Total Activos de S1. Σ B-03+B-04+B-05 = Total Pas+Pat de S1.',
+    },
+    {
+      sectionKey:  'S5',
+      label:       'Alertas de Importación',
+      description: 'Alertas automáticas detectadas al importar: cuentas nuevas, cuentas con saldo cero que tenían saldo anterior, variaciones >20% sobre ME.',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  false,
+      isAutoFilled:false,
+      sortOrder:   5,
+      aiHint:      'Lista cada alerta con formato: [TIPO] Código — Descripción — Acción recomendada. TIPOS: CUENTA_NUEVA (verificar si representa nueva actividad), SALDO_CERO (verificar baja o cancelación), VARIACION_CRITICA (>20% y monto>ME — investigar), DESCUADRE (diferencia en ecuación contable).',
+    },
+    {
+      sectionKey:  'S6',
+      label:       'Cuentas Materiales — Semáforo por Cuenta',
+      description: 'Lista de cuentas que superan la Materialidad de Ejecución (ME) con semáforo de 3 colores y enfoque de auditoría sugerido.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   6,
+      aiHint:      'Columnas: Código | Nombre | Saldo Actual | Semáforo (🔴 >MG = pruebas sustantivas extensas / 🟡 ME-MG = analíticas + sustantivas focalizadas / 🟢 <ME = analíticas suficientes) | % del Total Activos | Sub-sumaria | Enfoque sugerido | Ref. PT de ejecución. ME y MG provienen de A-06 PT-A4.',
+    },
+    {
+      sectionKey:  'S7',
+      label:       'Análisis de Variaciones — Comentarios por Cuenta Significativa',
+      description: 'Comentarios del auditor (o borrador IA) sobre las variaciones más relevantes del período vs. período anterior.',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   7,
+      aiHint:      'Para cada cuenta con variación >20% y monto >ME: describir la variación ($ y %), la causa probable según información del cliente, si la variación es consistente con el sector y la actividad, y el nivel de satisfacción con la explicación (Satisfactoria / Requiere prueba adicional / Requiere investigación).',
+    },
+    {
+      sectionKey:  'S8',
+      label:       'Rollforward — Conciliación con Cierre Anterior',
+      description: 'Verificación de que los saldos de apertura del período actual coinciden con los saldos de cierre auditados del período anterior (NIA 510).',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  false,
+      isAutoFilled:false,
+      sortOrder:   8,
+      aiHint:      'Columnas: Cuenta | Saldo cierre anterior auditado | Saldo apertura actual s/cliente | Diferencia | Explicación. Si es el primer encargo del cliente en AuditMind, dejar en blanco. Diferencias en apertura se clasifican como diferencias iniciales NIA 510 y se registran en B-08.',
+    },
+    {
+      sectionKey:  'S9',
+      label:       'EEFF Compilados — Presentación para el Dictamen',
+      description: 'Balance General y Estado de Resultados en formato de presentación (no de importación), generados automáticamente desde el balance de comprobación clasificado.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  false,
+      isAutoFilled:false,
+      sortOrder:   9,
+      aiHint:      'Estado de Situación Financiera: Activos Corrientes (sub-clasificados por B-01a a B-01d) / Activos No Corrientes / Total Activos / Pasivos Corrientes / Pasivos No Corrientes / Total Pasivos / Patrimonio / Total Pasivos+Patrimonio. Período actual vs anterior. Estado de Resultados: Ingresos / Costo de Ventas / Utilidad Bruta / Gastos Operativos / EBIT / Gastos Financieros / UAI / ISR / Utilidad Neta. Estos EEFF son la base del dictamen E-01.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B01: Cédula Sumaria — Activos Corrientes [PT MAESTRO]
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B01': [
+    {
+      sectionKey:  'S1',
+      label:       'Tabla Principal — Activos Corrientes',
+      description: 'Lead schedule de activos corrientes con 10 columnas. Saldos provienen automáticamente de B-00 S4.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:true,
+      sourceRef:   'B-00::S4',
+      sortOrder:   1,
+      aiHint:      'Columnas: Grupo | Saldo s/cliente actual | Saldo año-1 | Saldo año-2 | Ajustes propuestos (de B-08) | Saldo auditado | Var$ | Var% | Ref. PT ejecución | Estado (Pendiente/En proceso/Completado sin excepción/Completado con excepción). Filas: B-01a Caja/Bancos | B-01b CxC | B-01c Inventarios | B-01d Otros AC | TOTAL ACTIVOS CORRIENTES.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Detalle B-01a — Caja y Bancos',
+      description: 'Drill-down de todas las cuentas de caja y bancos asignadas a B-01a en el Clasificador.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  false,
+      isAutoFilled:true,
+      sourceRef:   'B-00::S1',
+      sortOrder:   2,
+      aiHint:      'Lista cada cuenta de caja/bancos (ej: 1101 Caja, 1102 Banco Agrícola, 1103 Banco Cuscatlán) con columnas: Código | Nombre | Saldo actual | Saldo año-1 | Var$ | Var% | Ref. PT (C-01) | Estado. Total debe cuadrar con fila B-01a de S1.',
+    },
+    {
+      sectionKey:  'S3',
+      label:       'Detalle B-01b — Cuentas por Cobrar',
+      description: 'Drill-down de todas las cuentas de CxC y documentos por cobrar asignadas a B-01b.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  false,
+      isAutoFilled:true,
+      sourceRef:   'B-00::S1',
+      sortOrder:   3,
+      aiHint:      'Cuentas típicas: CxC clientes, CxC empleados, documentos por cobrar, estimación cuentas incobrables (saldo acreedor). Total cuadra con B-01b de S1. Ref. PT: C-02 Circularización.',
+    },
+    {
+      sectionKey:  'S4',
+      label:       'Detalle B-01c — Inventarios',
+      description: 'Drill-down de todas las cuentas de inventarios asignadas a B-01c.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  false,
+      isAutoFilled:true,
+      sourceRef:   'B-00::S1',
+      sortOrder:   4,
+      aiHint:      'Sub-clasificar por tipo: Materia Prima | Producción en Proceso | Producto Terminado | Materiales y Suministros | Estimación obsolescencia. Si la industria es comercio: Mercadería en Almacén | Mercadería en Tránsito. Total cuadra con B-01c. Ref. PT: C-03.',
+    },
+    {
+      sectionKey:  'S5',
+      label:       'Detalle B-01d — Otros Activos Corrientes',
+      description: 'Drill-down de cuentas de activos corrientes no clasificadas en B-01a/b/c.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  false,
+      isAutoFilled:true,
+      sourceRef:   'B-00::S1',
+      sortOrder:   5,
+      aiHint:      'Incluye: gastos pagados por anticipado, IVA crédito fiscal, impuestos pagados por adelantado, otros deudores. Total cuadra con B-01d.',
+    },
+    {
+      sectionKey:  'S6',
+      label:       'Análisis de Variaciones — Activos Corrientes',
+      description: 'Comentarios por sub-área con variación significativa.',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   6,
+      aiHint:      'Para cada sub-área con variación >15% o monto >ME: descripción de la variación, causa probable (expansión de operaciones, política de crédito, acumulación de inventario, etc.), si es consistente con el sector y la estrategia del cliente.',
+    },
+    {
+      sectionKey:  'S7',
+      label:       'Procedimientos Sugeridos por Variación',
+      description: 'Procedimientos analíticos adicionales sugeridos basados en variaciones identificadas.',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  false,
+      isAutoFilled:false,
+      sortOrder:   7,
+      aiHint:      'Si CxC sube >30%: ampliar circularización. Si Inventario baja >20%: verificar obsolescencia y valuación. Si Caja/Bancos sube >50%: confirmar restricciones de uso. Transferir procedimientos confirmados al programa A-08.',
+    },
+    {
+      sectionKey:  'S8',
+      label:       'Cuadre con B-00',
+      description: 'Verificación de que el total de Activos Corrientes en esta sumaria coincide con el total B-01 en B-00 S4.',
+      fieldType:   FieldType.BOOLEAN,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   8,
+      aiHint:      'true = total S1 = total B-01 en B-00. false = hay diferencia — revisar clasificación en S2 del Clasificador de Cuentas.',
+    },
+    {
+      sectionKey:  'S9',
+      label:       'Conclusión del Área — Activos Corrientes',
+      description: 'Conclusión del auditor sobre la razonabilidad de los activos corrientes.',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   9,
+      aiHint:      'Incluye: total auditado de activos corrientes, principales variaciones explicadas, sub-áreas con excepción, saldos ajustados vs. saldos s/cliente, conclusión sobre si los activos corrientes están razonablemente presentados en todos los aspectos materiales.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B02: Cédula Sumaria — Activos No Corrientes [PT MAESTRO]
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B02': [
+    {
+      sectionKey: 'S1', label: 'Tabla Principal — Activos No Corrientes',
+      description: 'Lead schedule de activos no corrientes. Filas: B-02a Activos Fijos | B-02b Intangibles | B-02c Inversiones LP.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'B-00::S4', sortOrder: 1,
+      aiHint: 'Columnas idénticas a B-01 S1. Filas: B-02a Prop/Planta/Equipo (neto de dep.) | B-02b Activos Intangibles (neto de amort.) | B-02c Inversiones LP | TOTAL ANC.',
+    },
+    {
+      sectionKey: 'S2', label: 'Detalle B-02a — Propiedad, Planta y Equipo',
+      description: 'Drill-down de activos fijos: costo histórico, depreciación acumulada y valor neto por categoría.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 2,
+      aiHint: 'Categorías: Terrenos | Edificios | Maquinaria | Vehículos | Equipo de oficina | Mejoras | Activos en leasing (NIIF 16). Columnas: Categoría | Costo | Dep. Acumulada | Valor Neto | Año-1 Neto | Var$. Ref. PT: C-04.',
+    },
+    {
+      sectionKey: 'S3', label: 'Detalle B-02b — Activos Intangibles',
+      description: 'Goodwill, marcas, licencias, software y otros intangibles.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 3,
+      aiHint: 'Columnas: Tipo | Costo | Amort. Acum. | Valor Neto | Vida útil restante. Verificar test de deterioro (NIC 36) para goodwill.',
+    },
+    {
+      sectionKey: 'S4', label: 'Detalle B-02c — Inversiones Largo Plazo',
+      description: 'Inversiones en subsidiarias, asociadas, instrumentos de deuda y capital a LP.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 4,
+      aiHint: 'Columnas: Inversión | Método de valuación | Valor en libros | VR si aplicable | % participación. Verificar método de participación (NIC 28) para asociadas >20%.',
+    },
+    {
+      sectionKey: 'S5', label: 'Análisis de Variaciones — ANC', description: 'Comentarios por sub-área con variación significativa en activos no corrientes.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Variaciones típicas: adquisición de activos (verificar autorización), bajas/ventas (ganancia/pérdida), revaluaciones, deterioro reconocido. Verificar CAPEX vs OPEX.',
+    },
+    {
+      sectionKey: 'S6', label: 'Cuadre con B-00', description: 'Total ANC en esta sumaria = total B-02 en B-00 S4.',
+      fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'true = cuadra. false = revisar clasificación.',
+    },
+    {
+      sectionKey: 'S7', label: 'Conclusión — Activos No Corrientes', description: 'Conclusión del auditor sobre la razonabilidad de los ANC.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 7,
+      aiHint: 'Incluye: política de depreciación aplicada, tasa promedio, activos con posible deterioro, conclusión sobre presentación razonable.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B03: Cédula Sumaria — Pasivos Corrientes [PT MAESTRO]
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B03': [
+    {
+      sectionKey: 'S1', label: 'Tabla Principal — Pasivos Corrientes',
+      description: 'Lead schedule de pasivos corrientes. Filas: B-03a CxP Proveedores | B-03b Obligaciones Bancarias CP | B-03c Impuestos y Contrib. | B-03d Otros PC.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'B-00::S4', sortOrder: 1,
+      aiHint: 'Columnas idénticas a B-01 S1. Filas: B-03a CxP comerciales | B-03b Préstamos bancarios CP | B-03c IVA débito, ISR corriente, cotizaciones | B-03d Acumulaciones, anticipos clientes, otros | TOTAL PASIVOS CORRIENTES.',
+    },
+    {
+      sectionKey: 'S2', label: 'Detalle B-03a — Cuentas por Pagar Comerciales',
+      description: 'Drill-down de proveedores y acreedores comerciales.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 2,
+      aiHint: 'Columnas: Proveedor | Saldo | Antigüedad (0-30 / 31-60 / 61-90 / >90 días) | Ref. confirmación. Verificar con circularización de cuentas por pagar. Ref. PT: C-07.',
+    },
+    {
+      sectionKey: 'S3', label: 'Detalle B-03b — Obligaciones Bancarias CP',
+      description: 'Préstamos bancarios con vencimiento dentro de 12 meses.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 3,
+      aiHint: 'Columnas: Banco | Tipo préstamo | Tasa | Vencimiento | Saldo capital CP | Intereses acumulados. Verificar confirmación bancaria. Ref. PT: C-08.',
+    },
+    {
+      sectionKey: 'S4', label: 'Detalle B-03c — Impuestos y Contribuciones',
+      description: 'IVA débito fiscal, ISR corriente, cotizaciones ISSS/AFP, retenciones por pagar.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 4,
+      aiHint: 'Verificar declaraciones presentadas vs saldo en libros. Cuotas en mora generan multas e intereses (NIA 250). Ref. PT: C-08 / módulo fiscal si aplica.',
+    },
+    {
+      sectionKey: 'S5', label: 'Análisis de Variaciones — Pasivos Corrientes',
+      description: 'Comentarios por sub-área con variación significativa en pasivos corrientes.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Verificar si incremento en CxP indica problemas de flujo. Reducción significativa puede indicar renegociación o pagos anticipados. Evaluar razón de liquidez corriente vs industria.',
+    },
+    {
+      sectionKey: 'S6', label: 'Cuadre con B-00', description: 'Total PC en esta sumaria = total B-03 en B-00 S4.',
+      fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'true = cuadra. false = revisar clasificación.',
+    },
+    {
+      sectionKey: 'S7', label: 'Conclusión — Pasivos Corrientes',
+      description: 'Conclusión del auditor sobre la razonabilidad de los pasivos corrientes.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 7,
+      aiHint: 'Incluye evaluación de completitud de pasivos (NIA 330: buscar pasivos no registrados), ratios de liquidez, covenants bancarios y conclusión sobre presentación razonable.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B04: Cédula Sumaria — Pasivos No Corrientes [PT MAESTRO]
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B04': [
+    {
+      sectionKey: 'S1', label: 'Tabla Principal — Pasivos No Corrientes',
+      description: 'Lead schedule de PNC. Filas: B-04a Deuda LP | B-04b Provisiones LP | B-04c Arrendamientos LP.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'B-00::S4', sortOrder: 1,
+      aiHint: 'Columnas: Grupo | Saldo actual | Año-1 | Año-2 | Ajustes (B-08) | Auditado | Var$ | Var% | Ref. PT | Estado.',
+    },
+    {
+      sectionKey: 'S2', label: 'Detalle B-04a — Deuda a Largo Plazo',
+      description: 'Préstamos bancarios, bonos y deuda financiera con vencimiento >12 meses.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 2,
+      aiHint: 'Columnas: Acreedor | Instrumento | Tasa | Fecha vencimiento | Saldo LP | Garantías | Covenants. Obtener confirmación de saldos. Ref. PT: C-09.',
+    },
+    {
+      sectionKey: 'S3', label: 'Detalle B-04b — Provisiones LP',
+      description: 'Provisiones por beneficios a empleados, garantías, litigios y desmantelamiento.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 3,
+      aiHint: 'Verificar si la provisión cumple NIC 37: obligación presente, salida probable, estimación fiable. Indemnizaciones laborales (NIC 19) son frecuentes en SV.',
+    },
+    {
+      sectionKey: 'S4', label: 'Detalle B-04c — Arrendamientos LP (NIIF 16)',
+      description: 'Pasivos por arrendamiento con vencimiento >12 meses según NIIF 16.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 4,
+      aiHint: 'Columnas: Contrato | Activo arrendado | Tasa incremental | Saldo LP | Cuota mensual. Verificar amortización del pasivo vs tabla NIIF 16.',
+    },
+    {
+      sectionKey: 'S5', label: 'Análisis y Conclusión — PNC',
+      description: 'Variaciones significativas y conclusión de auditoría sobre pasivos no corrientes.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Evaluar vencimientos LP próximos que requieran reclasificación a CP. Verificar revelaciones requeridas (NIC 1). Conclusión sobre presentación razonable.',
+    },
+    {
+      sectionKey: 'S6', label: 'Cuadre con B-00', fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'true = total PNC en sumaria = total B-04 en B-00 S4.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B05: Cédula Sumaria — Patrimonio [PT MAESTRO]
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B05': [
+    {
+      sectionKey: 'S1', label: 'Tabla Principal — Patrimonio',
+      description: 'Lead schedule de patrimonio. Filas: B-05a Capital | B-05b Reservas | B-05c Utilidades Retenidas.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'B-00::S4', sortOrder: 1,
+      aiHint: 'Columnas: Componente | Saldo actual | Año-1 | Año-2 | Ajustes (B-08) | Auditado | Var$ | Var% | Ref. PT | Estado.',
+    },
+    {
+      sectionKey: 'S2', label: 'Detalle B-05a — Capital Social',
+      description: 'Capital autorizado, suscrito y pagado. Acciones en circulación.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 2,
+      aiHint: 'Verificar contra escritura de constitución y libro de accionistas. Capital mínimo en SV: $2,000 (SA simple). Ref. PT: C-10.',
+    },
+    {
+      sectionKey: 'S3', label: 'Detalle B-05b — Reservas y ORI',
+      description: 'Reserva legal, reservas estatutarias y Otro Resultado Integral acumulado.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 3,
+      aiHint: 'Reserva legal SV: 7% de utilidades hasta el 20% del capital. ORI: diferencias de conversión, valuación instrumentos financieros.',
+    },
+    {
+      sectionKey: 'S4', label: 'Detalle B-05c — Utilidades Retenidas y del Período',
+      description: 'Utilidades de ejercicios anteriores, dividendos decretados y utilidad del período.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 4,
+      aiHint: 'Verificar: saldo inicial = saldo final período anterior. Dividendos decretados = aprobados en acta de junta. Utilidad del período = coincide con B-06 total.',
+    },
+    {
+      sectionKey: 'S5', label: 'Estado de Cambios en el Patrimonio',
+      description: 'Conciliación de movimientos del patrimonio durante el período auditado.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Formato: Fila por componente patrimonial. Columnas: Saldo inicial | + Utilidad neta | + ORI | - Dividendos | +/- Otros | Saldo final. Cuadre horizontal y vertical.',
+    },
+    {
+      sectionKey: 'S6', label: 'Cuadre con B-00 y Conclusión', fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Verificar: total patrimonio S1 = total B-05 en B-00 S4. Conclusión sobre si el patrimonio está correctamente presentado, autorizaciones de dividendos documentadas y revelaciones NIC 1 completas.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B06: Cédula Sumaria — Resultados / P&G [PT MAESTRO]
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B06': [
+    {
+      sectionKey: 'S1', label: 'Tabla Principal — Estado de Resultados',
+      description: 'Lead schedule del P&G. Filas: B-06a Ingresos | B-06b Costo de Ventas | B-06c Gastos Operativos | B-06d Otros I/G.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'B-00::S4', sortOrder: 1,
+      aiHint: 'Columnas: Grupo | Saldo actual | Año-1 | Año-2 | Ajustes (B-08) | Auditado | Var$ | Var% | Ref. PT | Estado. Subtotales: Utilidad Bruta (B-06a - B-06b) | Utilidad Operativa (UB - B-06c) | UAI | ISR | Utilidad Neta.',
+    },
+    {
+      sectionKey: 'S2', label: 'Detalle B-06a — Ingresos',
+      description: 'Drill-down de fuentes de ingreso por línea de negocio o tipo.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 2,
+      aiHint: 'Clasificar: Ventas de productos | Ingresos por servicios | Ingresos por intereses | Otros ingresos. Verificar reconocimiento de ingresos NIIF 15: momento de transferencia del control. Ref. PT: C-11.',
+    },
+    {
+      sectionKey: 'S3', label: 'Detalle B-06b — Costo de Ventas',
+      description: 'Apertura del costo de ventas: inventario inicial + compras - inventario final.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 3,
+      aiHint: 'Verificar método de costeo (FIFO, promedio ponderado, costo específico). Margen bruto vs industria. Si hay variación >5% en margen: investigar causas. Ref. PT: C-12.',
+    },
+    {
+      sectionKey: 'S4', label: 'Detalle B-06c — Gastos Operativos',
+      description: 'Gastos de venta y distribución, gastos de administración, depreciación y amortización.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 4,
+      aiHint: 'Sub-clasificar: Gastos de personal | Servicios | Alquileres | Depreciación/amortización | Otros. Verificar consistencia con NIF de gastos de empleados (NIC 19) y política de depreciación. Ref. PT: C-12.',
+    },
+    {
+      sectionKey: 'S5', label: 'Análisis de Márgenes y Ratios de Rentabilidad',
+      description: 'Margen bruto, operativo, EBITDA y neto para el período actual vs anteriores.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Calcular: Margen Bruto = UB/Ingresos, Margen Operativo = EBIT/Ingresos, EBITDA Margin = (EBIT+D&A)/Ingresos, Margen Neto = UN/Ingresos. Comparar con año anterior y promedio sectorial. Variaciones >3pp requieren explicación.',
+    },
+    {
+      sectionKey: 'S6', label: 'Cuadre con B-00 y Conclusión', fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Verificar: total Ingresos S2 + total CV S3 + total GO S4 + B-06d = saldo de cada grupo en B-00 S4. Conclusión sobre razonabilidad del Estado de Resultados: márgenes explicados, revelaciones completas, reconocimiento de ingresos correcto.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B07: Análisis de Variaciones Automático [PT INTELIGENTE]
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B07': [
+    {
+      sectionKey: 'S1', label: 'Análisis Horizontal — 3 Períodos',
+      description: 'Variación $ y % de cada cuenta del balance y P&G vs período anterior y hace 2 períodos.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'B-00::S1', sortOrder: 1,
+      aiHint: 'Para cada cuenta: Saldo Año0 | Saldo Año-1 | Saldo Año-2 | Var$ Año0vsAño-1 | Var% | Var$ Año-1vsAño-2 | Var% | Tendencia (↑ Creciente / ↓ Decreciente / → Estable). Alertas: variaciones >20% con monto >ME marcadas en rojo.',
+    },
+    {
+      sectionKey: 'S2', label: 'Análisis Vertical',
+      description: 'Participación porcentual de cada cuenta respecto a un total representativo.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      aiHint: 'Balance: % sobre Total Activos. P&G: % sobre Ingresos Totales. Mostrar para Año0 y Año-1. Variación en % >5pp para una cuenta requiere explicación. Utili para detectar desplazamientos en estructura financiera.',
+    },
+    {
+      sectionKey: 'S3', label: 'Ratios Financieros — Comparativo 3 Períodos',
+      description: 'Indicadores de liquidez, endeudamiento, rentabilidad y actividad calculados automáticamente.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'LIQUIDEZ: Corriente=AC/PC | Ácida=(AC-Inv)/PC | Inmediata=Caja/PC. ENDEUDAMIENTO: D/E=PasivoTotal/Patrimonio | Cobertura intereses=EBIT/GastosFinancieros. RENTABILIDAD: ROA=UN/ActivoTotal | ROE=UN/Patrimonio | Margen Bruto | Margen Neto. ACTIVIDAD: Rotación CxC=Ingresos/CxCProm | Días CxC=365/RotCxC | Rotación Inv=CV/InvProm | Días Inv | Rotación CxP=Compras/CxPProm | Días CxP. Incluir benchmarks sectoriales cuando disponibles.',
+    },
+    {
+      sectionKey: 'S4', label: 'Procedimientos Sugeridos por Variación',
+      description: 'Procedimientos analíticos adicionales sugeridos basados en variaciones identificadas. Transferibles al programa A-08.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Para cada variación significativa: Cuenta | Variación | Procedimiento sugerido | NIA aplicable | ¿Transferir a A-08? (Sí/No). Ejemplos: CxC +35%→"Ampliar circularización al 40%—NIA 505". Costo/Ventas +3pp→"Revisión de política de costos". Utilidad -20%→"Revisar hipótesis empresa en marcha—NIA 570". Click para transferir al programa.',
+    },
+    {
+      sectionKey: 'S5', label: 'Indicadores de Riesgo de Fraude — NIA 240',
+      description: 'Patrones que activan presunciones de fraude según NIA 240.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Evaluar: ¿Ingresos crecen desproporcionalmente vs cuentas por cobrar? (reconocimiento anticipado). ¿Márgenes inusualmente estables? (suavización). ¿Transacciones significativas en el último mes del período? (window dressing). ¿Cambios en políticas contables sin justificación clara? ¿Activos crecen sin respaldo en flujos? Documentar si se activa la presunción de fraude en ingresos (NIA 240.27).',
+    },
+    {
+      sectionKey: 'S6', label: 'Conclusión de Procedimientos Analíticos — NIA 520',
+      description: 'Conclusión global del auditor sobre los procedimientos analíticos preliminares.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Resumir: variaciones explicadas (consistentes con expectativas) vs inexplicadas (requieren prueba adicional). Áreas de mayor riesgo identificadas desde el análisis. Si hay variaciones inexplicadas significativas: describir los procedimientos adicionales diseñados para responder (NIA 520.7). Integrar con evaluación de riesgos A-05.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B08: Cédula de Diferencias y Ajustes Consolidada [PT MAESTRO ESPECIAL]
+  // Versión extendida de PT-DIFS para auditoría financiera con semáforo automatizado
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B08': [
+    {
+      sectionKey: 'S1', label: 'Diferencias Identificadas — Todas las Áreas',
+      description: 'Tabla maestra de excepciones detectadas en C-01 a C-15. Se puebla automáticamente cuando un PT de ejecución registra una diferencia.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'C-01::S_DIFS,C-02::S_DIFS,C-03::S_DIFS,C-04::S_DIFS', sortOrder: 1,
+      aiHint: 'Columnas: # | Área (C-01..C-15) | Descripción del error | Tipo (Factual/Por estimación/Proyectado) | Cuentas afectadas | Debe $ | Haber $ | Impacto en UAI (+/-) | ¿Material? (vs UAE) | Estado (Propuesta/Aceptada/Rechazada). Sin reingreso manual — proviene automáticamente de los PTs de ejecución.',
+    },
+    {
+      sectionKey: 'S2', label: 'Totales Acumulados vs Materialidad',
+      description: 'Comparación del total de diferencias acumuladas vs UAE y MG para determinar impacto en opinión.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'A-06::S3,S4,S5', sortOrder: 2,
+      aiHint: 'Filas: Diferencias Factuales | Por Estimación | Proyectadas | Total. Columnas: Total acumulado | UAE (50% MG) | Materialidad Global (MG) | ¿Supera UAE? | ¿Supera MG? | Diferencias aceptadas | Diferencias rechazadas/pendientes. Fuente UAE y MG: A-06 PT-A4.',
+    },
+    {
+      sectionKey: 'S3', label: 'Semáforo de Opinión',
+      description: 'Estado automático de la opinión basado en diferencias no ajustadas acumuladas vs materialidad.',
+      fieldType: FieldType.ENUM_SELECT,
+      options: ['VERDE_OPINION_SIN_SALVEDADES', 'AMARILLO_EVALUAR_SALVEDAD', 'ROJO_SALVEDAD_O_ADVERSA'],
+      isRequired: true, isAutoFilled: true, sortOrder: 3,
+      aiHint: 'VERDE: diferencias no ajustadas < UAE → opinión sin salvedades factible. AMARILLO: UAE ≤ diferencias < MG → solicitar ajuste al cliente o evaluar salvedad. ROJO: diferencias ≥ MG → salvedad o adversa según si el efecto es generalizado. Se recalcula automáticamente cada vez que se registra una nueva diferencia.',
+    },
+    {
+      sectionKey: 'S4', label: 'Libro de AJEs — Asientos Formales',
+      description: 'Asientos de ajuste formales generados para cada diferencia confirmada.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Para cada ajuste: AJE-001, AJE-002... | Cuenta Debe (código + nombre) | Monto $ | Cuenta Haber (código + nombre) | Monto $ | Descripción técnica | Base NIIF/NIA | Estado (Propuesto/Aceptado/Rechazado). Los asientos aceptados fluyen automáticamente a B-09 Libro de AJEs.',
+    },
+    {
+      sectionKey: 'S5', label: 'Respuesta del Cliente a los Ajustes',
+      description: 'Decisión formal del cliente sobre cada AJE propuesto.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Columnas: # AJE | Decisión (Acepta / Acepta parcialmente / Rechaza) | Fecha respuesta | ¿Procesado en contabilidad? | Comentario del cliente. Diferencias rechazadas permanecen como "no ajustadas" en el semáforo.',
+    },
+    {
+      sectionKey: 'S6', label: 'Total Diferencias No Ajustadas',
+      description: 'Suma final de diferencias que el cliente no corrigió.',
+      fieldType: FieldType.CURRENCY, isRequired: true, isAutoFilled: true, sortOrder: 6,
+      aiHint: 'Total = suma de montos de AJEs rechazados o pendientes. Si > MG: modifica la opinión del auditor. Documentar en carta de representación (NIA 580) para reconocimiento formal del management.',
+    },
+    {
+      sectionKey: 'S7', label: 'EEFF Ajustados — Antes y Después',
+      description: 'Estados financieros que muestran el impacto de todos los ajustes aceptados.',
+      fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: false, sortOrder: 7,
+      aiHint: 'Columnas: Línea EEFF | EEFF s/cliente | AJEs aceptados (+/-) | EEFF auditados. Para Balance General y Estado de Resultados. Los EEFF auditados son la base del dictamen E-01.',
+    },
+    {
+      sectionKey: 'S8', label: 'Propuesta de Tipo de Opinión',
+      description: 'Tipo de opinión propuesto por el socio basado en el semáforo y las diferencias no ajustadas.',
+      fieldType: FieldType.ENUM_SELECT,
+      options: ['OPINION_SIN_MODIFICAR', 'SALVEDAD_INCORRECCIÓN_MATERIAL', 'OPINION_ADVERSA', 'ABSTENCIÓN_DE_OPINION'],
+      isRequired: true, isAutoFilled: false, sortOrder: 8,
+      aiHint: 'NIA 705: Sin modificar = EEFF presentan razonablemente en todos los aspectos materiales. Salvedad = incorrecciones materiales pero no generalizadas. Adversa = incorrecciones materiales y generalizadas. Abstención = incapacidad para obtener evidencia suficiente.',
+    },
+    {
+      sectionKey: 'S9', label: 'Narrativa del Socio — Dictamen Propuesto',
+      description: 'Párrafo de opinión y fundamento redactado para el dictamen.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 9,
+      aiHint: 'El Agente Cicero puede generar: párrafo de base para la opinión, párrafo de opinión (sin modificar o con salvedad según S8), párrafos de énfasis si aplica (empresa en marcha, incertidumbre, cambio contable). Modelo CVPCPA/IAASB para El Salvador.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-B09: Libro de AJEs — Asientos de Ajuste Formales [PT INTELIGENTE]
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-B09': [
+    {
+      sectionKey: 'S1', label: 'Asientos de Ajuste del Período',
+      description: 'Libro formal de asientos de ajuste propuestos por el auditor. Se genera automáticamente desde los AJEs aceptados en B-08.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'B-08::S4', sortOrder: 1,
+      aiHint: 'Formato: AJE-001 | Fecha: [cierre del período] | Cuenta Debe: código, nombre, monto | Cuenta Haber: código, nombre, monto | Descripción técnica (Cicero) | Base: NIIF/NIA específica | Estado: Propuesto/Aceptado. Total Débitos = Total Créditos (verificación automática).',
+    },
+    {
+      sectionKey: 'S2', label: 'Descripción Técnica por Ajuste',
+      description: 'Argumento técnico contable para cada AJE, con referencia a la norma NIIF/NIA que lo sustenta.',
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      aiHint: 'Para cada AJE: "El ajuste AJE-00X corresponde a [descripción]. Conforme [norma], el tratamiento correcto establece que [criterio técnico]. El impacto en los estados financieros es [efecto en líneas específicas del EEFF]. Base: [NIA/NIIF citada]." El Agente Cicero genera este texto; el auditor revisa y aprueba.',
+    },
+    {
+      sectionKey: 'S3', label: 'Carta de Ajustes Propuestos al Cliente',
+      description: 'Documento formal para presentar al cliente todos los AJEs propuestos con base técnica y solicitar aceptación.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 3,
+      aiHint: 'Incluir: fecha, destinatario (Gerente/Director Financiero), resumen de ajustes por área, total impacto en UAI y patrimonio, tabla de AJEs (número, descripción, monto, base), solicitud de confirmación. Espacio para firma del cliente aceptando o rechazando. Formato carta membretada con datos del auditor.',
+    },
+    {
+      sectionKey: 'S4', label: 'Impacto Consolidado en EEFF Auditados',
+      description: 'Tabla que muestra cómo cambian los EEFF al aplicar los ajustes aceptados.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 4,
+      aiHint: 'Tres columnas: EEFF s/cliente | Ajustes del período (+/-) | EEFF Auditados. Por cada línea del Balance General y Estado de Resultados. Variación total = Σ AJEs aceptados. Verificar que cuadre: Total Ajustes Débito = Total Ajustes Crédito.',
+    },
+    {
+      sectionKey: 'S5', label: 'Efecto Fiscal de los Ajustes — Mercado SV',
+      description: 'Impacto en ISR de los ajustes que afectan la renta gravable, para mercado El Salvador.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 5,
+      aiHint: 'Para cada AJE que afecte ingresos o gastos: calcular impacto en renta imponible (Código Tributario SV). ISR tasa: 25% para rentas >$150,000 o 30% para rentas >$500,000. Si el encargo incluye dictamen fiscal, referenciar al módulo Fiscal (AF-07 PT-FIN-ISR). El Agente Lex puede calcular el impacto tributario automáticamente.',
+    },
+  ],
 };

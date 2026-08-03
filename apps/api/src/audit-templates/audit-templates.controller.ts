@@ -72,4 +72,14 @@ export class AuditTemplatesController {
   reseedSystem(@CurrentUser() user: AuthUser) {
     return this.service.reseedSystemTemplates(user);
   }
+
+  @Post('create-demo-audit')
+  @ApiOperation({
+    summary: 'Crear auditoría de demostración completa',
+    description:
+      'Crea una auditoría financiera externa con 20 cuentas balanceadas, semáforo NIA 320, papeles A-03 a A-06, C-01 y E-01 totalmente poblados. Idempotente.',
+  })
+  createDemoAudit(@CurrentUser() user: AuthUser) {
+    return this.service.createDemoAudit(user);
+  }
 }

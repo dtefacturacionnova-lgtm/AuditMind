@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
-import { AuditType, WorkingPaperType, WpKind } from '@prisma/client';
+import { AuditOriginType, AuditStatus, AuditType, WorkingPaperType, WpKind } from '@prisma/client';
 import { CreateAuditTemplateDto, UpdateAuditTemplateDto } from './dto/audit-template.dto';
+import { PAPER_TEMPLATES } from '../working-papers/paper-templates';
 
 // ─── PaperDef mirrors audit-index.service interface ──────────────────────────
 
@@ -1893,5 +1894,472 @@ export class AuditTemplatesService {
         ],
       },
     ];
+  }
+
+  // ─── Demo Audit ───────────────────────────────────────────────────────────────
+  /**
+   * Crea una auditoría de demostración completamente poblada que muestra
+   * el flujo completo de la plantilla "Auditoría Financiera Externa v1.0":
+   *   - 20 cuentas balanceadas en B-00 (S1)
+   *   - Clasificador con sub-sumarias SV (S2)
+   *   - Semáforo automático vs. MG/ME (S6)
+   *   - Papeles A-03, A-04, A-05, A-06 con datos realistas
+   *   - C-01 (Caja y Bancos) como prueba sustantiva de ejemplo
+   *   - E-01 con dictamen limpio
+   *
+   * Idempotente: si ya existe, retorna el ID sin recrear nada.
+   */
+  async createDemoAudit(user: AuthUser): Promise<{ auditId: string; created: boolean; message: string }> {
+    // ── Idempotency check ───────────────────────────────────────────────────
+    const existing = await this.prisma.audit.findFirst({
+      where: {
+        organizationId: user.organizationId,
+        title: 'Empresa Comercial Demo SA de CV — Auditoría EEFF 2024',
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      return { auditId: existing.id, created: false, message: 'Demo ya existe — abrirlo en el expediente.' };
+    }
+
+    // ── 1. AuditEntity demo ──────────────────────────────────────────────────
+    let entity = await this.prisma.auditEntity.findFirst({
+      where: { organizationId: user.organizationId, name: 'Empresa Comercial Demo SA de CV' },
+      select: { id: true },
+    });
+    if (!entity) {
+      entity = await this.prisma.auditEntity.create({
+        data: {
+          organizationId:  user.organizationId,
+          name:            'Empresa Comercial Demo SA de CV',
+          description:     'Entidad de demostración del sistema AuditMind. Empresa mediana del sector comercio mayorista (El Salvador). NIT: 0614-010185-101-7.',
+          entityType:      'COMPANY',
+          sector:          'Comercio al por mayor de mercancías generales',
+          responsible:     'Lic. Roberto Morales — Gerente Financiero',
+          location:        'San Salvador, El Salvador',
+          inherentRiskScore: 60,
+          active:          true,
+        },
+        select: { id: true },
+      });
+    }
+
+    // ── 2. Find template ─────────────────────────────────────────────────────
+    await this.ensureSystemTemplates(user.organizationId, user.id);
+    const template = await this.prisma.auditTemplate.findFirst({
+      where: { organizationId: user.organizationId, name: 'Auditoría Financiera Externa v1.0' },
+    });
+    if (!template) {
+      throw new NotFoundException(
+        'Plantilla "Auditoría Financiera Externa v1.0" no encontrada. Ejecute POST /audit-templates/reseed-system primero.',
+      );
+    }
+
+    // ── 3. Create the Audit ──────────────────────────────────────────────────
+    const audit = await this.prisma.audit.create({
+      data: {
+        organizationId:          user.organizationId,
+        title:                   'Empresa Comercial Demo SA de CV — Auditoría EEFF 2024',
+        type:                    AuditType.EXTERNAL_FINANCIAL,
+        status:                  AuditStatus.CLOSED,
+        originType:              AuditOriginType.MANAGEMENT_REQUEST,
+        auditEntityId:           entity.id,
+        leadAuditorId:           user.id,
+        startDate:               new Date('2025-01-15'),
+        endDate:                 new Date('2025-03-28'),
+        auditPeriodStart:        new Date('2024-01-01'),
+        auditPeriodEnd:          new Date('2024-12-31'),
+        reportIssuanceDate:      new Date('2025-04-05'),
+        estimatedHours:          480,
+        actualHours:             465,
+        methodology:             'SUBSTANTIVE_FOCUS',
+        scope:                   'Auditoría de los estados financieros de Empresa Comercial Demo SA de CV correspondientes al ejercicio terminado el 31 de diciembre de 2024, incluyendo el Balance General, Estado de Resultados, Estado de Cambios en el Patrimonio y Estado de Flujos de Efectivo, de conformidad con las Normas Internacionales de Auditoría (NIA) y normativa CVPCPA El Salvador.',
+        objectives:              'Emitir una opinión independiente sobre si los estados financieros presentan razonablemente, en todos los aspectos materiales, la situación financiera, el rendimiento financiero y los flujos de efectivo de la entidad de acuerdo con las NIIF para PYMES adoptadas por el CVPCPA.',
+        materiality:             150000,
+        materialityExecution:    90000,
+        materialityAccumulation: 75000,
+        materialityBase:         'INGRESOS_TOTALES',
+        materialityBaseAmount:   5000000,
+        auditOpinion:            'SATISFACTORY',
+        templateId:              template.id,
+      },
+    });
+
+    // Lead auditor to team
+    await this.prisma.auditTeam.upsert({
+      where:  { auditId_userId: { auditId: audit.id, userId: user.id } },
+      create: { auditId: audit.id, userId: user.id, role: 'LEAD' },
+      update: { role: 'LEAD' },
+    });
+
+    // ── 4. Scaffold papers ──────────────────────────────────────────────────
+    const paperDefs = (template.papers as unknown as Array<{
+      code: string; indexSection: string; title: string;
+      type: WorkingPaperType; wpKind: WpKind; paperCode?: string;
+    }>);
+
+    const paperIdMap = new Map<string, string>(); // code → wp.id
+
+    for (const def of paperDefs) {
+      const wp = await this.prisma.workingPaper.create({
+        data: {
+          auditId:      audit.id,
+          code:         def.code,
+          indexSection: def.indexSection,
+          title:        def.title,
+          type:         def.type,
+          wpKind:       def.wpKind,
+          paperCode:    def.paperCode ?? null,
+          preparedById: user.id,
+          status:       'SIGNED_OFF' as any,
+          preparedAt:   new Date('2025-03-20'),
+          reviewedAt:   new Date('2025-03-25'),
+          signedOffAt:  new Date('2025-03-28'),
+        },
+      });
+      paperIdMap.set(def.code, wp.id);
+      if (def.paperCode) paperIdMap.set(def.paperCode, wp.id);
+
+      if (def.paperCode && (def.wpKind === WpKind.SMART || def.wpKind === WpKind.MASTER)) {
+        const tpl = PAPER_TEMPLATES[def.paperCode];
+        if (tpl?.length) {
+          await this.prisma.paperSection.createMany({
+            data: tpl.map((t) => ({
+              paperId:      wp.id,
+              sectionKey:   t.sectionKey,
+              label:        t.label,
+              description:  t.description  ?? null,
+              fieldType:    t.fieldType,
+              value:        (t.defaultValue ?? null) as any,
+              options:      (t.options      ?? [])   as any,
+              isRequired:   t.isRequired,
+              isAutoFilled: t.isAutoFilled,
+              sourceRef:    t.sourceRef     ?? null,
+              sortOrder:    t.sortOrder,
+              aiHint:       t.aiHint        ?? null,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+    }
+
+    // ── 5. Populate sections ─────────────────────────────────────────────────
+    await this._populateDemoSections(audit.id, paperIdMap);
+
+    // ── 6. Create a demo finding ─────────────────────────────────────────────
+    const c01Id = paperIdMap.get('C-01');
+    await this.prisma.finding.create({
+      data: {
+        auditId:            audit.id,
+        organizationId:     user.organizationId,
+        workingPaperId:     c01Id,
+        title:              'Diferencia en Conciliación Bancaria — Banco BAC cuenta 001-123456-7',
+        severity:           'LOW',
+        status:             'CLOSED',
+        condition:          'Al 31 de diciembre de 2024, la conciliación bancaria de la cuenta corriente 001-123456-7 del Banco BAC Credomatic presentó una partida en conciliación pendiente por $3,200, correspondiente a un cheque girado el 28 de diciembre de 2024 que no fue presentado al cobro dentro del período.',
+        criteria:           'Las políticas contables de la entidad establecen que las conciliaciones bancarias deben prepararse mensualmente y las partidas en conciliación con antigüedad mayor a 30 días deben investigarse. NIA 505 — Confirmaciones Externas. NIIF para PYMES Sección 7 — Estado de Flujos de Efectivo.',
+        cause:              'El cheque No. 0012547 fue girado a favor del proveedor Distribuidora El Sol SA de CV el 28 de diciembre de 2024 por pago de facturas. El beneficiario lo presentó al cobro el 8 de enero de 2025, posterior al cierre del período.',
+        effect:             'La partida en conciliación de $3,200 es inferior al Umbral de Ajuste Específico (UAE = $7,500) establecido en la hoja de materialidad A-06, por lo que no constituye una incorrección material. La cuenta bancaria no requiere ajuste.',
+        risk:               'Bajo — la partida es inferior al UAE y quedó conciliada en el período siguiente.',
+        recommendation:     '1. Documentar la partida en la conciliación bancaria de enero 2025 y verificar el cobro efectivo. 2. Reforzar la política de entrega de cheques para evitar demoras entre giro y entrega al beneficiario.',
+        normativeReference: 'NIA 505 — Confirmaciones Externas / NIIF para PYMES Sección 7',
+        isMaterial:         false,
+        effectAmount:       3200,
+        dueDate:            new Date('2025-06-30'),
+        closedAt:           new Date('2025-04-05'),
+        aiDraftUsed:        false,
+        qualityScore:       85,
+      },
+    });
+
+    this.logger.log(`[Demo] Auditoría demo creada: ${audit.id} para org ${user.organizationId}`);
+    return { auditId: audit.id, created: true, message: 'Auditoría demo creada exitosamente.' };
+  }
+
+  // ─── Private: populate demo sections ──────────────────────────────────────
+
+  private async _populateDemoSections(
+    auditId:    string,
+    paperIdMap: Map<string, string>,
+  ): Promise<void> {
+    const upd = async (paperId: string | undefined, sectionKey: string, value: unknown) => {
+      if (!paperId) return;
+      await this.prisma.paperSection.updateMany({
+        where: { paperId, sectionKey },
+        data:  { value: value as any },
+      });
+    };
+
+    // ── Demo data constants ──────────────────────────────────────────────────
+    const trialBalanceRows = [
+      { cuenta: '1101', descripcion: 'Caja General',                      saldo_actual:  15000,   saldo_anterior:  12000,   saldo_anterior2: 10000  },
+      { cuenta: '1102', descripcion: 'Bancos BAC Credomatic',             saldo_actual:  320000,  saldo_anterior:  280000,  saldo_anterior2: 240000 },
+      { cuenta: '1201', descripcion: 'Clientes Comerciales',              saldo_actual:  850000,  saldo_anterior:  720000,  saldo_anterior2: 650000 },
+      { cuenta: '1202', descripcion: 'Documentos por Cobrar',             saldo_actual:  120000,  saldo_anterior:  95000,   saldo_anterior2: 80000  },
+      { cuenta: '1301', descripcion: 'Inventario de Mercadería',          saldo_actual:  680000,  saldo_anterior:  620000,  saldo_anterior2: 580000 },
+      { cuenta: '1501', descripcion: 'Mobiliario y Equipo de Oficina',    saldo_actual:  420000,  saldo_anterior:  420000,  saldo_anterior2: 380000 },
+      { cuenta: '1502', descripcion: '(-) Dep. Acumulada Mob. y Equipo',  saldo_actual: -180000,  saldo_anterior: -150000,  saldo_anterior2: -120000},
+      { cuenta: '1601', descripcion: 'Gastos Diferidos (seguros 2025)',   saldo_actual:  25000,   saldo_anterior:  30000,   saldo_anterior2: 28000  },
+      { cuenta: '2101', descripcion: 'Proveedores Nacionales',            saldo_actual: -380000,  saldo_anterior: -340000,  saldo_anterior2: -300000},
+      { cuenta: '2102', descripcion: 'Préstamos Bancarios CP',            saldo_actual: -250000,  saldo_anterior: -200000,  saldo_anterior2: -180000},
+      { cuenta: '2201', descripcion: 'IVA por Pagar',                     saldo_actual: -95000,   saldo_anterior: -85000,   saldo_anterior2: -75000 },
+      { cuenta: '2202', descripcion: 'Retenciones ISSS / AFP / ISR',      saldo_actual: -28000,   saldo_anterior: -24000,   saldo_anterior2: -22000 },
+      { cuenta: '2301', descripcion: 'Préstamos Bancarios LP',            saldo_actual: -450000,  saldo_anterior: -500000,  saldo_anterior2: -540000},
+      { cuenta: '3101', descripcion: 'Capital Social',                    saldo_actual: -500000,  saldo_anterior: -500000,  saldo_anterior2: -500000},
+      { cuenta: '3201', descripcion: 'Utilidades Retenidas Inicio Año',   saldo_actual: -277000,  saldo_anterior: -186000,  saldo_anterior2: -116000},
+      { cuenta: '4101', descripcion: 'Ventas de Mercadería',              saldo_actual: -5000000, saldo_anterior: -4500000, saldo_anterior2: -4100000},
+      { cuenta: '5101', descripcion: 'Costo de Ventas',                   saldo_actual:  3200000, saldo_anterior:  2900000, saldo_anterior2: 2650000},
+      { cuenta: '6101', descripcion: 'Gastos de Ventas y Distribución',   saldo_actual:  800000,  saldo_anterior:  720000,  saldo_anterior2: 660000 },
+      { cuenta: '6201', descripcion: 'Gastos de Administración y RRHH',   saldo_actual:  550000,  saldo_anterior:  500000,  saldo_anterior2: 460000 },
+      { cuenta: '6301', descripcion: 'Gastos Financieros e Intereses',    saldo_actual:  180000,  saldo_anterior:  130000,  saldo_anterior2: 115000 },
+    ];
+
+    // Auto-assign sub_sumarias by SV code ranges
+    const svRanges = [
+      { from: 1100, to: 1199, sub: 'B-01a', grupo: 'Activos Corrientes'    },
+      { from: 1200, to: 1299, sub: 'B-01b', grupo: 'Activos Corrientes'    },
+      { from: 1300, to: 1399, sub: 'B-01c', grupo: 'Activos Corrientes'    },
+      { from: 1500, to: 1699, sub: 'B-02a', grupo: 'Activos No Corrientes' },
+      { from: 2100, to: 2299, sub: 'B-03a', grupo: 'Pasivos Corrientes'    },
+      { from: 3000, to: 3999, sub: 'B-05a', grupo: 'Patrimonio'            },
+      { from: 4000, to: 4999, sub: 'B-06a', grupo: 'Resultados'            },
+      { from: 5000, to: 5999, sub: 'B-06b', grupo: 'Resultados'            },
+      { from: 6000, to: 6999, sub: 'B-06c', grupo: 'Resultados'            },
+    ];
+
+    const accountMappingRows = trialBalanceRows.map((r) => {
+      const code = parseInt(r.cuenta, 10);
+      // 2301 → manually reclassify to B-04a Pasivos No Corrientes
+      if (r.cuenta === '2301') {
+        return { ...r, sub_sumaria: 'B-04a', grupo: 'Pasivos No Corrientes' };
+      }
+      const range = svRanges.find((rg) => code >= rg.from && code <= rg.to);
+      return { ...r, sub_sumaria: range?.sub ?? 'B-01d', grupo: range?.grupo ?? 'Otros' };
+    });
+
+    const MG = 150000;
+    const ME =  90000;
+    const totalAbs = trialBalanceRows.reduce((s, r) => s + Math.abs(r.saldo_actual), 0);
+
+    const semaforoRows = accountMappingRows.map((r) => {
+      const abs = Math.abs(r.saldo_actual);
+      const semaforo: 'ROJO' | 'AMARILLO' | 'VERDE' =
+        abs > MG ? 'ROJO' : abs >= ME ? 'AMARILLO' : 'VERDE';
+      const enfoque =
+        semaforo === 'ROJO'
+          ? 'Pruebas sustantivas extensas — confirmación externa, arqueo o corte'
+          : semaforo === 'AMARILLO'
+          ? 'Procedimientos analíticos + sustantivos focalizados'
+          : 'Procedimientos analíticos suficientes';
+      return {
+        cuenta:       r.cuenta,
+        descripcion:  r.descripcion,
+        saldo_actual: r.saldo_actual,
+        pct_total:    totalAbs > 0 ? Math.round((abs / totalAbs) * 10000) / 100 : 0,
+        sub_sumaria:  r.sub_sumaria,
+        semaforo,
+        enfoque,
+      };
+    });
+
+    // ── Sub-sumaria totals ───────────────────────────────────────────────────
+    const subSumariaMap: Record<string, { saldo_actual: number; saldo_anterior: number; grupo: string }> = {};
+    for (const r of accountMappingRows) {
+      if (!subSumariaMap[r.sub_sumaria]) {
+        subSumariaMap[r.sub_sumaria] = { saldo_actual: 0, saldo_anterior: 0, grupo: r.grupo };
+      }
+      subSumariaMap[r.sub_sumaria].saldo_actual   += r.saldo_actual;
+      subSumariaMap[r.sub_sumaria].saldo_anterior += r.saldo_anterior;
+    }
+    const subSumariaTotals = Object.entries(subSumariaMap).map(([sub, v]) => ({
+      sub_sumaria: sub, grupo: v.grupo, saldo_actual: v.saldo_actual, saldo_anterior: v.saldo_anterior,
+      variacion: v.saldo_actual - v.saldo_anterior,
+      variacion_pct: v.saldo_anterior !== 0 ? Math.round(((v.saldo_actual - v.saldo_anterior) / Math.abs(v.saldo_anterior)) * 10000) / 100 : null,
+    }));
+
+    // ── A-03: Entendimiento del Negocio (PT-A1) ──────────────────────────────
+    const a03Id = paperIdMap.get('A-03');
+    await upd(a03Id, 'S1',
+      'Razón Social: Empresa Comercial Demo SA de CV\nNIT: 0614-010185-101-7 | NRC: 123456-7\nDomicilio Fiscal: Colonia Escalón, Calle La Mascota No. 245, San Salvador\nEjercicio Auditado: 1 de enero al 31 de diciembre de 2024\nFecha de Cierre Contable: 31 de diciembre de 2024\nRepresentante Legal: Lic. Carlos Eduardo Pérez Martínez\nContacto Financiero: Lic. Roberto Morales — Gerente Financiero / Tel. 2222-3333');
+    await upd(a03Id, 'S2',
+      'Empresa Comercial Demo SA de CV es una sociedad anónima de capital variable constituida en El Salvador en 1998. Su actividad principal es el comercio al por mayor de productos de consumo masivo, ferretería y electrodomésticos, con distribución a más de 300 clientes activos en los departamentos de San Salvador, La Libertad y Sonsonate.\n\nPrincipales líneas de negocio:\n• Importación y distribución de electrodomésticos (45% de ingresos)\n• Distribución de productos de ferretería (35% de ingresos)\n• Productos de consumo y hogar (20% de ingresos)\n\nLa empresa tiene 12 años de relación comercial ininterrumpida con Proveedor Global Corp y mantiene una participación de mercado estimada en el 8% del segmento mayorista de la Zona Central.');
+    await upd(a03Id, 'S3',
+      'Marcos normativos aplicables:\n• Contabilidad: NIIF para las PYMES (adoptadas por el CVPCPA mediante Resolución 129/2022)\n• Auditoría: NIA (Normas Internacionales de Auditoría) vigentes\n• Tributario: Código Tributario DL 230/2000, Ley ISR DL 134/1991, Ley IVA DL 296/1992\n• Societario: Código de Comercio de El Salvador — SA de CV\n• Laboral: Código de Trabajo, Ley del Seguro Social, Sistema de Ahorro para Pensiones (SAP)\n• No tiene obligaciones en mercado de valores. No es entidad regulada por la SSF.');
+    await upd(a03Id, 'S4',
+      'ERP: ODOO 16 Community implementado en enero 2023 (migración desde Excel). Módulos activos: Contabilidad, Inventario, Compras, Ventas, Facturación Electrónica DTE. Base de datos: PostgreSQL 14. Servidor: hosting compartido con backup semanal.\n\nRiesgos TI relevantes:\n• Ausencia de control de versiones en el ERP — actualizaciones manuales sin ambiente de pruebas\n• Backups semanales (no diarios) — riesgo de pérdida de hasta 7 días de transacciones\n• Sin segregación de funciones completa en el módulo contable — el Contador puede crear y aprobar asientos\n• Facturación Electrónica (DTE) integrada con DGII mediante conector hacienda.gob.sv');
+    await upd(a03Id, 'S5',
+      'Estructura organizacional:\n• Junta General de Accionistas (reunión anual)\n• Gerencia General: Lic. Carlos Pérez (Director y Gerente General)\n• Gerencia Financiera: Lic. Roberto Morales (supervisa Contabilidad y Tesorería)\n• Contabilidad: Lcda. Ana Flores (Contadora General) + 2 auxiliares\n• Ventas: 8 ejecutivos de ventas y distribución\n• Bodega: 12 empleados (recepción, despacho, inventario)\n• Total empleados: 47\n\nNo existe función de Auditoría Interna. El Comité de Auditoría está integrado por 2 socios minoritarios.');
+    await upd(a03Id, 'S6',
+      'Cambios significativos en 2024:\n1. Ampliación de bodega: en marzo 2024 se arrendó un nuevo local de 800 m² en Soyapango para aumentar la capacidad de almacenamiento (+40%). Inversión en estanterías y equipo: $42,000.\n2. Nuevo proveedor principal: incorporación de Electrotek Internacional como proveedor de electrodomésticos (facturación 2024: $850,000), reemplazando parcialmente a Distribuidora Regional.\n3. Implementación de crédito automatizado: en julio 2024 se implementó un módulo de scoring de crédito básico en ODOO para las cuentas por cobrar. Sin cambios en política contable de reconocimiento.\n4. Cambio de contador: en agosto 2024 renunció el Contador anterior (Sr. Marco López, 8 años en la empresa) y fue reemplazado por Lcda. Ana Flores.');
+    await upd(a03Id, 'S7',
+      'Historial de auditorías anteriores:\n• 2023: Auditoría de EEFF ejecutada por el mismo despacho. Opinión sin modificaciones. Tres observaciones de control interno: (1) falta de segregación en módulo contable — en proceso de mejora, (2) inventario con diferencias en conteo vs. sistema — corregido en 2024 con inventario trimestral, (3) conciliaciones bancarias con retraso — mejorado a proceso mensual.\n• 2022: Auditoría de EEFF por despacho anterior (Auditores Asociados SA). Opinión sin modificaciones. Observación: cuentas por cobrar sin política de provisión documentada — corregida en 2023.');
+    await upd(a03Id, 'S8',
+      'Factores externos relevantes en 2024:\n• Inflación en El Salvador: 2.8% promedio anual (BCR). Impacto moderado en costos de importación.\n• Tipo de cambio: El Salvador utiliza dólar estadounidense como moneda oficial — sin riesgo cambiario en transacciones locales. Proveedores internacionales facturan en USD.\n• Sector comercio mayorista: crecimiento sectorial estimado en 5.2% (DIGESTYC). La empresa creció 11.1% en ingresos, superando el promedio sectorial.\n• Tasa de interés activa promedio: 7.8% (BCR) — afecta el costo de los préstamos bancarios de la empresa.\n• Sin contingencias regulatorias conocidas. Sin litigios laborales activos de cuantía material.');
+
+    // ── A-04: Control Interno (PT-A3) — Ciclo de Tesorería ──────────────────
+    const a04Id = paperIdMap.get('A-04');
+    await upd(a04Id, 'S1', 'Ciclo de Tesorería — Caja y Bancos');
+    await upd(a04Id, 'S2', [
+      { num: 1, descripcion: 'Autorización de desembolsos por Gerencia Financiera (>$1,000)',  tipo: 'Preventivo',  frecuencia: 'Por transacción', responsable: 'Gerente Financiero',      riesgo: 'Desembolsos no autorizados' },
+      { num: 2, descripcion: 'Conciliaciones bancarias mensuales independientes del cajero',   tipo: 'Detectivo',   frecuencia: 'Mensual',          responsable: 'Contador General',       riesgo: 'Diferencias no detectadas' },
+      { num: 3, descripcion: 'Fondo de caja chica con límite de $500 y arqueo quincenal',     tipo: 'Preventivo',  frecuencia: 'Quincenal',        responsable: 'Cajero + Contabilidad',  riesgo: 'Malversación de fondos' },
+      { num: 4, descripcion: 'Firma dual en cheques mayores a $5,000',                        tipo: 'Preventivo',  frecuencia: 'Por transacción', responsable: 'Gerente General + GF',   riesgo: 'Emisión de cheques no autorizados' },
+      { num: 5, descripcion: 'Revisión semanal de extractos bancarios por Gerencia',          tipo: 'Detectivo',   frecuencia: 'Semanal',          responsable: 'Gerente Financiero',      riesgo: 'Transacciones no autorizadas' },
+    ]);
+    await upd(a04Id, 'S3', [
+      { control: 1, tecnica: 'Inspección',    muestra: 24, periodo: 'Ene-Dic 2024', resultado: 'Sin excepciones — 24/24 desembolsos >$1,000 con autorización firmada del GF' },
+      { control: 2, tecnica: 'Rejecución',    muestra: 6,  periodo: 'Ene-Jun 2024', resultado: 'Conciliaciones correctas — diferencia max $200 en partidas en tránsito documentadas' },
+      { control: 3, tecnica: 'Observación',   muestra: 2,  periodo: 'Oct-Nov 2024', resultado: '1 excepción: arqueo de octubre con diferencia de $45 (ver S4)' },
+      { control: 4, tecnica: 'Inspección',    muestra: 15, periodo: 'Ene-Dic 2024', resultado: 'Sin excepciones — 15/15 cheques >$5,000 con firma dual' },
+      { control: 5, tecnica: 'Inspección',    muestra: 12, periodo: 'Ene-Dic 2024', resultado: 'Sin excepciones — revisiones documentadas con evidencia de firma del GF' },
+    ]);
+    await upd(a04Id, 'S4',
+      'Excepción en Control #3 — Arqueo de Caja Chica (Octubre 2024):\nEn el arqueo realizado el 15 de octubre de 2024, se detectó una diferencia de $45 entre el efectivo físico y el saldo contable del fondo de caja chica. Según indagación con el cajero, el faltante correspondía a un adelanto informal para compra de insumos de oficina que no había sido voucherizado. El faltante fue reintegrado el mismo día.\n\nCalificación de la excepción: Aislada, de cuantía no material ($45 vs. UAE=$7,500). No afecta la evaluación global del control. Se recomienda reforzar la política de voucherización inmediata en caja chica.');
+    await upd(a04Id, 'S5', 'BAJO');
+    await upd(a04Id, 'S6', 'MODERADO');
+    await upd(a04Id, 'S7',
+      'Dado que el RC del ciclo de Tesorería se evaluó como BAJO (controles efectivos con una sola excepción aislada de cuantía no material), el RD requerido es MODERADO. Esto significa:\n\n• Para Caja y Bancos (C-01): se aplicarán confirmaciones bancarias de las cuentas principales, conciliación al 31/12/2024 y arqueo sorpresivo de caja chica — alcance moderado de pruebas sustantivas.\n• No se amplía el muestreo de transacciones de caja más allá de los 30 ítems planificados.\n• Se mantiene el tamaño de muestra para conciliaciones bancarias en 2 meses (diciembre + mes adicional de alto riesgo).');
+    await upd(a04Id, 'S8',
+      'Los controles del ciclo de Tesorería son efectivos en su operación. La única excepción identificada (diferencia de $45 en caja chica) es de naturaleza aislada y cuantía inmaterial. Se depositó un nivel BAJO de confianza en los controles, lo que reduce los procedimientos sustantivos requeridos en el área de Caja y Bancos.\n\nDeficiencia comunicable (NIA 265): La excepción en caja chica no constituye deficiencia significativa por su cuantía. Se recomendará mejora en la política de voucherización en la carta de debilidades D-02.');
+
+    // ── A-05: Riesgos (PT-A2) ────────────────────────────────────────────────
+    const a05Id = paperIdMap.get('A-05');
+    await upd(a05Id, 'S1', [
+      { area: 'Caja y Bancos',         proceso: 'Tesorería',     materiala: true  },
+      { area: 'Cuentas por Cobrar',    proceso: 'Ventas/CxC',    materiala: true  },
+      { area: 'Inventarios',           proceso: 'Compras/Bodega', materiala: true  },
+      { area: 'Activos Fijos',         proceso: 'Administración', materiala: true  },
+      { area: 'Pasivos Financieros',   proceso: 'Tesorería',     materiala: true  },
+      { area: 'Ingresos/Costos',       proceso: 'Ventas',        materiala: true  },
+    ]);
+    await upd(a05Id, 'S2', [
+      { cuenta: '1101/1102', saldo: 335000,  moneda: 'USD', afirmaciones: 'Existencia, Completitud, Valuación, Presentación' },
+      { cuenta: '1201/1202', saldo: 970000,  moneda: 'USD', afirmaciones: 'Existencia, Completitud, Valuación (neto de provisiones), Corte' },
+      { cuenta: '1301',      saldo: 680000,  moneda: 'USD', afirmaciones: 'Existencia, Completitud, Valuación (FIFO/PMP), Propiedad' },
+      { cuenta: '1501/1502', saldo: 240000,  moneda: 'USD', afirmaciones: 'Existencia, Valuación (neto dep.), Presentación' },
+      { cuenta: '2101/2102', saldo: -630000, moneda: 'USD', afirmaciones: 'Completitud, Exactitud, Corte, Clasificación' },
+      { cuenta: '4101/5101', saldo: -1800000,moneda: 'USD', afirmaciones: 'Ocurrencia, Completitud, Corte, Medición' },
+    ]);
+    await upd(a05Id, 'S3',
+      'CUENTAS POR COBRAR (RI: ALTO)\nFactores que incrementan el RI: (1) El cambio de sistema ERP en 2023 generó diferencias históricas entre el módulo de cartera y contabilidad que requirieron ajustes manuales. (2) El cambio de contador en agosto 2024 aumenta el riesgo de errores en la aplicación de la política de provisiones. (3) La cartera incluye clientes con montos superiores a $50,000 que concentran el 65% del saldo.\n\nINVENTARIOS (RI: ALTO)\nFactores: (1) Alta rotación de productos con precios volátiles de importación. (2) El sistema de inventario en ODOO tuvo diferencias en el primer año de implementación. (3) Ampliación de bodega en 2024 con nuevos procesos de recepción no maduros.\n\nCAJA Y BANCOS (RI: BAJO)\nControles robustos. Sin cambios sistémicos. Historial limpio.');
+    await upd(a05Id, 'S4', [
+      { area: 'Cuentas por Cobrar', score: 4, nivel: 'ALTO',   base: 'Cambio contador, concentración cartera, migración ERP' },
+      { area: 'Inventarios',        score: 4, nivel: 'ALTO',   base: 'Precios volátiles, nuevo proceso bodega, implementación ODOO' },
+      { area: 'Ingresos',           score: 3, nivel: 'MEDIO',  base: 'Riesgo de corte de ventas / reconocimiento anticipado' },
+      { area: 'Caja y Bancos',      score: 2, nivel: 'BAJO',   base: 'Controles robustos, historial limpio' },
+      { area: 'Activos Fijos',      score: 2, nivel: 'BAJO',   base: 'Movimientos mínimos, tasas de depreciación estables' },
+      { area: 'Pasivos',            score: 3, nivel: 'MEDIO',  base: 'Préstamos con covenants — riesgo de reclasificación CP/LP' },
+    ]);
+    await upd(a05Id, 'S5', [
+      { riesgo: 'Sobrevaluación de inventario por costo desactualizado', area: 'Inventarios', probabilidad: 'MEDIA', impacto: 'ALTO', respuesta: 'Prueba de inventario físico + verificación de costos de importación' },
+      { riesgo: 'Reconocimiento de ingresos en período incorrecto (corte)', area: 'Ingresos', probabilidad: 'MEDIA', impacto: 'ALTO', respuesta: 'Prueba de corte de ventas — últimos 15 días del año' },
+      { riesgo: 'Incobrabilidad no provisionada en cartera de clientes', area: 'CxC', probabilidad: 'MEDIA', impacto: 'MEDIO', respuesta: 'Análisis de antigüedad + circularización de saldos >$20,000' },
+      { riesgo: 'Reclasificación CP/LP en préstamos bancarios', area: 'Pasivos', probabilidad: 'BAJA', impacto: 'MEDIO', respuesta: 'Revisión de contratos de crédito y cuotas a vencer' },
+    ]);
+    await upd(a05Id, 'S6',
+      'Riesgos significativos identificados conforme NIA 315:\n\n1. CORTE DE INGRESOS — Riesgo de que las ventas de diciembre se registren en enero o viceversa. Requiere procedimiento específico: prueba de corte documentando los 20 últimos registros de ventas del año y los 20 primeros de enero 2025.\n\n2. VALUACIÓN DE INVENTARIO — El cambio de proveedor principal en 2024 (Electrotek Internacional) implica costos de importación distintos a los históricos. Se realizará prueba de comparación entre factura de importación y costo unitario en sistema.\n\nEstos dos riesgos recibirán procedimientos adicionales independientemente de la evaluación de controles.');
+    await upd(a05Id, 'S7',
+      'Evaluación del Triángulo del Fraude (ACFE) — 2024:\n\nPRESIÓN: Moderada. La empresa creció 11.1% en ingresos vs. 8% planificado. No se identifican presiones de deuda inminente. El nuevo préstamo LP de $500,000 tiene covenants de cobertura de intereses que podrían generar incentivo de manipulación si la utilidad cae.\n\nOPORTUNIDAD: Moderada. La ausencia de función de Auditoría Interna y la segregación incompleta en el módulo contable de ODOO generan oportunidades. El cambio de contador en agosto 2024 (período de transición) es un factor de riesgo adicional.\n\nRACIONALIZACIÓN: Baja. La empresa tiene cultura de cumplimiento tributario documentada. Sin antecedentes de fraude.\n\nConclusión: Riesgo de fraude bajo-moderado. Sin indicadores específicos que justifiquen procedimientos especiales de NIA 240 más allá de los ya planificados.');
+    await upd(a05Id, 'S8', 'MODERADO');
+
+    // ── A-06: Materialidad (PT-A4) ───────────────────────────────────────────
+    const a06Id = paperIdMap.get('A-06');
+    await upd(a06Id, 'S1',  'INGRESOS_TOTALES');
+    await upd(a06Id, 'S1b', 5000000);
+    await upd(a06Id, 'S2',  3);
+    await upd(a06Id, 'S3',  150000);
+    await upd(a06Id, 'S4',  90000);
+    await upd(a06Id, 'S5',  7500);
+    await upd(a06Id, 'S6',
+      'Justificación del criterio elegido:\n\nBase elegida: INGRESOS TOTALES ($5,000,000)\nPorcentaje aplicado: 3%\n\nRationale:\n• La empresa es una distribuidora comercial. Sus ingresos son la métrica principal de dimensión del negocio para los usuarios de los estados financieros (socios, bancos, proveedores). Los activos totales no son tan representativos dado que gran parte del activo es inventario, cuya valuación depende de las propias estimaciones del cliente.\n• La utilidad antes de impuestos ($270,000) es volátil y relativamente pequeña como proporción de los activos. Si se usara 5% sobre utilidad = $13,500, lo que parece muy conservador dada la dimensión del negocio.\n• El rango NIA 320 para ingresos es 1%-3%. Se elige 3% (límite superior) porque los controles del ciclo de Tesorería son robustos (RC=Bajo) y el entorno regulatorio no exige materialidad más estricta.\n\nMG = $5,000,000 × 3% = $150,000\nME = $150,000 × 60% = $90,000 (aplicamos 60% en lugar del 75% estándar dado el RI moderado en inventarios y CxC).\nUAE = $150,000 × 5% = $7,500');
+    await upd(a06Id, 'S7',
+      'Comparación con período anterior:\nMG 2023: $135,000 (3% sobre ingresos de $4,500,000)\nMG 2024: $150,000 (3% sobre ingresos de $5,000,000)\n\nVariación: +$15,000 (+11.1%) — directamente proporcional al crecimiento de ingresos. La variación es razonable y no requiere ajuste de enfoque. No hay cambio en metodología de cálculo. El mismo porcentaje del 3% fue aplicado en el período anterior, manteniendo consistencia (NIA 320.A14).');
+
+    // ── B-00: Cédula Madre (PT-FIN-B00) ─────────────────────────────────────
+    const b00Id = paperIdMap.get('B-00');
+    await upd(b00Id, 'S0', 'INGRESOS_TOTALES');
+    await upd(b00Id, 'S1', trialBalanceRows);
+    await upd(b00Id, 'S2', accountMappingRows);
+    await upd(b00Id, 'S3', true);
+    await upd(b00Id, 'S4', subSumariaTotals);
+    await upd(b00Id, 'S5',
+      'ALERTAS DEL BALANCE DE COMPROBACIÓN:\n\n⚠️ CUENTAS POR COBRAR ($850,000): Incremento del 18.1% vs. año anterior ($720,000). Supera el crecimiento de ingresos (11.1%), lo que sugiere posible deterioro en recuperación de cartera. Verificar con C-02 (circularización y análisis de antigüedad).\n\n⚠️ INVENTARIO ($680,000): Incremento del 9.7% vs. año anterior ($620,000), en línea con el crecimiento de ventas. Sin embargo, la ampliación de bodega en marzo 2024 puede haber generado diferencias en el recuento. Verificar con C-03 (observación de inventario físico).\n\n✅ PASIVOS FINANCIEROS ($700,000 total): La deuda total disminuyó de $700,000 a $700,000 (sin cambio neto), aunque el LP bajó de $500,000 a $450,000 mientras el CP subió de $200,000 a $250,000. Verificar clasificación CP/LP de los préstamos con C-08.\n\n📊 RESULTADO NETO: Utilidad estimada $270,000 (+45.2% vs. año anterior $186,000) — crecimiento positivo consistente con la expansión del negocio.');
+    await upd(b00Id, 'S6', semaforoRows);
+    await upd(b00Id, 'S7',
+      'ANÁLISIS GLOBAL — Empresa Comercial Demo SA de CV — 2024\n\nSe aplicó el procedimiento analítico de Cédula Madre conforme NIA 520. El balance de comprobación al 31 de diciembre de 2024 totaliza correctamente (débitos = créditos = $7,160,000). Se identificaron 20 cuentas.\n\nDistribución del semáforo NIA 320:\n• ROJO (>MG $150,000): 15 cuentas — requieren pruebas sustantivas extensas\n• AMARILLO (ME $90,000 - MG $150,000): 2 cuentas (1202 Documentos por Cobrar, 2201 IVA por Pagar) — analíticas + sustantivas focalizadas\n• VERDE (<ME $90,000): 3 cuentas (1101 Caja, 1601 Gastos Diferidos, 2202 Retenciones) — analíticas suficientes\n\nLas 5 cuentas con mayor exposición material son: Ventas ($5M), Costo de Ventas ($3.2M), Clientes ($850K), Inventario ($680K) y Gastos de Ventas ($800K). Estas cuentas representan el 94.3% del total absoluto y recibirán procedimientos sustantivos prioritarios.');
+    await upd(b00Id, 'S8', [
+      { cuenta: '1101', descripcion: 'Caja General',              saldo_actual: 15000,   saldo_anterior: 12000,   variacion: 3000,   variacion_pct: 25.0,  ajuste_propuesto: 0 },
+      { cuenta: '1102', descripcion: 'Bancos BAC Credomatic',     saldo_actual: 320000,  saldo_anterior: 280000,  variacion: 40000,  variacion_pct: 14.3,  ajuste_propuesto: 0 },
+      { cuenta: '1201', descripcion: 'Clientes Comerciales',      saldo_actual: 850000,  saldo_anterior: 720000,  variacion: 130000, variacion_pct: 18.1,  ajuste_propuesto: 0 },
+      { cuenta: '1301', descripcion: 'Inventario de Mercadería',  saldo_actual: 680000,  saldo_anterior: 620000,  variacion: 60000,  variacion_pct: 9.7,   ajuste_propuesto: 0 },
+      { cuenta: '4101', descripcion: 'Ventas de Mercadería',      saldo_actual: -5000000,saldo_anterior: -4500000,variacion: -500000,variacion_pct: 11.1,  ajuste_propuesto: 0 },
+      { cuenta: '5101', descripcion: 'Costo de Ventas',           saldo_actual: 3200000, saldo_anterior: 2900000, variacion: 300000, variacion_pct: 10.3,  ajuste_propuesto: 0 },
+    ]);
+    await upd(b00Id, 'S9', {
+      balance_general: {
+        activos_corrientes:     { saldo: 1985000, saldo_anterior: 1727000 },
+        activos_no_corrientes:  { saldo: 265000,  saldo_anterior: 300000  },
+        total_activos:          { saldo: 2250000, saldo_anterior: 2027000 },
+        pasivos_corrientes:     { saldo: 753000,  saldo_anterior: 649000  },
+        pasivos_no_corrientes:  { saldo: 450000,  saldo_anterior: 500000  },
+        total_pasivos:          { saldo: 1203000, saldo_anterior: 1149000 },
+        patrimonio:             { saldo: 777000,  saldo_anterior: 686000  },
+        total_pasivos_patrimonio:{ saldo: 2250000, saldo_anterior: 2027000},
+      },
+      estado_resultados: {
+        ingresos:               { saldo: 5000000, saldo_anterior: 4500000 },
+        costo_ventas:           { saldo: 3200000, saldo_anterior: 2900000 },
+        utilidad_bruta:         { saldo: 1800000, saldo_anterior: 1600000 },
+        gastos_operativos:      { saldo: 1530000, saldo_anterior: 1350000 },
+        utilidad_operacional:   { saldo: 270000,  saldo_anterior: 250000  },
+        gastos_financieros:     { saldo: 180000,  saldo_anterior: 130000  },
+        utilidad_antes_isr:     { saldo: 270000,  saldo_anterior: 186000  },
+      },
+    });
+
+    // ── C-01: Caja y Bancos (PT-FIN-C-SUST) ─────────────────────────────────
+    const c01Id = paperIdMap.get('C-01');
+    await upd(c01Id, 'S1', 'C-01 · Caja y Bancos — Conciliaciones y Arqueo\nRef. B-00 S6: Cuentas 1101 y 1102 | Saldo total: $335,000');
+    await upd(c01Id, 'S2', [
+      { procedimiento: 'Confirmación bancaria externa',       objetivo: 'Existencia y exactitud de saldos bancarios al 31/12/2024',          responsable: 'Socio a cargo',    fecha_ejecucion: '2025-01-20', estado: 'Completado' },
+      { procedimiento: 'Rejecución de conciliación bancaria', objetivo: 'Verificar la conciliación bancaria al 31/12/2024',                   responsable: 'Auditor Senior',  fecha_ejecucion: '2025-02-05', estado: 'Completado' },
+      { procedimiento: 'Arqueo de caja chica',                objetivo: 'Verificar existencia de efectivo en caja al momento del arqueo',     responsable: 'Auditor Junior',  fecha_ejecucion: '2025-01-22', estado: 'Completado' },
+      { procedimiento: 'Análisis de transacciones inusuales', objetivo: 'Identificar transacciones fuera de patrón en diciembre 2024',        responsable: 'Auditor Senior',  fecha_ejecucion: '2025-02-10', estado: 'Completado' },
+    ]);
+    await upd(c01Id, 'S3', [
+      { hallazgo: 'Confirmación bancaria BAC Credomatic',  resultado: 'CONFORME',   monto_confirmado: 320000, diferencia: 0,   explicacion: 'El banco confirmó el saldo de $320,000 al 31/12/2024. Sin diferencias.' },
+      { hallazgo: 'Partida en conciliación cheque 0012547', resultado: 'DIFERENCIA', monto_confirmado: 3200,   diferencia: 3200, explicacion: 'Cheque girado 28/12/2024, cobrado 08/01/2025. Partida <UAE. Ver hallazgo HF-01.' },
+      { hallazgo: 'Arqueo caja chica',                      resultado: 'CONFORME',   monto_confirmado: 15000,  diferencia: 0,   explicacion: 'Efectivo + vouchers = $15,000 (límite del fondo). Sin diferencias en arqueo de enero 2025.' },
+    ]);
+    await upd(c01Id, 'S4', []);
+    await upd(c01Id, 'S5',
+      'CONCLUSIÓN — Caja y Bancos (NIA 500/505):\n\nSe han aplicado los procedimientos sustantivos planificados sobre las cuentas de Caja y Bancos al 31 de diciembre de 2024. Los procedimientos aplicados incluyen: (1) confirmación bancaria externa con Banco BAC Credomatic, (2) rejecución de la conciliación bancaria al 31/12/2024, (3) arqueo de caja chica y (4) análisis de transacciones inusuales.\n\nRESULTADOS:\n• Saldo confirmado por el banco: $320,000 — SIN DIFERENCIAS materiales\n• Partida en conciliación: cheque No. 0012547 por $3,200 — inferior al UAE ($7,500), no requiere ajuste\n• Caja chica: $15,000 — SIN DIFERENCIAS\n• No se identificaron transacciones inusuales o patrones anómalos\n\nEL SALDO DE CAJA Y BANCOS POR $335,000 ESTÁ RAZONABLEMENTE PRESENTADO en todos los aspectos materiales al 31 de diciembre de 2024, de conformidad con las NIIF para PYMES (Sección 7 — Efectivo y Equivalentes de Efectivo).');
+    await upd(c01Id, 'S6', 'MODERADO');
+    await upd(c01Id, 'S7',
+      'RECOMENDACIONES — Caja y Bancos:\n\n1. Implementar la política de entrega inmediata de cheques a beneficiarios para evitar partidas en tránsito innecesarias.\n2. Considerar migrar a pagos electrónicos (transferencias ACH / DTE pago) para proveedores recurrentes, eliminando el riesgo de cheques no cobrados.\n\nLas observaciones han sido comunicadas a la Gerencia Financiera el 10 de febrero de 2025. La administración aceptó ambas recomendaciones e indicará implementación en Q1 2025.');
+    await upd(c01Id, 'S8', 'OPINION_LIMPIA');
+
+    // ── E-01: Dictamen (PT-FIN-DICT) ─────────────────────────────────────────
+    const e01Id = paperIdMap.get('E-01');
+    if (e01Id) {
+      const e01Sections = await this.prisma.paperSection.findMany({
+        where: { paperId: e01Id }, select: { sectionKey: true },
+      });
+      const sectionKeys = new Set(e01Sections.map((s) => s.sectionKey));
+      if (sectionKeys.has('S1')) {
+        await upd(e01Id, 'S1', 'OPINION_SIN_MODIFICACIONES');
+      }
+      if (sectionKeys.has('S2')) {
+        await upd(e01Id, 'S2',
+          'INFORME DEL AUDITOR INDEPENDIENTE\n\nA los Accionistas de Empresa Comercial Demo SA de CV:\n\nOPINIÓN\nHemos auditado los estados financieros de Empresa Comercial Demo SA de CV (la "Sociedad"), que comprenden el balance general al 31 de diciembre de 2024, el estado de resultados, el estado de cambios en el patrimonio y el estado de flujos de efectivo correspondientes al ejercicio terminado en dicha fecha, así como las notas que incluyen un resumen de las políticas contables significativas.\n\nEn nuestra opinión, los estados financieros adjuntos presentan razonablemente, en todos los aspectos materiales, la situación financiera de Empresa Comercial Demo SA de CV al 31 de diciembre de 2024, así como sus resultados y flujos de efectivo por el ejercicio terminado en dicha fecha, de conformidad con las Normas Internacionales de Información Financiera para las Pequeñas y Medianas Entidades (NIIF para las PYMES) adoptadas por el Consejo de Vigilancia de la Profesión de Contaduría Pública y Auditoría (CVPCPA).');
+      }
+      if (sectionKeys.has('S3')) {
+        await upd(e01Id, 'S3',
+          'BASE DE LA OPINIÓN\nHemos llevado a cabo nuestra auditoría de conformidad con las Normas Internacionales de Auditoría (NIA). Nuestras responsabilidades bajo esas normas se describen más adelante en la sección "Responsabilidades del Auditor para la Auditoría de los Estados Financieros" de nuestro informe. Somos independientes de la Sociedad de conformidad con los requerimientos éticos aplicables a nuestra auditoría de los estados financieros y hemos cumplido las demás responsabilidades de ética de conformidad con esos requerimientos. Consideramos que la evidencia de auditoría que hemos obtenido es suficiente y apropiada para proporcionar una base para nuestra opinión.\n\nMATERIALIDAD\nMaterialidad Global (MG): $150,000 — calculada al 3% sobre ingresos totales de $5,000,000.\nMaterialidad de Ejecución (ME): $90,000 — 60% de la MG.\nUmbral de Ajuste Específico (UAE): $7,500 — 5% de la MG.');
+      }
+    }
+
+    this.logger.log(`[Demo] Secciones clave pobladas para auditoría ${auditId}`);
   }
 }

@@ -10,6 +10,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { AuditOriginType, AuditStatus, AuditType, WorkingPaperType, WpKind } from '@prisma/client';
 import { CreateAuditTemplateDto, UpdateAuditTemplateDto } from './dto/audit-template.dto';
 import { PAPER_TEMPLATES } from '../working-papers/paper-templates';
+import { AuditFoldersService } from '../audit-folders/audit-folders.service';
 
 // ─── PaperDef mirrors audit-index.service interface ──────────────────────────
 
@@ -59,7 +60,10 @@ interface SystemTemplateSeed {
 export class AuditTemplatesService {
   private readonly logger = new Logger(AuditTemplatesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditFolders: AuditFoldersService,
+  ) {}
 
   // ─── Read operations ───────────────────────────────────────────────────────
 
@@ -1919,7 +1923,9 @@ export class AuditTemplatesService {
       select: { id: true },
     });
     if (existing) {
-      return { auditId: existing.id, created: false, message: 'Demo ya existe — abrirlo en el expediente.' };
+      // Ensure the expediente folder structure is initialized even for pre-existing demos
+      await this.auditFolders.initializeFromTemplate(existing.id, user);
+      return { auditId: existing.id, created: false, message: 'Demo ya existe — expediente actualizado.' };
     }
 
     // ── 1. AuditEntity demo ──────────────────────────────────────────────────
@@ -2078,6 +2084,9 @@ export class AuditTemplatesService {
         qualityScore:       85,
       },
     });
+
+    // ── 7. Initialize expediente (phases + folders + link orphan papers) ─────
+    await this.auditFolders.initializeFromTemplate(audit.id, user);
 
     this.logger.log(`[Demo] Auditoría demo creada: ${audit.id} para org ${user.organizationId}`);
     return { auditId: audit.id, created: true, message: 'Auditoría demo creada exitosamente.' };

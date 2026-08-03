@@ -1923,9 +1923,14 @@ export class AuditTemplatesService {
       select: { id: true },
     });
     if (existing) {
-      // Ensure the expediente folder structure is initialized even for pre-existing demos
-      await this.auditFolders.initializeFromTemplate(existing.id, user);
-      return { auditId: existing.id, created: false, message: 'Demo ya existe — expediente actualizado.' };
+      // Reset expediente: unlink papers first (FK has no SetNull cascade), then delete phases
+      await this.prisma.workingPaper.updateMany({
+        where: { auditId: existing.id },
+        data:  { folderId: null },
+      });
+      await this.prisma.auditPhase.deleteMany({ where: { auditId: existing.id } });
+      await this.auditFolders.initializeFromAuditTemplateSections(existing.id, user);
+      return { auditId: existing.id, created: false, message: 'Demo ya existe — expediente reinicializado con secciones A/B/C/D/E.' };
     }
 
     // ── 1. AuditEntity demo ──────────────────────────────────────────────────
@@ -2085,8 +2090,8 @@ export class AuditTemplatesService {
       },
     });
 
-    // ── 7. Initialize expediente (phases + folders + link orphan papers) ─────
-    await this.auditFolders.initializeFromTemplate(audit.id, user);
+    // ── 7. Initialize expediente using the audit template's A/B/C/D/E sections
+    await this.auditFolders.initializeFromAuditTemplateSections(audit.id, user);
 
     this.logger.log(`[Demo] Auditoría demo creada: ${audit.id} para org ${user.organizationId}`);
     return { auditId: audit.id, created: true, message: 'Auditoría demo creada exitosamente.' };

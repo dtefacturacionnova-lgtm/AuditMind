@@ -6,6 +6,7 @@ import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AuditStatus, AuditType, Prisma, UserRole } from '@prisma/client';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AuditIndexService } from './audit-index.service';
 import { AiService } from '../ai/ai.service';
 
@@ -13,11 +14,18 @@ const AUDIT_RISK_TARGET = 0.05;
 
 @Injectable()
 export class AuditsService {
+  private readonly supabaseAdmin: SupabaseClient;
+
   constructor(
     private prisma: PrismaService,
     private readonly auditIndex: AuditIndexService,
     private readonly aiService: AiService,
-  ) {}
+  ) {
+    this.supabaseAdmin = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+  }
 
   private computeMateriality(base: number, pct: number) {
     const mg = (base * pct) / 100;
@@ -68,6 +76,12 @@ export class AuditsService {
         objectives: dto.objectives,
         isInvestigationMode: dto.isInvestigationMode ?? false,
         templateId: dto.templateId ?? null,
+        originType: dto.originType,
+        requestedByName: dto.requestedByName ?? null,
+        requestedByRole: dto.requestedByRole ?? null,
+        requestDate:     dto.requestDate ? new Date(dto.requestDate) : null,
+        requestReason:   dto.requestReason ?? null,
+        requestAntecedents: dto.requestAntecedents ?? null,
         ...( materialityData && {
           materiality: materialityData.materiality,
           materialityExecution: materialityData.materialityExecution,
@@ -802,5 +816,70 @@ export class AuditsService {
     // Verify audit belongs to org
     await this.findOne(auditId, user);
     return this.auditIndex.addPaperFromTemplate(auditId, code, user.id, user.organizationId);
+  }
+
+  // ─── Documentos de soporte — Auditorías Imprevistas ──────────────────────────
+
+  async listRequestDocuments(auditId: string, user: AuthUser) {
+    await this.findOne(auditId, user); // verifica acceso
+    return this.prisma.auditRequestDocument.findMany({
+      where: { auditId },
+      orderBy: { createdAt: 'desc' },
+      include: { uploadedBy: { select: { id: true, name: true, avatarUrl: true } } },
+    });
+  }
+
+  async addRequestDocument(
+    auditId: string,
+    file: Express.Multer.File,
+    description: string | undefined,
+    user: AuthUser,
+  ) {
+    await this.findOne(auditId, user); // verifica acceso
+
+    const safeName = file.originalname.replace(/[^\w.\-]/g, '_');
+    const path = `request-docs/${auditId}/${Date.now()}_${safeName}`;
+
+    const { error: upErr } = await this.supabaseAdmin.storage
+      .from('audit-files')
+      .upload(path, file.buffer, {
+        contentType: file.mimetype || 'application/octet-stream',
+        cacheControl: '3600',
+        upsert: false,
+      });
+    if (upErr) throw new BadRequestException(`Error al subir archivo: ${upErr.message}`);
+
+    const { data: urlData } = this.supabaseAdmin.storage
+      .from('audit-files')
+      .getPublicUrl(path);
+
+    return this.prisma.auditRequestDocument.create({
+      data: {
+        auditId,
+        uploadedById: user.id,
+        filename:     path.split('/').pop()!,
+        originalName: file.originalname,
+        mimeType:     file.mimetype,
+        fileSize:     file.size,
+        fileUrl:      urlData.publicUrl,
+        description:  description ?? null,
+      },
+      include: { uploadedBy: { select: { id: true, name: true, avatarUrl: true } } },
+    });
+  }
+
+  async removeRequestDocument(auditId: string, docId: string, user: AuthUser) {
+    await this.findOne(auditId, user);
+    const doc = await this.prisma.auditRequestDocument.findFirst({
+      where: { id: docId, auditId },
+    });
+    if (!doc) throw new NotFoundException('Documento no encontrado');
+
+    // Intentar eliminar de Storage (no fatal si falla)
+    const storagePath = `request-docs/${auditId}/${doc.filename}`;
+    await this.supabaseAdmin.storage.from('audit-files').remove([storagePath]).catch(() => null);
+
+    await this.prisma.auditRequestDocument.delete({ where: { id: docId } });
+    return { removed: true };
   }
 }

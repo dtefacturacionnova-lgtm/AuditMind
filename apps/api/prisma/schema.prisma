@@ -74,11 +74,19 @@ enum AuditEntityType {
 }
 
 enum AuditOriginType {
-  PLANNED              // Originado del Plan Anual aprobado
-  UNPLANNED            // Riesgo emergente — agregado mid-year
-  MANAGEMENT_REQUEST   // Solicitado por gerencia / junta
-  REGULATORY_MANDATE   // Mandato regulatorio / legal
-  FOLLOW_UP            // Seguimiento de hallazgos previos
+  // ─── Planificadas (nacen del flujo Universo Auditable → Plan Anual) ─────────
+  PLANNED_RISK_BASED    // Planificada — Por Evaluación de Riesgos (mayor RI/RC)
+  PLANNED_COMPLIANCE    // Planificada — Por Cumplimiento Normativo (mandato legal/regulatorio)
+  // ─── Imprevistas (surgen después de aprobado el Plan Anual, siempre con plan asociado) ─
+  UNPLANNED_COMMITTEE   // Imprevista — Solicitada por Comité de Auditoría
+  UNPLANNED_MANAGEMENT  // Imprevista — Solicitada por Máxima Autoridad / Dirección
+  UNPLANNED_REGULATOR   // Imprevista — Solicitada por Fiscalizadores / Ente Regulador
+  // ─── Legacy — mantener para compatibilidad con registros existentes ──────────
+  PLANNED               // → usar PLANNED_RISK_BASED o PLANNED_COMPLIANCE en nuevos registros
+  UNPLANNED             // → usar UNPLANNED_COMMITTEE / UNPLANNED_MANAGEMENT / UNPLANNED_REGULATOR
+  MANAGEMENT_REQUEST    // → migrar a UNPLANNED_MANAGEMENT
+  REGULATORY_MANDATE    // → migrar a UNPLANNED_REGULATOR
+  FOLLOW_UP             // Seguimiento de hallazgos — siempre debe tener plan asociado
 }
 
 enum AuditOpinion {
@@ -415,9 +423,10 @@ model User {
   certifications    UserCertification[]
   competencies      UserCompetency[]
   cpeRecords        CpeRecord[]
-  auditTeams        AuditTeam[]
-  workingPapers     WorkingPaper[]        @relation("PreparedBy")
-  reviewedPapers    WorkingPaper[]        @relation("ReviewedBy")
+  auditTeams           AuditTeam[]
+  uploadedRequestDocs  AuditRequestDocument[] @relation("UploadedRequestDocs")
+  workingPapers        WorkingPaper[]        @relation("PreparedBy")
+  reviewedPapers       WorkingPaper[]        @relation("ReviewedBy")
   signedOffPapers       WorkingPaper[]        @relation("WpSignedOffBy")
   signedOffPhases       AuditPhase[]          @relation("PhaseSignOff")
   createdIndexTemplates IndexTemplate[]       @relation("IndexTemplateCreator")
@@ -934,6 +943,14 @@ model Audit {
   deferralReason          String?     // si status = DEFERRED
   deferredToDate          DateTime?   // nueva fecha tentativa si fue diferida
 
+  // ─── Auditorías Imprevistas — documentación de la solicitud ──────────────
+  // Aplica cuando originType = UNPLANNED_COMMITTEE | UNPLANNED_MANAGEMENT | UNPLANNED_REGULATOR
+  requestedByName         String?     // Nombre del solicitante (si es externo al sistema)
+  requestedByRole         String?     // Cargo / Rol del solicitante
+  requestDate             DateTime?   // Fecha formal de la solicitud
+  requestReason           String?     // Motivo / justificación de la solicitud
+  requestAntecedents      String?     // Antecedentes relevantes (contexto previo)
+
   // ─── Opinión final de la auditoría ───────────────────────────────────────
   auditOpinion            AuditOpinion?   // retroalimenta universo / coverage gap
 
@@ -972,6 +989,7 @@ model Audit {
   externalConfirmations  ExternalConfirmation[]
   bcpAudit               BcpAudit?
   connectorImports       ConnectorImport[]
+  requestDocuments       AuditRequestDocument[]
   trialBalances          TrialBalance[]
   // ─── Expediente de auditoría (fases y carpetas) ───────────────────────────
   phases                 AuditPhase[]
@@ -1101,6 +1119,28 @@ model AuditTeam {
   @@unique([auditId, userId])
   @@index([auditId])
   @@map("audit_teams")
+}
+
+// ─── Documentos de soporte para auditorías imprevistas ───────────────────────
+// Adjuntos que respaldan la solicitud (acta del comité, carta de fiscalizador,
+// memorando de gerencia, etc.). Mismos tipos de archivo que wpKind=FILE.
+model AuditRequestDocument {
+  id            String   @id @default(cuid())
+  auditId       String
+  uploadedById  String
+  filename      String   // nombre en Storage (uuid-safe)
+  originalName  String   // nombre original del archivo
+  mimeType      String   // application/pdf | image/* | application/vnd.openxmlformats...
+  fileSize      Int      // bytes
+  fileUrl       String   // Supabase Storage public URL
+  description   String?  // comentario libre del auditor
+  createdAt     DateTime @default(now())
+
+  audit       Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  uploadedBy  User  @relation("UploadedRequestDocs", fields: [uploadedById], references: [id])
+
+  @@index([auditId])
+  @@map("audit_request_documents")
 }
 
 model AuditProgram {

@@ -5,7 +5,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AuditType } from '@prisma/client';
+import { AuditOriginType, AuditType } from '@prisma/client';
 
 export class AuditRiskModelDto {
   @ApiProperty({ example: 0.6, description: 'Riesgo Inherente (0-1)' })
@@ -117,4 +117,39 @@ export class CreateAuditDto {
   @IsOptional()
   @IsIn(['FULL', 'STRUCTURE_ONLY'])
   scaffoldMode?: 'FULL' | 'STRUCTURE_ONLY';
+
+  // ─── Clasificación Plan Anual ─────────────────────────────────────────────
+  @ApiPropertyOptional({
+    enum: AuditOriginType,
+    description: 'PLANNED_RISK_BASED | PLANNED_COMPLIANCE | UNPLANNED_COMMITTEE | UNPLANNED_MANAGEMENT | UNPLANNED_REGULATOR',
+  })
+  @IsOptional()
+  @IsEnum(AuditOriginType)
+  originType?: AuditOriginType;
+
+  // ─── Campos para auditorías imprevistas ──────────────────────────────────
+  @ApiPropertyOptional({ description: 'Nombre del solicitante (si es externo al sistema)' })
+  @IsOptional()
+  @IsString()
+  requestedByName?: string;
+
+  @ApiPropertyOptional({ description: 'Cargo / Rol del solicitante' })
+  @IsOptional()
+  @IsString()
+  requestedByRole?: string;
+
+  @ApiPropertyOptional({ description: 'Fecha formal de la solicitud (ISO 8601)' })
+  @IsOptional()
+  @IsDateString()
+  requestDate?: string;
+
+  @ApiPropertyOptional({ description: 'Motivo / justificación de la solicitud' })
+  @IsOptional()
+  @IsString()
+  requestReason?: string;
+
+  @ApiPropertyOptional({ description: 'Antecedentes relevantes (contexto previo)' })
+  @IsOptional()
+  @IsString()
+  requestAntecedents?: string;
 }

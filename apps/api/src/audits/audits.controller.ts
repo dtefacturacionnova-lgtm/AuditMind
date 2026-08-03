@@ -1,7 +1,10 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param,
   Query, ParseIntPipe, DefaultValuePipe,
+  UseInterceptors, UploadedFile, BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { IsString, IsOptional, IsBoolean, IsArray, ValidateNested, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -214,5 +217,42 @@ export class AuditsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.addPaperFromTemplate(id, body.code, user);
+  }
+
+  // ─── Documentos de soporte — Auditorías Imprevistas ──────────────────────────
+
+  @Get(':id/request-documents')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Listar documentos de soporte de la solicitud imprevista' })
+  listRequestDocuments(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.listRequestDocuments(id, user);
+  }
+
+  @Post(':id/request-documents')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({
+    summary: 'Subir documento de soporte para auditoría imprevista',
+    description: 'multipart/form-data: campo "file" (PDF/Word/Excel/imagen). Campo opcional "description".',
+  })
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  async addRequestDocument(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('description') description: string | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) throw new BadRequestException('Campo "file" requerido');
+    return this.service.addRequestDocument(id, file, description, user);
+  }
+
+  @Delete(':id/request-documents/:docId')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Eliminar documento de soporte de la solicitud imprevista' })
+  removeRequestDocument(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.removeRequestDocument(id, docId, user);
   }
 }

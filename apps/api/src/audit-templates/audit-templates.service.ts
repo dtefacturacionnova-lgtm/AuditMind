@@ -1962,7 +1962,7 @@ export class AuditTemplatesService {
         title:                   'Empresa Comercial Demo SA de CV — Auditoría EEFF 2024',
         type:                    AuditType.EXTERNAL_FINANCIAL,
         status:                  AuditStatus.CLOSED,
-        originType:              AuditOriginType.MANAGEMENT_REQUEST,
+        originType:              AuditOriginType.UNPLANNED_MANAGEMENT,
         auditEntityId:           entity.id,
         leadAuditorId:           user.id,
         startDate:               new Date('2025-01-15'),
@@ -1982,6 +1982,12 @@ export class AuditTemplatesService {
         materialityBaseAmount:   5000000,
         auditOpinion:            'SATISFACTORY',
         templateId:              template.id,
+        // Documentación de la solicitud imprevista (ejemplo demo)
+        requestedByName:         'Lic. Héctor Martínez Fuentes',
+        requestedByRole:         'Presidente — Comité de Auditoría',
+        requestDate:             new Date('2024-12-05'),
+        requestReason:           'El Comité de Auditoría acordó en sesión del 05/12/2024 (Acta CA-2024-08) solicitar la realización de una auditoría de estados financieros externos correspondiente al ejercicio 2024, debido al vencimiento del contrato con el auditor externo anterior y la necesidad de presentar estados financieros auditados a la entidad bancaria antes del 30 de abril de 2025 (condición del préstamo LP vigente).',
+        requestAntecedents:      'Antecedentes: (1) El contrato con el despacho anterior (Auditores Asociados SA) venció el 31/08/2024 y no fue renovado. (2) El préstamo LP con Banco Agrícola ($450,000 vigente) establece en la cláusula 8.3 la obligación de presentar EEFF auditados antes del 30 de abril de cada año. (3) La empresa no cuenta con función de auditoría interna que pueda realizar esta función. (4) El Comité evaluó tres propuestas de firmas auditoras y seleccionó la firma actual mediante proceso competitivo. Resolución CA-2024-08, aprobada por unanimidad.',
       },
     });
 

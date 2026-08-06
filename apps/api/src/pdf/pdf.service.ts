@@ -45,9 +45,12 @@ export class PdfService implements OnModuleDestroy {
           // Resolver el ejecutable de Chromium
           const candidates = [
             process.env.PUPPETEER_EXECUTABLE_PATH,
+            // Prefer real non-snap Chrome/Chromium (snap builds fail in PM2)
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/google-chrome',
+            '/opt/google/chrome/google-chrome',
             '/usr/bin/chromium',
             '/usr/bin/chromium-browser',
-            '/usr/bin/google-chrome',
             // Windows (dev local)
             'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
             'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',

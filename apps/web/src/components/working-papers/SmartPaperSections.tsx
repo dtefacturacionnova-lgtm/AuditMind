@@ -59,6 +59,8 @@ const AVAILABLE_TEMPLATES = [
   // ── Cierre e Informe ────────────────────────────────────────────────────────────────────────
   { key: 'PT-FIN-DICT',   label: 'Fin.Ext · Dictamen del Auditor Independiente NIA 700-720 (PT-FIN-DICT)'      },
   { key: 'PT-FIN-D02CI',  label: 'Fin.Ext · Carta de Debilidades Control Interno NIA 265 (PT-FIN-D02CI)'       },
+  // ── Archivo Permanente / Conocimiento ────────────────────────────────────
+  { key: 'PT-FIN-A3-KC',  label: 'Fin.Ext · Conocimiento del Cliente y su Entorno NIA 315 (PT-FIN-A3-KC)'    },
 ];
 
 function InitFromTemplatePanel({

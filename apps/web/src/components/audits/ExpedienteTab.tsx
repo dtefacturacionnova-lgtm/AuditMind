@@ -231,7 +231,7 @@ function TreeFolderRow({
           className="hidden items-center gap-0.5 group-hover:flex"
           onClick={(e) => e.stopPropagation()}
         >
-          {depth < 2 && (
+          {depth < 3 && (
             <button
               type="button"
               onClick={() => onAddChild(folder.id, folder.phaseId)}

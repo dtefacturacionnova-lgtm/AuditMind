@@ -4,6 +4,34 @@ import { Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock, Sparkles, BookO
 import { useConsolidatePaper } from '@/hooks/useWorkingPaperGraph';
 import type { WpSyncStatus } from '@/hooks/useWorkingPapers';
 import type { WpPaperSection } from '@/hooks/useWorkingPapers';
+import { LeadScheduleMasterView } from './LeadScheduleMasterView';
+
+// ─── Lead schedule config (frontend mirror of backend LEAD_SCHEDULE_CONFIG) ──
+
+const LS_CONFIG: Record<string, {
+  groupName: string; prefix: string;
+  detailSections: { key: string; label: string; subSumaria: string }[];
+  analysisSectionKey: string; proceduresSectionKey: string; conclusionSectionKey: string;
+}> = {
+  'PT-FIN-B01': { groupName: 'Activos Corrientes',   prefix: 'B-01',
+    detailSections: [{ key:'S2', label:'Caja y Bancos', subSumaria:'B-01a' },{ key:'S3', label:'Cuentas por Cobrar', subSumaria:'B-01b' },{ key:'S4', label:'Inventarios', subSumaria:'B-01c' },{ key:'S5', label:'Otros Activos Corrientes', subSumaria:'B-01d' }],
+    analysisSectionKey:'S6', proceduresSectionKey:'S7', conclusionSectionKey:'S9' },
+  'PT-FIN-B02': { groupName: 'Activos No Corrientes', prefix: 'B-02',
+    detailSections: [{ key:'S2', label:'Propiedad, Planta y Equipo', subSumaria:'B-02a' },{ key:'S3', label:'Activos Intangibles', subSumaria:'B-02b' },{ key:'S4', label:'Inversiones LP', subSumaria:'B-02c' }],
+    analysisSectionKey:'S5', proceduresSectionKey:'S6', conclusionSectionKey:'S8' },
+  'PT-FIN-B03': { groupName: 'Pasivos Corrientes',    prefix: 'B-03',
+    detailSections: [{ key:'S2', label:'Proveedores y CxP', subSumaria:'B-03a' },{ key:'S3', label:'Obligaciones Financieras CP', subSumaria:'B-03b' },{ key:'S4', label:'Impuestos y Retenciones', subSumaria:'B-03c' }],
+    analysisSectionKey:'S5', proceduresSectionKey:'S6', conclusionSectionKey:'S8' },
+  'PT-FIN-B04': { groupName: 'Pasivos No Corrientes', prefix: 'B-04',
+    detailSections: [{ key:'S2', label:'Deuda LP y Pasivos Financieros', subSumaria:'B-04a' }],
+    analysisSectionKey:'S3', proceduresSectionKey:'S4', conclusionSectionKey:'S6' },
+  'PT-FIN-B05': { groupName: 'Patrimonio',            prefix: 'B-05',
+    detailSections: [{ key:'S2', label:'Capital y Reservas', subSumaria:'B-05a' }],
+    analysisSectionKey:'S3', proceduresSectionKey:'S4', conclusionSectionKey:'S6' },
+  'PT-FIN-B06': { groupName: 'Resultados (P&G)',       prefix: 'B-06',
+    detailSections: [{ key:'S2', label:'Ingresos', subSumaria:'B-06a' },{ key:'S3', label:'Costo de Ventas', subSumaria:'B-06b' },{ key:'S4', label:'Gastos Operativos', subSumaria:'B-06c' },{ key:'S5', label:'Otros Ingresos/Gastos', subSumaria:'B-06d' }],
+    analysisSectionKey:'S6', proceduresSectionKey:'S7', conclusionSectionKey:'S9' },
+};
 
 // ─── Narrative renderer ───────────────────────────────────────────────────────
 // Renders text with inline source citations like [PT-A1] highlighted.
@@ -119,12 +147,14 @@ function SyncStatusBadge({ syncStatus }: { syncStatus: WpSyncStatus }) {
 // ─── MasterPaperView ──────────────────────────────────────────────────────────
 
 interface MasterPaperViewProps {
-  paperId:      string;
-  syncStatus:   WpSyncStatus;
-  narrative?:   string;
-  sections?:    WpPaperSection[];
-  staleCount?:  number;
+  paperId:       string;
+  syncStatus:    WpSyncStatus;
+  narrative?:    string;
+  sections?:     WpPaperSection[];
+  staleCount?:   number;
   lastSyncedAt?: string;
+  paperCode?:    string | null;
+  auditId?:      string | null;
 }
 
 export function MasterPaperView({
@@ -134,7 +164,24 @@ export function MasterPaperView({
   sections = [],
   staleCount = 0,
   lastSyncedAt,
+  paperCode,
+  auditId,
 }: MasterPaperViewProps) {
+  // ── Route B-series lead schedule papers to their dedicated view ────────────
+  const lsConfig = paperCode ? LS_CONFIG[paperCode] : null;
+  if (lsConfig && auditId) {
+    return (
+      <LeadScheduleMasterView
+        paperId={paperId}
+        paperCode={paperCode!}
+        auditId={auditId}
+        syncStatus={syncStatus}
+        sections={sections}
+        lastSyncedAt={lastSyncedAt}
+        config={lsConfig}
+      />
+    );
+  }
   const consolidate = useConsolidatePaper();
 
   async function handleConsolidate() {

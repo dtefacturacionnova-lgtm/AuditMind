@@ -1441,6 +1441,8 @@ export default function WpDetailPage() {
               narrative={wp.narrative}
               sections={wp.sections}
               lastSyncedAt={wp.lastSyncedAt}
+              paperCode={wp.paperCode}
+              auditId={wp.auditId}
             />
           )}
 

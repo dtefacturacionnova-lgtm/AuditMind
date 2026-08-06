@@ -46,7 +46,81 @@ interface GeminiResponse {
 
 // ─── Generated sections map ───────────────────────────────────────────────────
 
-type SectionMap = Record<string, string>;
+type SectionMap = Record<string, unknown>;
+
+// ─── Lead schedule config ─────────────────────────────────────────────────────
+
+interface AccountMappingRow {
+  cuenta: string; descripcion: string;
+  saldo_actual: number; saldo_anterior: number; saldo_anterior2: number;
+  sub_sumaria: string; grupo: string;
+}
+
+interface DetailSectionDef { key: string; label: string; subSumaria: string; }
+
+interface LeadScheduleConfig {
+  groupName: string;
+  prefix: string;
+  detailSections: DetailSectionDef[];
+  analysisSectionKey: string;
+  proceduresSectionKey: string;
+  conclusionSectionKey: string;
+}
+
+const LEAD_SCHEDULE_CONFIG: Record<string, LeadScheduleConfig> = {
+  'PT-FIN-B01': {
+    groupName: 'Activos Corrientes', prefix: 'B-01',
+    detailSections: [
+      { key: 'S2', label: 'Caja y Bancos',           subSumaria: 'B-01a' },
+      { key: 'S3', label: 'Cuentas por Cobrar',       subSumaria: 'B-01b' },
+      { key: 'S4', label: 'Inventarios',              subSumaria: 'B-01c' },
+      { key: 'S5', label: 'Otros Activos Corrientes', subSumaria: 'B-01d' },
+    ],
+    analysisSectionKey: 'S6', proceduresSectionKey: 'S7', conclusionSectionKey: 'S9',
+  },
+  'PT-FIN-B02': {
+    groupName: 'Activos No Corrientes', prefix: 'B-02',
+    detailSections: [
+      { key: 'S2', label: 'Propiedad, Planta y Equipo', subSumaria: 'B-02a' },
+      { key: 'S3', label: 'Activos Intangibles',         subSumaria: 'B-02b' },
+      { key: 'S4', label: 'Inversiones LP',              subSumaria: 'B-02c' },
+    ],
+    analysisSectionKey: 'S5', proceduresSectionKey: 'S6', conclusionSectionKey: 'S8',
+  },
+  'PT-FIN-B03': {
+    groupName: 'Pasivos Corrientes', prefix: 'B-03',
+    detailSections: [
+      { key: 'S2', label: 'Proveedores y CxP',          subSumaria: 'B-03a' },
+      { key: 'S3', label: 'Obligaciones Financieras CP', subSumaria: 'B-03b' },
+      { key: 'S4', label: 'Impuestos y Retenciones',    subSumaria: 'B-03c' },
+    ],
+    analysisSectionKey: 'S5', proceduresSectionKey: 'S6', conclusionSectionKey: 'S8',
+  },
+  'PT-FIN-B04': {
+    groupName: 'Pasivos No Corrientes', prefix: 'B-04',
+    detailSections: [
+      { key: 'S2', label: 'Deuda LP y Pasivos Financieros', subSumaria: 'B-04a' },
+    ],
+    analysisSectionKey: 'S3', proceduresSectionKey: 'S4', conclusionSectionKey: 'S6',
+  },
+  'PT-FIN-B05': {
+    groupName: 'Patrimonio', prefix: 'B-05',
+    detailSections: [
+      { key: 'S2', label: 'Capital y Reservas', subSumaria: 'B-05a' },
+    ],
+    analysisSectionKey: 'S3', proceduresSectionKey: 'S4', conclusionSectionKey: 'S6',
+  },
+  'PT-FIN-B06': {
+    groupName: 'Resultados (P&G)', prefix: 'B-06',
+    detailSections: [
+      { key: 'S2', label: 'Ingresos',               subSumaria: 'B-06a' },
+      { key: 'S3', label: 'Costo de Ventas',         subSumaria: 'B-06b' },
+      { key: 'S4', label: 'Gastos Operativos',       subSumaria: 'B-06c' },
+      { key: 'S5', label: 'Otros Ingresos y Gastos', subSumaria: 'B-06d' },
+    ],
+    analysisSectionKey: 'S6', proceduresSectionKey: 'S7', conclusionSectionKey: 'S9',
+  },
+};
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
@@ -66,15 +140,22 @@ export class PaperConsolidationService {
 
   @OnEvent('paper.consolidate', { async: true })
   async handleConsolidate(event: PaperConsolidateEvent): Promise<void> {
-    const { paperId, paperCode, auditTitle, sourceData, userId, reason } = event;
+    const { paperId, paperCode, auditId, auditTitle, sourceData, userId, reason } = event;
     this.logger.log(`[Consolidation] Starting: ${paperId} (${paperCode ?? 'no code'})`);
+
+    const lsConfig = paperCode ? LEAD_SCHEDULE_CONFIG[paperCode] : null;
 
     try {
       // ── PI.5: capture snapshot of current state BEFORE modifying ────────
       await this.snapshotCurrentState(paperId, sourceData, userId, reason);
 
       // 1. Generate section content (AI or fallback)
-      const sections = await this.generateSections(paperCode, sourceData, auditTitle);
+      let sections: SectionMap;
+      if (lsConfig) {
+        sections = await this.generateLeadScheduleSections(lsConfig, auditId, auditTitle);
+      } else {
+        sections = await this.generateSections(paperCode, sourceData, auditTitle);
+      }
 
       // 2. Persist each section value
       await this.persistSections(paperId, sections);
@@ -170,6 +251,69 @@ export class PaperConsolidationService {
     this.logger.log(`[Consolidation] Snapshot v${paper.version} saved for ${paperId}`);
   }
 
+  // ─── Lead schedule generation ─────────────────────────────────────────────
+
+  private async generateLeadScheduleSections(
+    config:     LeadScheduleConfig,
+    auditId:    string,
+    auditTitle: string,
+  ): Promise<SectionMap> {
+    // Fetch B-00 S2 (classified account mapping)
+    const b00 = await this.prisma.workingPaper.findFirst({
+      where:   { auditId, paperCode: 'PT-FIN-B00' },
+      include: { sections: { where: { sectionKey: 'S2' } } },
+    });
+
+    const allAccounts = Array.isArray(b00?.sections[0]?.value)
+      ? (b00!.sections[0].value as unknown as AccountMappingRow[])
+      : [];
+
+    // Filter to this paper's prefix (B-01, B-02, …)
+    const groupAccounts = allAccounts.filter(a => a.sub_sumaria?.startsWith(config.prefix));
+
+    const sections: SectionMap = {};
+
+    // ── Detail sections (S2-Sx): one per sub-sumaria subgroup ────────────
+    for (const det of config.detailSections) {
+      const rows = groupAccounts
+        .filter(a => a.sub_sumaria === det.subSumaria)
+        .map(a => ({
+          cuenta:        a.cuenta,
+          descripcion:   a.descripcion,
+          saldo_actual:  a.saldo_actual,
+          saldo_anterior: a.saldo_anterior,
+          var_abs:  (a.saldo_actual ?? 0) - (a.saldo_anterior ?? 0),
+          var_pct:  a.saldo_anterior
+            ? Math.round(((a.saldo_actual - a.saldo_anterior) / Math.abs(a.saldo_anterior)) * 1000) / 10
+            : 0,
+        }));
+      if (rows.length > 0) sections[det.key] = rows;
+    }
+
+    // ── AI analysis sections (S6/S7/S9 or equivalents) ───────────────────
+    const totalActual   = groupAccounts.reduce((s, a) => s + (a.saldo_actual   ?? 0), 0);
+    const totalAnterior = groupAccounts.reduce((s, a) => s + (a.saldo_anterior ?? 0), 0);
+
+    const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
+    let aiSections: SectionMap = {};
+
+    if (apiKey && groupAccounts.length > 0) {
+      try {
+        const prompt = this.buildLeadSchedulePrompt(config, groupAccounts, totalActual, totalAnterior, auditTitle);
+        aiSections   = await this.callGeminiWithPrompt(apiKey, prompt);
+        this.logger.log(`[Consolidation] Lead schedule AI OK: ${config.groupName}`);
+      } catch (err) {
+        this.logger.warn('[Consolidation] Lead schedule Gemini failed, using fallback', String(err));
+      }
+    }
+
+    if (!aiSections[config.analysisSectionKey]) {
+      aiSections = this.templateFallbackLeadSchedule(config, groupAccounts, totalActual, totalAnterior, auditTitle);
+    }
+
+    return { ...sections, ...aiSections };
+  }
+
   // ─── Section generation ───────────────────────────────────────────────────
 
   private async generateSections(
@@ -192,16 +336,9 @@ export class PaperConsolidationService {
     return this.templateFallback(paperCode, sourceData, auditTitle);
   }
 
-  // ─── Gemini call ──────────────────────────────────────────────────────────
+  // ─── Gemini calls ─────────────────────────────────────────────────────────
 
-  private async callGemini(
-    apiKey:     string,
-    paperCode:  string | null,
-    sourceData: SourcePaperData[],
-    auditTitle: string,
-  ): Promise<SectionMap> {
-    const prompt = this.buildPrompt(paperCode, sourceData, auditTitle);
-
+  private async callGeminiWithPrompt(apiKey: string, prompt: string): Promise<SectionMap> {
     const res = await fetch(`${this.geminiEndpoint}?key=${apiKey}`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -222,7 +359,6 @@ export class PaperConsolidationService {
     }
 
     const data = await res.json() as GeminiResponse;
-
     if (data.error) throw new Error(`Gemini API error: ${data.error.message}`);
 
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
@@ -232,6 +368,16 @@ export class PaperConsolidationService {
     const parsed = JSON.parse(jsonMatch[0]) as SectionMap;
     this.logger.log(`[Consolidation] Gemini generated ${Object.keys(parsed).length} sections`);
     return parsed;
+  }
+
+  private async callGemini(
+    apiKey:     string,
+    paperCode:  string | null,
+    sourceData: SourcePaperData[],
+    auditTitle: string,
+  ): Promise<SectionMap> {
+    const prompt = this.buildPrompt(paperCode, sourceData, auditTitle);
+    return this.callGeminiWithPrompt(apiKey, prompt);
   }
 
   // ─── Prompt builder ───────────────────────────────────────────────────────
@@ -296,6 +442,93 @@ INSTRUCCIONES:
 - Usa citas [PT-A1], [PT-A2], [PT-A4] al referenciar fuentes
 - Sé conciso pero completo
 - Solo el JSON, sin texto fuera del objeto`;
+  }
+
+  // ─── Lead schedule prompt ────────────────────────────────────────────────
+
+  private buildLeadSchedulePrompt(
+    config:        LeadScheduleConfig,
+    accounts:      AccountMappingRow[],
+    totalActual:   number,
+    totalAnterior: number,
+    auditTitle:    string,
+  ): string {
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('es-SV', { maximumFractionDigits: 0 }).format(Math.abs(n));
+
+    const varTotal = totalActual - totalAnterior;
+    const varPct   = totalAnterior !== 0
+      ? Math.round((varTotal / Math.abs(totalAnterior)) * 100) : 0;
+
+    const lines = accounts.map(a => {
+      const v  = (a.saldo_actual ?? 0) - (a.saldo_anterior ?? 0);
+      const vp = a.saldo_anterior
+        ? Math.round((v / Math.abs(a.saldo_anterior)) * 100) : 0;
+      return `${a.cuenta} | ${a.descripcion} | ${fmt(a.saldo_actual)} | ${fmt(a.saldo_anterior)} | ${v >= 0 ? '+' : ''}${fmt(Math.abs(v))} (${vp >= 0 ? '+' : ''}${vp}%)`;
+    }).join('\n');
+
+    const { analysisSectionKey: sk6, proceduresSectionKey: sk7, conclusionSectionKey: sk9 } = config;
+
+    return `Eres un auditor senior experto en NIA/IAASB. Analiza el grupo "${config.groupName}" de la auditoría "${auditTitle}".
+
+CUENTAS DEL GRUPO (código | nombre | saldo actual | saldo año anterior | variación):
+${lines}
+
+TOTAL GRUPO: $${fmt(totalActual)} (año anterior: $${fmt(totalAnterior)}, variación: ${varPct >= 0 ? '+' : ''}${varPct}%)
+
+Responde EXCLUSIVAMENTE con JSON (sin markdown) con estas claves:
+{
+  "${sk6}": "Análisis de variaciones del grupo ${config.groupName} en 3-4 párrafos: variación total, sub-áreas con mayor movimiento, causas probables, cuentas que superan 15% de variación. Lenguaje NIA formal. Máx 400 palabras.",
+  "${sk7}": "Procedimientos sustantivos recomendados en 6-8 ítems numerados: '1. Procedimiento: descripción concisa'. Basados en variaciones y riesgos de ${config.groupName}. Incluir referencia a papeles de detalle. Máx 300 palabras.",
+  "${sk9}": "Conclusión preliminar del área ${config.groupName} en 2 párrafos: nivel de riesgo identificado, razonabilidad de saldos, indicar que el auditor debe completar con evidencia de campo."
+}`;
+  }
+
+  // ─── Lead schedule fallback ───────────────────────────────────────────────
+
+  private templateFallbackLeadSchedule(
+    config:        LeadScheduleConfig,
+    accounts:      AccountMappingRow[],
+    totalActual:   number,
+    totalAnterior: number,
+    auditTitle:    string,
+  ): SectionMap {
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('es-SV', { maximumFractionDigits: 0 }).format(Math.abs(n));
+
+    const varTotal = totalActual - totalAnterior;
+    const varPct   = totalAnterior !== 0
+      ? Math.round((varTotal / Math.abs(totalAnterior)) * 100) : 0;
+    const now      = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    const significant = accounts
+      .filter(a => {
+        const v  = (a.saldo_actual ?? 0) - (a.saldo_anterior ?? 0);
+        const vp = a.saldo_anterior ? Math.abs(v / a.saldo_anterior) * 100 : 0;
+        return vp > 15 || Math.abs(v) > 50_000;
+      })
+      .map(a => {
+        const v  = (a.saldo_actual ?? 0) - (a.saldo_anterior ?? 0);
+        const vp = a.saldo_anterior ? Math.round((v / Math.abs(a.saldo_anterior)) * 100) : 0;
+        return `• ${a.descripcion} (${a.cuenta}): ${v >= 0 ? '+' : '-'}$${fmt(Math.abs(v))} (${vp >= 0 ? '+' : ''}${vp}%)`;
+      }).join('\n');
+
+    const { analysisSectionKey: sk6, proceduresSectionKey: sk7, conclusionSectionKey: sk9 } = config;
+
+    return {
+      [sk6]: `El grupo ${config.groupName} de la auditoría "${auditTitle}" totaliza $${fmt(Math.abs(totalActual))} al cierre del período auditado, frente a $${fmt(Math.abs(totalAnterior))} del año anterior, reflejando una variación de ${varPct >= 0 ? '+' : ''}${varPct}%.\n\nCuentas con variaciones relevantes (>15% o >$50,000):\n${significant || '• No se identificaron variaciones individuales significativas.'}\n\nEl auditor debe analizar las causas de cada variación y determinar su consistencia con el entendimiento del negocio. Generado automáticamente el ${now}.`,
+
+      [sk7]: [
+        '1. Procedimiento: Conciliar el total del grupo con el balance de comprobación (B-00) y verificar cuadre con cédula sumaria S1.',
+        '2. Procedimiento: Aplicar procedimientos analíticos a cuentas con variación >15% para identificar causas e inconsistencias.',
+        '3. Procedimiento: Seleccionar partidas para pruebas de detalle según materialidad de PT-A4 y el nivel de riesgo del área.',
+        '4. Procedimiento: Verificar existencia, valuación y presentación de saldos significativos conforme a NIA 500.',
+        '5. Procedimiento: Obtener documentación de soporte para saldos con variación inusual o sin explicación aparente.',
+        '6. Procedimiento: Documentar evidencia obtenida en papeles de trabajo de detalle (C-0x) por cada cuenta examinada.',
+      ].join('\n'),
+
+      [sk9]: `Conclusión preliminar — ${config.groupName}: Con base en el análisis del balance de comprobación, el grupo totaliza $${fmt(Math.abs(totalActual))} con ${accounts.length} cuenta(s) y una variación de ${varPct >= 0 ? '+' : ''}${varPct}% respecto al año anterior.\n\nEsta conclusión es preliminar. El auditor responsable debe completarla con la evidencia de campo obtenida, las excepciones resueltas y la evaluación final de razonabilidad, antes de aprobar y firmar este papel de trabajo. Generado automáticamente el ${now}.`,
+    };
   }
 
   // ─── Template fallback ────────────────────────────────────────────────────
@@ -376,12 +609,16 @@ INSTRUCCIONES:
 
   private async persistSections(paperId: string, sections: SectionMap): Promise<void> {
     for (const [sectionKey, value] of Object.entries(sections)) {
-      if (!value?.toString().trim()) continue;
+      if (value === null || value === undefined) continue;
+      const isEmpty = Array.isArray(value)
+        ? value.length === 0
+        : !String(value).trim();
+      if (isEmpty) continue;
       // updateMany silently skips when 0 rows match (sections not yet initialised)
       await this.prisma.paperSection.updateMany({
         where: { paperId, sectionKey },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        data:  { value: value as any },
+        data:  { value: value as any, isStale: false, staleSince: null, staleReason: null },
       });
     }
   }
@@ -394,20 +631,34 @@ INSTRUCCIONES:
     auditTitle: string,
   ): string {
     const parts: string[] = [];
+    const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
-    if (paperCode === 'PT-PROG') {
-      if (sections.S1) parts.push(`### Procedimientos de Auditoría\n\n${sections.S1}`);
-      if (sections.S7) parts.push(`\n\n### Notas del Auditor\n\n${sections.S7}`);
-    } else {
-      // PT-MEMO / generic MASTER
-      const title = `**${paperCode ?? 'Memorando'} — ${auditTitle}**\n\n`;
-      parts.push(title);
-      if (sections.S2) parts.push(`### I. Entendimiento del Negocio\n\n${sections.S2}`);
-      if (sections.S3) parts.push(`\n\n### II. Evaluación de Riesgo Inherente\n\n${sections.S3}`);
-      if (sections.S4) parts.push(`\n\n### III. Materialidad\n\n${sections.S4}`);
-      if (sections.S8) parts.push(`\n\n### IV. Conclusión y Enfoque de Auditoría\n\n${sections.S8}`);
+    // ── B-series lead schedule ────────────────────────────────────────────
+    const lsConfig = paperCode ? LEAD_SCHEDULE_CONFIG[paperCode] : null;
+    if (lsConfig) {
+      parts.push(`**${paperCode} — ${lsConfig.groupName} · ${auditTitle}**\n\n`);
+      const s6 = str(sections[lsConfig.analysisSectionKey]);
+      const s7 = str(sections[lsConfig.proceduresSectionKey]);
+      const s9 = str(sections[lsConfig.conclusionSectionKey]);
+      if (s6) parts.push(`### I. Análisis de Variaciones\n\n${s6}`);
+      if (s7) parts.push(`\n\n### II. Procedimientos Sustantivos Recomendados\n\n${s7}`);
+      if (s9) parts.push(`\n\n### III. Conclusión Preliminar del Área\n\n${s9}`);
+      return parts.join('');
     }
 
+    // ── PT-PROG ───────────────────────────────────────────────────────────
+    if (paperCode === 'PT-PROG') {
+      if (sections.S1) parts.push(`### Procedimientos de Auditoría\n\n${str(sections.S1)}`);
+      if (sections.S7) parts.push(`\n\n### Notas del Auditor\n\n${str(sections.S7)}`);
+      return parts.join('');
+    }
+
+    // ── PT-MEMO / generic MASTER ──────────────────────────────────────────
+    parts.push(`**${paperCode ?? 'Memorando'} — ${auditTitle}**\n\n`);
+    if (sections.S2) parts.push(`### I. Entendimiento del Negocio\n\n${str(sections.S2)}`);
+    if (sections.S3) parts.push(`\n\n### II. Evaluación de Riesgo Inherente\n\n${str(sections.S3)}`);
+    if (sections.S4) parts.push(`\n\n### III. Materialidad\n\n${str(sections.S4)}`);
+    if (sections.S8) parts.push(`\n\n### IV. Conclusión y Enfoque de Auditoría\n\n${str(sections.S8)}`);
     return parts.join('');
   }
 }

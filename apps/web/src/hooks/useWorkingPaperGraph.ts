@@ -82,6 +82,22 @@ export function usePaperGraph(paperId: string) {
   });
 }
 
+export interface MaterialidadData {
+  mg:      number | null;
+  me:      number | null;
+  uae:     number | null;
+  paperId: string | null;
+}
+
+export function useMaterialidad(auditId: string | null | undefined) {
+  return useQuery<MaterialidadData>({
+    queryKey: ['materialidad', auditId],
+    queryFn:  () => apiClient.get(`/working-papers/audit-materialidad/${auditId}`),
+    enabled:  !!auditId,
+    staleTime: 5 * 60_000,
+  });
+}
+
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 export function useUpdateSection() {

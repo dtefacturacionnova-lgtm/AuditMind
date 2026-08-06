@@ -5,10 +5,12 @@ import { AuditsController } from './audits.controller';
 import { AuditsService } from './audits.service';
 import { AuditIndexService } from './audit-index.service';
 import { AiModule } from '../ai/ai.module';
+import { AuditFoldersModule } from '../audit-folders/audit-folders.module';
 
 @Module({
   imports: [
     AiModule,
+    AuditFoldersModule,
     MulterModule.register({ storage: memoryStorage() }),
   ],
   controllers: [AuditsController],

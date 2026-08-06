@@ -9,6 +9,7 @@ import { AuditStatus, AuditType, Prisma, UserRole } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AuditIndexService } from './audit-index.service';
 import { AiService } from '../ai/ai.service';
+import { AuditFoldersService } from '../audit-folders/audit-folders.service';
 
 const AUDIT_RISK_TARGET = 0.05;
 
@@ -20,6 +21,7 @@ export class AuditsService {
     private prisma: PrismaService,
     private readonly auditIndex: AuditIndexService,
     private readonly aiService: AiService,
+    private readonly auditFolders: AuditFoldersService,
   ) {
     this.supabaseAdmin = createClient(
       process.env.SUPABASE_URL!,
@@ -113,8 +115,17 @@ export class AuditsService {
       update: { role: 'LEAD' },
     });
 
-    // Auto-scaffold working papers based on audit type (fire-and-forget)
-    void this.auditIndex.scaffold(audit.id, audit.type as AuditType, user.id, dto.templateId, dto.scaffoldMode);
+    // Auto-scaffold working papers + folder structure (fire-and-forget, sequential)
+    if (dto.templateId) {
+      // When a template is selected: create papers first, then phases+folders so
+      // linkOrphanPapersToFolders can assign every paper to its folder immediately.
+      void (async () => {
+        await this.auditIndex.scaffold(audit.id, audit.type as AuditType, user.id, dto.templateId, dto.scaffoldMode);
+        await this.auditFolders.initializeFromAuditTemplateSections(audit.id, user);
+      })();
+    } else {
+      void this.auditIndex.scaffold(audit.id, audit.type as AuditType, user.id, undefined, dto.scaffoldMode);
+    }
 
     return this.findOne(audit.id, user);
   }

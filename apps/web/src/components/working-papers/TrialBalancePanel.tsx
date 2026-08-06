@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react';
 import {
   Upload, RefreshCw, CheckCircle2, AlertCircle, Table2, Tag,
-  BarChart3, Loader2, Save,
+  BarChart3, Loader2, Save, FileSpreadsheet,
 } from 'lucide-react';
 import type { PaperSection } from '@/hooks/useWorkingPaperGraph';
 import { useMaterialidadByAudit } from '@/hooks/useWorkingPaperGraph';
@@ -171,15 +171,36 @@ export function TrialBalanceImporter({
     const f = e.target.files?.[0];
     if (!f) return;
     setError('');
+    const isXlsx = /\.(xlsx?|ods)$/i.test(f.name);
     const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const parsed = parseCSV(ev.target?.result as string);
-        if (!parsed.length) { setError('No se encontraron filas. Verifique el formato CSV.'); return; }
-        setPreview(parsed);
-      } catch (err) { setError(`Error al parsear: ${(err as Error).message}`); }
-    };
-    reader.readAsText(f);
+
+    if (isXlsx) {
+      reader.onload = async ev => {
+        try {
+          const { read, utils } = await import('xlsx');
+          const wb  = read(ev.target?.result as ArrayBuffer, { type: 'array' });
+          const ws  = wb.Sheets[wb.SheetNames[0]];
+          // Convert to array-of-arrays (with header row)
+          const aoa = utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][];
+          if (aoa.length < 2) { setError('El archivo Excel no tiene filas de datos.'); return; }
+          // Build a CSV string and reuse the existing parser
+          const csv = aoa.map(row => row.map(c => String(c ?? '')).join(',')).join('\n');
+          const parsed = parseCSV(csv);
+          if (!parsed.length) { setError('No se encontraron cuentas válidas. Verifique que la primera hoja tenga columnas Cuenta, Descripcion y Saldo.'); return; }
+          setPreview(parsed);
+        } catch (err) { setError(`Error al leer Excel: ${(err as Error).message}`); }
+      };
+      reader.readAsArrayBuffer(f);
+    } else {
+      reader.onload = ev => {
+        try {
+          const parsed = parseCSV(ev.target?.result as string);
+          if (!parsed.length) { setError('No se encontraron filas. Verifique el formato CSV.'); return; }
+          setPreview(parsed);
+        } catch (err) { setError(`Error al parsear: ${(err as Error).message}`); }
+      };
+      reader.readAsText(f);
+    }
     e.target.value = '';
   }
 
@@ -208,11 +229,11 @@ export function TrialBalanceImporter({
                 Cancelar
               </button>
             )}
-            <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" className="hidden" onChange={onFileChange} />
+            <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls,.ods" className="hidden" onChange={onFileChange} />
             <button onClick={() => fileRef.current?.click()}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
-              <Upload className="w-3.5 h-3.5" />
-              {hasSaved ? 'Reimportar CSV' : 'Importar CSV'}
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              {hasSaved ? 'Reimportar' : 'Importar Excel/CSV'}
             </button>
           </div>
         )}
@@ -221,7 +242,7 @@ export function TrialBalanceImporter({
       {/* CSV hint */}
       {!hasSaved && !preview && (
         <p className="text-[11px] text-gray-400 mb-3">
-          Exporte el balance de comprobación desde su sistema contable como CSV.
+          Importe el balance de comprobación en formato <strong>Excel (.xlsx)</strong> o CSV.
           Columnas esperadas: <span className="font-mono bg-gray-100 px-1 rounded">Cuenta, Descripcion, Saldo_Actual[, Saldo_Anterior, Saldo_Anterior_2]</span>
         </p>
       )}

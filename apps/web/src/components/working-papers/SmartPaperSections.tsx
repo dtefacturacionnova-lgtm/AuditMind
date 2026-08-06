@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Loader2, LayoutTemplate, CheckCircle2 } from 'lucide-react';
+import { useState, Component, type ErrorInfo, type ReactNode } from 'react';
+import { Loader2, LayoutTemplate, CheckCircle2, AlertTriangle } from 'lucide-react';
 import {
   usePaperSections,
   useUpdateSection,
@@ -14,6 +14,35 @@ import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
 import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './TrialBalancePanel';
 import { MaterialidadPanel } from './MaterialidadPanel';
+
+// ─── Error boundary ───────────────────────────────────────────────────────────
+
+class SectionErrorBoundary extends Component<
+  { children: ReactNode; label?: string },
+  { caught: Error | null }
+> {
+  state: { caught: Error | null } = { caught: null };
+  static getDerivedStateFromError(e: Error) { return { caught: e }; }
+  componentDidCatch(e: Error, info: ErrorInfo) {
+    console.error('[SmartPaperSections] render error', e, info);
+  }
+  render() {
+    if (this.state.caught) {
+      return (
+        <div className="py-4 border-b border-gray-100">
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-700">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold mb-0.5">{this.props.label ?? 'Esta sección'} no pudo renderizarse</p>
+              <p className="text-red-500">{this.state.caught.message}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Template key selector ────────────────────────────────────────────────────
 
@@ -252,41 +281,44 @@ export function SmartPaperSections({
           if (paperCode === 'PT-FIN-B00') {
             if (section.sectionKey === 'S1') {
               return (
-                <TrialBalanceImporter
-                  key="S1"
-                  section={section}
-                  readonly={readonly}
-                  onSave={handleSave}
-                />
+                <SectionErrorBoundary key="S1" label="S1 · Balance de Comprobación">
+                  <TrialBalanceImporter
+                    section={section}
+                    readonly={readonly}
+                    onSave={handleSave}
+                  />
+                </SectionErrorBoundary>
               );
             }
             if (section.sectionKey === 'S2' && s1Section) {
               return (
-                <AccountClassifier
-                  key={`classifier-${Array.isArray(s1Section.value) ? (s1Section.value as unknown[]).length : 0}`}
-                  s1Section={s1Section}
-                  s2Section={section}
-                  readonly={readonly}
-                  onSave={handleSave}
-                  onPropagate={
-                    !readonly
-                      ? () => propagateTrialBal.mutateAsync(paperId)
-                      : undefined
-                  }
-                />
+                <SectionErrorBoundary key={`classifier-${Array.isArray(s1Section.value) ? (s1Section.value as unknown[]).length : 0}`} label="S2 · Clasificador de Cuentas">
+                  <AccountClassifier
+                    s1Section={s1Section}
+                    s2Section={section}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    onPropagate={
+                      !readonly
+                        ? () => propagateTrialBal.mutateAsync(paperId)
+                        : undefined
+                    }
+                  />
+                </SectionErrorBoundary>
               );
             }
             if (section.sectionKey === 'S6' && s1Section) {
               return (
-                <AccountSemaforo
-                  key="S6"
-                  s1Section={s1Section}
-                  s2Section={s2Section}
-                  s6Section={section}
-                  auditId={auditId}
-                  readonly={readonly}
-                  onSave={handleSave}
-                />
+                <SectionErrorBoundary key="S6" label="S6 · Semáforo de Cuentas">
+                  <AccountSemaforo
+                    s1Section={s1Section}
+                    s2Section={s2Section}
+                    s6Section={section}
+                    auditId={auditId}
+                    readonly={readonly}
+                    onSave={handleSave}
+                  />
+                </SectionErrorBoundary>
               );
             }
           }

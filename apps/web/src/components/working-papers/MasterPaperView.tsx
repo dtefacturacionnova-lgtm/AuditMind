@@ -167,6 +167,8 @@ export function MasterPaperView({
   paperCode,
   auditId,
 }: MasterPaperViewProps) {
+  const consolidate = useConsolidatePaper();
+
   // ── Route B-series lead schedule papers to their dedicated view ────────────
   const lsConfig = paperCode ? LS_CONFIG[paperCode] : null;
   if (lsConfig && auditId) {
@@ -182,7 +184,6 @@ export function MasterPaperView({
       />
     );
   }
-  const consolidate = useConsolidatePaper();
 
   async function handleConsolidate() {
     await consolidate.mutateAsync(paperId);

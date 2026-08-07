@@ -18,7 +18,8 @@ export type SectionFieldType =
   | 'REFERENCE'
   | 'RISK_REF'
   | 'ATTACHMENT'
-  | 'ACCOUNT_SCHEDULE';
+  | 'ACCOUNT_SCHEDULE'
+  | 'DECLARATIONS';
 
 export interface PaperSection {
   id: string;

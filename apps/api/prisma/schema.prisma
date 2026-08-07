@@ -141,6 +141,7 @@ enum FieldType {
   RISK_REF         // Referencia a riesgo del registro
   ATTACHMENT       // Archivos adjuntos
   ACCOUNT_SCHEDULE // Cédula analítica multi-nivel: código/nombre/saldo/ajustes/saldo ajustado/notas/evidencia por fila
+  DECLARATIONS     // Grid editable de declaraciones de independencia con adjunto por fila
 }
 
 // Tipo de mapeo entre papeles en el grafo

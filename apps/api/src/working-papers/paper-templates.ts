@@ -3546,9 +3546,9 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     },
     {
       sectionKey:   'S6',
-      label:        'Declaraciones Individuales de Independencia del Equipo',
+      label:        'Declaraciones Firmadas de Independencia del Equipo',
       description:  'Registro formal de cada integrante del equipo con confirmación de cumplimiento de independencia. Adjunte la declaración firmada (física o digital) por miembro.',
-      fieldType:    FieldType.MATRIX,
+      fieldType:    FieldType.DECLARATIONS,
       isRequired:   true,
       isAutoFilled: false,
       sortOrder:    9,

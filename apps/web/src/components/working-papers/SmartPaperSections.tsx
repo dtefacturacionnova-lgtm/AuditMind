@@ -103,6 +103,7 @@ const AVAILABLE_TEMPLATES = [
   { key: 'PT-NIA260',  label: 'NIA 260 · Comunicación con Gobierno Corporativo (PT-NIA260)' },
   // ── Pruebas de Ejecución (papers adicionales financieros) ─────────────────
   { key: 'PT-CIRC',        label: 'Fin.Ext · Circularización de CxC NIA 505 (PT-CIRC)'                         },
+  { key: 'PT-FIN-C-GEN',   label: 'Fin.Ext · Área / Cuenta Adicional — Sustantiva Genérica (PT-FIN-C-GEN)'   },
   { key: 'PT-FIN-C-ESTIM', label: 'Fin.Ext · Estimaciones Contables NIA 540 Rev. (PT-FIN-C-ESTIM)'             },
   { key: 'PT-ADJ-RECLASIF',label: 'Fin.Ext · Libro de Ajustes y Reclasificaciones del Auditor (PT-ADJ-RECLASIF)'},
   // ── Hallazgos y Seguimiento — Universal (todas las plantillas) ────────────

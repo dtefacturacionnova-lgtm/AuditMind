@@ -83,6 +83,7 @@ const CANONICAL_PAPER_GROUPS: { group: string; items: CanonicalPaper[] }[] = [
   {
     group: 'Auditoría Financiera — Pruebas y Cierre',
     items: [
+      { code: 'PT-FIN-C-GEN',   label: 'Área / Cuenta Adicional — Prueba Sustantiva Genérica (comodín)',   kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'Para cuentas sin papel C-XX específico: NIIF 16, NIIF 9 Derivados, NIC 41 Biológicos, NIC 40, criptoactivos, etc. S1 incluye referencias cruzadas a B-XX sumaria y PT-ADJ-RECLASIF. Diferencias → B-08.' },
       { code: 'PT-FIN-C-SUST',  label: 'Prueba Sustantiva por Área (genérico)',            kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'Diferencias auto-push a B-08 cuando superan UAE' },
       { code: 'PT-CIRC',        label: 'Circularización de CxC (NIA 505)',                 kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'Universo CxC, selección, envío, seguimiento y evaluación de respuestas' },
       { code: 'PT-FIN-C-ESTIM', label: 'Estimaciones Contables (NIA 540 Rev.)',            kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'Espectro de resultados, rango del auditor vs. estimación gerencia, indicadores de sesgo' },
@@ -137,7 +138,7 @@ const _EXT_FIN = new Set([
   'PT-NIA250', 'PT-NIA530', 'PT-NIA610', 'PT-NIA620',
   'PT-FIN-A3-KC', 'PT-FIN-B00', 'PT-FIN-B01', 'PT-FIN-B02', 'PT-FIN-B03',
   'PT-FIN-B04', 'PT-FIN-B05', 'PT-FIN-B06', 'PT-FIN-B07', 'PT-FIN-B08', 'PT-FIN-B09',
-  'PT-ADJ-RECLASIF', 'PT-DIFS', 'PT-CIRC', 'PT-FIN-C-SUST', 'PT-FIN-C-NORM', 'PT-FIN-C-ESTIM',
+  'PT-ADJ-RECLASIF', 'PT-DIFS', 'PT-CIRC', 'PT-FIN-C-SUST', 'PT-FIN-C-NORM', 'PT-FIN-C-ESTIM', 'PT-FIN-C-GEN',
   'PT-REP580', 'PT-NIA560', 'PT-NIA265', 'PT-NIA260',
   'PT-FIN-D02CI', 'PT-FIN-DICT',
   ..._HALL,

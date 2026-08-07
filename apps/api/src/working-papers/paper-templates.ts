@@ -3844,4 +3844,106 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       aiHint:       'Estructura la conclusión así: "Al [fecha de cierre del seguimiento], de los [N] hallazgos comunicados en este encargo: [N] fueron cerrados satisfactoriamente, [N] están en proceso vigente, [N] están vencidos sin respuesta, y [N] fueron rechazados por la administración. Los hallazgos de alto riesgo pendientes son: [lista resumida]. El impacto en el informe final es: [descripción]. El auditor jefe / socio responsable ha revisado y aprobado este seguimiento con fecha ___." Preparado por: ___ | Revisado por: ___ | Fecha: ___.',
     },
   ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FIN-C-GEN: Área / Cuenta Adicional — Prueba Sustantiva Genérica
+  // Comodín para cualquier cuenta o área que no tenga papel C-XX específico
+  // (NIIF 16 Arrendamientos, NIIF 9 Derivados, NIC 41 Activos Biológicos,
+  //  propiedades de inversión, criptoactivos, etc.).
+  // El auditor asigna el nombre del área en S0 y las referencias al expediente
+  // (cédula sumaria B-XX y ajustes PT-ADJ-RECLASIF) en S1.
+  // S2 (Diferencias) alimenta B-08 exactamente igual que C-01 a C-13.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FIN-C-GEN': [
+    {
+      sectionKey:   'S0',
+      label:        'Identificación del Área / Cuenta',
+      description:  'Nombre y descripción del área o cuenta analizada. Completar ANTES de inicializar las demás secciones.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    0,
+      aiHint:       'Columnas: Campo | Valor. Filas sugeridas: (1) Nombre del área / cuenta (ej: Activos por Derecho de Uso NIIF 16 / Instrumentos Derivados NIIF 9 / Activos Biológicos NIC 41 / Propiedades de Inversión NIC 40 / Criptomonedas). (2) Código(s) contable(s) cubiertos (ej: 1207-01, 1207-02). (3) Marco normativo aplicable (NIIF 16 / NIIF 9 / NIC 41 / NIC 40 / NIC 2 / otro). (4) Saldo en Balance al cierre ($). (5) ¿Supera Materialidad de Ejecución? (Sí/No — si No: documentar por qué se incluye). (6) Área funcional responsable. (7) Auditor asignado al área.',
+    },
+    {
+      sectionKey:   'S1',
+      label:        'Referencias Cruzadas al Expediente',
+      description:  'Vínculos con la cédula sumaria (B-XX), los ajustes (PT-ADJ-RECLASIF) y otros papeles del encargo que consolidan la información de esta área.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    1,
+      aiHint:       'Columnas: Papel relacionado | Código / Ref. PT | Tipo de vínculo | Sección que recibe datos | Nota. Filas típicas según el área: (1) Cédula Sumaria que agrupa esta cuenta → B-01 (Act. Ctes.) / B-02 (Act. No Ctes.) / B-03 (Pas. Ctes.) / B-04 (Pas. No Ctes.) — vínculo: saldo de S2 cuadra con cédula sumaria. (2) Libro de Ajustes → PT-ADJ-RECLASIF — vínculo: AJEs propuestos en S2 se trasladan aquí con número de asiento. (3) Cédula de Diferencias → B-08 — vínculo: diferencias >UAE se propagan automáticamente desde S2. (4) Programa de auditoría → PT-PROG — ref. al procedimiento específico asignado a esta área. (5) Papel de Estimaciones → PT-FIN-C-ESTIM — si el área incluye estimaciones contables (valor razonable, deterioro). (6) Lead Schedule → B-01 a B-06 — si el área contribuye a más de una sumaria. Incluir el código exacto del papel como aparece en el Árbol del Expediente (ej. "B-02", "APE-01").',
+    },
+    {
+      sectionKey:   'S2',
+      label:        'Diferencias Identificadas',
+      description:  'Registro de todas las diferencias/hallazgos encontrados. Alimenta automáticamente la cédula consolidada B-08.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    2,
+      aiHint:       'Columnas: N° | Área/Cuenta (del Mayor) | Descripción de la diferencia | Saldo según cliente ($) | Saldo según auditor ($) | Diferencia ($) | Naturaleza (Error/Estimación/Fraude/No ajustable) | Proponer AJE (Sí/No/Pendiente). Si no hay diferencias: dejar tabla vacía con nota "Sin diferencias identificadas". Las diferencias mayores a UAE se trasladan automáticamente a B-08 al propagar el grafo. Asignar número de AJE con referencia a PT-ADJ-RECLASIF (columna "Ref. AJE" adicional).',
+    },
+    {
+      sectionKey:   'S3',
+      label:        'Afirmaciones de Auditoría Cubiertas',
+      description:  'Afirmaciones NIA 315/500 que se verifican con los procedimientos de este papel.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    3,
+      aiHint:       'Columnas: Afirmación (Existencia/Completitud/Valoración/Exactitud/Corte/Derechos-Obligaciones/Presentación) | Aplica (Sí/No) | Riesgo asociado (A/M/B) | Procedimiento vinculado (ref. S4). Adaptar según el área: NIIF 16 → Existencia del contrato, Valoración del activo por derecho de uso y pasivo por arrendamiento. NIIF 9 Derivados → Valoración a valor razonable, Presentación como cobertura vs. especulación. NIC 41 Biológicos → Existencia física, Valoración al valor razonable o costo.',
+    },
+    {
+      sectionKey:   'S4',
+      label:        'Diseño de Muestra y Procedimientos Aplicados',
+      description:  'Descripción de la población, criterio de muestra y procedimientos ejecutados.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'Columnas: N° | Procedimiento | Técnica (Inspección/Confirmación/Cálculo/Indagación/Observación/Analítica/Experto) | Población total | Muestra | Criterio | Período. Procedimientos típicos por área: NIIF 16: recálculo de tablas de amortización del pasivo, verificar tasa incremental de préstamo, confirmar expiración. NIIF 9 Derivados: cotización de mercado o modelo de valoración, verificar documentación de cobertura, contrastar con ISDA/confirmaciones. NIC 41 Biológicos: inspección física, valoración por experto agronómico, verificar mercado activo. NIC 40 Propiedades: informe de avalúo independiente, verificar ingresos por arrendamiento, tasas de capitalización del mercado.',
+    },
+    {
+      sectionKey:   'S5',
+      label:        'Resultados de Pruebas — Detalle de Ejecución',
+      description:  'Descripción narrativa de los resultados de cada procedimiento aplicado.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    5,
+      aiHint:       'Para cada procedimiento de S4: describir lo realizado, evidencia obtenida, elementos examinados y excepciones encontradas. Formato: "Procedimiento [N°]: [descripción]. Resultado: [Sin excepciones / X excepciones de N elementos]. Evidencia: [documentos revisados, adjuntos referenciados]." Cicero puede estructurar los resultados en formato narrativo NIA 500 si se ingresan los datos de S4.',
+    },
+    {
+      sectionKey:   'S6',
+      label:        'Evaluación de Diferencias vs Materialidad',
+      description:  'Análisis de las diferencias encontradas en relación con MG, ME y UAE del encargo.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    6,
+      aiHint:       'Si S2 tiene diferencias: comparar total acumulado vs UAE (trivial — no registrar), ME (registrar en B-08) y MG (impacto en opinión). Indicar si la diferencia es ajustable, estimable o solo informativa. Si sin diferencias: "Los procedimientos aplicados no revelaron incorrecciones materiales en [nombre del área — de S0]." Referenciar materialidad de PT-A4.',
+    },
+    {
+      sectionKey:   'S7',
+      label:        'Conclusión del Área',
+      description:  'Conclusión final del auditor sobre el área evaluada.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    7,
+      aiHint:       '"Con base en los procedimientos aplicados a [nombre del área — completar de S0] al [fecha de cierre], concluimos que los saldos se presentan razonablemente / con las siguientes excepciones: [lista de S2]. Las diferencias identificadas [superan/no superan] la ME ($[importe]). [Impacto esperado en dictamen: Sin efecto / Ajuste propuesto / Salvedad si no se ajusta]." Preparado por: ___ Revisado por: ___ Fecha: ___.',
+    },
+    {
+      sectionKey:   'S8',
+      label:        'Analítica de Cuentas — Desagregación por Cuenta del Mayor',
+      description:  'Cédula analítica que desglosa el saldo del área por cuenta individual.',
+      fieldType:    FieldType.ACCOUNT_SCHEDULE,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    8,
+      aiHint:       'Ingrese una fila por cada cuenta del Mayor que compone el saldo del área (de S0). Saldo al Cierre: del Balance de Comprobación (B-00). Ajustes: de PT-ADJ-RECLASIF para las cuentas del área. Saldo Ajustado = Cierre + Ajustes + Reclasificaciones. El total debe cuadrar con la cédula sumaria referenciada en S1. Use Notas por fila para tick-marks (✓ verificado, ^ recalculado, D documentado).',
+    },
+  ],
 };

@@ -31,7 +31,8 @@ function displayValue(value: unknown, fieldType: SectionFieldType): string {
 function MatrixDisplay({ value }: { value: unknown }) {
   let data: Record<string, unknown>[] = [];
   try {
-    data = Array.isArray(value) ? (value as Record<string, unknown>[]) : JSON.parse(String(value));
+    const parsed = Array.isArray(value) ? value : JSON.parse(String(value));
+    data = Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : [];
   } catch {
     return <p className="text-xs text-gray-400 italic">Datos de matriz inválidos</p>;
   }

@@ -218,18 +218,21 @@ function NewWorkingPaperInner() {
 
   const allowedCodes = audit?.type ? TEMPLATE_ALLOWED_CODES[audit.type] : undefined;
 
+  const [title,     setTitle]     = useState('');
+  const [type,      setType]      = useState<typeof WORKING_PAPER_TYPES[number]['value']>('PLANNING_UNDERSTANDING');
+  const [wpKind,    setWpKind]    = useState<typeof WP_KINDS[number]['value']>('SMART');
+
   const filteredGroups = useMemo(() => {
     return CANONICAL_PAPER_GROUPS
       .map(g => ({
         ...g,
-        items: g.items.filter(p => !allowedCodes || allowedCodes.has(p.code)),
+        items: g.items.filter(p =>
+          (!allowedCodes || allowedCodes.has(p.code)) &&
+          p.kind === wpKind,
+        ),
       }))
       .filter(g => g.items.length > 0);
-  }, [allowedCodes]);
-
-  const [title,     setTitle]     = useState('');
-  const [type,      setType]      = useState<typeof WORKING_PAPER_TYPES[number]['value']>('PLANNING_UNDERSTANDING');
-  const [wpKind,    setWpKind]    = useState<typeof WP_KINDS[number]['value']>('SMART');
+  }, [allowedCodes, wpKind]);
   const [code,      setCode]      = useState('');
   const [paperCode,   setPaperCode]   = useState('');
   const [customCode,  setCustomCode]  = useState(false);

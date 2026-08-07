@@ -48,6 +48,14 @@ const CANONICAL_PAPER_GROUPS: { group: string; items: CanonicalPaper[] }[] = [
     ],
   },
   {
+    group: 'Seguimiento de Hallazgos — Universal (todas las plantillas)',
+    items: [
+      { code: 'PT-HALL',      label: 'Hallazgo Individual (5 elementos + seguimiento de respuesta)', kind: 'SMART',  type: 'FINDING',           hint: 'Condición, Criterio, Causa, Efecto, Recomendación + comunicación y estado de cierre' },
+      { code: 'PT-HALL-COM',  label: 'Comunicación Formal de Hallazgos al Cliente/Área',             kind: 'SMART',  type: 'CLOSURE_CONCLUSION', hint: 'Carta estructurada: hallazgos, plazo de respuesta, acuse de recibo, estado' },
+      { code: 'PT-HALL-RESP', label: 'Cédula de Seguimiento — Respondidos, Vigentes y Vencidos',    kind: 'MASTER', type: 'CLOSURE_CONCLUSION', hint: 'Consolida todos los hallazgos: tasa de respuesta, vencidos con escalamiento, impacto en informe' },
+    ],
+  },
+  {
     group: 'Auditoría Financiera — Planificación',
     items: [
       { code: 'PT-INDEP',     label: 'Independencia, Ética y Aceptación del Encargo (NIA 220/IESBA)', kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Amenazas, salvaguardas, servicios prohibidos, EQR, aceptación/continuación' },
@@ -121,6 +129,9 @@ const CANONICAL_BY_CODE = Object.fromEntries(
 // ─── Allowed paper codes per audit type ───────────────────────────────────────
 // Based on system template definitions in audit-templates.service.ts
 
+// Hallazgos — aplican a TODAS las plantillas
+const _HALL = ['PT-HALL', 'PT-HALL-COM', 'PT-HALL-RESP'];
+
 const _EXT_FIN = new Set([
   'PT-INDEP', 'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-COSO', 'PT-MEMO', 'PT-PROG',
   'PT-NIA250', 'PT-NIA530', 'PT-NIA610', 'PT-NIA620',
@@ -129,32 +140,39 @@ const _EXT_FIN = new Set([
   'PT-ADJ-RECLASIF', 'PT-DIFS', 'PT-CIRC', 'PT-FIN-C-SUST', 'PT-FIN-C-NORM', 'PT-FIN-C-ESTIM',
   'PT-REP580', 'PT-NIA560', 'PT-NIA265', 'PT-NIA260',
   'PT-FIN-D02CI', 'PT-FIN-DICT',
+  ..._HALL,
 ]);
 
 const _FISCAL = new Set([
   'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-MEMO', 'PT-PROG',
   'PT-FISC-INDEP', 'PT-FISC-QC', 'PT-FISC-ENCARGO', 'PT-FISC-RISK',
   'PT-FISC-AML', 'PT-FISC-PT', 'PT-FISC-ZF', 'PT-FISC-DICT',
+  ..._HALL,
 ]);
 
 const _INTERNAL = new Set([
   'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-COSO', 'PT-MEMO', 'PT-PROG', 'PT-DIFS',
+  ..._HALL,
 ]);
 
 const _NAIG = new Set([
   'PT-A1', 'PT-A2', 'PT-A4', 'PT-COSO', 'PT-MEMO', 'PT-PROG', 'PT-GOV-HAL',
+  ..._HALL,
 ]);
 
 const _IT = new Set([
   'PT-A1', 'PT-A3', 'PT-MEMO', 'PT-PROG', 'PT-SEC-RISK', 'PT-BIA',
+  ..._HALL,
 ]);
 
 const _AML = new Set([
   'PT-A1', 'PT-A3', 'PT-MEMO', 'PT-PROG', 'PT-AML-RISK',
+  ..._HALL,
 ]);
 
 const _FORENSIC = new Set([
   'PT-A2', 'PT-MEMO', 'PT-PROG', 'PT-DIFS',
+  ..._HALL,
 ]);
 
 const TEMPLATE_ALLOWED_CODES: Record<string, Set<string>> = {

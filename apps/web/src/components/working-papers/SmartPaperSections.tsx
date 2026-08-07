@@ -105,6 +105,10 @@ const AVAILABLE_TEMPLATES = [
   { key: 'PT-CIRC',        label: 'Fin.Ext · Circularización de CxC NIA 505 (PT-CIRC)'                         },
   { key: 'PT-FIN-C-ESTIM', label: 'Fin.Ext · Estimaciones Contables NIA 540 Rev. (PT-FIN-C-ESTIM)'             },
   { key: 'PT-ADJ-RECLASIF',label: 'Fin.Ext · Libro de Ajustes y Reclasificaciones del Auditor (PT-ADJ-RECLASIF)'},
+  // ── Hallazgos y Seguimiento — Universal (todas las plantillas) ────────────
+  { key: 'PT-HALL',        label: 'Universal · Hallazgo Individual — 5 Elementos + Seguimiento (PT-HALL)'       },
+  { key: 'PT-HALL-COM',    label: 'Universal · Comunicación Formal de Hallazgos al Cliente/Área (PT-HALL-COM)'  },
+  { key: 'PT-HALL-RESP',   label: 'Universal · Seguimiento Consolidado — Respondidos/Vigentes/Vencidos (PT-HALL-RESP)'},
 ];
 
 function InitFromTemplatePanel({

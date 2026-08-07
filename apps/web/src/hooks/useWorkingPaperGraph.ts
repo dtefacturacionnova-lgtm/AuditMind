@@ -19,7 +19,8 @@ export type SectionFieldType =
   | 'RISK_REF'
   | 'ATTACHMENT'
   | 'ACCOUNT_SCHEDULE'
-  | 'DECLARATIONS';
+  | 'DECLARATIONS'
+  | 'LEGAL_MATRIX';
 
 export interface PaperSection {
   id: string;

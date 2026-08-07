@@ -142,6 +142,7 @@ enum FieldType {
   ATTACHMENT       // Archivos adjuntos
   ACCOUNT_SCHEDULE // Cédula analítica multi-nivel: código/nombre/saldo/ajustes/saldo ajustado/notas/evidencia por fila
   DECLARATIONS     // Grid editable de declaraciones de independencia con adjunto por fila
+  LEGAL_MATRIX     // Grid editable de normativas/leyes con columnas especializadas + adjunto por fila
 }
 
 // Tipo de mapeo entre papeles en el grafo

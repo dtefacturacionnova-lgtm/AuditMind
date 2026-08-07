@@ -2875,7 +2875,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       sectionKey:   'S2',
       label:        'Marco Legal y Regulatorio Aplicable a la Entidad',
       description:  'Identificación y evaluación de las leyes y regulaciones que afectan directamente a la entidad auditada.',
-      fieldType:    FieldType.MATRIX,
+      fieldType:    FieldType.LEGAL_MATRIX,
       isRequired:   true,
       isAutoFilled: false,
       sortOrder:    2,

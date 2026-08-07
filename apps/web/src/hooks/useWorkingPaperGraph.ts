@@ -17,7 +17,8 @@ export type SectionFieldType =
   | 'MATRIX'
   | 'REFERENCE'
   | 'RISK_REF'
-  | 'ATTACHMENT';
+  | 'ATTACHMENT'
+  | 'ACCOUNT_SCHEDULE';
 
 export interface PaperSection {
   id: string;
@@ -50,16 +51,34 @@ export interface SectionAttachment {
 }
 
 export interface WpRef {
-  id: string;
-  code: string;
-  title: string;
-  wpKind: string;
-  syncStatus: string;
+  id:           string;
+  code:         string;
+  title:        string;
+  wpKind:       string;
+  syncStatus:   string;
+  sourceField?: string;
+  targetField?: string;
+  mappingType?: string;
+  description?: string | null;
 }
 
 export interface PaperGraphData {
   sources: WpRef[];
   targets: WpRef[];
+}
+
+export interface TbAccount {
+  cuenta:         string;
+  descripcion:    string;
+  saldo_actual:   number;
+  saldo_anterior: number;
+  sub_sumaria:    string;
+  grupo:          string;
+}
+
+export interface TbAccountsResult {
+  accounts: TbAccount[];
+  message:  string;
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -70,6 +89,15 @@ export function usePaperSections(paperId: string) {
     queryFn: () => apiClient.get(`/working-papers/${paperId}/sections`),
     enabled: !!paperId,
     staleTime: 15_000,
+  });
+}
+
+export function useTbAccounts(paperId: string | undefined) {
+  return useQuery<TbAccountsResult>({
+    queryKey: ['wp', paperId, 'tb-accounts'],
+    queryFn:  () => apiClient.get(`/working-papers/${paperId}/tb-accounts`),
+    enabled:  !!paperId,
+    staleTime: 60_000,
   });
 }
 
@@ -478,6 +506,45 @@ export function useRemoveSectionAttachment() {
     mutationFn: ({ paperId, sectionKey, attachmentId }: { paperId: string; sectionKey: string; attachmentId: string }) =>
       apiClient.delete(`/working-papers/${paperId}/sections/${sectionKey}/attachments/${attachmentId}`),
     onSuccess: (_res, vars) => qc.invalidateQueries({ queryKey: ['wp', vars.paperId] }),
+  });
+}
+
+// F4: Evidencia documental (STANDARD papers)
+export function useAttachToDocumentEvidence() {
+  return useMutation({
+    mutationFn: ({ paperId, rowId, file }: { paperId: string; rowId: string; file: File }) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return apiClient.postForm<{
+        id: string; filename: string; url: string; mimeType: string; size: number; uploadedAt: string;
+      }>(`/working-papers/${paperId}/document-evidence/${rowId}/attachments`, fd);
+    },
+  });
+}
+
+export function useRemoveDocumentEvidenceAttachment() {
+  return useMutation({
+    mutationFn: ({ paperId, rowId, attachmentId }: { paperId: string; rowId: string; attachmentId: string }) =>
+      apiClient.delete(`/working-papers/${paperId}/document-evidence/${rowId}/attachments/${attachmentId}`),
+  });
+}
+
+export function useAttachToAccountSchedule() {
+  return useMutation({
+    mutationFn: ({ paperId, rowId, file }: { paperId: string; rowId: string; file: File }) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return apiClient.postForm<{
+        id: string; filename: string; url: string; mimeType: string; size: number; uploadedAt: string;
+      }>(`/working-papers/${paperId}/account-schedule/${rowId}/attachments`, fd);
+    },
+  });
+}
+
+export function useRemoveAccountScheduleAttachment() {
+  return useMutation({
+    mutationFn: ({ paperId, rowId, attachmentId }: { paperId: string; rowId: string; attachmentId: string }) =>
+      apiClient.delete(`/working-papers/${paperId}/account-schedule/${rowId}/attachments/${attachmentId}`),
   });
 }
 

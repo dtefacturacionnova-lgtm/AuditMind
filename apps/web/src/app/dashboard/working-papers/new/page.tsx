@@ -23,6 +23,89 @@ const WORKING_PAPER_TYPES = [
   { value: 'NORMATIVE_ANALYSIS',     label: 'Análisis Normativo' },
 ] as const;
 
+// ─── Canonical paper catalogue ───────────────────────────────────────────────
+
+interface CanonicalPaper {
+  code: string;
+  label: string;
+  kind: 'SMART' | 'MASTER';
+  type: typeof WORKING_PAPER_TYPES[number]['value'];
+  hint: string;
+}
+
+const CANONICAL_PAPER_GROUPS: { group: string; items: CanonicalPaper[] }[] = [
+  {
+    group: 'General — Planificación y Riesgo',
+    items: [
+      { code: 'PT-A1',   label: 'Entendimiento del Negocio y Entorno',        kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'Contexto del sector, estructura, regulación y entorno' },
+      { code: 'PT-A2',   label: 'Evaluación de Riesgo Inherente (RI)',         kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'Aserciones por área y factores de riesgo significativo' },
+      { code: 'PT-A3',   label: 'Evaluación de Controles y Riesgo de Control', kind: 'SMART',  type: 'CONTROL_EVALUATION',     hint: 'Diseño y efectividad operativa de controles clave' },
+      { code: 'PT-A4',   label: 'Cálculo de Materialidad (NIA 320)',           kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'MG, ME y UAE con benchmark referencial automático' },
+      { code: 'PT-COSO', label: 'Evaluación COSO 2013 — SCI (5 Comp./17 P.)', kind: 'SMART',  type: 'CONTROL_EVALUATION',     hint: 'Evaluación del SCI: 5 componentes, 17 principios, semáforo global y enfoque de auditoría' },
+      { code: 'PT-MEMO', label: 'Memorando de Planificación',                  kind: 'MASTER', type: 'PLANNING_UNDERSTANDING', hint: 'Consolida entendimiento, riesgo, materialidad y estrategia global' },
+      { code: 'PT-PROG', label: 'Programa de Auditoría',                       kind: 'MASTER', type: 'PLANNING_UNDERSTANDING', hint: 'Procedimientos auto-generados desde RI + materialidad' },
+      { code: 'PT-DIFS', label: 'Cédula de Diferencias y Ajustes',            kind: 'MASTER', type: 'CLOSURE_CONCLUSION',      hint: 'Acumula excepciones, semáforo vs materialidad, propuesta de opinión' },
+    ],
+  },
+  {
+    group: 'Auditoría Financiera — Planificación',
+    items: [
+      { code: 'PT-FIN-A3-KC', label: 'Conocimiento del Cliente y Entorno (NIA 315)', kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'Historia, gobierno corporativo, ciclos clave, partes relacionadas' },
+      { code: 'PT-FIN-B00',   label: 'Importación Trial Balance y Cédula Madre',      kind: 'SMART',  type: 'SUBSTANTIVE_TEST',        hint: 'Import Excel/CSV/ERP, clasificador de cuentas, semáforo de materialidad' },
+      { code: 'PT-FIN-B07',   label: 'Análisis de Variaciones (NIA 520)',             kind: 'SMART',  type: 'DATA_ANALYSIS',           hint: 'Horizontal, vertical, 12 ratios financieros, señales de fraude NIA 240' },
+      { code: 'PT-FIN-B09',   label: 'Libro de AJEs — Base Técnica NIIF',            kind: 'SMART',  type: 'SUBSTANTIVE_TEST',        hint: 'Desde B-08, justificación técnica NIIF, carta propuesta al cliente' },
+    ],
+  },
+  {
+    group: 'Auditoría Financiera — Cédulas Sumarias',
+    items: [
+      { code: 'PT-FIN-B01', label: 'Cédula Sumaria — Activos Corrientes',      kind: 'MASTER', type: 'SUBSTANTIVE_TEST', hint: 'B-01a Caja, B-01b CxC, B-01c Inventarios, B-01d Otros AC' },
+      { code: 'PT-FIN-B02', label: 'Cédula Sumaria — Activos No Corrientes',   kind: 'MASTER', type: 'SUBSTANTIVE_TEST', hint: 'PP&E, intangibles, inversiones LP' },
+      { code: 'PT-FIN-B03', label: 'Cédula Sumaria — Pasivos Corrientes',      kind: 'MASTER', type: 'SUBSTANTIVE_TEST', hint: 'CxP comerciales, obligaciones bancarias CP, impuestos' },
+      { code: 'PT-FIN-B04', label: 'Cédula Sumaria — Pasivos No Corrientes',   kind: 'MASTER', type: 'SUBSTANTIVE_TEST', hint: 'Deuda LP, provisiones NIC 37, arrendamientos NIIF 16' },
+      { code: 'PT-FIN-B05', label: 'Cédula Sumaria — Patrimonio',              kind: 'MASTER', type: 'SUBSTANTIVE_TEST', hint: 'Capital social, reservas, utilidades retenidas + Estado de Cambios' },
+      { code: 'PT-FIN-B06', label: 'Cédula Sumaria — Resultados (P&G)',        kind: 'MASTER', type: 'SUBSTANTIVE_TEST', hint: 'Ingresos, costos, gastos, márgenes, EBITDA vs sector' },
+    ],
+  },
+  {
+    group: 'Auditoría Financiera — Pruebas y Cierre',
+    items: [
+      { code: 'PT-FIN-C-SUST', label: 'Prueba Sustantiva por Área (genérico)',  kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'Diferencias auto-push a B-08 cuando superan UAE' },
+      { code: 'PT-FIN-C-NORM', label: 'Análisis Normativo por Área (genérico)', kind: 'SMART',  type: 'NORMATIVE_ANALYSIS', hint: 'NIA 550 Partes Rel. / NIA 570 Continuidad Operativa' },
+      { code: 'PT-FIN-B08',    label: 'Diferencias y Semáforo de Opinión',      kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Acumula diferencias C-XX → semáforo vs MG/ME, opinión propuesta' },
+      { code: 'PT-FIN-D02CI',  label: 'Carta de Debilidades CI (NIA 265)',      kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Deficiencias significativas y materiales comunicadas a gobierno' },
+      { code: 'PT-FIN-DICT',   label: 'Dictamen del Auditor — NIA 700-720',     kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Opinión auto-fill desde B-08, KAMs NIA 701, párrafo de énfasis' },
+    ],
+  },
+  {
+    group: 'Auditoría Fiscal SV (NACOT)',
+    items: [
+      { code: 'PT-FISC-INDEP',   label: 'Independencia Fiscal (NACOT Sec. 2)',    kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: '5 amenazas CIEPC, servicios prohibidos, salvaguardas' },
+      { code: 'PT-FISC-QC',      label: 'Control de Calidad (NACOT Sec. 3)',       kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'Revisor independiente, aprobación previa al dictamen' },
+      { code: 'PT-FISC-ENCARGO', label: 'Carta de Encargo Fiscal (NACOT Sec. 4)', kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'Términos, alcance ISR/IVA/retenciones, SDF 31 mayo' },
+      { code: 'PT-FISC-RISK',    label: 'Riesgo de Incumplimiento Fiscal',         kind: 'SMART',  type: 'CONTROL_EVALUATION',     hint: 'RI por impuesto, fraude fiscal NIA 240, respuesta planeada' },
+      { code: 'PT-FISC-AML',     label: 'Indicadores LA/FT (LCLDA / FATF)',        kind: 'SMART',  type: 'NORMATIVE_ANALYSIS',     hint: '40 señales FATF, paraísos fiscales, obligaciones UIF' },
+      { code: 'PT-FISC-PT',      label: 'Precios de Transferencia (Art. 199-A CT)',kind: 'SMART',  type: 'SUBSTANTIVE_TEST',        hint: '5 métodos OCDE, principio plena competencia, ajuste ISR, F982' },
+      { code: 'PT-FISC-ZF',      label: 'Dictamen Semestral Zona Franca / SI',     kind: 'SMART',  type: 'CLOSURE_CONCLUSION',      hint: 'Régimen de exención, 1er y 2do semestre' },
+      { code: 'PT-FISC-DICT',    label: 'Dictamen Fiscal NACOT Anexo 1',           kind: 'MASTER', type: 'CLOSURE_CONCLUSION',      hint: 'Modelo oficial, 3 tipos de opinión NACOT, independencia auto-fill' },
+    ],
+  },
+  {
+    group: 'Especializado (ISO · NAIG · LA/FT)',
+    items: [
+      { code: 'PT-GOV-HAL',  label: 'Hallazgo Gubernamental (NAIG — 5 elementos)', kind: 'SMART', type: 'FINDING',            hint: 'Condición, Criterio, Causa, Efecto, Recomendación + clasificación NAIG' },
+      { code: 'PT-SEC-RISK', label: 'Evaluación de Riesgos ISO 27001:2022',         kind: 'SMART', type: 'CONTROL_EVALUATION', hint: '93 controles Anexo A, madurez SGSI, NRP-23/32 BCR/SSF' },
+      { code: 'PT-BIA',      label: 'BIA — Impacto en el Negocio (ISO 22301:2019)', kind: 'SMART', type: 'SUBSTANTIVE_TEST',   hint: 'RTO, RPO, MTPoD, dependencias críticas, brecha vs ISO 22301' },
+      { code: 'PT-AML-RISK', label: 'Riesgo LA/FT — NRP-36 / GAFI Rec. 1',         kind: 'SMART', type: 'CONTROL_EVALUATION', hint: 'Clientes 40%, productos 30%, canales 20%, geografía 10%, 3 líneas defensa' },
+    ],
+  },
+];
+
+// Flat lookup: paperCode → metadata
+const CANONICAL_BY_CODE = Object.fromEntries(
+  CANONICAL_PAPER_GROUPS.flatMap(g => g.items).map(p => [p.code, p]),
+);
+
 const WP_KINDS = [
   { value: 'STANDARD', label: 'Estándar', icon: FileText,  description: 'Documento tradicional con adjuntos y narrativa libre',          color: 'bg-gray-50 border-gray-300 text-gray-700' },
   { value: 'SMART',    label: 'Inteligente', icon: Database, description: 'Secciones tipadas, asistencia IA por sección, propagación al grafo', color: 'bg-blue-50 border-blue-400 text-blue-700' },
@@ -44,8 +127,21 @@ function NewWorkingPaperInner() {
   const [type,      setType]      = useState<typeof WORKING_PAPER_TYPES[number]['value']>('PLANNING_UNDERSTANDING');
   const [wpKind,    setWpKind]    = useState<typeof WP_KINDS[number]['value']>('SMART');
   const [code,      setCode]      = useState('');
-  const [paperCode, setPaperCode] = useState('');
-  const [error,     setError]     = useState('');
+  const [paperCode,   setPaperCode]   = useState('');
+  const [customCode,  setCustomCode]  = useState(false);
+  const [error,       setError]       = useState('');
+
+  function handleSelectPaperCode(value: string) {
+    if (value === '__custom__') { setCustomCode(true); setPaperCode(''); return; }
+    setPaperCode(value);
+    if (!value) return;
+    const meta = CANONICAL_BY_CODE[value];
+    if (meta) {
+      if (!title.trim()) setTitle(meta.label);
+      setType(meta.type as never);
+      setWpKind(meta.kind as never);
+    }
+  }
 
   // Pre-fill code based on folder ref (if available)
   const [folderRef, setFolderRef] = useState('');
@@ -228,22 +324,61 @@ function NewWorkingPaperInner() {
               </p>
             </div>
 
-            {/* Paper code optional */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                paperCode canónico (opcional)
-              </label>
-              <input
-                type="text"
-                value={paperCode}
-                onChange={e => setPaperCode(e.target.value)}
-                placeholder="Ej. PT-A1, PT-COSO, PT-MEMO"
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400 font-mono"
-              />
-              <p className="text-[10px] text-gray-400 mt-1">
-                Si usas un código estándar (PT-A1, PT-COSO, etc.), inicializa secciones automáticamente desde plantilla.
-              </p>
-            </div>
+            {/* Canonical paper picker — only for SMART / MASTER */}
+            {(wpKind === 'SMART' || wpKind === 'MASTER') && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Plantilla canónica de secciones
+                </label>
+                {!customCode ? (
+                  <select
+                    value={paperCode}
+                    onChange={e => handleSelectPaperCode(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
+                  >
+                    <option value="">— Sin plantilla (papel en blanco) —</option>
+                    {CANONICAL_PAPER_GROUPS.map(g => (
+                      <optgroup key={g.group} label={g.group}>
+                        {g.items.map(p => (
+                          <option key={p.code} value={p.code}>
+                            {p.code} — {p.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                    <option value="__custom__">✎ Ingresar código manualmente…</option>
+                  </select>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={paperCode}
+                      onChange={e => setPaperCode(e.target.value)}
+                      placeholder="PT-A1, PT-COSO, PT-MEMO…"
+                      className="flex-1 px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400 font-mono"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setCustomCode(false); setPaperCode(''); }}
+                      className="px-3 py-2 text-xs text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      ← Lista
+                    </button>
+                  </div>
+                )}
+                {paperCode && CANONICAL_BY_CODE[paperCode] && (
+                  <p className="text-[10px] text-blue-600 mt-1">
+                    💡 {CANONICAL_BY_CODE[paperCode].hint}
+                  </p>
+                )}
+                {!paperCode && !customCode && (
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Al seleccionar una plantilla, el tipo, motor y secciones se inicializan automáticamente.
+                  </p>
+                )}
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-700">

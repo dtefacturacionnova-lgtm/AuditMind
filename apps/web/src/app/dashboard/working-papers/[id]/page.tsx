@@ -31,7 +31,10 @@ import { CrossAuditSuggestions }   from '@/components/working-papers/CrossAuditS
 import { PaperProceduresPanel, type AppliedProcedure } from '@/components/working-papers/PaperProceduresPanel';
 import { PaperAgentPanel, PaperAgentButton, PAPER_AGENT_MAP, DEFAULT_AGENT } from '@/components/working-papers/PaperAgentPanel';
 import { SamplingCalculatorModal }  from '@/components/working-papers/SamplingCalculatorModal';
-import { CosoAssessmentPanel }      from '@/components/working-papers/CosoAssessmentPanel';
+import { CosoAssessmentPanel, assessmentToText } from '@/components/working-papers/CosoAssessmentPanel';
+import { DocumentEvidencePanel, type DocumentEvidenceRow } from '@/components/working-papers/DocumentEvidencePanel';
+import { useUpdateSection }         from '@/hooks/useWorkingPaperGraph';
+import { type CosoAssessment }      from '@/hooks/useCosoAssessment';
 import { VersionHistoryPanel }      from '@/components/working-papers/VersionHistoryPanel';
 import type { AiDraftConfig } from '@/components/working-papers/SectionField';
 import { apiClient }            from '@/lib/api-client';
@@ -910,6 +913,55 @@ function PbcLinksPanel({ paperId }: { paperId: string }) {
 
 type TabKey = 'content' | 'sections' | 'graph' | 'review' | 'history' | 'file';
 
+// ─── COSO IA → section mapping helpers ───────────────────────────────────────
+
+const COSO_PRINCIPLE_NAMES: Record<number, string> = {
+  1:  'Integridad y valores éticos',
+  2:  'Independencia del órgano de supervisión',
+  3:  'Estructura, autoridades y responsabilidades',
+  4:  'Competencia del personal',
+  5:  'Responsabilidad por el control',
+  6:  'Objetivos específicos definidos',
+  7:  'Identificación y análisis de riesgos',
+  8:  'Evaluación del riesgo de fraude',
+  9:  'Cambios significativos identificados',
+  10: 'Selección y desarrollo de controles',
+  11: 'Controles Generales de TI',
+  12: 'Implementación mediante políticas y procedimientos',
+  13: 'Información relevante y de calidad',
+  14: 'Comunicación interna efectiva',
+  15: 'Comunicación con terceros',
+  16: 'Evaluaciones continuas e independientes',
+  17: 'Comunicación oportuna de deficiencias',
+};
+
+const COSO_COMP_TO_SECTION: Record<string, string> = {
+  CE: 'S1', RA: 'S2', CA: 'S3', IC: 'S4', MA: 'S5',
+};
+
+const COSO_MATURITY_LABEL: Record<string, string> = {
+  EFFECTIVE:             'Efectivo',
+  WITH_DEFICIENCIES:     'Con deficiencias',
+  INEFFECTIVE:           'Inefectivo',
+  INSUFFICIENT_EVIDENCE: 'Evidencia insuficiente',
+};
+
+function cosoToCompEval(m: string): string {
+  if (m === 'EFFECTIVE')   return 'EFECTIVO';
+  if (m === 'INEFFECTIVE') return 'DEBILIDAD_MATERIAL';
+  return 'DEBILIDAD_SIGNIFICATIVA';
+}
+function cosoToS6(m: string): string {
+  if (m === 'EFFECTIVE')   return 'EFECTIVO';
+  if (m === 'INEFFECTIVE') return 'INEFECTIVO';
+  return 'CON_DEBILIDADES_SIGNIFICATIVAS';
+}
+function cosoToS7(m: string): string {
+  if (m === 'EFFECTIVE')   return 'ENFOQUE_CONTROLES';
+  if (m === 'INEFFECTIVE') return 'ENFOQUE_SUSTANTIVO';
+  return 'ENFOQUE_MIXTO';
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WpDetailPage() {
@@ -925,6 +977,7 @@ export default function WpDetailPage() {
   const { data: versions } = useWpVersions(params.id);
 
   const [content, setContent]         = useState<Record<string, string>>({});
+  const [documentEvidence, setDocumentEvidence] = useState<DocumentEvidenceRow[]>([]);
   const [conclusion, setConclusion]   = useState('');
   const [dirty, setDirty]             = useState(false);
   const [activeTab, setActiveTab]     = useState<TabKey>('content');
@@ -938,12 +991,17 @@ export default function WpDetailPage() {
   const [showSampling,    setShowSampling]    = useState(false);
   const [downloadingPdf,  setDownloadingPdf]  = useState(false);
   const [showCoso,        setShowCoso]        = useState(false);
+  const updateSection = useUpdateSection();
 
   // Initialize content from server data — use useEffect to avoid setState-during-render
   const [initialized, setInit] = useState(false);
   useEffect(() => {
     if (wp && !initialized) {
-      setContent((wp.content ?? {}) as Record<string, string>);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fullContent = (wp.content ?? {}) as Record<string, any>;
+      const { documentEvidence: de, ...textContent } = fullContent;
+      setContent(textContent as Record<string, string>);
+      setDocumentEvidence(Array.isArray(de) ? (de as DocumentEvidenceRow[]) : []);
       setConclusion(wp.conclusion ?? '');
       setInit(true);
     }
@@ -979,7 +1037,7 @@ export default function WpDetailPage() {
   }, []);
 
   const handleSave = async () => {
-    await updateWp.mutateAsync({ content, conclusion });
+    await updateWp.mutateAsync({ content: { ...content, documentEvidence }, conclusion });
     setDirty(false);
   };
 
@@ -1549,6 +1607,14 @@ export default function WpDetailPage() {
                     disabled={addTickMark.isPending || wp.status === 'ARCHIVED'}
                   />
                 </div>
+
+                {/* Documentos y Evidencias Recibidos */}
+                <DocumentEvidencePanel
+                  paperId={params.id}
+                  rows={documentEvidence}
+                  onChange={newRows => { setDocumentEvidence(newRows); setDirty(true); }}
+                  readOnly={wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED' || wp.status === 'ARCHIVED'}
+                />
               </div>
 
               {/* Right: Sidebar */}
@@ -1778,9 +1844,44 @@ export default function WpDetailPage() {
         <CosoAssessmentPanel
           paperId={params.id as string}
           onClose={() => setShowCoso(false)}
-          onInsert={(text) => {
-            setConclusion(prev => prev ? `${prev}\n\n${text}` : text);
-            setDirty(true);
+          onInsert={(assessment: CosoAssessment) => {
+            if (wp?.paperCode === 'PT-COSO') {
+              // Populate the 13 structured PT-COSO sections from the AI assessment
+              const pid = params.id as string;
+              const updates: Promise<unknown>[] = [];
+              for (const comp of assessment.components) {
+                const s = COSO_COMP_TO_SECTION[comp.key];
+                if (!s) continue;
+                const compPrinciples = assessment.principles.filter(p => p.componentKey === comp.key);
+                const matrixRows = compPrinciples.map(p => ({
+                  'Principio':     `P${p.id} — ${COSO_PRINCIPLE_NAMES[p.id] ?? ''}`,
+                  'Estado':        COSO_MATURITY_LABEL[p.status] ?? p.status,
+                  'Evidencia':     p.evidenceRef,
+                  'Justificación': p.justification,
+                }));
+                updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: s,           value: matrixRows }));
+                updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: `${s}_EVAL`, value: cosoToCompEval(comp.maturity) }));
+              }
+              updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: 'S6', value: cosoToS6(assessment.overallMaturity) }));
+              updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: 'S7', value: cosoToS7(assessment.overallMaturity) }));
+              const defText = assessment.components
+                .flatMap(c => c.deficiencies.map(d => `[${c.key}] ${d}`))
+                .join('\n');
+              updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: 'S8', value: defText || '(Sin deficiencias identificadas)' }));
+              const conclusionText = [
+                assessment.executiveSummary,
+                '',
+                'Próximos pasos recomendados:',
+                ...assessment.nextSteps.map((step, i) => `${i + 1}. ${step}`),
+              ].join('\n');
+              updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: 'S9', value: conclusionText }));
+              Promise.all(updates).catch(e => alert('Error al guardar secciones COSO: ' + (e as Error).message));
+            } else {
+              // Standard (non-SMART) paper: append formatted text to the conclusion field
+              const text = assessmentToText(assessment);
+              setConclusion(prev => prev ? `${prev}\n\n${text}` : text);
+              setDirty(true);
+            }
           }}
         />
       )}

@@ -498,6 +498,68 @@ export class WorkingPapersController {
     return this.service.removeAttachment(id, procedureId, attachmentId, user);
   }
 
+  // ─── F4: Evidencia documental (STANDARD papers) ────────────────────────────
+  @Post(':id/document-evidence/:rowId/attachments')
+  @Roles(UserRole.AUDITOR)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Subir un archivo de evidencia a una fila de documento (máx 25MB)' })
+  attachToDocumentEvidence(
+    @Param('id') id: string,
+    @Param('rowId') rowId: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) throw new Error('No se recibió archivo');
+    return this.service.attachToDocumentEvidence(id, rowId, file, user);
+  }
+
+  @Delete(':id/document-evidence/:rowId/attachments/:attachmentId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Quitar un archivo de evidencia de una fila de documento' })
+  removeDocumentEvidenceAttachment(
+    @Param('id') id: string,
+    @Param('rowId') rowId: string,
+    @Param('attachmentId') attachmentId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.removeDocumentEvidenceAttachment(id, rowId, attachmentId, user);
+  }
+
+  // ─── F5b: Obtener cuentas del TB de B-00 para importar a la analítica ───────
+  @Get(':id/tb-accounts')
+  @Roles(UserRole.AUDITOR, UserRole.SENIOR_AUDITOR, UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Devuelve cuentas clasificadas del B-00 para importar a la analítica' })
+  getTbAccountsForPaper(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.getTbAccountsForPaper(id, user);
+  }
+
+  // ─── F5: Analítica de cuentas (ACCOUNT_SCHEDULE) ─────────────────────────
+  @Post(':id/account-schedule/:rowId/attachments')
+  @Roles(UserRole.AUDITOR)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Subir adjunto a una fila de cédula analítica (ACCOUNT_SCHEDULE, máx 25MB)' })
+  attachToAccountSchedule(
+    @Param('id') id: string,
+    @Param('rowId') rowId: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) throw new Error('No se recibió archivo');
+    return this.service.attachToAccountSchedule(id, rowId, file, user);
+  }
+
+  @Delete(':id/account-schedule/:rowId/attachments/:attachmentId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Quitar adjunto de una fila de cédula analítica' })
+  removeAccountScheduleAttachment(
+    @Param('id') id: string,
+    @Param('rowId') rowId: string,
+    @Param('attachmentId') attachmentId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.removeAccountScheduleAttachment(id, rowId, attachmentId, user);
+  }
+
   // ─── F3: Referencias cruzadas — vincular procedimiento con otro papel ──────
   @Post(':id/procedures/:procedureId/cross-refs')
   @Roles(UserRole.AUDITOR)

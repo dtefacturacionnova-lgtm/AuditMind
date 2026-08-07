@@ -115,7 +115,7 @@ function ComponentCard({ comp }: { comp: CosoComponent }) {
 
 // ─── Build insertable text ───────────────────────────────────────────────────
 
-function assessmentToText(a: CosoAssessment): string {
+export function assessmentToText(a: CosoAssessment): string {
   const lines: string[] = [];
   lines.push('═════════ EVALUACIÓN COSO 2013 (asistida por IA) ═════════');
   lines.push(`Score global: ${a.overallScore}/100 · Madurez: ${MATURITY_STYLE[a.overallMaturity]?.label ?? a.overallMaturity}`);
@@ -147,7 +147,7 @@ function assessmentToText(a: CosoAssessment): string {
 interface CosoAssessmentPanelProps {
   paperId:  string;
   onClose:  () => void;
-  onInsert?: (text: string) => void;
+  onInsert?: (assessment: CosoAssessment) => void;
 }
 
 export function CosoAssessmentPanel({ paperId, onClose, onInsert }: CosoAssessmentPanelProps) {
@@ -173,7 +173,7 @@ export function CosoAssessmentPanel({ paperId, onClose, onInsert }: CosoAssessme
 
   function handleInsert() {
     if (!assessment || !onInsert) return;
-    onInsert(assessmentToText(assessment));
+    onInsert(assessment);
     onClose();
   }
 

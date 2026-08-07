@@ -115,7 +115,13 @@ export class PaperGraphService {
         },
       },
     });
-    return links.map((l) => ({ ...l.source, sourceField: l.sourceField, targetField: l.targetField }));
+    return links.map((l) => ({
+      ...l.source,
+      sourceField: l.sourceField,
+      targetField: l.targetField,
+      mappingType: l.mappingType,
+      description: l.description ?? null,
+    }));
   }
 
   /**
@@ -133,7 +139,13 @@ export class PaperGraphService {
         },
       },
     });
-    return links.map((l) => ({ ...l.target, sourceField: l.sourceField, targetField: l.targetField }));
+    return links.map((l) => ({
+      ...l.target,
+      sourceField: l.sourceField,
+      targetField: l.targetField,
+      mappingType: l.mappingType,
+      description: l.description ?? null,
+    }));
   }
 
   /**

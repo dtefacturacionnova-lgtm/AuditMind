@@ -432,6 +432,188 @@ export class WorkingPapersService {
     return { removed: true };
   }
 
+  // ─── F4: Evidencia documental (STANDARD papers) ────────────────────────────
+  async attachToDocumentEvidence(
+    paperId: string,
+    rowId: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    user: AuthUser,
+  ) {
+    const wp = await this.findOne(paperId, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows: any[] = Array.isArray(content.documentEvidence) ? content.documentEvidence : [];
+    let rowIndex = rows.findIndex((r: { id: string }) => r.id === rowId);
+    if (rowIndex === -1) {
+      rows.push({ id: rowId, name: '', description: '', reviewedBy: '', attachments: [] });
+      rowIndex = rows.length - 1;
+    }
+
+    const safeName = file.originalname.replace(/[^\w.\-]/g, '_');
+    const path     = `docevidence/${paperId}/${rowId}/${Date.now()}_${safeName}`;
+    const { error: upErr } = await this.supabaseAdmin.storage
+      .from('audit-files')
+      .upload(path, file.buffer, {
+        contentType: file.mimetype || 'application/octet-stream',
+        cacheControl: '3600',
+        upsert: false,
+      });
+    if (upErr) throw new BadRequestException(`Error al subir archivo: ${upErr.message}`);
+
+    const { data: urlData } = this.supabaseAdmin.storage.from('audit-files').getPublicUrl(path);
+
+    const attachment = {
+      id:         `att_${Date.now().toString(36)}`,
+      filename:   file.originalname,
+      url:        urlData.publicUrl,
+      mimeType:   file.mimetype,
+      size:       file.size,
+      uploadedAt: new Date().toISOString(),
+    };
+    rows[rowIndex].attachments = [...(rows[rowIndex].attachments ?? []), attachment];
+
+    await this.prisma.workingPaper.update({
+      where: { id: paperId },
+      data:  { content: { ...content, documentEvidence: rows } as Prisma.InputJsonValue },
+    });
+    return attachment;
+  }
+
+  async removeDocumentEvidenceAttachment(
+    paperId: string,
+    rowId: string,
+    attachmentId: string,
+    user: AuthUser,
+  ) {
+    const wp = await this.findOne(paperId, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows: any[] = Array.isArray(content.documentEvidence) ? content.documentEvidence : [];
+    const rowIndex = rows.findIndex((r: { id: string }) => r.id === rowId);
+    if (rowIndex === -1) throw new NotFoundException('Fila de evidencia no encontrada');
+
+    rows[rowIndex].attachments = (rows[rowIndex].attachments ?? []).filter(
+      (a: { id: string }) => a.id !== attachmentId,
+    );
+
+    await this.prisma.workingPaper.update({
+      where: { id: paperId },
+      data:  { content: { ...content, documentEvidence: rows } as Prisma.InputJsonValue },
+    });
+    return { removed: true };
+  }
+
+  // ─── F5: Analítica de cuentas (ACCOUNT_SCHEDULE) — adjuntos por fila ────────
+  async attachToAccountSchedule(
+    paperId: string,
+    rowId: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    user: AuthUser,
+  ) {
+    const wp = await this.findOne(paperId, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+
+    const safeName = file.originalname.replace(/[^\w.\-]/g, '_');
+    const path     = `acct-schedule/${paperId}/${rowId}/${Date.now()}_${safeName}`;
+    const { error: upErr } = await this.supabaseAdmin.storage
+      .from('audit-files')
+      .upload(path, file.buffer, {
+        contentType:  file.mimetype || 'application/octet-stream',
+        cacheControl: '3600',
+        upsert:       false,
+      });
+    if (upErr) throw new BadRequestException(`Error al subir archivo: ${upErr.message}`);
+
+    const { data: urlData } = this.supabaseAdmin.storage.from('audit-files').getPublicUrl(path);
+
+    const attachment = {
+      id:         `att_${Date.now().toString(36)}`,
+      filename:   file.originalname,
+      url:        urlData.publicUrl,
+      mimeType:   file.mimetype,
+      size:       file.size,
+      uploadedAt: new Date().toISOString(),
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const acctEvidence: Record<string, any> = content.accountScheduleEvidence ?? {};
+    const rowEvidence = acctEvidence[rowId] ?? { attachments: [] };
+    rowEvidence.attachments = [...(rowEvidence.attachments ?? []), attachment];
+    acctEvidence[rowId] = rowEvidence;
+
+    await this.prisma.workingPaper.update({
+      where: { id: paperId },
+      data:  { content: { ...content, accountScheduleEvidence: acctEvidence } as Prisma.InputJsonValue },
+    });
+    return attachment;
+  }
+
+  async removeAccountScheduleAttachment(
+    paperId: string,
+    rowId: string,
+    attachmentId: string,
+    user: AuthUser,
+  ) {
+    const wp = await this.findOne(paperId, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const content = (wp.content ?? {}) as Record<string, any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const acctEvidence: Record<string, any> = content.accountScheduleEvidence ?? {};
+    const rowEvidence = acctEvidence[rowId];
+    if (!rowEvidence) throw new NotFoundException('Fila de cédula analítica no encontrada');
+
+    rowEvidence.attachments = (rowEvidence.attachments ?? []).filter(
+      (a: { id: string }) => a.id !== attachmentId,
+    );
+    acctEvidence[rowId] = rowEvidence;
+
+    await this.prisma.workingPaper.update({
+      where: { id: paperId },
+      data:  { content: { ...content, accountScheduleEvidence: acctEvidence } as Prisma.InputJsonValue },
+    });
+    return { removed: true };
+  }
+
+  // ─── TB Accounts: Devuelve cuentas clasificadas del B-00 para importar ──────
+
+  async getTbAccountsForPaper(paperId: string, user: AuthUser) {
+    const paper = await this.prisma.workingPaper.findUnique({
+      where:   { id: paperId },
+      include: { audit: { select: { id: true, organizationId: true } } },
+    });
+    if (!paper) throw new NotFoundException('Papel no encontrado');
+    if (paper.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+
+    const b00 = await this.prisma.workingPaper.findFirst({
+      where:  { auditId: paper.audit.id, paperCode: 'PT-FIN-B00' },
+      select: { id: true },
+    });
+    if (!b00) return { accounts: [], message: 'No hay Balance de Comprobación en B-00' };
+
+    const s2 = await this.prisma.paperSection.findUnique({
+      where:  { paperId_sectionKey: { paperId: b00.id, sectionKey: 'S2' } },
+      select: { value: true },
+    });
+    if (!s2?.value) return { accounts: [], message: 'B-00 aún no tiene clasificación guardada' };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows: any[] = Array.isArray(s2.value) ? s2.value : [];
+    return {
+      accounts: rows.map((r) => ({
+        cuenta:         String(r.cuenta ?? ''),
+        descripcion:    String(r.descripcion ?? ''),
+        saldo_actual:   Number(r.saldo_actual ?? 0),
+        saldo_anterior: Number(r.saldo_anterior ?? 0),
+        sub_sumaria:    String(r.sub_sumaria ?? ''),
+        grupo:          String(r.grupo ?? ''),
+      })),
+      message: `${rows.length} cuentas disponibles desde B-00`,
+    };
+  }
+
   // ─── F3: Referencias cruzadas — vincular procedimiento con otro papel ──────
   async addCrossRefToProcedure(
     id: string,

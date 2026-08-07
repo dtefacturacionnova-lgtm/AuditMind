@@ -5,6 +5,8 @@ import { Pencil, Bot, X, Check, Sparkles, RefreshCw, AlertTriangle, ShieldCheck,
 import type { MentionItem, PaperSection, SectionAttachment, SectionFieldType } from '@/hooks/useWorkingPaperGraph';
 import { useAssistSection, useConfirmSection, useAttachToSection, useRemoveSectionAttachment } from '@/hooks/useWorkingPaperGraph';
 import { HighlightedMentions, MentionableTextarea } from './MentionableTextarea';
+import { AccountScheduleSection } from './AccountScheduleSection';
+import type { AccountScheduleRow } from './AccountScheduleSection';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -678,6 +680,23 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
             onClick={isReadOnlyField || isAutoAndLocked ? undefined : startEdit}
             className={!isReadOnlyField && !isAutoAndLocked ? 'cursor-text hover:bg-gray-50 rounded-lg p-1.5 -mx-1.5 transition-colors' : ''}
           >
+            {/* Account Schedule — analítica multi-nivel */}
+            {section.fieldType === 'ACCOUNT_SCHEDULE' && paperId && (
+              <AccountScheduleSection
+                paperId={paperId}
+                rows={
+                  Array.isArray(effectiveValue)
+                    ? (effectiveValue as AccountScheduleRow[])
+                    : (() => {
+                        try { return JSON.parse(String(effectiveValue ?? '[]')); }
+                        catch { return []; }
+                      })()
+                }
+                onChange={rows => onSave(section.sectionKey, rows as unknown as string)}
+                readOnly={readonly}
+              />
+            )}
+
             {/* Matrix */}
             {section.fieldType === 'MATRIX' && (
               <MatrixDisplay value={effectiveValue} />
@@ -705,7 +724,7 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
             )}
 
             {/* All text-like */}
-            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN'].includes(section.fieldType) && (
+            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE'].includes(section.fieldType) && (
               <p className={`text-sm leading-relaxed ${
                 effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== ''
                   ? 'text-gray-700'

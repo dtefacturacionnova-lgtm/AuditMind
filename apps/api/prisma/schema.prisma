@@ -136,10 +136,11 @@ enum FieldType {
   BOOLEAN
   ENUM_SELECT
   DATE
-  MATRIX        // Tabla de riesgos/controles
-  REFERENCE     // Referencia a otro campo de otro PT
-  RISK_REF      // Referencia a riesgo del registro
-  ATTACHMENT    // Archivos adjuntos
+  MATRIX           // Tabla de riesgos/controles
+  REFERENCE        // Referencia a otro campo de otro PT
+  RISK_REF         // Referencia a riesgo del registro
+  ATTACHMENT       // Archivos adjuntos
+  ACCOUNT_SCHEDULE // Cédula analítica multi-nivel: código/nombre/saldo/ajustes/saldo ajustado/notas/evidencia por fila
 }
 
 // Tipo de mapeo entre papeles en el grafo

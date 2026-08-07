@@ -20,7 +20,8 @@ export type SectionFieldType =
   | 'ATTACHMENT'
   | 'ACCOUNT_SCHEDULE'
   | 'DECLARATIONS'
-  | 'LEGAL_MATRIX';
+  | 'LEGAL_MATRIX'
+  | 'AUDIT_REPORTS';
 
 export interface PaperSection {
   id: string;

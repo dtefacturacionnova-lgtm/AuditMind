@@ -11,6 +11,8 @@ import { DeclaracionesIndependenciaPanel } from './DeclaracionesIndependenciaPan
 import type { DeclaracionRow } from './DeclaracionesIndependenciaPanel';
 import { MarcoLegalNormativaPanel } from './MarcoLegalNormativaPanel';
 import type { NormativaRow } from './MarcoLegalNormativaPanel';
+import { InformesAuditoriaInternaPanel } from './InformesAuditoriaInternaPanel';
+import type { InformeAIRow } from './InformesAuditoriaInternaPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -513,7 +515,8 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
     section.fieldType === 'RISK_REF' ||
     section.fieldType === 'ATTACHMENT' ||
     section.fieldType === 'DECLARATIONS' ||
-    section.fieldType === 'LEGAL_MATRIX';
+    section.fieldType === 'LEGAL_MATRIX' ||
+    section.fieldType === 'AUDIT_REPORTS';
 
   const isAutoAndLocked = section.isAutoFilled && !overriding && !editing;
 
@@ -738,6 +741,23 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
               />
             )}
 
+            {/* Audit Reports — grid de informes de auditoría interna emitidos + adjunto por fila */}
+            {section.fieldType === 'AUDIT_REPORTS' && paperId && (
+              <InformesAuditoriaInternaPanel
+                paperId={paperId}
+                rows={
+                  Array.isArray(effectiveValue)
+                    ? (effectiveValue as InformeAIRow[])
+                    : (() => {
+                        try { return JSON.parse(String(effectiveValue ?? '[]')); }
+                        catch { return []; }
+                      })()
+                }
+                onChange={rows => onSave(section.sectionKey, rows as unknown as string)}
+                readOnly={readonly}
+              />
+            )}
+
             {/* Matrix */}
             {section.fieldType === 'MATRIX' && (
               <MatrixDisplay value={effectiveValue} />
@@ -765,7 +785,7 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
             )}
 
             {/* All text-like */}
-            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX'].includes(section.fieldType) && (
+            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS'].includes(section.fieldType) && (
               <p className={`text-sm leading-relaxed ${
                 effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== ''
                   ? 'text-gray-700'

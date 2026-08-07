@@ -143,6 +143,7 @@ enum FieldType {
   ACCOUNT_SCHEDULE // Cédula analítica multi-nivel: código/nombre/saldo/ajustes/saldo ajustado/notas/evidencia por fila
   DECLARATIONS     // Grid editable de declaraciones de independencia con adjunto por fila
   LEGAL_MATRIX     // Grid editable de normativas/leyes con columnas especializadas + adjunto por fila
+  AUDIT_REPORTS    // Grid editable de informes de auditoría interna emitidos con adjunto por fila
 }
 
 // Tipo de mapeo entre papeles en el grafo

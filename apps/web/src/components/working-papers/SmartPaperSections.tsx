@@ -46,6 +46,35 @@ class SectionErrorBoundary extends Component<
 
 // ─── Template key selector ────────────────────────────────────────────────────
 
+// Conjuntos de claves permitidas por tipo de auditoría.
+// Deben mantenerse en sync con TEMPLATE_ALLOWED_CODES en new/page.tsx.
+const _HALL_KEYS = new Set(['PT-HALL', 'PT-HALL-COM', 'PT-HALL-RESP']);
+const _EXT_FIN_KEYS = new Set([
+  'PT-INDEP','PT-A1','PT-A2','PT-A3','PT-A4','PT-COSO','PT-MEMO','PT-PROG',
+  'PT-NIA250','PT-NIA530','PT-NIA610','PT-NIA620',
+  'PT-FIN-A3-KC','PT-FIN-B00','PT-FIN-B01','PT-FIN-B02','PT-FIN-B03',
+  'PT-FIN-B04','PT-FIN-B05','PT-FIN-B06','PT-FIN-B07','PT-FIN-B08','PT-FIN-B09',
+  'PT-ADJ-RECLASIF','PT-DIFS','PT-CIRC','PT-FIN-C-SUST','PT-FIN-C-NORM','PT-FIN-C-ESTIM','PT-FIN-C-GEN',
+  'PT-REP580','PT-NIA560','PT-NIA265','PT-NIA260','PT-FIN-D02CI','PT-FIN-DICT',
+  ..._HALL_KEYS,
+]);
+const _FISCAL_KEYS    = new Set(['PT-A1','PT-A2','PT-A3','PT-A4','PT-MEMO','PT-PROG','PT-FISC-INDEP','PT-FISC-QC','PT-FISC-ENCARGO','PT-FISC-RISK','PT-FISC-AML','PT-FISC-PT','PT-FISC-ZF','PT-FISC-DICT',..._HALL_KEYS]);
+const _INTERNAL_KEYS  = new Set(['PT-A1','PT-A2','PT-A3','PT-A4','PT-COSO','PT-MEMO','PT-PROG','PT-DIFS',..._HALL_KEYS]);
+const _NAIG_KEYS      = new Set(['PT-A1','PT-A2','PT-A4','PT-COSO','PT-MEMO','PT-PROG','PT-GOV-HAL',..._HALL_KEYS]);
+const _IT_KEYS        = new Set(['PT-A1','PT-A3','PT-MEMO','PT-PROG','PT-SEC-RISK','PT-BIA',..._HALL_KEYS]);
+const _AML_KEYS       = new Set(['PT-A1','PT-A3','PT-MEMO','PT-PROG','PT-AML-RISK',..._HALL_KEYS]);
+const _FORENSIC_KEYS  = new Set(['PT-A2','PT-MEMO','PT-PROG','PT-DIFS',..._HALL_KEYS]);
+const TEMPLATE_FILTER: Record<string, Set<string>> = {
+  EXTERNAL: _EXT_FIN_KEYS, FINANCIAL: _EXT_FIN_KEYS, EXTERNAL_FINANCIAL: _EXT_FIN_KEYS,
+  FISCAL: _FISCAL_KEYS,
+  INTERNAL: _INTERNAL_KEYS, OPERATIONAL: _INTERNAL_KEYS, IT: _INTERNAL_KEYS,
+  COMPLIANCE: _INTERNAL_KEYS, ESG: _INTERNAL_KEYS, BCP_DRP: _INTERNAL_KEYS,
+  INTERNAL_GOVERNMENTAL: _NAIG_KEYS,
+  IT_SECURITY: _IT_KEYS,
+  AML: _AML_KEYS,
+  FORENSIC: _FORENSIC_KEYS,
+};
+
 // Las claves DEBEN coincidir con PAPER_TEMPLATES del backend (paperCode).
 // Ver apps/api/src/working-papers/paper-templates.ts
 const AVAILABLE_TEMPLATES = [
@@ -115,14 +144,21 @@ const AVAILABLE_TEMPLATES = [
 function InitFromTemplatePanel({
   paperId,
   defaultKey,
+  auditType,
   onDone,
 }: {
   paperId: string;
   defaultKey?: string;
+  auditType?: string;
   onDone: () => void;
 }) {
-  // Pre-select the paper's own paperCode if it matches an available template
-  const initialKey = defaultKey && AVAILABLE_TEMPLATES.some(t => t.key === defaultKey)
+  const allowedKeys = auditType ? TEMPLATE_FILTER[auditType] : undefined;
+  const visibleTemplates = allowedKeys
+    ? AVAILABLE_TEMPLATES.filter(t => allowedKeys.has(t.key))
+    : AVAILABLE_TEMPLATES;
+
+  // Pre-select the paper's own paperCode if it matches a visible template
+  const initialKey = defaultKey && visibleTemplates.some(t => t.key === defaultKey)
     ? defaultKey
     : '';
   const [selected, setSelected] = useState(initialKey);
@@ -155,7 +191,7 @@ function InitFromTemplatePanel({
           className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
         >
           <option value="">— Seleccionar plantilla —</option>
-          {AVAILABLE_TEMPLATES.map(t => (
+          {visibleTemplates.map(t => (
             <option key={t.key} value={t.key}>{t.label}</option>
           ))}
         </select>
@@ -208,6 +244,7 @@ interface SmartPaperSectionsProps {
   paperCode?:     string | null;
   readonly?:      boolean;
   aiDraftConfig?: AiDraftConfig;
+  auditType?:     string;
 }
 
 export function SmartPaperSections({
@@ -216,6 +253,7 @@ export function SmartPaperSections({
   paperCode,
   readonly = false,
   aiDraftConfig,
+  auditType,
 }: SmartPaperSectionsProps) {
   const { data: sections, isLoading, error } = usePaperSections(paperId);
   const updateSection       = useUpdateSection();
@@ -245,6 +283,7 @@ export function SmartPaperSections({
       <InitFromTemplatePanel
         paperId={paperId}
         defaultKey={paperCode ?? undefined}
+        auditType={auditType}
         onDone={() => { /* query will auto-refresh */ }}
       />
     );
@@ -349,23 +388,24 @@ export function SmartPaperSections({
           }
 
           return (
-            <SectionField
-              key={section.sectionKey}
-              section={section}
-              readonly={readonly}
-              onSave={handleSave}
-              paperId={paperId}
-              mentionItems={mentionItems}
-              aiDraftConfig={aiDraftConfig}
-              onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
-                void createReference.mutateAsync({
-                  paperId,
-                  sourceSectionKey: sectionKey,
-                  targetPaperId,
-                  targetSectionKey,
-                });
-              }}
-            />
+            <SectionErrorBoundary key={section.sectionKey} label={section.label}>
+              <SectionField
+                section={section}
+                readonly={readonly}
+                onSave={handleSave}
+                paperId={paperId}
+                mentionItems={mentionItems}
+                aiDraftConfig={aiDraftConfig}
+                onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                  void createReference.mutateAsync({
+                    paperId,
+                    sourceSectionKey: sectionKey,
+                    targetPaperId,
+                    targetSectionKey,
+                  });
+                }}
+              />
+            </SectionErrorBoundary>
           );
         })}
       </div>

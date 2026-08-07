@@ -1708,6 +1708,7 @@ export default function WpDetailPage() {
                 paperCode={wp.paperCode}
                 readonly={wp.status === 'APPROVED'}
                 aiDraftConfig={wp.status !== 'APPROVED' ? aiDraftConfig : undefined}
+                auditType={(wp.audit as any)?.type ?? ''}
               />
               <PaperProceduresPanel
                 paperId={params.id}

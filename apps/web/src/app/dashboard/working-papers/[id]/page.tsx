@@ -1001,7 +1001,8 @@ export default function WpDetailPage() {
       const fullContent = (wp.content ?? {}) as Record<string, any>;
       const { documentEvidence: de, ...textContent } = fullContent;
       setContent(textContent as Record<string, string>);
-      setDocumentEvidence(Array.isArray(de) ? (de as DocumentEvidenceRow[]) : []);
+      const rows = Array.isArray(de) ? (de as DocumentEvidenceRow[]) : [];
+      setDocumentEvidence(rows.map(r => ({ ...r, attachments: Array.isArray(r.attachments) ? r.attachments : [] })));
       setConclusion(wp.conclusion ?? '');
       setInit(true);
     }
@@ -1012,7 +1013,7 @@ export default function WpDetailPage() {
   const checkin  = useCheckin(params.id);
   useEffect(() => {
     if (!wp) return;
-    const locked = wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED';
+    const locked = wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED' || wp.status === 'ARCHIVED';
     if (locked) return; // no checkout needed for read-only papers
     checkout.mutateAsync().then(result => {
       if (!result.success && result.lockedBy) {
@@ -1037,8 +1038,12 @@ export default function WpDetailPage() {
   }, []);
 
   const handleSave = async () => {
-    await updateWp.mutateAsync({ content: { ...content, documentEvidence }, conclusion });
-    setDirty(false);
+    try {
+      await updateWp.mutateAsync({ content: { ...content, documentEvidence }, conclusion });
+      setDirty(false);
+    } catch (e) {
+      alert('Error al guardar: ' + (e as Error).message);
+    }
   };
 
   async function handleDownloadPdf() {
@@ -1153,8 +1158,8 @@ export default function WpDetailPage() {
     },
   };
 
-  // F6.4 Lockdown — paper cannot be edited when SIGNED_OFF or CLOSED
-  const isLocked = wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED';
+  // F6.4 Lockdown — paper cannot be edited when SIGNED_OFF, CLOSED or ARCHIVED
+  const isLocked = wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED' || wp.status === 'ARCHIVED';
 
   // Determine which tabs to show
   const isFilePaper     = wpKind === 'FILE';

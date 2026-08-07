@@ -89,7 +89,7 @@ function EvidenceRow({ row, index, paperId, readOnly, onUpdate, onDelete }: RowP
     setUploading(true);
     try {
       const att = await attachMutation.mutateAsync({ paperId, rowId: row.id, file });
-      onUpdate({ attachments: [...row.attachments, att] });
+      onUpdate({ attachments: [...(row.attachments ?? []), att] });
     } catch (e) {
       alert('Error al subir el archivo: ' + (e as Error).message);
     } finally {
@@ -101,7 +101,7 @@ function EvidenceRow({ row, index, paperId, readOnly, onUpdate, onDelete }: RowP
     setRemoving(attachmentId);
     try {
       await removeMutation.mutateAsync({ paperId, rowId: row.id, attachmentId });
-      onUpdate({ attachments: row.attachments.filter(a => a.id !== attachmentId) });
+      onUpdate({ attachments: (row.attachments ?? []).filter(a => a.id !== attachmentId) });
     } catch (e) {
       alert('Error al quitar el archivo: ' + (e as Error).message);
     } finally {
@@ -161,7 +161,7 @@ function EvidenceRow({ row, index, paperId, readOnly, onUpdate, onDelete }: RowP
       {/* Evidencias adjuntas */}
       <td className="px-3 py-3 w-60">
         <div className="flex flex-col gap-1">
-          {row.attachments.map(att => (
+          {(row.attachments ?? []).map(att => (
             <div
               key={att.id}
               className="flex items-center gap-1.5 px-2 py-1 bg-white border border-gray-100

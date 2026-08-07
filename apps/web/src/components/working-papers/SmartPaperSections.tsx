@@ -90,15 +90,21 @@ const AVAILABLE_TEMPLATES = [
   { key: 'PT-FIN-D02CI',  label: 'Fin.Ext · Carta de Debilidades Control Interno NIA 265 (PT-FIN-D02CI)'       },
   // ── Archivo Permanente / Conocimiento ────────────────────────────────────
   { key: 'PT-FIN-A3-KC',  label: 'Fin.Ext · Conocimiento del Cliente y su Entorno NIA 315 (PT-FIN-A3-KC)'    },
+  { key: 'PT-INDEP',       label: 'Fin.Ext · Independencia, Ética y Aceptación NIA 220/IESBA (PT-INDEP)'      },
   // ── NIAs Específicas (Planificación) ─────────────────────────────────────
   { key: 'PT-NIA250',  label: 'NIA 250 · Cumplimiento con Leyes y Regulaciones (PT-NIA250)' },
   { key: 'PT-NIA530',  label: 'NIA 530 · Plan Maestro de Muestreo Estadístico (PT-NIA530)' },
   { key: 'PT-NIA610',  label: 'NIA 610 · Uso del Trabajo de Auditoría Interna (PT-NIA610)' },
   { key: 'PT-NIA620',  label: 'NIA 620 · Uso del Trabajo de Experto del Auditor (PT-NIA620)' },
   // ── NIAs Específicas (Cierre) ─────────────────────────────────────────────
+  { key: 'PT-REP580',  label: 'NIA 580 · Carta de Representación de la Dirección (PT-REP580)' },
   { key: 'PT-NIA560',  label: 'NIA 560 · Eventos Posteriores al Cierre (PT-NIA560)' },
   { key: 'PT-NIA265',  label: 'NIA 265 · Carta de Debilidades de CI (PT-NIA265)' },
   { key: 'PT-NIA260',  label: 'NIA 260 · Comunicación con Gobierno Corporativo (PT-NIA260)' },
+  // ── Pruebas de Ejecución (papers adicionales financieros) ─────────────────
+  { key: 'PT-CIRC',        label: 'Fin.Ext · Circularización de CxC NIA 505 (PT-CIRC)'                         },
+  { key: 'PT-FIN-C-ESTIM', label: 'Fin.Ext · Estimaciones Contables NIA 540 Rev. (PT-FIN-C-ESTIM)'             },
+  { key: 'PT-ADJ-RECLASIF',label: 'Fin.Ext · Libro de Ajustes y Reclasificaciones del Auditor (PT-ADJ-RECLASIF)'},
 ];
 
 function InitFromTemplatePanel({

@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, FileText, Database, Sparkles, Activity, Paperclip,
-  Loader2, AlertTriangle, Folder,
+  Loader2, AlertTriangle, Folder, CheckCircle2,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAudit } from '@/hooks/useAudits';
-import { useCreateWorkingPaper } from '@/hooks/useWorkingPapers';
+import { useCreateWorkingPaper, useWorkingPapersForAudit } from '@/hooks/useWorkingPapers';
 
 const WORKING_PAPER_TYPES = [
   { value: 'PLANNING_UNDERSTANDING', label: 'Planificación y Entendimiento' },
@@ -50,13 +50,15 @@ const CANONICAL_PAPER_GROUPS: { group: string; items: CanonicalPaper[] }[] = [
   {
     group: 'Auditoría Financiera — Planificación',
     items: [
-      { code: 'PT-FIN-A3-KC', label: 'Conocimiento del Cliente y Entorno (NIA 315)', kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'Historia, gobierno corporativo, ciclos clave, partes relacionadas' },
-      { code: 'PT-FIN-B00',   label: 'Importación Trial Balance y Cédula Madre',      kind: 'SMART',  type: 'SUBSTANTIVE_TEST',        hint: 'Import Excel/CSV/ERP, clasificador de cuentas, semáforo de materialidad' },
-      { code: 'PT-FIN-B07',   label: 'Análisis de Variaciones (NIA 520)',             kind: 'SMART',  type: 'DATA_ANALYSIS',           hint: 'Horizontal, vertical, 12 ratios financieros, señales de fraude NIA 240' },
-      { code: 'PT-FIN-B09',   label: 'Libro de AJEs — Base Técnica NIIF',            kind: 'SMART',  type: 'SUBSTANTIVE_TEST',        hint: 'Desde B-08, justificación técnica NIIF, carta propuesta al cliente' },
-      { code: 'PT-NIA250',    label: 'Cumplimiento con Leyes y Regulaciones (NIA 250)', kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Marco legal aplicable, indicios de incumplimiento, comunicación a dirección' },
-      { code: 'PT-NIA530',    label: 'Plan Maestro de Muestreo Estadístico (NIA 530)', kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Población, muestra MUS/aleatorio, umbral de error tolerable, resultados' },
-      { code: 'PT-NIA610',    label: 'Uso del Trabajo de Auditoría Interna (NIA 610)', kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Evaluación AI, alcance, competencia/objetividad, resultados utilizados' },
+      { code: 'PT-INDEP',     label: 'Independencia, Ética y Aceptación del Encargo (NIA 220/IESBA)', kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Amenazas, salvaguardas, servicios prohibidos, EQR, aceptación/continuación' },
+      { code: 'PT-FIN-A3-KC', label: 'Conocimiento del Cliente y Entorno (NIA 315)',                   kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Historia, gobierno corporativo, ciclos clave, partes relacionadas' },
+      { code: 'PT-FIN-B00',   label: 'Importación Trial Balance y Cédula Madre',                        kind: 'SMART', type: 'SUBSTANTIVE_TEST',        hint: 'Import Excel/CSV/ERP, clasificador de cuentas, semáforo de materialidad' },
+      { code: 'PT-FIN-B07',   label: 'Análisis de Variaciones (NIA 520)',                               kind: 'SMART', type: 'DATA_ANALYSIS',           hint: 'Horizontal, vertical, 12 ratios financieros, señales de fraude NIA 240' },
+      { code: 'PT-FIN-B09',   label: 'Libro de AJEs — Base Técnica NIIF',                              kind: 'SMART', type: 'SUBSTANTIVE_TEST',        hint: 'Desde B-08, justificación técnica NIIF, carta propuesta al cliente' },
+      { code: 'PT-NIA250',    label: 'Cumplimiento con Leyes y Regulaciones (NIA 250)',                 kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Marco legal aplicable, indicios de incumplimiento, comunicación a dirección' },
+      { code: 'PT-NIA530',    label: 'Plan Maestro de Muestreo Estadístico (NIA 530)',                  kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Población, muestra MUS/aleatorio, umbral de error tolerable, resultados' },
+      { code: 'PT-NIA610',    label: 'Uso del Trabajo de Auditoría Interna (NIA 610)',                  kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Evaluación AI, alcance, competencia/objetividad, resultados utilizados' },
+      { code: 'PT-NIA620',    label: 'Uso del Trabajo de Experto del Auditor (NIA 620)',                kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Evaluación de competencia, acuerdo, resultados y referencia en informe' },
     ],
   },
   {
@@ -73,15 +75,18 @@ const CANONICAL_PAPER_GROUPS: { group: string; items: CanonicalPaper[] }[] = [
   {
     group: 'Auditoría Financiera — Pruebas y Cierre',
     items: [
-      { code: 'PT-FIN-C-SUST', label: 'Prueba Sustantiva por Área (genérico)',  kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'Diferencias auto-push a B-08 cuando superan UAE' },
-      { code: 'PT-FIN-C-NORM', label: 'Análisis Normativo por Área (genérico)', kind: 'SMART',  type: 'NORMATIVE_ANALYSIS', hint: 'NIA 550 Partes Rel. / NIA 570 Continuidad Operativa' },
-      { code: 'PT-FIN-B08',    label: 'Diferencias y Semáforo de Opinión',      kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Acumula diferencias C-XX → semáforo vs MG/ME, opinión propuesta' },
-      { code: 'PT-NIA560',     label: 'Eventos Posteriores al Cierre (NIA 560)', kind: 'SMART', type: 'CLOSURE_CONCLUSION',  hint: 'Procedimientos de búsqueda, Tipo I (ajuste) y Tipo II (revelación)' },
-      { code: 'PT-NIA265',     label: 'Carta de Debilidades de CI (NIA 265)',    kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Deficiencias significativas / materiales vinculadas a COSO, comunicadas a gobierno' },
-      { code: 'PT-FIN-D02CI',  label: 'Carta de Debilidades CI — Financiera (NIA 265)', kind: 'MASTER', type: 'CLOSURE_CONCLUSION', hint: 'Deficiencias significativas y materiales comunicadas a gobierno (versión financiera)' },
-      { code: 'PT-NIA260',     label: 'Comunicación con Gobierno Corporativo (NIA 260)', kind: 'SMART', type: 'CLOSURE_CONCLUSION', hint: 'Responsabilidades del auditor, hallazgos significativos, independencia, representación' },
-      { code: 'PT-NIA620',     label: 'Uso del Trabajo de Experto del Auditor (NIA 620)', kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Evaluación de competencia, acuerdo, resultados y referencia en informe' },
-      { code: 'PT-FIN-DICT',   label: 'Dictamen del Auditor — NIA 700-720',     kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Opinión auto-fill desde B-08, KAMs NIA 701, párrafo de énfasis' },
+      { code: 'PT-FIN-C-SUST',  label: 'Prueba Sustantiva por Área (genérico)',            kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'Diferencias auto-push a B-08 cuando superan UAE' },
+      { code: 'PT-CIRC',        label: 'Circularización de CxC (NIA 505)',                 kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'Universo CxC, selección, envío, seguimiento y evaluación de respuestas' },
+      { code: 'PT-FIN-C-ESTIM', label: 'Estimaciones Contables (NIA 540 Rev.)',            kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'Espectro de resultados, rango del auditor vs. estimación gerencia, indicadores de sesgo' },
+      { code: 'PT-FIN-C-NORM',  label: 'Análisis Normativo por Área (genérico)',           kind: 'SMART',  type: 'NORMATIVE_ANALYSIS', hint: 'NIA 550 Partes Rel. / NIA 570 Continuidad Operativa' },
+      { code: 'PT-ADJ-RECLASIF',label: 'Libro de Ajustes y Reclasificaciones del Auditor', kind: 'SMART',  type: 'SUBSTANTIVE_TEST',   hint: 'AJEs propuestos, alimenta B-08 con diferencias no registradas' },
+      { code: 'PT-FIN-B08',     label: 'Diferencias y Semáforo de Opinión',                kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Acumula diferencias C-XX → semáforo vs MG/ME, opinión propuesta' },
+      { code: 'PT-REP580',      label: 'Carta de Representación (NIA 580)',                 kind: 'SMART',  type: 'CLOSURE_CONCLUSION',  hint: 'Representaciones explícitas e implícitas, período, firmantes' },
+      { code: 'PT-NIA560',      label: 'Eventos Posteriores al Cierre (NIA 560)',           kind: 'SMART',  type: 'CLOSURE_CONCLUSION',  hint: 'Procedimientos de búsqueda, Tipo I (ajuste) y Tipo II (revelación)' },
+      { code: 'PT-NIA265',      label: 'Carta de Debilidades de CI (NIA 265)',              kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Deficiencias significativas / materiales vinculadas a COSO, comunicadas a gobierno' },
+      { code: 'PT-FIN-D02CI',   label: 'Carta de Debilidades CI — Financiera (NIA 265)',   kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Deficiencias significativas y materiales comunicadas a gobierno (versión financiera)' },
+      { code: 'PT-NIA260',      label: 'Comunicación con Gobierno Corporativo (NIA 260)',   kind: 'SMART',  type: 'CLOSURE_CONCLUSION',  hint: 'Responsabilidades del auditor, hallazgos significativos, independencia, representación' },
+      { code: 'PT-FIN-DICT',    label: 'Dictamen del Auditor — NIA 700-720',               kind: 'MASTER', type: 'CLOSURE_CONCLUSION',  hint: 'Opinión auto-fill desde B-08, KAMs NIA 701, párrafo de énfasis' },
     ],
   },
   {
@@ -113,6 +118,62 @@ const CANONICAL_BY_CODE = Object.fromEntries(
   CANONICAL_PAPER_GROUPS.flatMap(g => g.items).map(p => [p.code, p]),
 );
 
+// ─── Allowed paper codes per audit type ───────────────────────────────────────
+// Based on system template definitions in audit-templates.service.ts
+
+const _EXT_FIN = new Set([
+  'PT-INDEP', 'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-COSO', 'PT-MEMO', 'PT-PROG',
+  'PT-NIA250', 'PT-NIA530', 'PT-NIA610', 'PT-NIA620',
+  'PT-FIN-A3-KC', 'PT-FIN-B00', 'PT-FIN-B01', 'PT-FIN-B02', 'PT-FIN-B03',
+  'PT-FIN-B04', 'PT-FIN-B05', 'PT-FIN-B06', 'PT-FIN-B07', 'PT-FIN-B08', 'PT-FIN-B09',
+  'PT-ADJ-RECLASIF', 'PT-DIFS', 'PT-CIRC', 'PT-FIN-C-SUST', 'PT-FIN-C-NORM', 'PT-FIN-C-ESTIM',
+  'PT-REP580', 'PT-NIA560', 'PT-NIA265', 'PT-NIA260',
+  'PT-FIN-D02CI', 'PT-FIN-DICT',
+]);
+
+const _FISCAL = new Set([
+  'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-MEMO', 'PT-PROG',
+  'PT-FISC-INDEP', 'PT-FISC-QC', 'PT-FISC-ENCARGO', 'PT-FISC-RISK',
+  'PT-FISC-AML', 'PT-FISC-PT', 'PT-FISC-ZF', 'PT-FISC-DICT',
+]);
+
+const _INTERNAL = new Set([
+  'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-COSO', 'PT-MEMO', 'PT-PROG', 'PT-DIFS',
+]);
+
+const _NAIG = new Set([
+  'PT-A1', 'PT-A2', 'PT-A4', 'PT-COSO', 'PT-MEMO', 'PT-PROG', 'PT-GOV-HAL',
+]);
+
+const _IT = new Set([
+  'PT-A1', 'PT-A3', 'PT-MEMO', 'PT-PROG', 'PT-SEC-RISK', 'PT-BIA',
+]);
+
+const _AML = new Set([
+  'PT-A1', 'PT-A3', 'PT-MEMO', 'PT-PROG', 'PT-AML-RISK',
+]);
+
+const _FORENSIC = new Set([
+  'PT-A2', 'PT-MEMO', 'PT-PROG', 'PT-DIFS',
+]);
+
+const TEMPLATE_ALLOWED_CODES: Record<string, Set<string>> = {
+  EXTERNAL:             _EXT_FIN,
+  FINANCIAL:            _EXT_FIN,
+  EXTERNAL_FINANCIAL:   _EXT_FIN,
+  FISCAL:               _FISCAL,
+  INTERNAL:             _INTERNAL,
+  OPERATIONAL:          _INTERNAL,
+  IT:                   _INTERNAL,
+  COMPLIANCE:           _INTERNAL,
+  ESG:                  _INTERNAL,
+  BCP_DRP:              _INTERNAL,
+  INTERNAL_GOVERNMENTAL: _NAIG,
+  IT_SECURITY:          _IT,
+  AML:                  _AML,
+  FORENSIC:             _FORENSIC,
+};
+
 const WP_KINDS = [
   { value: 'STANDARD', label: 'Estándar', icon: FileText,  description: 'Documento tradicional con adjuntos y narrativa libre',          color: 'bg-gray-50 border-gray-300 text-gray-700' },
   { value: 'SMART',    label: 'Inteligente', icon: Database, description: 'Secciones tipadas, asistencia IA por sección, propagación al grafo', color: 'bg-blue-50 border-blue-400 text-blue-700' },
@@ -129,6 +190,23 @@ function NewWorkingPaperInner() {
 
   const { data: audit, isLoading: auditLoading, isError: auditError } = useAudit(auditId);
   const create = useCreateWorkingPaper();
+  const { data: existingPapers = [] } = useWorkingPapersForAudit(auditId);
+
+  const existingPaperCodes = useMemo(
+    () => new Set(existingPapers.map(p => p.paperCode).filter(Boolean) as string[]),
+    [existingPapers],
+  );
+
+  const allowedCodes = audit?.type ? TEMPLATE_ALLOWED_CODES[audit.type] : undefined;
+
+  const filteredGroups = useMemo(() => {
+    return CANONICAL_PAPER_GROUPS
+      .map(g => ({
+        ...g,
+        items: g.items.filter(p => !allowedCodes || allowedCodes.has(p.code)),
+      }))
+      .filter(g => g.items.length > 0);
+  }, [allowedCodes]);
 
   const [title,     setTitle]     = useState('');
   const [type,      setType]      = useState<typeof WORKING_PAPER_TYPES[number]['value']>('PLANNING_UNDERSTANDING');
@@ -334,9 +412,16 @@ function NewWorkingPaperInner() {
             {/* Canonical paper picker — only for SMART / MASTER */}
             {(wpKind === 'SMART' || wpKind === 'MASTER') && (
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Plantilla canónica de secciones
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-gray-700">
+                    Plantilla canónica de secciones
+                  </label>
+                  {allowedCodes && audit?.template?.name && (
+                    <span className="text-[10px] text-violet-600 font-medium bg-violet-50 px-2 py-0.5 rounded-full border border-violet-200">
+                      {audit.template.name}
+                    </span>
+                  )}
+                </div>
                 {!customCode ? (
                   <select
                     value={paperCode}
@@ -344,13 +429,16 @@ function NewWorkingPaperInner() {
                     className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
                   >
                     <option value="">— Sin plantilla (papel en blanco) —</option>
-                    {CANONICAL_PAPER_GROUPS.map(g => (
+                    {filteredGroups.map(g => (
                       <optgroup key={g.group} label={g.group}>
-                        {g.items.map(p => (
-                          <option key={p.code} value={p.code}>
-                            {p.code} — {p.label}
-                          </option>
-                        ))}
+                        {g.items.map(p => {
+                          const used = existingPaperCodes.has(p.code);
+                          return (
+                            <option key={p.code} value={p.code} disabled={used}>
+                              {used ? `✓ ${p.code} — ${p.label} (ya en el encargo)` : `${p.code} — ${p.label}`}
+                            </option>
+                          );
+                        })}
                       </optgroup>
                     ))}
                     <option value="__custom__">✎ Ingresar código manualmente…</option>
@@ -379,7 +467,13 @@ function NewWorkingPaperInner() {
                     💡 {CANONICAL_BY_CODE[paperCode].hint}
                   </p>
                 )}
-                {!paperCode && !customCode && (
+                {existingPaperCodes.size > 0 && !customCode && (
+                  <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                    Las plantillas marcadas con ✓ ya están en este encargo y no pueden seleccionarse
+                  </p>
+                )}
+                {!paperCode && !customCode && existingPaperCodes.size === 0 && (
                   <p className="text-[10px] text-gray-400 mt-1">
                     Al seleccionar una plantilla, el tipo, motor y secciones se inicializan automáticamente.
                   </p>

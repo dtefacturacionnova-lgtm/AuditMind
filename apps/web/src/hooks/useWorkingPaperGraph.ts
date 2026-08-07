@@ -21,7 +21,9 @@ export type SectionFieldType =
   | 'ACCOUNT_SCHEDULE'
   | 'DECLARATIONS'
   | 'LEGAL_MATRIX'
-  | 'AUDIT_REPORTS';
+  | 'AUDIT_REPORTS'
+  | 'CHECKLIST'
+  | 'COMMUNICATION_LOG';
 
 export interface PaperSection {
   id: string;

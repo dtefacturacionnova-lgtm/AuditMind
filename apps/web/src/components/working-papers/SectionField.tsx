@@ -13,6 +13,10 @@ import { MarcoLegalNormativaPanel } from './MarcoLegalNormativaPanel';
 import type { NormativaRow } from './MarcoLegalNormativaPanel';
 import { InformesAuditoriaInternaPanel } from './InformesAuditoriaInternaPanel';
 import type { InformeAIRow } from './InformesAuditoriaInternaPanel';
+import { ChecklistPanel } from './ChecklistPanel';
+import type { ChecklistValue } from './ChecklistPanel';
+import { ComunicacionAIPanel } from './ComunicacionAIPanel';
+import type { ComunicacionRow } from './ComunicacionAIPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -516,7 +520,9 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
     section.fieldType === 'ATTACHMENT' ||
     section.fieldType === 'DECLARATIONS' ||
     section.fieldType === 'LEGAL_MATRIX' ||
-    section.fieldType === 'AUDIT_REPORTS';
+    section.fieldType === 'AUDIT_REPORTS' ||
+    section.fieldType === 'CHECKLIST' ||
+    section.fieldType === 'COMMUNICATION_LOG';
 
   const isAutoAndLocked = section.isAutoFilled && !overriding && !editing;
 
@@ -758,6 +764,42 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
               />
             )}
 
+            {/* Checklist — tabla interactiva Sí/No/N/A por criterio + conclusión + fundamento */}
+            {section.fieldType === 'CHECKLIST' && (
+              <ChecklistPanel
+                options={section.options ?? []}
+                value={(() => {
+                  try {
+                    const parsed = typeof effectiveValue === 'string'
+                      ? JSON.parse(effectiveValue)
+                      : effectiveValue;
+                    return parsed && typeof parsed === 'object' && 'items' in parsed
+                      ? (parsed as ChecklistValue)
+                      : null;
+                  } catch { return null; }
+                })()}
+                onChange={v => onSave(section.sectionKey, JSON.stringify(v))}
+                readOnly={readonly}
+              />
+            )}
+
+            {/* Communication Log — grid de comunicaciones con AI + adjunto por fila */}
+            {section.fieldType === 'COMMUNICATION_LOG' && paperId && (
+              <ComunicacionAIPanel
+                paperId={paperId}
+                rows={
+                  Array.isArray(effectiveValue)
+                    ? (effectiveValue as ComunicacionRow[])
+                    : (() => {
+                        try { return JSON.parse(String(effectiveValue ?? '[]')); }
+                        catch { return []; }
+                      })()
+                }
+                onChange={rows => onSave(section.sectionKey, rows as unknown as string)}
+                readOnly={readonly}
+              />
+            )}
+
             {/* Matrix */}
             {section.fieldType === 'MATRIX' && (
               <MatrixDisplay value={effectiveValue} />
@@ -785,7 +827,7 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
             )}
 
             {/* All text-like */}
-            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS'].includes(section.fieldType) && (
+            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG'].includes(section.fieldType) && (
               <p className={`text-sm leading-relaxed ${
                 effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== ''
                   ? 'text-gray-700'

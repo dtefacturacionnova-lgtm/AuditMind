@@ -1,20 +1,25 @@
 'use client';
 
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Upload, Play, Download, CheckCircle2, Loader2,
-  AlertCircle, FileSpreadsheet, BarChart3, Info, X,
+  AlertCircle, FileSpreadsheet, BarChart3, Info, X, Paperclip,
 } from 'lucide-react';
 import type { PaperSection } from '@/hooks/useWorkingPaperGraph';
-import { useCalculateMUS, useCalculateAttribute, useSelectSample } from '@/hooks/useSampling';
+import { useCalculateMUS, useCalculateAttribute } from '@/hooks/useSampling';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Mode = 'MUS' | 'ATTRIBUTES';
 type AttrMethod = 'RANDOM' | 'SYSTEMATIC';
-
 type ParsedRow = Record<string, string | number>;
+
+interface RowAnnotation {
+  observedAmt: string;
+  observation: string;
+  deviation:   string;
+}
 
 interface SamplingResultData {
   mode:               Mode;
@@ -36,8 +41,7 @@ interface Props {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtCurrency(n: number) {
-  return n.toLocaleString('es-SV', {
-    style: 'currency', currency: 'USD',
+  return 'US$ ' + n.toLocaleString('es-SV', {
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   });
 }
@@ -56,18 +60,80 @@ function detectCol(keys: string[], ...hints: string[]): string {
   return '';
 }
 
+function sanitizeAmount(raw: string): string {
+  let s = raw.replace(/[^0-9.]/g, '');
+  const parts = s.split('.');
+  if (parts.length > 2) s = parts[0] + '.' + parts.slice(1).join('');
+  return s;
+}
+
+function amtError(raw: string, maxAmt: number | undefined): string | null {
+  if (!raw) return null;
+  const n = parseFloat(raw);
+  if (isNaN(n)) return 'Valor inválido';
+  if (n < 0) return 'No puede ser negativo';
+  if (maxAmt !== undefined && n > maxAmt) return `Excede monto de transacción (${fmtCurrency(maxAmt)})`;
+  return null;
+}
+
+// ─── Client-side MUS walk (NIA 530) ─────────────────────────────────────────
+// Selects monetary units at regular intervals; large items may appear multiple times.
+
+function musSelect(records: ParsedRow[], sampleSize: number, bv: number): ParsedRow[] {
+  if (bv <= 0 || sampleSize <= 0) return [];
+  const interval  = bv / sampleSize;
+  const start     = Math.random() * interval;
+  const selected: ParsedRow[] = [];
+  let cumulative  = 0;
+  let nextTarget  = start;
+
+  for (const record of records) {
+    const amt = typeof record.monto === 'number' ? record.monto : parseAmount(String(record.monto));
+    if (amt <= 0) continue;
+    cumulative += amt;
+    while (nextTarget <= cumulative) {
+      selected.push({ ...record });
+      nextTarget += interval;
+    }
+  }
+  return selected;
+}
+
+// ─── Client-side attribute selection ─────────────────────────────────────────
+
+function randomSelect(records: ParsedRow[], n: number): ParsedRow[] {
+  const arr = [...records];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, Math.min(n, arr.length));
+}
+
+function systematicSelect(records: ParsedRow[], n: number): ParsedRow[] {
+  if (records.length <= n) return [...records];
+  const interval = records.length / n;
+  const start    = Math.random() * interval;
+  const selected: ParsedRow[] = [];
+  for (let i = 0; i < n; i++) {
+    const idx = Math.floor(start + i * interval);
+    if (idx < records.length) selected.push({ ...records[idx] });
+  }
+  return selected;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
-  const me  = sections.find(s => s.sectionKey === 'S4')?.value != null
+  const me = sections.find(s => s.sectionKey === 'S4')?.value != null
     ? Number(sections.find(s => s.sectionKey === 'S4')!.value)
     : null;
 
   const saved = sections.find(s => s.sectionKey === 'S_EJE')?.value as SamplingResultData | null | undefined;
 
-  const [mode,    setMode]    = useState<Mode>('MUS');
-  const [records, setRecords] = useState<ParsedRow[]>([]);
-  const [fileName, setFileName] = useState('');
+  const [mode,       setMode]      = useState<Mode>('MUS');
+  const [records,    setRecords]   = useState<ParsedRow[]>([]);
+  const [fileName,   setFileName]  = useState('');
 
   const [refCol,  setRefCol]  = useState('');
   const [descCol, setDescCol] = useState('');
@@ -77,19 +143,22 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
   const [musEE, setMusEE] = useState('0');
   const [musCL, setMusCL] = useState('95');
 
-  const [attrTDR, setAttrTDR]   = useState('5');
-  const [attrEDR, setAttrEDR]   = useState('0');
-  const [attrCL,  setAttrCL]    = useState('95');
-  const [attrSel, setAttrSel]   = useState<AttrMethod>('RANDOM');
+  const [attrTDR, setAttrTDR] = useState('5');
+  const [attrEDR, setAttrEDR] = useState('0');
+  const [attrCL,  setAttrCL]  = useState('95');
+  const [attrSel, setAttrSel] = useState<AttrMethod>('RANDOM');
 
-  const [results, setResults] = useState<SamplingResultData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
+  const [results,  setResults]  = useState<SamplingResultData | null>(null);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
   const [showSaved, setShowSaved] = useState(false);
+
+  // Row-level annotation state (resets on each new execution)
+  const [rowAnnotations, setRowAnnotations] = useState<Record<number, RowAnnotation>>({});
+  const [evidenceFiles,  setEvidenceFiles]  = useState<Record<number, File[]>>({});
 
   const calcMUS  = useCalculateMUS();
   const calcAttr = useCalculateAttribute();
-  const selApi   = useSelectSample();
   const fileRef  = useRef<HTMLInputElement>(null);
 
   const columns = useMemo(() => (records.length > 0 ? Object.keys(records[0]) : []), [records]);
@@ -108,8 +177,8 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const wb  = XLSX.read(evt.target?.result, { type: 'binary' });
-        const ws  = wb.Sheets[wb.SheetNames[0]];
+        const wb   = XLSX.read(evt.target?.result, { type: 'binary' });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json<ParsedRow>(ws, { raw: false, defval: '' });
         if (rows.length === 0) { setError('El archivo está vacío.'); return; }
         const keys = Object.keys(rows[0]);
@@ -120,6 +189,8 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
         setAmtCol(detectCol(keys,  'monto', 'valor', 'amount', 'importe', 'total', 'saldo', 'balance'));
         setDateCol(detectCol(keys, 'fecha', 'date', 'periodo'));
         setResults(null);
+        setRowAnnotations({});
+        setEvidenceFiles({});
       } catch {
         setError('Error al leer el archivo. Verifique que sea CSV o Excel válido.');
       }
@@ -128,7 +199,7 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
     e.target.value = '';
   }
 
-  // ── Execute MUS ─────────────────────────────────────────────────────────────
+  // ── Execute MUS (client-side NIA 530 walk) ──────────────────────────────────
 
   async function executeMUS() {
     if (!amtCol) { setError('Selecciona la columna de Monto.'); return; }
@@ -138,9 +209,9 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
     setLoading(true); setError('');
     try {
       const normalized = records.map(r => ({
-        ...(refCol  ? { referencia: String(r[refCol])  } : {}),
+        ...(refCol  ? { referencia:  String(r[refCol])  } : {}),
         ...(descCol ? { descripcion: String(r[descCol]) } : {}),
-        monto:        parseAmount(r[amtCol]),
+        monto:         parseAmount(r[amtCol]),
         ...(dateCol ? { fecha: String(r[dateCol]) } : {}),
       }));
 
@@ -151,31 +222,29 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
         confidence_level:       parseInt(musCL) as 95,
       });
 
-      const sel = await selApi.mutateAsync({
-        records:          normalized,
-        sample_size:      calc.sample_size,
-        selection_method: 'MUS',
-        value_field:      'monto',
-      });
+      // MUS walk client-side — avoids the "sample_size > population" API error
+      const selected = musSelect(normalized, calc.sample_size, bv);
 
       const result: SamplingResultData = {
-        mode:              'MUS',
-        executed_at:       new Date().toISOString(),
+        mode:     'MUS',
+        executed_at: new Date().toISOString(),
         parameters: {
-          valor_en_libros:          bv,
-          materialidad_ejecucion:   me,
-          error_esperado:           parseFloat(musEE || '0'),
-          nivel_confianza:          parseInt(musCL),
-          factor_confianza:         calc.confidence_factor,
+          valor_en_libros:        bv,
+          materialidad_ejecucion: me,
+          error_esperado:         parseFloat(musEE || '0'),
+          nivel_confianza:        parseInt(musCL),
+          factor_confianza:       calc.confidence_factor,
         },
-        sample_size:       calc.sample_size,
+        sample_size:       selected.length,
         total_items:       records.length,
         sampling_interval: calc.sampling_interval,
-        seed_used:         sel.seed_used,
-        selected:          sel.selected as ParsedRow[],
+        seed_used:         null,
+        selected,
       };
 
       setResults(result);
+      setRowAnnotations({});
+      setEvidenceFiles({});
       await onSave('S_EJE', result);
     } catch (e) {
       setError((e as Error).message || 'Error al ejecutar la selección.');
@@ -184,7 +253,7 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
     }
   }
 
-  // ── Execute Attributes ───────────────────────────────────────────────────────
+  // ── Execute Attributes (client-side selection) ───────────────────────────────
 
   async function executeAttributes() {
     if (records.length === 0) { setError('Carga un archivo de población primero.'); return; }
@@ -204,29 +273,29 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
         confidence_level:         parseInt(attrCL) as 95,
       });
 
-      const sel = await selApi.mutateAsync({
-        records:          normalized,
-        sample_size:      calc.sample_size,
-        selection_method: attrSel,
-      });
+      const selected = attrSel === 'RANDOM'
+        ? randomSelect(normalized, calc.sample_size)
+        : systematicSelect(normalized, calc.sample_size);
 
       const result: SamplingResultData = {
         mode:        'ATTRIBUTES',
         executed_at: new Date().toISOString(),
         parameters: {
-          poblacion:                   records.length,
-          tasa_desviacion_tolerable:   parseFloat(attrTDR),
-          tasa_desviacion_esperada:    parseFloat(attrEDR || '0'),
-          nivel_confianza:             parseInt(attrCL),
-          metodo_seleccion:            attrSel,
+          poblacion:                 records.length,
+          tasa_desviacion_tolerable: parseFloat(attrTDR),
+          tasa_desviacion_esperada:  parseFloat(attrEDR || '0'),
+          nivel_confianza:           parseInt(attrCL),
+          metodo_seleccion:          attrSel,
         },
-        sample_size: calc.sample_size,
+        sample_size: selected.length,
         total_items: records.length,
-        seed_used:   sel.seed_used,
-        selected:    sel.selected as ParsedRow[],
+        seed_used:   null,
+        selected,
       };
 
       setResults(result);
+      setRowAnnotations({});
+      setEvidenceFiles({});
       await onSave('S_EJE', result);
     } catch (e) {
       setError((e as Error).message || 'Error al ejecutar la selección.');
@@ -235,16 +304,33 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
     }
   }
 
+  // ── Row annotation helpers ────────────────────────────────────────────────────
+
+  const handleRowAnnotationChange = useCallback((idx: number, ann: RowAnnotation) => {
+    setRowAnnotations(prev => ({ ...prev, [idx]: ann }));
+  }, []);
+
+  const handleEvidenceChange = useCallback((idx: number, files: File[]) => {
+    setEvidenceFiles(prev => ({ ...prev, [idx]: files }));
+  }, []);
+
   // ── Export ───────────────────────────────────────────────────────────────────
 
   function exportResults(data: SamplingResultData) {
-    const rows = data.selected.map((r, i) => ({
-      '#':               i + 1,
-      ...r,
-      ...(data.mode === 'ATTRIBUTES' ? { 'Desviación encontrada': '', Observaciones: '' } : {}),
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
+    const rows = data.selected.map((r, i) => {
+      const ann = rowAnnotations[i];
+      const evFiles = evidenceFiles[i];
+      return {
+        '#': i + 1,
+        ...r,
+        ...(data.mode === 'ATTRIBUTES' ? { 'Desviación encontrada': ann?.deviation ?? '' } : {}),
+        'Monto Observado (US$)': ann?.observedAmt ?? '',
+        Observaciones:           ann?.observation ?? '',
+        ...(evFiles?.length ? { 'Archivos adjuntos': evFiles.map(f => f.name).join('; ') } : {}),
+      };
+    });
+    const ws  = XLSX.utils.json_to_sheet(rows);
+    const wb  = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Muestra');
 
     const paramsRows = Object.entries(data.parameters).map(([k, v]) => ({ Parámetro: k, Valor: v }));
@@ -254,7 +340,7 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
     XLSX.writeFile(wb, `Muestra_${data.mode}_${data.executed_at.slice(0, 10)}.xlsx`);
   }
 
-  // ── Render helpers ────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   const displayResults = results ?? (showSaved && saved ? saved as SamplingResultData : null);
 
@@ -327,7 +413,7 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
               <span className="font-medium">{fileName}</span>
               <span className="text-gray-400">· {records.length} registros</span>
               <button
-                onClick={() => { setRecords([]); setFileName(''); setResults(null); setError(''); }}
+                onClick={() => { setRecords([]); setFileName(''); setResults(null); setError(''); setRowAnnotations({}); setEvidenceFiles({}); }}
                 className="ml-1 text-gray-400 hover:text-gray-600"
               >
                 <X className="w-3 h-3" />
@@ -339,7 +425,7 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
 
         <p className="text-[11px] text-gray-400">
           {mode === 'MUS'
-            ? 'Columnas recomendadas: Referencia, Descripción, Monto. Una fila por transacción o cuenta.'
+            ? 'Columnas recomendadas: Referencia, Descripción, Monto (US$). Una fila por transacción o cuenta.'
             : 'Columnas recomendadas: Referencia/Número, Descripción, Fecha. Una fila por ocurrencia del control.'}
         </p>
 
@@ -357,9 +443,15 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
               <tbody>
                 {records.slice(0, 3).map((r, i) => (
                   <tr key={i} className="border-t border-gray-100">
-                    {columns.slice(0, 8).map(c => (
-                      <td key={c} className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{String(r[c])}</td>
-                    ))}
+                    {columns.slice(0, 8).map(c => {
+                      const isAmt = c === amtCol && mode === 'MUS';
+                      const raw   = r[c];
+                      return (
+                        <td key={c} className={`px-3 py-1.5 whitespace-nowrap ${isAmt ? 'font-mono text-blue-700' : 'text-gray-700'}`}>
+                          {isAmt && typeof raw === 'number' ? fmtCurrency(raw) : isAmt && typeof raw === 'string' ? `US$ ${parseAmount(raw).toFixed(2)}` : String(raw)}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
                 {records.length > 3 && (
@@ -380,12 +472,12 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
         <div className="space-y-3">
           <StepLabel n={2} text="Mapeo de columnas" />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <ColSelect label="Referencia" value={refCol}  onChange={setRefCol}  columns={columns} />
-            <ColSelect label="Descripción" value={descCol} onChange={setDescCol} columns={columns} />
+            <ColSelect label="Referencia"    value={refCol}  onChange={setRefCol}  columns={columns} />
+            <ColSelect label="Descripción"   value={descCol} onChange={setDescCol} columns={columns} />
             {mode === 'MUS' && (
-              <ColSelect label="Monto *"    value={amtCol}  onChange={setAmtCol}  columns={columns} required />
+              <ColSelect label="Monto US$ *" value={amtCol}  onChange={setAmtCol}  columns={columns} required />
             )}
-            <ColSelect label="Fecha (opc.)" value={dateCol} onChange={setDateCol} columns={columns} />
+            <ColSelect label="Fecha (opc.)"  value={dateCol} onChange={setDateCol} columns={columns} />
           </div>
 
           {mode === 'MUS' && amtCol && (
@@ -524,6 +616,10 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
           data={displayResults}
           onExport={() => exportResults(displayResults)}
           previewCols={previewCols}
+          rowAnnotations={rowAnnotations}
+          onRowAnnotationChange={handleRowAnnotationChange}
+          evidenceFiles={evidenceFiles}
+          onEvidenceChange={handleEvidenceChange}
         />
       )}
     </div>
@@ -533,20 +629,55 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
 // ─── ResultsBlock ─────────────────────────────────────────────────────────────
 
 function ResultsBlock({
-  data, onExport, previewCols,
+  data,
+  onExport,
+  previewCols,
+  rowAnnotations,
+  onRowAnnotationChange,
+  evidenceFiles,
+  onEvidenceChange,
 }: {
-  data:        SamplingResultData;
-  onExport:    () => void;
-  previewCols: string[];
+  data:                   SamplingResultData;
+  onExport:               () => void;
+  previewCols:            string[];
+  rowAnnotations:         Record<number, RowAnnotation>;
+  onRowAnnotationChange:  (idx: number, ann: RowAnnotation) => void;
+  evidenceFiles:          Record<number, File[]>;
+  onEvidenceChange:       (idx: number, files: File[]) => void;
 }) {
-  const isMUS   = data.mode === 'MUS';
-  const isAttr  = data.mode === 'ATTRIBUTES';
+  const isMUS  = data.mode === 'MUS';
+  const isAttr = data.mode === 'ATTRIBUTES';
   const fmtDate = new Date(data.executed_at).toLocaleString('es-SV', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
+  const evidenceInputRef  = useRef<HTMLInputElement>(null);
+  const [targetRow, setTargetRow] = useState<number | null>(null);
+
+  function handleEvidenceClick(idx: number) {
+    setTargetRow(idx);
+    setTimeout(() => evidenceInputRef.current?.click(), 0);
+  }
+
+  function handleEvidenceFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (targetRow === null || !e.target.files) return;
+    const newFiles = Array.from(e.target.files);
+    const existing = evidenceFiles[targetRow] ?? [];
+    onEvidenceChange(targetRow, [...existing, ...newFiles]);
+    e.target.value = '';
+  }
+
   return (
     <div className="space-y-4">
+      <input
+        ref={evidenceInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleEvidenceFileChange}
+      />
+
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-green-600" />
@@ -571,7 +702,7 @@ function ResultsBlock({
         {isMUS && data.sampling_interval != null && (
           <MetricCard
             label="Intervalo de muestreo"
-            value={data.sampling_interval.toLocaleString('es-SV', { maximumFractionDigits: 2 })}
+            value={fmtCurrency(data.sampling_interval)}
             color="violet"
           />
         )}
@@ -591,7 +722,7 @@ function ResultsBlock({
             <span className="text-gray-400 capitalize">{k.replace(/_/g, ' ')}: </span>
             <span className="font-medium text-gray-700">
               {typeof v === 'number' && v > 1000
-                ? v.toLocaleString('es-SV', { style: 'currency', currency: 'USD' })
+                ? fmtCurrency(v)
                 : String(v)}
             </span>
           </div>
@@ -608,50 +739,118 @@ function ResultsBlock({
                 <th key={c} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{c}</th>
               ))}
               {isAttr && (
-                <>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-500">¿Desviación?</th>
-                  <th className="px-3 py-2 text-left font-semibold text-gray-500">Observaciones</th>
-                </>
+                <th className="px-3 py-2 text-left font-semibold text-gray-500 whitespace-nowrap">¿Desviación?</th>
               )}
+              <th className="px-3 py-2 text-left font-semibold text-gray-500 whitespace-nowrap">Monto Observado</th>
+              <th className="px-3 py-2 text-left font-semibold text-gray-500">Observaciones</th>
+              <th className="px-3 py-2 text-left font-semibold text-gray-500">Evidencia</th>
             </tr>
           </thead>
           <tbody>
-            {data.selected.map((row, i) => (
-              <tr key={i} className={`border-t border-gray-100 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
-                <td className="px-3 py-1.5 text-gray-400 font-mono">{i + 1}</td>
-                {previewCols.map(c => (
-                  <td key={c} className="px-3 py-1.5 text-gray-700 whitespace-nowrap">{String(row[c] ?? '—')}</td>
-                ))}
-                {isAttr && (
-                  <>
-                    <td className="px-3 py-1.5">
-                      <select className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none">
+            {data.selected.map((row, i) => {
+              const ann      = rowAnnotations[i] ?? { observedAmt: '', observation: '', deviation: '' };
+              const rowMonto = typeof row.monto === 'number'
+                ? row.monto
+                : (typeof row.monto === 'string' ? parseAmount(row.monto) : undefined);
+              const amtErr   = amtError(ann.observedAmt, rowMonto);
+              const evCount  = evidenceFiles[i]?.length ?? 0;
+              const evNames  = evidenceFiles[i]?.map(f => f.name).join(', ') ?? '';
+
+              return (
+                <tr key={i} className={`border-t border-gray-100 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
+                  <td className="px-3 py-2 text-gray-400 font-mono">{i + 1}</td>
+
+                  {previewCols.map(c => {
+                    const val   = row[c];
+                    const isMnt = c === 'monto' && isMUS;
+                    return (
+                      <td key={c} className={`px-3 py-2 whitespace-nowrap ${isMnt ? 'font-mono text-blue-700 font-medium' : 'text-gray-700'}`}>
+                        {isMnt && typeof val === 'number'
+                          ? fmtCurrency(val)
+                          : isMnt && typeof val === 'string'
+                            ? `US$ ${parseAmount(val).toFixed(2)}`
+                            : String(val ?? '—')}
+                      </td>
+                    );
+                  })}
+
+                  {/* Deviation (attributes only) */}
+                  {isAttr && (
+                    <td className="px-3 py-2">
+                      <select
+                        value={ann.deviation}
+                        onChange={e => onRowAnnotationChange(i, { ...ann, deviation: e.target.value })}
+                        className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+                      >
                         <option value="">— Pendiente —</option>
                         <option value="NO">No (conforme)</option>
                         <option value="SI">Sí (desviación)</option>
                         <option value="NA">N/A</option>
                       </select>
                     </td>
-                    <td className="px-3 py-1.5">
-                      <input
-                        type="text"
-                        placeholder="Observación..."
-                        className="text-xs border border-gray-200 rounded px-2 py-1 w-40 bg-white focus:outline-none"
-                      />
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
+                  )}
+
+                  {/* Observed amount */}
+                  <td className="px-3 py-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-400 text-[10px] font-mono">US$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={ann.observedAmt}
+                          onChange={e => {
+                            const sanitized = sanitizeAmount(e.target.value);
+                            onRowAnnotationChange(i, { ...ann, observedAmt: sanitized });
+                          }}
+                          placeholder="0.00"
+                          className={`text-xs border rounded px-2 py-1 w-24 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300 font-mono ${
+                            amtErr ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200'
+                          }`}
+                        />
+                      </div>
+                      {amtErr && <p className="text-[10px] text-red-500 leading-tight">{amtErr}</p>}
+                    </div>
+                  </td>
+
+                  {/* Observation text */}
+                  <td className="px-3 py-2">
+                    <input
+                      type="text"
+                      value={ann.observation}
+                      onChange={e => onRowAnnotationChange(i, { ...ann, observation: e.target.value })}
+                      placeholder="Observación..."
+                      className="text-xs border border-gray-200 rounded px-2 py-1 w-36 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+                    />
+                  </td>
+
+                  {/* Evidence attachment */}
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => handleEvidenceClick(i)}
+                      title={evNames || 'Adjuntar evidencias a este ítem'}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors whitespace-nowrap ${
+                        evCount > 0
+                          ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Paperclip className="w-3 h-3 shrink-0" />
+                      {evCount > 0 ? `${evCount} arch.` : 'Adjuntar'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {isAttr && (
-        <p className="text-[11px] text-gray-400">
-          Las columnas Desviación y Observaciones son para referencia visual. Exporta a Excel para registrar y guardar los resultados de la revisión de cada ítem.
-        </p>
-      )}
+      <p className="text-[11px] text-gray-400">
+        {isMUS
+          ? 'Monto Observado: saldo auditado de cada ítem. Los archivos adjuntos se incluyen en el Excel exportado.'
+          : 'Completa Desviación y Observaciones por ítem. Los archivos adjuntos se incluyen en el Excel exportado.'}
+      </p>
     </div>
   );
 }
@@ -710,15 +909,15 @@ function ReadonlyField({ label, value, hint }: { label: string; value: string; h
 function LabeledInput({
   label, hint, value, onChange, disabled, type, min, max, step, placeholder,
 }: {
-  label:       string;
-  hint?:       string;
-  value:       string;
-  onChange:    (v: string) => void;
-  disabled?:   boolean;
-  type?:       string;
-  min?:        number;
-  max?:        number;
-  step?:       number;
+  label:        string;
+  hint?:        string;
+  value:        string;
+  onChange:     (v: string) => void;
+  disabled?:    boolean;
+  type?:        string;
+  min?:         number;
+  max?:         number;
+  step?:        number;
   placeholder?: string;
 }) {
   return (
@@ -770,7 +969,7 @@ function MetricCard({ label, value, color }: { label: string; value: string; col
   return (
     <div className={`border rounded-xl p-3 ${styles[color]}`}>
       <p className="text-[10px] uppercase tracking-wide opacity-70 font-medium leading-tight">{label}</p>
-      <p className="text-lg font-bold font-mono mt-0.5">{value}</p>
+      <p className="text-lg font-bold font-mono mt-0.5 break-all">{value}</p>
     </div>
   );
 }

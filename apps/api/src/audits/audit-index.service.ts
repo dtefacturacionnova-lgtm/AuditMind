@@ -84,10 +84,11 @@ const INDEX_INTERNAL: PaperDef[] = [
  */
 const INDEX_EXTERNAL: PaperDef[] = [
   {
-    code: 'A-01', indexSection: 'A',
-    title:    'Carta de Encargo / Términos del Trabajo (NIA 210)',
-    type:     WorkingPaperType.PLANNING_UNDERSTANDING,
-    wpKind:   WpKind.STANDARD,
+    code:      'A-01', indexSection: 'A',
+    title:     'Carta de Encargo / Términos del Trabajo (NIA 210)',
+    type:      WorkingPaperType.PLANNING_UNDERSTANDING,
+    wpKind:    WpKind.SMART,
+    paperCode: 'PT-FIN-ENCARGO',
   },
   {
     code: 'A-02', indexSection: 'A',

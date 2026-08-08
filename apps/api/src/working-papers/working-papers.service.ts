@@ -116,7 +116,7 @@ export class WorkingPapersService {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         crossReferences:(dto.crossReferences ?? []) as any,
         aiAssisted:     dto.aiAssisted ?? false,
-        status:         WorkingPaperStatus.DRAFT,
+        status:         WorkingPaperStatus.NOT_STARTED,
         version:        1,
       },
       include: INCLUDE_FULL,

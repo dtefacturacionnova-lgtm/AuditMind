@@ -569,8 +569,9 @@ export class AuditTemplatesService {
         papers: [
           // ── A — Planificación ───────────────────────────────────────────
           { code: 'A-01', indexSection: 'A',
-            title:  'Carta de Encargo / Términos del Trabajo (NIA 210)',
-            type:   WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.STANDARD },
+            title:     'Carta de Encargo / Términos del Trabajo (NIA 210)',
+            type:      WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART,
+            paperCode: 'PT-FIN-ENCARGO' },
           { code: 'A-02', indexSection: 'A',
             title:     'Evaluación de Independencia y Ética (NIA 220 / ISA 220 Rev. / IESBA)',
             type:      WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART,

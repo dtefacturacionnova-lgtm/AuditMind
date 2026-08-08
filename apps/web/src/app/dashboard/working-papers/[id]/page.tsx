@@ -1378,15 +1378,17 @@ export default function WpDetailPage() {
                   Volver al Índice
                 </Link>
               )}
-              {/* PI.7a — Calculadora de muestreo NIA 530 */}
-              <button
-                onClick={() => setShowSampling(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-violet-200 bg-violet-50 text-violet-700 text-xs font-medium rounded-lg hover:bg-violet-100 transition-colors"
-                title="Calcular tamaño de muestra (NIA 530)"
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                Muestreo
-              </button>
+              {/* PI.7a — Calculadora de muestreo NIA 530: ocultar en PT-A4 que ya tiene su cálculo integrado */}
+              {wp.paperCode !== 'PT-A4' && (
+                <button
+                  onClick={() => setShowSampling(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-violet-200 bg-violet-50 text-violet-700 text-xs font-medium rounded-lg hover:bg-violet-100 transition-colors"
+                  title="Calcular tamaño de muestra (NIA 530)"
+                >
+                  <Calculator className="w-3.5 h-3.5" />
+                  Muestreo
+                </button>
+              )}
               {/* PI.7c — Evaluación COSO 2013 asistida por IA */}
               <button
                 onClick={() => setShowCoso(true)}

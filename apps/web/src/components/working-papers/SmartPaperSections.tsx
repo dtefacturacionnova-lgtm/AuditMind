@@ -14,6 +14,7 @@ import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
 import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './TrialBalancePanel';
 import { MaterialidadPanel } from './MaterialidadPanel';
+import { SamplingExecutionPanel } from './SamplingExecutionPanel';
 
 // ─── Error boundary ───────────────────────────────────────────────────────────
 
@@ -333,6 +334,15 @@ export function SmartPaperSections({
         />
       )}
 
+      {/* PT-A4 — Panel de ejecución de muestreo NIA 530 (MUS + Atributos) */}
+      {paperCode === 'PT-A4' && (
+        <SamplingExecutionPanel
+          sections={sorted}
+          readonly={readonly}
+          onSave={handleSave}
+        />
+      )}
+
       {/* Sections */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-5 divide-y divide-gray-100">
         {sorted.map(section => {
@@ -382,8 +392,8 @@ export function SmartPaperSections({
             }
           }
 
-          // PT-A4: S1..S5 son renderizados por MaterialidadPanel — se omiten aquí
-          if (paperCode === 'PT-A4' && ['S1', 'S1b', 'S2', 'S3', 'S4', 'S5'].includes(section.sectionKey)) {
+          // PT-A4: S1..S5 renderizados por MaterialidadPanel; S_EJE por SamplingExecutionPanel
+          if (paperCode === 'PT-A4' && ['S1', 'S1b', 'S2', 'S3', 'S4', 'S5', 'S_EJE'].includes(section.sectionKey)) {
             return null;
           }
 

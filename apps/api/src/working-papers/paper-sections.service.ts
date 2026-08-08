@@ -60,15 +60,18 @@ export class PaperSectionsService {
   ) {
     await this.assertPaperAccess(paperId, user);
 
-    const existing = await this.prisma.paperSection.findUnique({
-      where: { paperId_sectionKey: { paperId, sectionKey } },
-    });
-    if (!existing) throw new NotFoundException(`Sección '${sectionKey}' no encontrada en el papel`);
-
-    const updated = await this.prisma.paperSection.update({
-      where: { paperId_sectionKey: { paperId, sectionKey } },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      data:  { value: value as any, isStale: false, staleSince: null, staleReason: null },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updated = await this.prisma.paperSection.upsert({
+      where:  { paperId_sectionKey: { paperId, sectionKey } },
+      create: {
+        paperId, sectionKey, label: sectionKey,
+        fieldType:    'TEXTAREA' as any,
+        value:        value as any,
+        isRequired:   false,
+        isAutoFilled: false,
+        sortOrder:    999,
+      },
+      update: { value: value as any, isStale: false, staleSince: null, staleReason: null },
     });
 
     // PI.2 — if no sections are stale anymore, clear paper-level STALE banner

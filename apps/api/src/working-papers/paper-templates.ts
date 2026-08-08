@@ -554,6 +554,15 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       sortOrder:   9,
       aiHint:      'Columnas: Área / Ciclo | Razón de importancia cualitativa | Materialidad Específica ($) | Base de cálculo. Aplicar a: (1) Remuneraciones de directores y ejecutivos clave. (2) Transacciones con partes relacionadas. (3) Incumplimientos de leyes o regulaciones. (4) Beneficios a empleados (planes de pensiones). (5) Cualquier partida con tratamiento contable cuestionado. La materialidad específica puede ser inferior a la ME cuando existe alta sensibilidad de los usuarios.',
     },
+    {
+      sectionKey:  'S_EJE',
+      label:       'Ejecución de Muestreo (NIA 530)',
+      description: 'Resultados de la selección de muestra MUS o por Atributos. Generado por el panel de ejecución.',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  false,
+      isAutoFilled:false,
+      sortOrder:   10,
+    },
   ],
 
   // ──────────────────────────────────────────────────────────────────────────

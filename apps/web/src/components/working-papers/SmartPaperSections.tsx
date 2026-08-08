@@ -53,6 +53,7 @@ const _HALL_KEYS = new Set(['PT-HALL', 'PT-HALL-COM', 'PT-HALL-RESP']);
 const _EXT_FIN_KEYS = new Set([
   'PT-INDEP','PT-A1','PT-A2','PT-A3','PT-A4','PT-COSO','PT-MEMO','PT-PROG',
   'PT-NIA250','PT-NIA530','PT-NIA610','PT-NIA620',
+  'PT-FIN-ENCARGO',
   'PT-FIN-A3-KC','PT-FIN-B00','PT-FIN-B01','PT-FIN-B02','PT-FIN-B03',
   'PT-FIN-B04','PT-FIN-B05','PT-FIN-B06','PT-FIN-B07','PT-FIN-B08','PT-FIN-B09',
   'PT-ADJ-RECLASIF','PT-DIFS','PT-CIRC','PT-FIN-C-SUST','PT-FIN-C-NORM','PT-FIN-C-ESTIM','PT-FIN-C-GEN',
@@ -118,6 +119,8 @@ const AVAILABLE_TEMPLATES = [
   // ── Cierre e Informe ────────────────────────────────────────────────────────────────────────
   { key: 'PT-FIN-DICT',   label: 'Fin.Ext · Dictamen del Auditor Independiente NIA 700-720 (PT-FIN-DICT)'      },
   { key: 'PT-FIN-D02CI',  label: 'Fin.Ext · Carta de Debilidades Control Interno NIA 265 (PT-FIN-D02CI)'       },
+  // ── Planificación / Aceptación del Encargo ────────────────────────────────
+  { key: 'PT-FIN-ENCARGO', label: 'Fin.Ext · Carta de Encargo y Términos del Trabajo NIA 210 (PT-FIN-ENCARGO)' },
   // ── Archivo Permanente / Conocimiento ────────────────────────────────────
   { key: 'PT-FIN-A3-KC',  label: 'Fin.Ext · Conocimiento del Cliente y su Entorno NIA 315 (PT-FIN-A3-KC)'    },
   { key: 'PT-INDEP',       label: 'Fin.Ext · Independencia, Ética y Aceptación NIA 220/IESBA (PT-INDEP)'      },
@@ -158,19 +161,51 @@ function InitFromTemplatePanel({
     ? AVAILABLE_TEMPLATES.filter(t => allowedKeys.has(t.key))
     : AVAILABLE_TEMPLATES;
 
-  // Pre-select the paper's own paperCode if it matches a visible template
-  const initialKey = defaultKey && visibleTemplates.some(t => t.key === defaultKey)
-    ? defaultKey
-    : '';
+  // Si el papel ya tiene una plantilla preasignada (paperCode) que existe en la lista, usarla directamente
+  const preassigned = defaultKey ? visibleTemplates.find(t => t.key === defaultKey) : undefined;
+  const initialKey = preassigned ? defaultKey! : '';
   const [selected, setSelected] = useState(initialKey);
   const initMutation = useInitFromTemplate();
 
   async function handleInit() {
-    if (!selected) return;
-    await initMutation.mutateAsync({ paperId, templateKey: selected });
+    const key = preassigned ? defaultKey! : selected;
+    if (!key) return;
+    await initMutation.mutateAsync({ paperId, templateKey: key });
     onDone();
   }
 
+  // ── Caso A: Plantilla preasignada → botón directo sin dropdown ─────────────
+  if (preassigned) {
+    return (
+      <div className="flex flex-col items-center py-16 gap-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center">
+          <LayoutTemplate className="w-8 h-8 text-blue-400" />
+        </div>
+        <div>
+          <p className="text-base font-semibold text-gray-800 mb-1">
+            Este papel no tiene secciones todavía
+          </p>
+          <p className="text-sm text-gray-500 max-w-sm">
+            Plantilla asignada: <span className="font-semibold text-blue-700">{preassigned.key}</span>
+          </p>
+          <p className="text-xs text-gray-400 mt-1 max-w-sm">{preassigned.label}</p>
+        </div>
+        <button
+          onClick={handleInit}
+          disabled={initMutation.isPending}
+          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-colors"
+        >
+          {initMutation.isPending ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Inicializando…</>
+          ) : (
+            <><LayoutTemplate className="w-4 h-4" /> Iniciar papel</>
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  // ── Caso B: Sin plantilla preasignada → dropdown de selección ─────────────
   return (
     <div className="flex flex-col items-center py-16 gap-6 text-center">
       <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center">

@@ -990,6 +990,7 @@ export default function WpDetailPage() {
   const [checkoutBanner,  setCheckoutBanner] = useState<string | null>(null);
   const [showSampling,    setShowSampling]    = useState(false);
   const [downloadingPdf,  setDownloadingPdf]  = useState(false);
+  const [downloadingWord, setDownloadingWord] = useState(false);
   const [showCoso,        setShowCoso]        = useState(false);
   const updateSection = useUpdateSection();
 
@@ -1068,6 +1069,24 @@ export default function WpDetailPage() {
       alert((e as Error).message);
     } finally {
       setDownloadingPdf(false);
+    }
+  }
+
+  async function handleDownloadWord() {
+    if (!wp?.sections) return;
+    setDownloadingWord(true);
+    try {
+      const { generateCartaEncargo } = await import('@/lib/generateCartaEncargo');
+      const blob = await generateCartaEncargo(wp.sections);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `carta_encargo_${(wp?.paperCode ?? wp?.code ?? params.id)}.docx`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setDownloadingWord(false);
     }
   }
 
@@ -1408,6 +1427,18 @@ export default function WpDetailPage() {
                 {downloadingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 PDF
               </button>
+              {/* Word export — solo PT-FIN-ENCARGO */}
+              {wp.paperCode === 'PT-FIN-ENCARGO' && (
+                <button
+                  onClick={handleDownloadWord}
+                  disabled={downloadingWord}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+                  title="Descargar Carta de Encargo en formato Word (.docx)"
+                >
+                  {downloadingWord ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                  Word
+                </button>
+              )}
               {nextStatus && (
                 <button
                   onClick={() => handleStatusChange(nextStatus)}

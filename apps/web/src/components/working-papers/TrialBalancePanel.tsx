@@ -74,6 +74,17 @@ const SUB_SUMARIA_OPTIONS = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+export interface SkippedRow {
+  lineNum:   number;
+  rawCuenta: string;
+  reason:    string;
+}
+
+export interface ParseResult {
+  valid:   TrialBalanceRow[];
+  skipped: SkippedRow[];
+}
+
 function splitLine(line: string): string[] {
   const result: string[] = [];
   let cur = '';
@@ -88,10 +99,38 @@ function splitLine(line: string): string[] {
   return result;
 }
 
-function parseCSV(text: string): TrialBalanceRow[] {
+// A valid account code must contain at least one digit and not be a metadata token
+function isValidAccountCode(raw: string): { ok: boolean; reason?: string } {
+  const code = raw.trim();
+  if (!code) return { ok: false, reason: 'Código vacío' };
+  if (code.length > 30) return { ok: false, reason: 'Texto demasiado largo para ser un código de cuenta' };
+  if (code.startsWith('(') || code.startsWith(')')) return { ok: false, reason: 'Parece un año entre paréntesis (fila de encabezado)' };
+  if (/[|]/.test(code)) return { ok: false, reason: 'Contiene separadores de fila de título' };
+  if (!/\d/.test(code)) return { ok: false, reason: 'No contiene ningún dígito (fila de texto descriptivo)' };
+  const lower = code.toLowerCase().replace(/[\s_\-]/g, '');
+  const metaWords = ['cuenta', 'codigo', 'code', 'cta', 'descripcion', 'nombre',
+                     'saldoactual', 'saldoanterior', 'saldo', 'balance', 'total'];
+  if (metaWords.some(w => lower === w || lower.startsWith(w + '('))) {
+    return { ok: false, reason: 'Fila de encabezado de columna' };
+  }
+  return { ok: true };
+}
+
+function parseCSVWithReport(text: string): ParseResult {
   const lines = text.split('\n').map(l => l.replace(/\r/g, '').trim()).filter(Boolean);
-  if (lines.length < 2) return [];
-  const hdr = splitLine(lines[0]).map(h => h.toLowerCase().replace(/[\s_\-.]+/g, ''));
+  if (lines.length < 2) return { valid: [], skipped: [] };
+
+  // Auto-detect header row: scan first 6 rows for recognizable column keywords
+  const HDR_KEYWORDS = ['cuenta', 'codigo', 'code', 'cta', 'descripcion', 'nombre', 'saldo', 'debe', 'haber', 'actual', 'anterior'];
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(6, lines.length); i++) {
+    const norm = lines[i].toLowerCase().replace(/[\s_\-\.]+/g, '');
+    if (HDR_KEYWORDS.filter(k => norm.includes(k)).length >= 2) { headerIdx = i; break; }
+  }
+
+  const hdr = splitLine(lines[headerIdx]).map(h =>
+    h.toLowerCase().replace(/[\s_\-\.]+/g, '').replace(/\(.*?\)/g, ''),
+  );
 
   function col(patterns: string[]): number {
     for (const p of patterns) {
@@ -100,28 +139,46 @@ function parseCSV(text: string): TrialBalanceRow[] {
     }
     return -1;
   }
-  const iCuenta  = col(['cuenta','codigo','code','cta','num','nro']);
-  const iDesc    = col(['descripcion','nombre','concepto','name','desc','detalle','detail']);
-  const iActual  = col(['actual','current','saldoactual','corriente','periodo1','ano1','saldo1']);
-  const iAnt     = col(['anterior','prior','saldoanterior','periodo2','ano2','saldo2']);
-  const iAnt2    = col(['anterior2','prev2','periodo3','ano3','saldo3','anteriordos']);
+  const iCuenta = col(['cuenta', 'codigo', 'code', 'cta', 'num', 'nro']);
+  const iDesc   = col(['descripcion', 'nombre', 'concepto', 'name', 'desc', 'detalle', 'detail']);
+  const iActual = col(['actual', 'current', 'saldoactual', 'corriente', 'periodo1', 'ano1', 'saldo1']);
+  const iAnt    = col(['anterior', 'prior', 'saldoanterior', 'periodo2', 'ano2', 'saldo2']);
+  const iAnt2   = col(['anterior2', 'prev2', 'periodo3', 'ano3', 'saldo3', 'anteriordos']);
 
   const toN = (v: string) => parseFloat(v.replace(/[$,\s]/g, '').replace(/\(([^)]+)\)/, '-$1')) || 0;
   const g   = (cells: string[], i: number, fb: number) => cells[i >= 0 ? i : fb] ?? '';
 
-  return lines.slice(1).flatMap(line => {
-    const c = splitLine(line);
-    const cuenta = g(c, iCuenta, 0);
-    const actual = toN(g(c, iActual, 2));
-    if (!cuenta && !actual) return [];
-    return [{
-      cuenta,
-      descripcion:     g(c, iDesc,  1),
+  const valid:   TrialBalanceRow[] = [];
+  const skipped: SkippedRow[]      = [];
+
+  lines.slice(headerIdx + 1).forEach((line, idx) => {
+    const c        = splitLine(line);
+    const rawCuenta = g(c, iCuenta, 0);
+    const actual    = toN(g(c, iActual, 2));
+
+    // Silently skip fully blank rows
+    if (!rawCuenta && actual === 0) return;
+
+    const { ok, reason } = isValidAccountCode(rawCuenta);
+    if (!ok) {
+      skipped.push({ lineNum: headerIdx + idx + 2, rawCuenta, reason: reason! });
+      return;
+    }
+
+    valid.push({
+      cuenta:          rawCuenta,
+      descripcion:     g(c, iDesc, 1),
       saldo_actual:    actual,
-      saldo_anterior:  toN(g(c, iAnt,  3)),
+      saldo_anterior:  toN(g(c, iAnt, 3)),
       saldo_anterior2: toN(g(c, iAnt2, 4)),
-    }];
+    });
   });
+
+  return { valid, skipped };
+}
+
+function parseCSV(text: string): ParseResult {
+  return parseCSVWithReport(text);
 }
 
 function autoMap(code: string): { sub: string; grupo: string } {
@@ -157,6 +214,7 @@ export function TrialBalanceImporter({
   const [preview,    setPreview]  = useState<TrialBalanceRow[] | null>(null);
   const [parseError, setError]    = useState('');
   const [saving,     setSaving]   = useState(false);
+  const [skipped,    setSkipped]  = useState<SkippedRow[]>([]);
 
   const saved  = safeParseArray<TrialBalanceRow>(section.value);
   const rows   = preview ?? saved;
@@ -167,10 +225,24 @@ export function TrialBalanceImporter({
   const netAnterior = rows.reduce((s, r) => s + r.saldo_anterior, 0);
   const netAnt2     = rows.reduce((s, r) => s + r.saldo_anterior2, 0);
 
+  function applyParseResult(result: ParseResult) {
+    setSkipped(result.skipped);
+    if (!result.valid.length) {
+      setError(
+        result.skipped.length > 0
+          ? `Ninguna fila pasó la validación (${result.skipped.length} fila${result.skipped.length > 1 ? 's' : ''} rechazada${result.skipped.length > 1 ? 's' : ''}). Verifique que la hoja tenga una fila de encabezado con "cuenta", "descripcion" y "saldo_actual".`
+          : 'No se encontraron cuentas válidas. Verifique el formato del archivo.',
+      );
+      return;
+    }
+    setPreview(result.valid);
+  }
+
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
     setError('');
+    setSkipped([]);
     const isXlsx = /\.(xlsx?|ods)$/i.test(f.name);
     const reader = new FileReader();
 
@@ -180,23 +252,20 @@ export function TrialBalanceImporter({
           const { read, utils } = await import('xlsx');
           const wb  = read(ev.target?.result as ArrayBuffer, { type: 'array' });
           const ws  = wb.Sheets[wb.SheetNames[0]];
-          // Convert to array-of-arrays (with header row)
           const aoa = utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][];
           if (aoa.length < 2) { setError('El archivo Excel no tiene filas de datos.'); return; }
-          // Build a CSV string and reuse the existing parser
-          const csv = aoa.map(row => row.map(c => String(c ?? '')).join(',')).join('\n');
-          const parsed = parseCSV(csv);
-          if (!parsed.length) { setError('No se encontraron cuentas válidas. Verifique que la primera hoja tenga columnas Cuenta, Descripcion y Saldo.'); return; }
-          setPreview(parsed);
+          // Sanitize: strip embedded newlines from cells (multi-line headers break CSV conversion)
+          const csv = aoa
+            .map(row => row.map(c => `"${String(c ?? '').replace(/[\n\r]+/g, ' ').replace(/"/g, '""')}"`).join(','))
+            .join('\n');
+          applyParseResult(parseCSV(csv));
         } catch (err) { setError(`Error al leer Excel: ${(err as Error).message}`); }
       };
       reader.readAsArrayBuffer(f);
     } else {
       reader.onload = ev => {
         try {
-          const parsed = parseCSV(ev.target?.result as string);
-          if (!parsed.length) { setError('No se encontraron filas. Verifique el formato CSV.'); return; }
-          setPreview(parsed);
+          applyParseResult(parseCSV(ev.target?.result as string));
         } catch (err) { setError(`Error al parsear: ${(err as Error).message}`); }
       };
       reader.readAsText(f);
@@ -252,6 +321,36 @@ export function TrialBalanceImporter({
         <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3 text-xs text-red-700">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />{parseError}
         </div>
+      )}
+
+      {/* Skipped rows report */}
+      {skipped.length > 0 && !parseError && (
+        <details className="mb-3 bg-amber-50 border border-amber-200 rounded-lg text-xs">
+          <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer text-amber-700 font-medium select-none">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            {skipped.length} fila{skipped.length > 1 ? 's' : ''} omitida{skipped.length > 1 ? 's' : ''} por no ser código de cuenta válido — haga clic para ver detalle
+          </summary>
+          <div className="border-t border-amber-200 overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="bg-amber-100 text-amber-800">
+                  <th className="px-3 py-1.5 text-left font-semibold w-16">Fila</th>
+                  <th className="px-3 py-1.5 text-left font-semibold">Valor en columna Cuenta</th>
+                  <th className="px-3 py-1.5 text-left font-semibold">Motivo del rechazo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {skipped.map((s, i) => (
+                  <tr key={i} className="border-t border-amber-100">
+                    <td className="px-3 py-1 font-mono text-amber-700">{s.lineNum}</td>
+                    <td className="px-3 py-1 font-mono text-gray-700 max-w-[300px] truncate">{s.rawCuenta || '(vacío)'}</td>
+                    <td className="px-3 py-1 text-amber-700">{s.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
       )}
 
       {/* Preview banner */}

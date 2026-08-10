@@ -409,17 +409,18 @@ export class PaperConsolidationService {
     const hasPTA1 = sourceData.some(p => p.paperCode === 'PT-A1');
     const hasPTA2 = sourceData.some(p => p.paperCode === 'PT-A2');
     const hasPTA4 = sourceData.some(p => p.paperCode === 'PT-A4');
+    const hasPTA5 = sourceData.some(p => p.paperCode === 'PT-A5');
 
     if (paperCode === 'PT-PROG') {
-      return `Eres un experto en auditoría. Con los datos de fuente, genera el contenido del Programa de Auditoría (PT-PROG) en español.
+      return `Eres un experto en auditoría NIA/IAASB. Con los datos de fuente, genera el Programa de Auditoría (PT-PROG) en español.
 
 DATOS DE FUENTE:
 ${contextLines.join('\n')}
 
 Responde EXCLUSIVAMENTE con un JSON (sin markdown) con estas claves:
 {
-  "S1": "Lista de 8-12 procedimientos de auditoría específicos, uno por línea con formato 'N. Procedimiento: descripción'. Basado en los riesgos del PT-A2 y materialidad del PT-A4 [PT-A2][PT-A4].",
-  "S7": "Notas del auditor: resumen del enfoque de auditoría propuesto, 2 párrafos. Incluye citas [PT-A2][PT-A4]."
+  "S1": "${hasPTA5 ? 'Lista de 10-14 procedimientos de auditoría por área, usando la estrategia RMM de PT-A5: para áreas RMM=ALTO o MUY_ALTO genera procedimientos sustantivos amplios (100% ó muestra grande); para áreas RMM=MODERADO genera mix controles+sustantivos; para áreas RMM=BAJO genera controles + analíticos. Incluye SIEMPRE procedimientos para NIA 240 (reconocimiento de ingresos y management override). Formato: N. [Área]: descripción del procedimiento. [PT-A2][PT-A4][PT-A5]' : 'Lista de 8-12 procedimientos de auditoría específicos, uno por línea con formato N. Procedimiento: descripción. Basado en los riesgos del PT-A2 y materialidad del PT-A4 [PT-A2][PT-A4].'}",
+  "S7": "Notas del auditor: resumen del enfoque de auditoría propuesto, 2 párrafos. ${hasPTA5 ? 'Mencionar nivel RMM global, áreas de mayor atención, estrategia controles vs. sustantivo y cobertura de presunciones NIA 240. [PT-A2][PT-A4][PT-A5]' : 'Incluye citas [PT-A2][PT-A4].'}"
 }`;
     }
 
@@ -432,14 +433,15 @@ ${contextLines.join('\n')}
 Responde EXCLUSIVAMENTE con un JSON (sin markdown extra) con estas claves:
 {
   "S2": "${hasPTA1 ? 'Entendimiento del negocio: resumen ejecutivo en 3 párrafos síntesis de PT-A1' : 'Entendimiento del negocio: indica que PT-A1 no está completo y describe los pasos a seguir'}. Incluye cita [PT-A1]. Máx. 350 palabras.",
-  "S3": "${hasPTA2 ? 'Evaluación del riesgo inherente: 2-3 párrafos con nivel global de RI, riesgos significativos y riesgo de fraude de PT-A2' : 'Evaluación de RI: indica que PT-A2 no está disponible'}. Incluye cita [PT-A2]. Máx. 300 palabras.",
+  "S3": "${hasPTA2 ? 'Evaluación del riesgo inherente: 2-3 párrafos con nivel global de RI, riesgos significativos y riesgo de fraude de PT-A2. Incluye presunciones NIA 240 evaluadas.' : 'Evaluación de RI: indica que PT-A2 no está disponible'}. Incluye cita [PT-A2]. Máx. 300 palabras.",
   "S4": "${hasPTA4 ? 'Materialidad NIA 320: 1-2 párrafos con MG, ME, UAE, base y justificación de PT-A4' : 'Materialidad: indica que PT-A4 no está disponible'}. Incluye cita [PT-A4]. Máx. 250 palabras.",
-  "S8": "Conclusión integral del memorando: 2 párrafos formales que integren entendimiento del negocio, evaluación de riesgos y materialidad para concluir el enfoque de auditoría de '${auditTitle}'. Lenguaje NIA/ISA profesional. Incluye citas [PT-A1][PT-A2][PT-A4]."
+  "S5": "${hasPTA5 ? 'Enfoque de auditoría basado en Matriz RMM de PT-A5: describe la estrategia por área (áreas con RMM alto → enfoque sustantivo ampliado, áreas con RMM bajo/moderado → mix controles+sustantivo), menciona tratamiento de riesgos significativos y presunciones NIA 240. [PT-A5]' : 'Enfoque de auditoría: describe la estrategia mixta basada en riesgo. Si PT-A5 (Matriz RMM) no está completo, recomendarlo como paso previo.'}. Máx. 200 palabras.",
+  "S8": "Conclusión integral del memorando: 2 párrafos formales que integren entendimiento del negocio, evaluación de riesgos ${hasPTA5 ? '(incluyendo RMM de PT-A5)' : ''} y materialidad para concluir el enfoque de auditoría de '${auditTitle}'. Lenguaje NIA/ISA profesional. Incluye citas [PT-A1][PT-A2][PT-A4]${hasPTA5 ? '[PT-A5]' : ''}."
 }
 
 INSTRUCCIONES:
 - Redacta en español formal de auditoría (NIA/IAASB)
-- Usa citas [PT-A1], [PT-A2], [PT-A4] al referenciar fuentes
+- Usa citas [PT-A1], [PT-A2], [PT-A4]${hasPTA5 ? ', [PT-A5]' : ''} al referenciar fuentes
 - Sé conciso pero completo
 - Solo el JSON, sin texto fuera del objeto`;
   }

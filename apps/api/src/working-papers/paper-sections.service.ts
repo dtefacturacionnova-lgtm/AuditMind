@@ -252,11 +252,11 @@ export class PaperSectionsService {
       select: { title: true, scope: true, type: true, subtype: true },
     });
 
-    // Gather peer papers from the same audit by paperCode (PT-A1, PT-A2, PT-A3)
+    // Gather peer papers from the same audit by paperCode
     const peers = await this.prisma.workingPaper.findMany({
       where: {
         auditId:   wp.auditId,
-        paperCode: { in: ['PT-A1', 'PT-A2', 'PT-A3'] },
+        paperCode: { in: ['PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-A5', 'PT-COSO'] },
       },
       include: { sections: { orderBy: { sortOrder: 'asc' } } },
     });
@@ -311,6 +311,8 @@ export class PaperSectionsService {
       entityContext:     summarizePaper(peerByCode.get('PT-A1')),
       riskAssessment:    summarizePaper(peerByCode.get('PT-A2')),
       controlEvaluation: summarizePaper(peerByCode.get('PT-A3')),
+      rmmMatrix:         summarizePaper(peerByCode.get('PT-A5')),
+      cosoEvaluation:    summarizePaper(peerByCode.get('PT-COSO')),
       currentCosoNotes:  currentCosoNotes || undefined,
       findingsSummary:   findingsSummary || undefined,
     };

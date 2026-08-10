@@ -421,13 +421,13 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     },
     {
       sectionKey:  'S7',
-      label:       'Riesgo de Fraude ACFE',
-      description: 'Evaluación del triángulo del fraude: presión, oportunidad y racionalización.',
+      label:       'Riesgo de Fraude — ACFE + Presunciones NIA 240',
+      description: 'Evaluación del triángulo del fraude (ACFE) y documentación obligatoria de las presunciones de fraude de NIA 240.26 y NIA 240.31-33.',
       fieldType:   FieldType.TEXTAREA,
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   7,
-      aiHint:      'Evalúa indicadores de fraude: incentivos, oportunidades de control débil y cultura organizacional.',
+      aiHint:      'PARTE A — TRIÁNGULO ACFE (evaluar los tres vértices):\n(1) PRESIÓN / INCENTIVO: presiones financieras del negocio, metas de resultados agresivas, remuneración atada a indicadores, deuda excesiva o problemas de liquidez, covenants bancarios en riesgo de incumplimiento.\n(2) OPORTUNIDAD: controles débiles o ausentes, acceso sin supervisión a activos/sistemas, transacciones complejas o inusuales, ausencia de segregación de funciones contables.\n(3) RACIONALIZACIÓN: cultura organizacional permisiva, historial de ajustes gerenciales a resultados, rotación alta en área contable, litigios previos con reguladores.\n\nPARTE B — PRESUNCIONES OBLIGATORIAS NIA 240 (documentar SIEMPRE):\n[NIA 240.26] RECONOCIMIENTO DE INGRESOS: Esta presunción es SIEMPRE aplicable en toda auditoría financiera. Evaluar: ¿existen transacciones de ingresos inusuales al cierre? ¿Hay presiones para alcanzar metas de ingresos? ¿Las políticas de reconocimiento son complejas o con juicio significativo? Si el auditor decide que la presunción no aplica en esta entidad, DEBE documentar aquí el fundamento específico y detallado.\n[NIA 240.31-33] MANAGEMENT OVERRIDE (sobrepaso de controles por la Dirección): Este riesgo se PRESUME SIEMPRE porque la Dirección tiene capacidad única de anular controles. Documentar: (a) Identificación de asientos de diario inusuales o no estandarizados que se probarán (especialmente al cierre y en períodos intermedios). (b) Estimaciones contables relevantes donde se buscará sesgo sistemático de la dirección (provisiones, depreciaciones, valor razonable, impairment). (c) Transacciones significativas fuera del curso normal del negocio que se revisarán. Estos tres procedimientos son OBLIGATORIOS y deben reflejarse en PT-PROG y PT-A5 S3.',
     },
     {
       sectionKey:  'S8',
@@ -614,14 +614,36 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       aiHint:       'Incluye la tabla de materialidad: base, porcentaje, MG, ME, UAE y justificación.',
     },
     {
+      sectionKey:   'S3b',
+      label:        'Evaluación Integrada de Riesgos — Resumen RMM (auto desde PT-A5)',
+      description:  'Tabla resumen de la Matriz RMM por área con nivel RMM y enfoque de auditoría resultante. Generado automáticamente desde PT-A5 S4.',
+      fieldType:    FieldType.REFERENCE,
+      isRequired:   false,
+      isAutoFilled: true,
+      sourceRef:    'PT-A5::S4',
+      sortOrder:    11,
+      aiHint:       'Extrae de PT-A5 S4 la estrategia consolidada: área | RMM | enfoque (solo sustantivo / controles+sustantivo / 100% sustantivo) | ME específica | papel de ejecución. Este resumen integra RI (PT-A2) + RC (PT-A3) + Materialidad (PT-A4) en una sola vista ejecutiva para el memorando. Si PT-A5 no ha sido completado, aparecerá vacío con aviso al auditor. NIA 300.8 requiere documentar la estrategia de auditoría incluyendo los niveles de riesgo evaluados.',
+    },
+    {
       sectionKey:  'S5',
       label:       'Enfoque de Auditoría',
-      description: 'Estrategia de auditoría: controles vs. sustantivo, áreas de mayor riesgo, enfoque por ciclo.',
+      description: 'Estrategia de auditoría: controles vs. sustantivo, áreas de mayor riesgo, enfoque por ciclo. Complementado por RMM de PT-A5.',
       fieldType:   FieldType.TEXTAREA,
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   5,
-      aiHint:      'Define el mix de pruebas de controles vs. procedimientos sustantivos por área de alto riesgo.',
+      aiHint:      'Define el mix de pruebas de controles vs. procedimientos sustantivos por área de alto riesgo. Basar este enfoque en la Matriz RMM de PT-A5 S4 (sección S3b arriba). Para áreas con RMM=ALTO o MUY_ALTO: enfoque principalmente sustantivo. Para áreas con RMM=BAJO o MODERADO y controles efectivos: combinación pruebas de controles + sustantivos reducidos. Mencionar el tratamiento de riesgos significativos y presunciones NIA 240.',
+    },
+    {
+      sectionKey:   'S5b',
+      label:        'Respuesta General a Riesgos de EEFF — Riesgos Pervasivos (auto desde PT-A5)',
+      description:  'Respuestas globales a riesgos que afectan los EEFF en su conjunto (NIA 330.5). Generado desde PT-A5 S2.',
+      fieldType:    FieldType.REFERENCE,
+      isRequired:   false,
+      isAutoFilled: true,
+      sourceRef:    'PT-A5::S2',
+      sortOrder:    12,
+      aiHint:       'Referencia a PT-A5 S2. Solo aparece con contenido si se identificaron riesgos pervasivos de EEFF en PT-A5. Documenta las respuestas de nivel global requeridas por NIA 330.5: mayor escepticismo, personal más experimentado, imprevisibilidad en procedimientos, procedimientos al cierre en lugar de interino. Si no hay riesgos pervasivos identificados, esta sección puede quedar vacía con la nota "No se identificaron riesgos pervasivos de EEFF que requieran respuesta general".',
     },
     {
       sectionKey:  'S6',
@@ -679,6 +701,17 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   // PT-A3: Evaluación de Controles y Riesgo de Control (RC)
   // ──────────────────────────────────────────────────────────────────────────
   'PT-A3': [
+    {
+      sectionKey:   'S0',
+      label:        'Base: Evaluación Global del SCI — COSO 2013 (auto desde PT-COSO)',
+      description:  'Resultado de la evaluación global del Sistema de Control Interno del PT-COSO. Determina el nivel de confianza que puede depositarse en los controles de la entidad antes de evaluar controles por área.',
+      fieldType:    FieldType.REFERENCE,
+      isRequired:   false,
+      isAutoFilled: true,
+      sourceRef:    'PT-COSO::S6,S7',
+      sortOrder:    0,
+      aiHint:       'Referencia automática a PT-COSO: S6 = evaluación global del SCI (EFECTIVO / CON_DEBILIDADES_SIGNIFICATIVAS / INEFECTIVO) y S7 = implicación en enfoque (ENFOQUE_CONTROLES / MIXTO / SUSTANTIVO). IMPACTO EN RC: Si el SCI global es CON_DEBILIDADES_SIGNIFICATIVAS → el RC de áreas afectadas tiende a ser ALTO. Si INEFECTIVO → RC = MUY_ALTO y el enfoque sustantivo se amplía al máximo. Si EFECTIVO → RC puede ser BAJO o MODERADO según los controles específicos del área. Si PT-COSO no ha sido completado, esta sección aparece vacía — completar PT-COSO antes de evaluar el RC por área (NIA 315 Rev.2019 requiere esta evaluación global).',
+    },
     {
       sectionKey:  'S1',
       label:       'Área / Proceso Evaluado',
@@ -1518,19 +1551,78 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
+  // PT-A5: Matriz Integrada RMM (NIA 315.32) — Elemento central del proceso
+  // Consolida PT-A2 (RI) + PT-A3 (RC) → RMM por área/aserción → alimenta PT-PROG y PT-MEMO
+  // Big 4: Deloitte "Risk Assessment Summary" · PwC "ABRA" · EY "Risk Summary" · KPMG "Scoping Matrix"
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-A5': [
+    {
+      sectionKey:   'S1',
+      label:        'Matriz RMM por Área y Aserción (NIA 315.32)',
+      description:  'Consolidación de Riesgo Inherente (PT-A2) + Riesgo de Control (PT-A3) = RMM por área/aserción. Pre-cargada con datos de PT-A2 S4 y PT-A3 S5. Completar y validar por auditor.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sourceRef:    'PT-A2::S4,PT-A3::S5',
+      sortOrder:    1,
+      aiHint:       'Columnas: Área/Ciclo | Cuenta/Saldo estimado | Aserción principal (EXI/VAL/COM/OCC/COR/CLA — NIA 315) | RI (BAJO/MODERADO/ALTO/MUY_ALTO — de PT-A2 S4) | RC (BAJO/MODERADO/ALTO/MUY_ALTO — de PT-A3 S5) | RMM = RI×RC (ver fórmula abajo) | ¿Riesgo Significativo? (S/N) | Tipo de Respuesta (Solo_Sustantivo/Controles+Sustantivo/100%_Sustantivo) | Enfoque específico | Ref. papel de ejecución (ej. C-01, B-03). FÓRMULA RMM: BAJO×BAJO=BAJO · BAJO×MOD=BAJO · MOD×MOD=MODERADO · ALTO×MOD=ALTO · ALTO×ALTO=MUY_ALTO · MUY_ALTO×cualquiera=MUY_ALTO. Marcar Riesgo Significativo: (a) toda combinación con RMM=MUY_ALTO, (b) riesgo catalogado como significativo en PT-A2 S6, (c) presunciones NIA 240 (ingresos + management override). Para áreas sin PT-A3 evaluado, usar RC=ALTO por defecto (máxima prudencia). REGLA DE TIPO DE RESPUESTA: RMM=BAJO → Controles+Sustantivo reducido. RMM=MODERADO → Controles+Sustantivo. RMM=ALTO → Solo_Sustantivo ampliado. RMM=MUY_ALTO → 100%_Sustantivo.',
+    },
+    {
+      sectionKey:   'S2',
+      label:        'Riesgos Pervasivos a Nivel de EEFF — Respuestas Generales (NIA 330.5)',
+      description:  'Riesgos que afectan los EEFF en su conjunto y requieren respuestas generales del auditor (no procedimientos por cuenta específica). Fuente para PT-MEMO S5b.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    2,
+      aiHint:       'Columnas: # | Descripción del riesgo pervasivo | Origen | Impacto potencial en EEFF | Respuesta general del auditor (NIA 330.5). RIESGOS A EVALUAR SIEMPRE: (1) Ambiente de control débil (vinculado a PT-COSO S6). (2) Sesgo o influencia de la Dirección en estimaciones contables. (3) Complejidad/inusualidad de transacciones significativas. (4) Duda sobre hipótesis de empresa en marcha (NIA 570). (5) Cambios significativos en la entidad (ERP, reorganización, M&A). RESPUESTAS GENERALES TÍPICAS NIA 330.5: (a) Mayor énfasis en escepticismo profesional y supervisión. (b) Asignar personal con mayor experiencia en áreas críticas. (c) Incorporar elemento de imprevisibilidad en procedimientos (qué, cuándo, cómo). (d) Realizar procedimientos al final del período en lugar de en interino. (e) Cambiar la naturaleza de los procedimientos (más externos/confirmaciones vs. internos).',
+    },
+    {
+      sectionKey:   'S3',
+      label:        'Riesgos Significativos Consolidados + Presunciones NIA 240',
+      description:  'Lista completa de riesgos significativos. OBLIGATORIO: incluir siempre las dos presunciones de fraude NIA 240.26 y NIA 240.31-33 como filas pre-cargadas.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    3,
+      aiHint:       'Columnas: # | Descripción | Fuente (PT-A2/NIA240/NIA315) | ¿Puede confiarse en controles? (S/N) | Procedimientos específicos requeridos | Ref. papel ejecución. FILAS OBLIGATORIAS PRE-CARGADAS — NIA 240: [NIA240-A] "Fraude en reconocimiento de ingresos": NIA 240.26 presume SIEMPRE que el reconocimiento de ingresos es riesgo significativo de fraude. No puede confiarse en controles (N). Procedimientos: (a) Análisis de consistencia de ingresos vs. expectativas del auditor, (b) Prueba de corte de ingresos al cierre, (c) Revisión de ajustes manuales/no estandarizados a cuentas de ingreso, (d) Confirmación de contratos/acuerdos no registrados. Si el auditor concluye que esta presunción no aplica, DEBE documentar el fundamento específico aquí. [NIA240-B] "Sobrepaso de controles por la Dirección (Management Override)": NIA 240.31-33 requiere SIEMPRE tres procedimientos obligatorios: (a) Prueba de asientos de diario inusuales/no estandarizados (especialmente al cierre), (b) Revisión de estimaciones contables para detectar sesgo sistemático de la dirección, (c) Evaluación de transacciones significativas fuera del curso normal del negocio. DEMÁS RIESGOS: agregar filas para cada riesgo significativo de PT-A2 S6 con RMM=ALTO o MUY_ALTO de S1.',
+    },
+    {
+      sectionKey:   'S4',
+      label:        'Estrategia de Auditoría Consolidada por Área',
+      description:  'Resumen ejecutivo de la estrategia resultante por área. AUTO-ALIMENTA: PT-PROG (enfoque por área) y PT-MEMO S5 (enfoque de auditoría).',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'Columnas: Área/Ciclo | Saldo aprox. ($) | RMM | Enfoque principal | ME específica ($) | Extensión estimada (% ó n muestra) | Papel(es) de ejecución | Auditor asignado | Horas estimadas. CÓMO USAR ESTA TABLA: (a) Se copia al PT-MEMO como base de la sección "Enfoque de Auditoría". (b) Actualiza el PT-PROG para que los procedimientos por área reflejen el enfoque RMM determinado. (c) Determina el tamaño de muestra MUS en PT-A4 S_EJE. ÁREAS A INCLUIR: todas las áreas de PT-A2 S1 con saldo ≥ ME. Las áreas < ME pueden documentarse con "Inmaterial — sin procedimientos sustantivos" y extensión = 0%.',
+    },
+    {
+      sectionKey:   'S5',
+      label:        'Conclusión — Estrategia Global de Riesgo (NIA 315.32 + NIA 300.8)',
+      description:  'Conclusión narrativa sobre el riesgo global de la auditoría. El Socio/CAE aprueba la estrategia antes del inicio del trabajo de campo.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    5,
+      aiHint:       'Estructura: (1) Nivel general de RMM de la auditoría (BAJO/MODERADO/ALTO/MUY_ALTO) con base en la ponderación de áreas significativas de S1. (2) Áreas de mayor atención y razón. (3) Restricciones de alcance identificadas (si las hay). (4) Confirmación de cobertura de: (a) todos los riesgos significativos de S3, (b) presunciones NIA 240 (ingresos + management override), (c) riesgos pervasivos de EEFF de S2. (5) Fecha y firma de aprobación del Socio/CAE. NOTA: Esta conclusión es requerida por NIA 315.32 (documentación de riesgos identificados) y NIA 300.8 (estrategia de auditoría documentada antes del trabajo de campo).',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
   // PT-PROG: Programa de Auditoría [MASTER]
   // ──────────────────────────────────────────────────────────────────────────
   'PT-PROG': [
     {
       sectionKey:   'S1',
       label:        'Procedimientos de Auditoría (auto-generados por IA)',
-      description:  'Lista de procedimientos generada automáticamente en base al RI y materialidad.',
+      description:  'Lista de procedimientos generada automáticamente en base al RI, RC, RMM y materialidad. Fuentes: PT-A2 S6 (riesgos significativos) + PT-A4 S3 (materialidad) + PT-A5 S4 (estrategia RMM por área).',
       fieldType:    FieldType.MATRIX,
       isRequired:   true,
       isAutoFilled: true,
-      sourceRef:    'PT-A2::S6,PT-A4::S3',
+      sourceRef:    'PT-A2::S6,PT-A4::S3,PT-A5::S4',
       sortOrder:    1,
-      aiHint:       'Genera procedimientos NIA por área de riesgo significativo. Considera nivel RI y enfoque definido.',
+      aiHint:       'Genera procedimientos NIA por área de riesgo. Para cada área de PT-A5 S4: (1) Si RMM=BAJO o MODERADO con controles efectivos → procedimientos mixtos: pruebas de efectividad operativa de controles (tamaño muestra reducido ~25 ítems) + procedimientos sustantivos analíticos. (2) Si RMM=ALTO → procedimientos sustantivos ampliados: pruebas de detalle con tamaño muestra según ME, confirmaciones externas si aplica. (3) Si RMM=MUY_ALTO o riesgo significativo → 100% sustantivo o muestra completa: inspección de todos los ítems significativos, confirmaciones, recálculos. SIEMPRE incluir procedimientos para: [NIA240-A] Reconocimiento de ingresos (corte, contratos, ajustes manuales). [NIA240-B] Management override (asientos de diario, estimaciones, transacciones inusuales). Estructura de columnas sugerida: # | Área/Ciclo | Procedimiento | Aserciones atendidas (EXI/VAL/COM/etc.) | Naturaleza (Inspección/Confirmación/Recálculo/Analítico/Indagación) | Momento (Interino/Cierre) | Extensión (% / n) | Auditor | Estado.',
     },
     {
       sectionKey:  'S2',

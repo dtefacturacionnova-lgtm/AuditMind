@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import {
   Upload, Play, Download, CheckCircle2, Loader2,
   AlertCircle, FileSpreadsheet, BarChart3, Info, X, Paperclip,
-  ListFilter,
+  ListFilter, Lightbulb,
 } from 'lucide-react';
 import type { PaperSection } from '@/hooks/useWorkingPaperGraph';
 import { useCalculateMUS, useCalculateAttribute } from '@/hooks/useSampling';
@@ -394,6 +394,20 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
     return Object.keys(source[0]).filter(k => k !== 'item').slice(0, 6);
   }, [displayResults]);
 
+  // Suggested MUS parameters based on Excel data + PT-A4 S4 materialidad
+  const suggestedEE = useMemo(() => {
+    if (!bv) return 0;
+    const fromBV  = bv  * 0.025;                      // 2.5% of BV
+    const fromTM  = me  ? me * 0.50 : Infinity;       // 50% of TM (Big 4 conservative ceiling)
+    const raw     = Math.min(fromBV, fromTM);
+    return Math.round(raw / 100) * 100;                // round to nearest $100
+  }, [bv, me]);
+
+  const suggestedTMFallback = useMemo(
+    () => (bv > 0 ? Math.round(bv * 0.05 / 100) * 100 : 0),
+    [bv],
+  );
+
   return (
     <div className="border border-blue-200 bg-blue-50/20 rounded-2xl p-5 space-y-5">
 
@@ -541,16 +555,89 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
         <div className="space-y-3">
           <StepLabel n={3} text="Parámetros de muestreo" />
 
+          {mode === 'MUS' && amtCol && bv > 0 && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-violet-600 shrink-0" />
+                <span className="text-xs font-semibold text-violet-800">
+                  Asistencia técnica — parámetros sugeridos NIA 530
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* BV */}
+                <div className="bg-white rounded-lg px-3 py-2 border border-violet-100">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">BV — Valor en Libros</p>
+                  <p className="text-sm font-bold font-mono text-violet-800 mt-0.5 leading-none">{fmtCurrency(bv)}</p>
+                  <p className="text-[10px] text-violet-400 mt-0.5">Auto del Excel · {records.length} ítems</p>
+                </div>
+
+                {/* TM */}
+                <div className={`bg-white rounded-lg px-3 py-2 border ${me != null ? 'border-violet-100' : 'border-amber-200'}`}>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">TM — Materialidad Ejecución</p>
+                  {me != null ? (
+                    <>
+                      <p className="text-sm font-bold font-mono text-violet-800 mt-0.5 leading-none">{fmtCurrency(me)}</p>
+                      <p className="text-[10px] text-violet-400 mt-0.5">Del panel de materialidad (S4)</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-bold font-mono text-amber-700 mt-0.5 leading-none">{fmtCurrency(suggestedTMFallback)}</p>
+                      <p className="text-[10px] text-amber-500 mt-0.5">Estimado 5% BV — falta PT-A4 materialidad</p>
+                    </>
+                  )}
+                </div>
+
+                {/* EE */}
+                <div className="bg-white rounded-lg px-3 py-2 border border-violet-100">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">EE — Error Esperado</p>
+                  <p className="text-sm font-bold font-mono text-violet-800 mt-0.5 leading-none">{fmtCurrency(suggestedEE)}</p>
+                  <p className="text-[10px] text-violet-400 mt-0.5">≈ 2.5% BV · ≤ 50% TM (estándar Big 4)</p>
+                </div>
+
+                {/* CL */}
+                <div className="bg-white rounded-lg px-3 py-2 border border-violet-100">
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">CL — Nivel de Confianza</p>
+                  <p className="text-sm font-bold font-mono text-violet-800 mt-0.5 leading-none">95%</p>
+                  <p className="text-[10px] text-violet-400 mt-0.5">Estándar NIA 530</p>
+                </div>
+              </div>
+
+              {me == null && (
+                <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>
+                    El panel de <strong>Materialidad de Ejecución</strong> (sección S4 arriba) no está completo.
+                    Se muestra <strong>{fmtCurrency(suggestedTMFallback)}</strong> como estimado (5% de BV) — punto de partida razonable
+                    mientras calculas la materialidad formal del encargo. El auditor debe ajustar antes de concluir.
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setMusEE(String(suggestedEE)); setMusCL('95'); }}
+                  disabled={readonly}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Aplicar EE y CL sugeridos
+                </button>
+                <span className="text-[10px] text-gray-400">BV y TM ya están aplicados automáticamente</span>
+              </div>
+            </div>
+          )}
+
           {mode === 'MUS' && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <ReadonlyField
                 label="Materialidad de Ejecución (TM)"
                 value={me != null ? fmtCurrency(me) : '— (pendiente)'}
-                hint="Auto-tomada del panel de materialidad"
+                hint="Auto-tomada del panel de materialidad (S4)"
               />
               <LabeledInput
                 label="Error Esperado (EE — US$)"
-                hint="Monto monetario esperado de errores. Default $0"
+                hint={suggestedEE > 0 ? `Sugerido: ${fmtCurrency(suggestedEE)} · 2.5% BV / ≤ 50% TM (Big 4)` : 'Monto monetario esperado de errores. Default $0'}
                 value={musEE}
                 onChange={setMusEE}
                 type="number" min={0} placeholder="0"

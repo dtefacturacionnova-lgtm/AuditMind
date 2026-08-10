@@ -1,0 +1,367 @@
+<title>AuditMind — Ciclo Completo de Auditoría Financiera Externa</title>
+<style>
+:root{
+  --bg:#F1F4F8;--surf:#FFF;--border:#DDE3EE;--text:#18202E;--muted:#5A6A82;
+  --c1:#1A4472;--c2:#185C48;--c3:#532D85;--c4:#923610;--c5:#1A4D80;--c6:#2E6B35;
+  --sh:0 1px 4px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.055);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0C1118;--surf:#18222F;--border:#28384A;--text:#D0DBE8;--muted:#7A8EA4;
+}}
+:root[data-theme="light"]{--bg:#F1F4F8;--surf:#FFF;--border:#DDE3EE;--text:#18202E;--muted:#5A6A82;}
+:root[data-theme="dark"]{--bg:#0C1118;--surf:#18222F;--border:#28384A;--text:#D0DBE8;--muted:#7A8EA4;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);font-size:12px;}
+.ph{padding:14px 20px 9px;border-bottom:1px solid var(--border);background:var(--surf);}
+.ph h1{font-size:14px;font-weight:700;}
+.ph p{font-size:10.5px;color:var(--muted);margin-top:2px;}
+
+.outer{overflow-x:auto;padding:16px 14px 16px;}
+.master{display:flex;gap:0;align-items:stretch;min-width:1060px;position:relative;}
+
+/* phase zone */
+.zone{flex:1;display:flex;flex-direction:column;gap:0;}
+.zone-hdr{padding:8px 12px 7px;display:flex;align-items:center;gap:8px;}
+.zone-hdr .ztitle{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#fff;}
+.zone-hdr .znia{font-size:9px;font-weight:600;background:rgba(255,255,255,.2);color:#fff;padding:1px 6px;border-radius:3px;}
+.zone-body{flex:1;padding:10px 10px;display:flex;flex-direction:column;gap:7px;
+  background:var(--surf);border:1px solid var(--border);}
+.zone:first-child .zone-body{border-radius:0 0 0 8px;}
+.zone:last-child  .zone-body{border-radius:0 0 8px 0;}
+
+/* dividers between zones */
+.zdiv{flex:0 0 28px;display:flex;align-items:center;justify-content:center;
+  background:var(--bg);position:relative;}
+.zdiv svg{overflow:visible;}
+
+/* paper mini-card */
+.mcard{border-radius:5px;overflow:hidden;box-shadow:var(--sh);}
+.mcard .mh{padding:4px 8px;display:flex;align-items:baseline;gap:5px;}
+.mcard .mh .mc{font-family:Consolas,monospace;font-size:9px;font-weight:700;color:#fff;letter-spacing:.1px;}
+.mcard .mh .mn{font-size:9px;color:rgba(255,255,255,.82);}
+.mcard .mb{padding:3px 8px 4px;background:var(--surf);font-size:9px;color:var(--muted);line-height:1.4;}
+.mcard .mb .tag{display:inline-block;font-size:8px;font-weight:700;padding:0px 4px;border-radius:2px;margin-right:3px;}
+.tag-ai{background:#EDE9FE;color:#6B21A8;}
+.tag-ref{background:#DBEAFE;color:#1565C0;}
+.tag-calc{background:#DCFCE7;color:#166534;}
+.tag-man{background:#F3F4F6;color:#4B5563;}
+
+/* connector labels inside zone */
+.conn{font-size:8.5px;color:var(--muted);text-align:center;padding:1px 0;}
+
+/* bridge row between planning and execution */
+.bridge{background:var(--bg);border-top:1px dashed var(--border);border-bottom:1px dashed var(--border);padding:5px 8px;font-size:9px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.bridge strong{color:var(--text);}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:7px 18px;padding:9px 18px 12px;border-top:1px solid var(--border);background:var(--surf);}
+.li{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);}
+.ld{width:10px;height:10px;border-radius:2px;}
+.ll{width:22px;height:0;}
+
+/* matrix key at bottom */
+.keyrow{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;min-width:1060px;}
+.kcard{flex:1;min-width:160px;background:var(--surf);border:1px solid var(--border);border-radius:6px;padding:7px 9px;box-shadow:var(--sh);}
+.kcard h4{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:4px;}
+.kcard p{font-size:9px;color:var(--muted);line-height:1.5;}
+
+/* SVG bridge arrow */
+#bridge-svg{position:absolute;pointer-events:none;top:0;left:0;width:100%;height:100%;overflow:visible;}
+</style>
+
+<div class="ph">
+  <h1>Ciclo completo de Auditoría Financiera Externa — Vista maestra</h1>
+  <p>One-pager: los 13 papeles de AuditMind desde el encargo hasta el informe · Planificación → Ejecución Financiera → Cierre</p>
+</div>
+
+<div class="outer">
+<div style="position:relative;">
+<div class="master" id="master">
+
+  <!-- ══ ZONA 1: PLANIFICACIÓN ══ -->
+  <div class="zone">
+    <div class="zone-hdr" style="background:var(--c1);">
+      <span class="ztitle">Planificación</span>
+      <span class="znia">NIA 200·210·290·300·315·320·330·610</span>
+    </div>
+    <div class="zone-body">
+
+      <div class="mcard" id="mc-enc">
+        <div class="mh" style="background:var(--c1);">
+          <span class="mc">PT-FIN-ENCARGO</span><span class="mn">Carta de encargo</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> S1-S23 · <span class="tag tag-ref">Ref</span> S24←PT-INDEP::S3</div>
+      </div>
+
+      <div class="mcard" id="mc-ind">
+        <div class="mh" style="background:var(--c1);">
+          <span class="mc">PT-INDEP</span><span class="mn">Independencia</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Declaración · amenazas · <span class="tag tag-ref">Ref</span> S3→ENCARGO</div>
+      </div>
+
+      <div class="conn">↓ entendimiento</div>
+
+      <div class="mcard" id="mc-a2">
+        <div class="mh" style="background:var(--c2);">
+          <span class="mc">PT-A2</span><span class="mn">Conocimiento cliente</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Industria · ciclos · partes rel. · <span class="tag tag-ai">✨ AI ctx</span></div>
+      </div>
+
+      <div class="mcard" id="mc-a3">
+        <div class="mh" style="background:var(--c2);">
+          <span class="mc">PT-A3</span><span class="mn">Comprensión de EF</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Políticas · estimaciones · <span class="tag tag-ai">✨ AI ctx</span></div>
+      </div>
+
+      <div class="mcard" id="mc-610">
+        <div class="mh" style="background:var(--c2);">
+          <span class="mc">PT-NIA610</span><span class="mn">Auditores Internos</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> 9 secciones · <span class="tag tag-ref">Ref</span> reliance→A5·S3B</div>
+      </div>
+
+      <div class="conn">↓ riesgos</div>
+
+      <div class="mcard" id="mc-a4">
+        <div class="mh" style="background:var(--c3);">
+          <span class="mc">PT-A4</span><span class="mn">Materialidad · MUS</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Criterio % · <span class="tag tag-calc">⚡ Calc</span> MG/ME/MUS→A5·PROG</div>
+      </div>
+
+      <div class="mcard" id="mc-a5">
+        <div class="mh" style="background:var(--c3);">
+          <span class="mc">PT-A5</span><span class="mn">Matriz RMM</span>
+        </div>
+        <div class="mb"><span class="tag tag-ref">Ref</span> S1 auto←A2·A3·A4 · <span class="tag tag-ai">✨ AI ctx</span> · <span class="tag tag-calc">⚡</span> S4→PROG</div>
+      </div>
+
+      <div class="conn">↓ programa</div>
+
+      <div class="mcard" id="mc-prog">
+        <div class="mh" style="background:var(--c4);">
+          <span class="mc">PT-PROG</span><span class="mn">Programa de Auditoría</span>
+        </div>
+        <div class="mb"><span class="tag tag-ref">Ref</span> S_RMM auto←A5 · <span class="tag tag-ai">✨ Gemini</span> S_PROC genera procedimientos</div>
+      </div>
+
+      <div class="conn">↓ aprobación</div>
+
+      <div class="mcard" id="mc-memo">
+        <div class="mh" style="background:var(--c5);">
+          <span class="mc">PT-MEMO</span><span class="mn">Memorando de Planificación</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Síntesis de todos los papeles · firma socio · habilita ejecución</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- arrow div 1→2 -->
+  <div class="zdiv" id="zdiv1">
+    <svg width="28" height="40" viewBox="0 0 28 40">
+      <defs><marker id="za1" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#6B7280"/></marker></defs>
+      <line x1="0" y1="20" x2="22" y2="20" stroke="#6B7280" stroke-width="1.8" marker-end="url(#za1)" stroke-dasharray="4,3"/>
+    </svg>
+  </div>
+
+  <!-- ══ ZONA 2: EJECUCIÓN FINANCIERA ══ -->
+  <div class="zone">
+    <div class="zone-hdr" style="background:var(--c2);">
+      <span class="ztitle">Ejecución Financiera</span>
+      <span class="znia">NIA 315·320·330·500·505·530·540</span>
+    </div>
+    <div class="zone-body">
+
+      <div class="mcard" id="mc-b00">
+        <div class="mh" style="background:var(--c5);">
+          <span class="mc">PT-FIN-B00</span><span class="mn">Balance de Comprobación</span>
+        </div>
+        <div class="mb">
+          <span class="tag tag-man">Manual</span> S1 importa Excel (3 años) · S2 clasificador ·
+          <span class="tag tag-calc">⚡</span> S3 cuadre · S4 totales sub-sum. · S6 semáforo
+        </div>
+      </div>
+
+      <div class="conn">↓ alimenta cédulas sumarias</div>
+
+      <div class="mcard">
+        <div class="mh" style="background:#37626E;">
+          <span class="mc">PT-CS-ESF / PT-CS-ER</span><span class="mn">Cédulas Sumarias</span>
+        </div>
+        <div class="mb"><span class="tag tag-calc">⚡</span> Totales B00·S4 → saldo auditado por grupo EF · variaciones 3 años</div>
+      </div>
+
+      <div class="conn">↓ alimenta cédulas resúmenes</div>
+
+      <div class="mcard">
+        <div class="mh" style="background:#5C3A8E;">
+          <span class="mc">PT-CR-AC · ANC · PC · PNC · ING · CGV</span><span class="mn">Cédulas Resúmenes</span>
+        </div>
+        <div class="mb"><span class="tag tag-calc">⚡</span> Subtotales por rubro → saldo de línea individual a cada PT-B</div>
+      </div>
+
+      <div class="conn">↓ alimenta papeles individuales</div>
+
+      <div class="mcard" id="mc-b01">
+        <div class="mh" style="background:var(--c4);">
+          <span class="mc">PT-B01</span><span class="mn">Cuentas por Cobrar</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Confirmaciones · corte · <span class="tag tag-ref">↑</span> saldo←CR-AC</div>
+      </div>
+
+      <div class="mcard" id="mc-b02">
+        <div class="mh" style="background:var(--c4);">
+          <span class="mc">PT-B02</span><span class="mn">Inventario</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Conteo físico · valuación NRV · <span class="tag tag-ref">↑</span> saldo←CR-AC</div>
+      </div>
+
+      <div class="mcard" id="mc-b03">
+        <div class="mh" style="background:var(--c4);">
+          <span class="mc">PT-B03</span><span class="mn">Ingresos</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Corte · ocurrencia · reconocimiento · <span class="tag tag-ref">↑</span> saldo←CR-ING</div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh" style="background:var(--c4);">
+          <span class="mc">PT-B04 … PT-Bnn</span><span class="mn">Otras áreas auditadas</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Un papel por área · <span class="tag tag-ref">↑</span> saldo←cédula resumen</div>
+      </div>
+
+      <div class="conn" style="font-size:8px;color:#6B21A8;">
+        ↑ PT-PROG dicta procedimientos · PT-A5 dicta riesgo por aseveración
+      </div>
+
+    </div>
+  </div>
+
+  <!-- arrow div 2→3 -->
+  <div class="zdiv" id="zdiv2">
+    <svg width="28" height="40" viewBox="0 0 28 40">
+      <defs><marker id="za2" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#6B7280"/></marker></defs>
+      <line x1="0" y1="20" x2="22" y2="20" stroke="#6B7280" stroke-width="1.8" marker-end="url(#za2)" stroke-dasharray="4,3"/>
+    </svg>
+  </div>
+
+  <!-- ══ ZONA 3: CIERRE ══ -->
+  <div class="zone">
+    <div class="zone-hdr" style="background:var(--c5);">
+      <span class="ztitle">Cierre y Opinión</span>
+      <span class="znia">NIA 450·560·700·705·706</span>
+    </div>
+    <div class="zone-body">
+
+      <div class="mcard" id="mc-difs">
+        <div class="mh" style="background:#3949AB;">
+          <span class="mc">PT-DIFS</span><span class="mn">Diferencias NIA 450</span>
+        </div>
+        <div class="mb">
+          <span class="tag tag-man">Manual</span> Todas las diferencias de PT-B01…Bnn ·
+          Proyección MUS · Acumulado vs. MG/ME de PT-A4
+        </div>
+      </div>
+
+      <div class="conn">↓ evaluación colectiva</div>
+
+      <div style="border-radius:5px;border:1px solid var(--border);padding:7px 9px;background:var(--surf);">
+        <div style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Comparación vs. materialidad</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#B91C1C;flex-shrink:0;"></div>
+            <span style="font-size:9px;color:var(--text);">Diff <strong>&gt; MG</strong> → ajuste / opinión modificada</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#B45309;flex-shrink:0;"></div>
+            <span style="font-size:9px;color:var(--text);">ME &lt; Diff &lt; MG → evaluación cualitativa</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#166534;flex-shrink:0;"></div>
+            <span style="font-size:9px;color:var(--text);">Diff <strong>&lt; ME</strong> → acepta sin ajuste</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="conn">↓ conclusión</div>
+
+      <div class="mcard" id="mc-memoclose">
+        <div class="mh" style="background:var(--c5);">
+          <span class="mc">PT-MEMO (cierre)</span><span class="mn">Carta de representación</span>
+        </div>
+        <div class="mb"><span class="tag tag-man">Manual</span> Conclusión global · representaciones gerencia · firma socio</div>
+      </div>
+
+      <div class="conn">↓ emite</div>
+
+      <div class="mcard" id="mc-inf">
+        <div class="mh" style="background:#2E4057;">
+          <span class="mc">Informe del Auditor</span><span class="mn">NIA 700 / 705 / 706</span>
+        </div>
+        <div class="mb">
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+            <span style="font-size:8.5px;background:#DCFCE7;color:#166534;border:1px solid #166534;border-radius:3px;padding:1px 5px;font-weight:700;">Sin modificar NIA 700</span>
+            <span style="font-size:8.5px;background:#FEE2E2;color:#B91C1C;border:1px solid #B91C1C;border-radius:3px;padding:1px 5px;font-weight:700;">Modificada NIA 705</span>
+            <span style="font-size:8.5px;background:#FEF3C7;color:#92400E;border:1px solid #B45309;border-radius:3px;padding:1px 5px;font-weight:700;">Énfasis NIA 706</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:6px;"></div>
+
+      <!-- cross-cutting intelligence summary -->
+      <div style="border-radius:5px;border:1.5px dashed #6B21A8;padding:7px 9px;background:var(--bg);">
+        <div style="font-size:9px;font-weight:700;color:#6B21A8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">✨ Inteligencia transversal</div>
+        <div style="font-size:9px;color:var(--muted);line-height:1.55;">
+          <strong style="color:var(--text);">8 secciones</strong> isAutoFilled o REFERENCE<br>
+          <strong style="color:var(--text);">Gemini AI</strong> genera procedimientos en PT-PROG<br>
+          <strong style="color:var(--text);">6 estados</strong> por paso con ProcStatus auto-sync<br>
+          <strong style="color:var(--text);">StepEvidence</strong> adjuntos en Supabase Storage<br>
+          <strong style="color:var(--text);">MUS client-side</strong> walk en PT-A4
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /.master -->
+
+<!-- KEY ROW -->
+<div class="keyrow">
+  <div class="kcard">
+    <h4>Flujo de saldos</h4>
+    <p>B00 S4 → Sumarias → Resúmenes → cada PT-B recibe el saldo de su línea auditada</p>
+  </div>
+  <div class="kcard">
+    <h4>Flujo de riesgo</h4>
+    <p>PT-A5 RMM por aseveración → PT-PROG procedimientos → PT-B alcance y muestra</p>
+  </div>
+  <div class="kcard">
+    <h4>Flujo de materialidad</h4>
+    <p>PT-A4 MG/ME → umbral de PT-DIFS → determina si las diferencias modifican la opinión</p>
+  </div>
+  <div class="kcard">
+    <h4>Flujo de inteligencia</h4>
+    <p>Gemini + isAutoFilled + REFERENCE eliminan re-digitación entre papeles relacionados</p>
+  </div>
+  <div class="kcard">
+    <h4>Flujo de control</h4>
+    <p>StepStatus DRAFT→APPROVED con validaciones · ProcStatus sincroniza automáticamente</p>
+  </div>
+</div>
+
+</div><!-- position:relative -->
+</div><!-- .outer -->
+
+<div class="legend">
+  <strong style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;align-self:center;">Tipo sección</strong>
+  <div class="li"><span class="tag tag-man">Manual</span> Auditor digita</div>
+  <div class="li"><span class="tag tag-ref">Ref</span> REFERENCE / isAutoFilled automático</div>
+  <div class="li"><span class="tag tag-ai">✨ AI</span> Gemini genera</div>
+  <div class="li"><span class="tag tag-calc">⚡ Calc</span> Sistema calcula</div>
+  <div class="li" style="margin-left:auto;font-size:9.5px;">13 papeles de trabajo · 3 fases · 1 ciclo completo</div>
+</div>

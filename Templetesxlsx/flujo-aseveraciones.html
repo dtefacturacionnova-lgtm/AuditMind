@@ -1,0 +1,306 @@
+<title>AuditMind — Mapa de Aseveraciones NIA 315</title>
+<style>
+:root{
+  --bg:#F1F4F8;--surf:#FFF;--border:#DDE3EE;--text:#18202E;--muted:#5A6A82;
+  --sh:0 1px 4px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.055);
+  --h-alto:#FEE2E2;--b-alto:#B91C1C;--t-alto:#991B1B;
+  --h-med:#FEF3C7;--b-med:#B45309;--t-med:#92400E;
+  --h-bajo:#DCFCE7;--b-bajo:#166534;--t-bajo:#15803D;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0C1118;--surf:#18222F;--border:#28384A;--text:#D0DBE8;--muted:#7A8EA4;
+  --h-alto:#3B0E0E;--b-alto:#F87171;--t-alto:#FCA5A5;
+  --h-med:#3B2000;--b-med:#FCD34D;--t-med:#FDE68A;
+  --h-bajo:#052E16;--b-bajo:#4ADE80;--t-bajo:#86EFAC;
+}}
+:root[data-theme="light"]{--bg:#F1F4F8;--surf:#FFF;--border:#DDE3EE;--text:#18202E;--muted:#5A6A82;--h-alto:#FEE2E2;--b-alto:#B91C1C;--t-alto:#991B1B;--h-med:#FEF3C7;--b-med:#B45309;--t-med:#92400E;--h-bajo:#DCFCE7;--b-bajo:#166534;--t-bajo:#15803D;}
+:root[data-theme="dark"]{--bg:#0C1118;--surf:#18222F;--border:#28384A;--text:#D0DBE8;--muted:#7A8EA4;--h-alto:#3B0E0E;--b-alto:#F87171;--t-alto:#FCA5A5;--h-med:#3B2000;--b-med:#FCD34D;--t-med:#FDE68A;--h-bajo:#052E16;--b-bajo:#4ADE80;--t-bajo:#86EFAC;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);font-size:12px;}
+.ph{padding:16px 20px 10px;border-bottom:1px solid var(--border);background:var(--surf);}
+.ph h1{font-size:14px;font-weight:700;}
+.ph p{font-size:10.5px;color:var(--muted);margin-top:2px;}
+.outer{overflow-x:auto;padding:18px 16px 20px;}
+
+/* matrix */
+table{border-collapse:collapse;min-width:960px;width:100%;background:var(--surf);border-radius:8px;box-shadow:var(--sh);overflow:hidden;}
+th,td{padding:7px 9px;border:1px solid var(--border);vertical-align:top;}
+th{font-size:9.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);background:var(--bg);text-align:center;}
+th.left{text-align:left;}
+/* group rows */
+.grp td,.grp th{background:#F8FAFC;padding:5px 9px;}
+:root[data-theme="dark"] .grp td,:root[data-theme="dark"] .grp th{background:#1A2535;}
+@media(prefers-color-scheme:dark){.grp td,.grp th{background:#1A2535;}}
+.grp-label{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);}
+/* assertion cell */
+.aname{font-size:10.5px;font-weight:700;color:var(--text);}
+.acode{font-family:Consolas,monospace;font-size:9px;color:var(--muted);margin-top:1px;}
+.adesc{font-size:9px;color:var(--muted);margin-top:2px;line-height:1.4;}
+/* risk dot */
+.risk{display:inline-block;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:700;margin:1px;}
+.ra{background:var(--h-alto);color:var(--t-alto);border:1px solid var(--b-alto);}
+.rm{background:var(--h-med);color:var(--t-med);border:1px solid var(--b-med);}
+.rb{background:var(--h-bajo);color:var(--t-bajo);border:1px solid var(--b-bajo);}
+.rn{color:var(--muted);font-size:9px;}
+/* procedures cell */
+.proc{font-size:9.5px;color:var(--text);line-height:1.55;}
+.proc li{list-style:none;padding-left:10px;position:relative;}
+.proc li::before{content:"→";position:absolute;left:0;color:var(--muted);font-size:8px;top:1px;}
+/* col widths */
+.c0{width:180px;} .c1{width:90px;} .c2{width:90px;} .c3{width:90px;} .c4{width:90px;} .c5{width:280px;}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;padding:10px 20px 14px;border-top:1px solid var(--border);background:var(--surf);}
+.li{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);}
+</style>
+
+<div class="ph">
+  <h1>Mapa de Aseveraciones NIA 315 → Riesgo (PT-A5) → Procedimientos (PT-PROG) → Papeles (PT-B)</h1>
+  <p>Vincula cada aseveración con el riesgo evaluado en PT-A5, los procedimientos que la cubren en PT-PROG y el papel de trabajo que los ejecuta</p>
+</div>
+
+<div class="outer">
+<table>
+<thead>
+<tr>
+  <th class="left c0">Aseveración NIA 315</th>
+  <th class="c1">PT-B01<br>CxC</th>
+  <th class="c2">PT-B02<br>Inventario</th>
+  <th class="c3">PT-B03<br>Ingresos</th>
+  <th class="c4">PT-B04+<br>Otras áreas</th>
+  <th class="left c5">Procedimientos típicos en PT-PROG</th>
+</tr>
+</thead>
+<tbody>
+
+<!-- GROUP: SALDOS (ESF) -->
+<tr class="grp">
+  <td colspan="6"><span class="grp-label">Saldos de cuentas — Estado de Situación Financiera (ESF)</span></td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Existencia</div>
+    <div class="acode">EXIST</div>
+    <div class="adesc">Los activos, pasivos y el patrimonio existen en la fecha del balance</div>
+  </td>
+  <td><span class="risk ra">ALTO</span><br><span class="rn">principal</span></td>
+  <td><span class="risk ra">ALTO</span></td>
+  <td><span class="rn">N/A saldos</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Confirmaciones externas (CxC, bancos, inversiones)</li>
+      <li>Inspección física de activos (inventario, PPE)</li>
+      <li>Recuento físico e inventario sorpresivo</li>
+      <li>Circularización de saldos a terceros</li>
+    </ul>
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Integridad</div>
+    <div class="acode">INTEG</div>
+    <div class="adesc">Todos los activos, pasivos y patrimonio que debían registrarse están incluidos</div>
+  </td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk ra">ALTO</span></td>
+  <td><span class="rn">N/A saldos</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Búsqueda de pasivos no registrados</li>
+      <li>Revisión de eventos posteriores al cierre</li>
+      <li>Conciliación de auxiliares vs. mayor</li>
+      <li>Análisis de partidas en tránsito y pendientes</li>
+    </ul>
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Valuación y Asignación</div>
+    <div class="acode">VALUA</div>
+    <div class="adesc">Los saldos están registrados a los montos apropiados según NIIF/PCG</div>
+  </td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk ra">ALTO</span></td>
+  <td><span class="rn">N/A saldos</span></td>
+  <td><span class="risk ra">ALTO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Evaluación de estimación de cuentas incobrables</li>
+      <li>Prueba de valor neto de realización (inventario)</li>
+      <li>Revisión de deterioro de activos (NIA 36)</li>
+      <li>Recálculo de provisiones y reservas</li>
+    </ul>
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Derechos y Obligaciones</div>
+    <div class="acode">D y O</div>
+    <div class="adesc">La entidad tiene derechos sobre activos y obligaciones por pasivos</div>
+  </td>
+  <td><span class="risk rb">BAJO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="rn">N/A saldos</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Revisión de contratos y títulos de propiedad</li>
+      <li>Verificación de documentos de inventario en consignación</li>
+      <li>Revisión de garantías y prendas sobre activos</li>
+    </ul>
+  </td>
+</tr>
+
+<!-- GROUP: TRANSACCIONES (ER) -->
+<tr class="grp">
+  <td colspan="6"><span class="grp-label">Transacciones y eventos — Estado de Resultados (ER)</span></td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Ocurrencia</div>
+    <div class="acode">OCURR</div>
+    <div class="adesc">Las transacciones y eventos registrados ocurrieron y corresponden a la entidad</div>
+  </td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk ra">ALTO</span><br><span class="rn">principal</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Rastreo de transacciones a documentos fuente</li>
+      <li>Revisión de ventas post-cierre (prueba de corte)</li>
+      <li>Prueba de ventas ficticias / clientes inexistentes</li>
+      <li>Revisión de notas de crédito y devoluciones</li>
+    </ul>
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Integridad</div>
+    <div class="acode">INTEG-T</div>
+    <div class="adesc">Todas las transacciones que debían registrarse están incluidas</div>
+  </td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk rb">BAJO</span></td>
+  <td><span class="risk ra">ALTO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Revisión de secuencia numérica de documentos</li>
+      <li>Reconciliación ingresos facturados vs. cobrados</li>
+      <li>Búsqueda de ingresos no facturados (side agreements)</li>
+    </ul>
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Exactitud (Accuracy)</div>
+    <div class="acode">EXACT</div>
+    <div class="adesc">Los montos registrados son exactos según precios y condiciones acordadas</div>
+  </td>
+  <td><span class="risk rb">BAJO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Recálculo aritmético de facturas</li>
+      <li>Comparación precio unitario vs. lista de precios</li>
+      <li>Prueba de descuentos autorizados</li>
+    </ul>
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Corte (Cut-off)</div>
+    <div class="acode">CORTE</div>
+    <div class="adesc">Las transacciones se registraron en el período contable correcto</div>
+  </td>
+  <td><span class="risk ra">ALTO</span></td>
+  <td><span class="risk ra">ALTO</span></td>
+  <td><span class="risk ra">ALTO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Revisión de últimas facturas emitidas y recibidas</li>
+      <li>Prueba de embarques/recepciones ±5 días del cierre</li>
+      <li>Revisión de ajustes de cierre de período</li>
+    </ul>
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Clasificación</div>
+    <div class="acode">CLASIF</div>
+    <div class="adesc">Las transacciones se registraron en las cuentas apropiadas del catálogo</div>
+  </td>
+  <td><span class="risk rb">BAJO</span></td>
+  <td><span class="risk rb">BAJO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Revisión de cargos inusuales en cuentas de gasto</li>
+      <li>Verificación de clasificación corriente vs. no corriente</li>
+      <li>Análisis de partidas de naturaleza dudosa</li>
+    </ul>
+  </td>
+</tr>
+
+<!-- GROUP: PRESENTACION -->
+<tr class="grp">
+  <td colspan="6"><span class="grp-label">Presentación y Revelación — Notas a los EF</span></td>
+</tr>
+
+<tr>
+  <td>
+    <div class="aname">Presentación y Revelación</div>
+    <div class="acode">PRES</div>
+    <div class="adesc">Los saldos están adecuadamente descritos, revelados y clasificados en los EF</div>
+  </td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td><span class="risk rm">MEDIO</span></td>
+  <td>
+    <ul class="proc">
+      <li>Revisión de notas a los EF vs. requerimientos NIIF</li>
+      <li>Verificación de revelaciones de partes relacionadas</li>
+      <li>Revisión de clasificación en el cuerpo de los EF</li>
+      <li>Comparación revelaciones año actual vs. anterior</li>
+    </ul>
+  </td>
+</tr>
+
+<!-- FOOTER ROW: connection to PT-A5 -->
+<tr class="grp">
+  <td colspan="6">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <span class="grp-label">Conexión con PT-A5 (Matriz RMM):</span>
+      <span style="font-size:9.5px;color:var(--muted);">El nivel de riesgo RMM por aseveración evaluado en PT-A5 determina la <strong>naturaleza, oportunidad y extensión</strong> de los procedimientos asignados en PT-PROG para cada PT-B</span>
+    </div>
+  </td>
+</tr>
+
+</tbody>
+</table>
+</div>
+
+<div class="legend">
+  <strong style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;align-self:center;">Nivel RMM en PT-A5</strong>
+  <div class="li"><span class="risk ra">ALTO</span> RMM alto → procedimientos extensos, muestras grandes, confirmaciones externas</div>
+  <div class="li"><span class="risk rm">MEDIO</span> RMM medio → procedimientos analíticos + pruebas de detalle selectivas</div>
+  <div class="li"><span class="risk rb">BAJO</span> RMM bajo → principalmente procedimientos analíticos</div>
+  <div class="li"><span style="font-size:9.5px;color:var(--muted);">N/A saldos</span> Aseveración no aplica al tipo de papel (ER vs. ESF)</div>
+</div>

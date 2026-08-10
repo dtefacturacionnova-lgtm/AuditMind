@@ -1872,6 +1872,116 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
+  // PT-STRAT: Estrategia Global de Auditoría (NIA 300 §7-9)
+  // Papel independiente: se completa DESPUÉS del RMM (PT-A5) y ANTES del Memo (PT-MEMO).
+  // Big 4: EY "Global Audit Strategy" / Deloitte "OAS" / PwC "Engagement Strategy"
+  // Referencia interna: las decisiones aquí documentadas alimentan al PT-MEMO y PT-PROG.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-STRAT': [
+    {
+      sectionKey:   'S1',
+      label:        'Características del Encargo y Alcance (NIA 300 §8(a))',
+      description:  'Define los límites de la auditoría: tipo de encargo, marco de información financiera, entidades o unidades incluidas, periodo cubierto y regulación aplicable. Base para todas las decisiones de estrategia posteriores.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    1,
+      aiHint:       'Documenta los siguientes elementos: (1) TIPO DE ENCARGO: auditoría financiera externa / auditoría interna / revisión limitada / auditoría de cumplimiento — indicar norma aplicable (NIA, NAGAS, ISAE 3000, etc.). (2) MARCO DE INFORMACIÓN FINANCIERA: NIIF Completas / NIIF para PYMES / PCGA local — indicar versión vigente. (3) ENTIDADES / COMPONENTES EN ALCANCE: nombre de todas las entidades incluidas en la auditoría (matriz, subsidiarias, sucursales, fideicomisos consolidados). (4) PERIODO CUBIERTO: desde [fecha inicio] hasta [fecha de cierre] del período bajo auditoría. (5) REGULACIÓN APLICABLE: si la entidad es supervisada (SSF, BCR, BIS, SEC, CONAMI, etc.) indicar las normas regulatorias adicionales que aplican. (6) LIMITACIONES DE ALCANCE: si existe alguna restricción acordada con el cliente, documentarla aquí con la razón y el impacto esperado en la opinión. (7) COMPONENTES EXCLUIDOS: áreas o entidades fuera del alcance y razón de exclusión.',
+    },
+    {
+      sectionKey:   'S2',
+      label:        'Objetivos de Reporte y Fechas Críticas (NIA 300 §8(b))',
+      description:  'Calendario del encargo: fechas comprometidas con el cliente para cada entregable. Permite al equipo planificar el trabajo de campo y evitar incumplimientos de plazos.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    2,
+      aiHint:       'Columnas: Entregable / Hito | Fecha compromiso | Responsable (cargo) | Estado (Pendiente / En proceso / Completado) | Notas. Filas mínimas a incluir: 1) Inicio del trabajo de campo, 2) Entrega de información por el cliente (balance de comprobación, reportes, bases de datos), 3) Conclusión de pruebas de control, 4) Conclusión de pruebas sustantivas, 5) Conferencia de hallazgos con la gerencia, 6) Borrador del informe al cliente, 7) Respuesta del cliente al borrador, 8) Informe final firmado por el Socio, 9) Comunicación al TCWG/Junta Directiva (si aplica), 10) Archivado del expediente (NIA 230 §14 — plazo de 60 días después de la fecha del informe). Agregar filas si hay entregables intermedios (informes por componente, revisiones regulatorias, etc.).',
+    },
+    {
+      sectionKey:   'S3',
+      label:        'Resumen del Entorno de Riesgo — Auto desde PT-A5',
+      description:  'Auto-consolidado desde PT-A5: Estrategia de Auditoría Consolidada por Área (S4) y Conclusión Global de Riesgo (S5). Solo lectura — editar directamente en PT-A5.',
+      fieldType:    FieldType.REFERENCE,
+      isRequired:   false,
+      isAutoFilled: true,
+      sortOrder:    3,
+      sourceRef:    'PT-A5::S4,PT-A5::S5',
+      aiHint:       'Este campo se llena automáticamente con la Estrategia de Auditoría Consolidada (PT-A5 S4) y la Conclusión Global de Riesgo (PT-A5 S5). Si está vacío, asegúrate de completar primero el PT-A5.',
+    },
+    {
+      sectionKey:   'S4',
+      label:        'Materialidad Aplicada — Resumen (NIA 300 §8 + NIA 320)',
+      description:  'Síntesis de los niveles de materialidad aprobados para esta auditoría. Confirma que los umbrales definidos en el papel de Materialidad (PT-A4) son consistentes con la estrategia de riesgo identificada.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'Copiar los valores aprobados del PT-A4. Columnas: Nivel | Monto ($) | Base de cálculo | % aplicado | Uso en la auditoría. Filas: 1) Materialidad Global (MG) — para evaluar si los EEFF en conjunto presentan errores materiales; 2) Materialidad de Ejecución / Desempeño (ME) — umbral operativo para la selección de muestras y acumulación de diferencias, generalmente 50-75% de MG; 3) Umbral de Acumulación de Errores (UAE) — nivel mínimo de diferencia que se registra en la cédula de diferencias; 4) Umbral de revelación de partes relacionadas (si aplica NIA 550). Nota al pie: indicar si los niveles se revisaron respecto al año anterior y la razón del cambio (NIA 320 §12 — cuando la materialidad cambia, la estrategia de auditoría puede requerir actualización).',
+    },
+    {
+      sectionKey:   'S5',
+      label:        'Decisiones de Enfoque por Área / Ciclo (NIA 300 §8(c) + NIA 330 §3)',
+      description:  'Documento central de la estrategia: para cada área/ciclo significativo el auditor decide si el enfoque es basado en controles, sustantivo o mixto, y documenta la justificación. Esta decisión determina qué procedimientos aparecerán en el PT-PROG.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    5,
+      aiHint:       'Una fila por ÁREA / CICLO significativo (incluir solo las áreas con saldo ≥ ME o con riesgo significativo identificado). Columnas: ÁREA / CICLO | Saldo aprox. ($) | Nivel RMM (BAJO/MOD/ALTO/MUY ALTO) | ENFOQUE SELECCIONADO (una de las siguientes opciones) | Justificación del enfoque | Cambio vs. año anterior (Igual / Cambió — explicar). OPCIONES DE ENFOQUE: (A) CONTROLES — se confía en la efectividad de los controles (requiere prueba de controles; reduce pruebas sustantivas — NIA 330 §8); (B) SUSTANTIVO COMPLETO — no se confía en controles; procedimientos sustantivos extendidos; (C) MIXTO — prueba de controles en controles clave + procedimientos sustantivos en áreas de mayor riesgo; (D) ANALÍTICO — principalmente procedimientos analíticos (NIA 520) cuando el riesgo es BAJO y la población es predecible. REGLA: si el RC fue evaluado como ALTO en PT-A3, el enfoque mínimo debe ser SUSTANTIVO COMPLETO. Si el ITGC fue calificado INEFECTIVO en PT-ITGC, no seleccionar CONTROLES para ningún área dependiente de sistemas. ÁREAS MÍNIMAS: Ingresos · Cuentas por Cobrar · Inventarios · Activos Fijos · Cuentas por Pagar · Tesorería · Nómina · Cierre contable · Impuestos · Partes Relacionadas · Estimaciones (NIA 540).',
+    },
+    {
+      sectionKey:   'S6',
+      label:        'Uso de Especialistas y Expertos del Auditor (NIA 620)',
+      description:  'Documenta si el equipo requerirá el trabajo de especialistas (valuadores, actuarios, peritos en TI, abogados, ingenieros) para obtener evidencia en áreas de juicio técnico especializado.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    6,
+      aiHint:       'Si no se requieren especialistas, indicar "No aplica — el equipo cuenta con el conocimiento necesario para todas las áreas" y dejar la tabla vacía. Si se requieren: Columnas: Área/Asunto | Tipo de especialista | Nombre/Firma | Alcance de su trabajo | Fecha de entrega del informe | Coordinador del equipo | Revisión del informe por el Socio (Sí/No). Tipos comunes de especialistas en auditoría financiera: 1) Valuador de activos (propiedades, instrumentos financieros, activos intangibles) — NIC 36/NIIF 13; 2) Actuario (beneficios a empleados, reservas de seguros) — NIC 19; 3) Experto en TI / ITGC (si el equipo no tiene suficiente experiencia en los sistemas del cliente); 4) Abogado (contingencias legales, contratos complejos, litigios) — NIC 37; 5) Especialista en impuestos (posiciones fiscales inciertas, precios de transferencia). Nota NIA 620 §10: el auditor evaluará la competencia, capacidades y objetividad del especialista antes de utilizar su trabajo.',
+    },
+    {
+      sectionKey:   'S7',
+      label:        'Asuntos Clave de Auditoría — KAMs (NIA 701)',
+      description:  'Identifica los Asuntos Clave de Auditoría (Key Audit Matters) que se comunicarán en el informe del auditor. Aplica únicamente para auditorías de entidades listadas o cuando el encargo lo requiera. (NIA 701)',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    7,
+      aiHint:       'Solo completar si la entidad es: (a) entidad listada en bolsa de valores, (b) entidad de interés público (banco, aseguradora, fondo de pensiones), (c) el cliente o regulador exigen comunicar KAMs. Si no aplica: dejar vacía e indicar "No aplica — entidad no listada / encargo no requiere KAMs". Columnas: KAM (título breve) | Área / Cuenta afectada | Por qué es un KAM (razón de la significatividad) | Cómo se trató en la auditoría (procedimientos específicos aplicados) | Ref. PT donde se documenta. NIA 701 §9: un KAM es un asunto que a juicio del auditor fue de mayor importancia en la auditoría del período actual, seleccionado entre los asuntos comunicados al TCWG. Número típico: 2-4 KAMs. Más de 5 KAMs rara vez es apropiado. KAMs frecuentes: Reconocimiento de ingresos (NIIF 15) · Deterioro de activos (NIC 36) · Estimaciones de valor razonable (NIIF 13) · Contratos de arrendamiento (NIIF 16) · Impuesto diferido · Continuidad del negocio.',
+    },
+    {
+      sectionKey:   'S8',
+      label:        'Consideraciones de Componentes y Auditores de Componentes (NIA 600)',
+      description:  'Si la entidad tiene subsidiarias, sucursales, VIE o unidades significativas que son auditadas por otra firma, documenta aquí las instrucciones al auditor de componentes y cómo se revisará su trabajo. (NIA 600 Rev. 2022)',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    8,
+      aiHint:       'Solo completar si existe una estructura de grupo con componentes auditados separadamente. Si la entidad es una entidad individual sin subsidiarias: "No aplica". Columnas: Componente (nombre) | País / Jurisdicción | Auditor del componente (firma) | Significatividad del componente (SIGNIFICANT/NON-SIGNIFICANT) | Alcance del trabajo del auditor de componente (Full audit / Procedimientos específicos / Review analítico) | Fecha de entrega de memorando del componente | Revisión del equipo principal (quién) | Forma de comunicación (carta de instrucciones / reunión / visita). NIA 600 Rev. 2022: el auditor principal es responsable de evaluar si el trabajo del auditor de componente es suficiente. Para componentes SIGNIFICATIVOS: la comunicación debe ser bidireccional y formal antes de que el componente inicie su trabajo.',
+    },
+    {
+      sectionKey:   'S9',
+      label:        'Equipo de Auditoría y Cronograma de Recursos (NIA 300 §8(d))',
+      description:  'Composición del equipo, roles, áreas asignadas y estimación de horas. Permite al Socio garantizar que el equipo tiene el conocimiento, la experiencia y la capacidad para ejecutar la estrategia definida.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    9,
+      aiHint:       'Columnas: Nombre | Cargo (Socio / Gerente / Senior / Asistente / Especialista) | Área(s) asignada(s) | Horas estimadas | Fechas en campo (desde → hasta) | ¿Primera vez en el cliente? (Sí/No) | Certificaciones relevantes (CPA, CIA, CISA, etc.). Consideraciones adicionales del equipo (NIA 300 §E13): 1) ¿El equipo tiene conocimiento suficiente de la industria del cliente? Si no, indicar acción de mitigación (briefing sectorial, revisión de papers del año anterior). 2) ¿Hay rotación de personal significativa respecto al año anterior? Si hay >50% de cambio en el equipo, agregar fila de plan de briefing. 3) ¿Se requiere supervisión adicional por presencia de personal nuevo? Indicar quién supervisa a quién. 4) Presupuesto de horas total: [N horas]. Horas del año anterior: [N horas]. Variación: [%].',
+    },
+    {
+      sectionKey:   'S10',
+      label:        'Conclusión y Aprobación del Socio / CAE (NIA 300 §12)',
+      description:  'Declaración formal del Socio o CAE de que la estrategia de auditoría cubre todos los riesgos identificados, es consistente con las NIA y fue aprobada antes del inicio del trabajo de campo. NIA 300 §12 exige documentar esta conclusión.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    10,
+      aiHint:       'Redactar en 3 párrafos: (1) DECLARACIÓN DE COMPLETITUD: "He revisado la estrategia de auditoría documentada en este papel de trabajo y confirmo que: (a) cubre todos los riesgos de incorrección material identificados en el PT-A5, incluyendo los riesgos significativos; (b) incluye respuestas específicas a cada riesgo significativo per NIA 330 §18; (c) es consistente con el entendimiento del cliente y su entorno documentado en [PT-A1/PT-FIN-A3-KC]; (d) incorpora los resultados del seguimiento de hallazgos anteriores del PT-APE04." (2) MODIFICACIONES RESPECTO AL AÑO ANTERIOR: indicar si hubo cambios significativos en la estrategia (nuevo enfoque en áreas, cambios en el equipo, nuevo marco normativo, nueva línea de negocio del cliente) y la razón. Si no hay cambios: "La estrategia es sustancialmente consistente con el año anterior, con los ajustes menores indicados en la S5." (3) APROBACIÓN: "Esta estrategia ha sido aprobada por el Socio/CAE antes del inicio del trabajo de campo. Fecha de aprobación: ___. Firma del Socio/CAE: ___." IMPORTANTE: NIA 300 §12 requiere que este papel esté completado y aprobado ANTES de que el equipo inicie el trabajo de campo.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
   // PT-PROG: Programa de Auditoría por Área (NIA 230/330) — Big 4 2-level grid
   // Estructura: HDR (encabezado) + PROC_GRID (procedimientos/actividades) + CONCL + SIGN
   // ──────────────────────────────────────────────────────────────────────────

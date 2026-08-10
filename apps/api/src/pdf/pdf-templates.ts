@@ -286,6 +286,138 @@ export interface WorkingPaperReportData {
   };
 }
 
+// ─── S_EJE: Sampling execution result renderer ────────────────────────────────
+
+function fmtUSD(n: number): string {
+  return 'US$ ' + Number(n).toLocaleString('es-SV', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const PARAM_LABELS_PDF: Record<string, string> = {
+  valor_en_libros:           'Valor en Libros (BV)',
+  materialidad_ejecucion:    'Materialidad de Ejecución (TM)',
+  error_esperado:            'Error Esperado (EE)',
+  nivel_confianza:           'Nivel de Confianza',
+  factor_confianza:          'Factor de Confianza (RF)',
+  poblacion:                 'Población (N)',
+  tasa_desviacion_tolerable: 'Tasa Desv. Tolerable (TDR)',
+  tasa_desviacion_esperada:  'Tasa Desv. Esperada (EDR)',
+  metodo_seleccion:          'Método de Selección',
+};
+const MONETARY_PARAM_KEYS = new Set(['valor_en_libros', 'materialidad_ejecucion', 'error_esperado']);
+const PCT_PARAM_KEYS       = new Set(['nivel_confianza', 'tasa_desviacion_tolerable', 'tasa_desviacion_esperada']);
+
+function renderSamplingResult(val: Record<string, unknown>): string {
+  const mode             = String(val['mode'] ?? 'MUS');
+  const isMUS            = mode === 'MUS';
+  const sampleSize       = Number(val['sample_size'] ?? 0);
+  const totalItems       = Number(val['total_items'] ?? 0);
+  const monetaryUnits    = val['monetary_units'] != null ? Number(val['monetary_units']) : null;
+  const interval         = val['sampling_interval'] != null ? Number(val['sampling_interval']) : null;
+  const executedAt       = val['executed_at'] ? new Date(String(val['executed_at'])).toLocaleString('es-SV') : '—';
+  const params           = (val['parameters'] ?? {}) as Record<string, unknown>;
+  const selected         = (val['selected'] ?? []) as Record<string, unknown>[];
+
+  // Parameters table
+  const paramsHtml = Object.entries(params).map(([k, v]) => {
+    const label   = PARAM_LABELS_PDF[k] ?? k.replace(/_/g, ' ');
+    const numV    = Number(v);
+    const display = MONETARY_PARAM_KEYS.has(k) ? fmtUSD(numV)
+                  : PCT_PARAM_KEYS.has(k)      ? `${v}%`
+                  : String(v);
+    return `<tr><td style="padding:2mm 3mm;border:1px solid #E2E8F0;color:#4A5568;">${esc(label)}</td>
+                <td style="padding:2mm 3mm;border:1px solid #E2E8F0;font-weight:600;font-family:monospace;">${esc(display)}</td></tr>`;
+  }).join('');
+
+  // MUS extra metrics row
+  const extraMetrics = isMUS ? `
+    <div style="display:flex;gap:4mm;margin:3mm 0;">
+      ${monetaryUnits != null ? `<div style="border:1px solid #D6BCFA;background:#FAF5FF;border-radius:2mm;padding:2mm 3mm;flex:1;">
+        <p style="font-size:7pt;color:#6B46C1;text-transform:uppercase;margin:0 0 0.5mm 0;">n — Tamaño de Muestra MUS</p>
+        <p style="font-size:12pt;font-weight:700;font-family:monospace;color:#553C9A;margin:0;">${monetaryUnits}</p>
+        <p style="font-size:7pt;color:#805AD5;margin:0.5mm 0 0 0;">unidades monetarias (BV ÷ IMM)</p>
+      </div>` : ''}
+      <div style="border:1px solid #BEE3F8;background:#EBF8FF;border-radius:2mm;padding:2mm 3mm;flex:1;">
+        <p style="font-size:7pt;color:#2B6CB0;text-transform:uppercase;margin:0 0 0.5mm 0;">Partidas en Muestra</p>
+        <p style="font-size:12pt;font-weight:700;font-family:monospace;color:#2C5282;margin:0;">${sampleSize}</p>
+        ${sampleSize === totalItems && monetaryUnits != null && monetaryUnits > totalItems
+          ? '<p style="font-size:7pt;color:#C05621;margin:0.5mm 0 0 0;">⚠ Selección 100%</p>' : ''}
+      </div>
+      <div style="border:1px solid #E2E8F0;background:#F7FAFC;border-radius:2mm;padding:2mm 3mm;flex:1;">
+        <p style="font-size:7pt;color:#718096;text-transform:uppercase;margin:0 0 0.5mm 0;">Partidas en Población (N)</p>
+        <p style="font-size:12pt;font-weight:700;font-family:monospace;color:#2D3748;margin:0;">${totalItems}</p>
+      </div>
+      ${interval != null ? `<div style="border:1px solid #D6BCFA;background:#FAF5FF;border-radius:2mm;padding:2mm 3mm;flex:1;">
+        <p style="font-size:7pt;color:#6B46C1;text-transform:uppercase;margin:0 0 0.5mm 0;">Intervalo de Muestreo (IMM)</p>
+        <p style="font-size:12pt;font-weight:700;font-family:monospace;color:#553C9A;margin:0;">${esc(fmtUSD(interval))}</p>
+      </div>` : ''}
+    </div>` : `
+    <div style="display:flex;gap:4mm;margin:3mm 0;">
+      <div style="border:1px solid #BEE3F8;background:#EBF8FF;border-radius:2mm;padding:2mm 3mm;flex:1;">
+        <p style="font-size:7pt;color:#2B6CB0;text-transform:uppercase;margin:0 0 0.5mm 0;">Muestra (n)</p>
+        <p style="font-size:12pt;font-weight:700;font-family:monospace;color:#2C5282;margin:0;">${sampleSize}</p>
+      </div>
+      <div style="border:1px solid #E2E8F0;background:#F7FAFC;border-radius:2mm;padding:2mm 3mm;flex:1;">
+        <p style="font-size:7pt;color:#718096;text-transform:uppercase;margin:0 0 0.5mm 0;">Partidas en Población (N)</p>
+        <p style="font-size:12pt;font-weight:700;font-family:monospace;color:#2D3748;margin:0;">${totalItems}</p>
+      </div>
+    </div>`;
+
+  // Selected items table — show max 200 rows to avoid huge PDFs
+  const displayRows = selected.slice(0, 200);
+  const hasMore     = selected.length > 200;
+  const colKeys     = displayRows.length > 0 ? Object.keys(displayRows[0]).filter(k => k !== 'item') : [];
+  const selectedTableHtml = displayRows.length > 0 ? `
+    <div style="margin-top:4mm;">
+      <p style="font-size:9pt;font-weight:700;color:#2D3748;margin:0 0 2mm 0;">Partidas Seleccionadas en la Muestra</p>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:8pt;">
+          <thead>
+            <tr style="background:#EBF8FF;">
+              <th style="padding:2mm 3mm;border:1px solid #BEE3F8;text-align:left;color:#2C5282;white-space:nowrap;">#</th>
+              ${colKeys.map(c => `<th style="padding:2mm 3mm;border:1px solid #BEE3F8;text-align:left;color:#2C5282;white-space:nowrap;text-transform:uppercase;font-size:7pt;">${esc(c)}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${displayRows.map((row, i) => `
+              <tr style="${i % 2 === 1 ? 'background:#F7FAFC;' : ''}">
+                <td style="padding:1.5mm 3mm;border:1px solid #E2E8F0;color:#718096;font-family:monospace;">${i + 1}</td>
+                ${colKeys.map(c => {
+                  const v     = row[c];
+                  const isMnt = c === 'monto' && isMUS;
+                  const disp  = isMnt && typeof v === 'number' ? fmtUSD(v)
+                              : isMnt && typeof v === 'string'  ? fmtUSD(parseFloat(v) || 0)
+                              : esc(String(v ?? '—'));
+                  return `<td style="padding:1.5mm 3mm;border:1px solid #E2E8F0;${isMnt ? 'font-family:monospace;color:#2C5282;font-weight:600;' : 'color:#4A5568;'}">${disp}</td>`;
+                }).join('')}
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        ${hasMore ? `<p style="font-size:7pt;color:#718096;margin:1mm 0 0 0;">… y ${selected.length - 200} partidas más (ver Excel exportado para la lista completa)</p>` : ''}
+      </div>
+    </div>` : '';
+
+  return `
+    <div style="font-size:8pt;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2mm;">
+        <span style="font-size:9pt;font-weight:700;color:#2D3748;">
+          ${mode === 'MUS' ? 'MUS — Monetary Unit Sampling (NIA 530)' : 'Muestreo por Atributos (NIA 530)'}
+        </span>
+        <span style="font-size:7pt;color:#718096;">Ejecutado: ${esc(executedAt)}</span>
+      </div>
+      ${extraMetrics}
+      <table style="border-collapse:collapse;font-size:8pt;margin-bottom:3mm;">
+        <thead>
+          <tr style="background:#F7FAFC;">
+            <th style="padding:2mm 3mm;border:1px solid #E2E8F0;text-align:left;color:#718096;font-size:7pt;text-transform:uppercase;white-space:nowrap;">Parámetro</th>
+            <th style="padding:2mm 3mm;border:1px solid #E2E8F0;text-align:left;color:#718096;font-size:7pt;text-transform:uppercase;">Valor</th>
+          </tr>
+        </thead>
+        <tbody>${paramsHtml}</tbody>
+      </table>
+      ${selectedTableHtml}
+    </div>`;
+}
+
 export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
   const wp = data.paper;
 
@@ -296,6 +428,8 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
         let valStr = '';
         if (val === null || val === undefined || val === '') {
           valStr = '<span class="text-muted text-small">— Sin completar —</span>';
+        } else if (typeof val === 'object' && s.sectionKey === 'S_EJE') {
+          valStr = renderSamplingResult(val as Record<string, unknown>);
         } else if (typeof val === 'object') {
           valStr = `<pre class="pre-wrap text-small">${esc(JSON.stringify(val, null, 2))}</pre>`;
         } else {

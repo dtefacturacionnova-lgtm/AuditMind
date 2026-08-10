@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import {
   Upload, Play, Download, CheckCircle2, Loader2,
   AlertCircle, FileSpreadsheet, BarChart3, Info, X, Paperclip,
+  ListFilter,
 } from 'lucide-react';
 import type { PaperSection } from '@/hooks/useWorkingPaperGraph';
 import { useCalculateMUS, useCalculateAttribute } from '@/hooks/useSampling';
@@ -14,6 +15,7 @@ import { useCalculateMUS, useCalculateAttribute } from '@/hooks/useSampling';
 type Mode = 'MUS' | 'ATTRIBUTES';
 type AttrMethod = 'RANDOM' | 'SYSTEMATIC';
 type ParsedRow = Record<string, string | number>;
+type TableFilter = 'all' | 'selected';
 
 interface RowAnnotation {
   observedAmt: string;
@@ -25,12 +27,14 @@ interface SamplingResultData {
   mode:               Mode;
   executed_at:        string;
   parameters:         Record<string, number | string>;
-  sample_size:        number;      // unique physical items selected
-  monetary_units?:    number;      // MUS theoretical count (BV/interval); may exceed population
+  sample_size:        number;        // unique physical items selected
+  monetary_units?:    number;        // MUS theoretical count (BV / IMM)
   total_items:        number;
   sampling_interval?: number;
   seed_used:          number | null;
   selected:           ParsedRow[];
+  allRecords?:        ParsedRow[];   // full population (new runs only)
+  selectedIndices?:   number[];      // indices in allRecords that are in the sample
 }
 
 interface Props {
@@ -38,6 +42,23 @@ interface Props {
   readonly: boolean;
   onSave:   (key: string, value: unknown) => void | Promise<void>;
 }
+
+// ─── Parameter label map ─────────────────────────────────────────────────────
+
+const PARAM_LABELS: Record<string, string> = {
+  valor_en_libros:           'Valor en Libros (BV)',
+  materialidad_ejecucion:    'Materialidad de Ejecución (TM)',
+  error_esperado:            'Error Esperado (EE)',
+  nivel_confianza:           'Nivel de Confianza',
+  factor_confianza:          'Factor de Confianza (RF)',
+  poblacion:                 'Población (N)',
+  tasa_desviacion_tolerable: 'Tasa Desv. Tolerable (TDR)',
+  tasa_desviacion_esperada:  'Tasa Desv. Esperada (EDR)',
+  metodo_seleccion:          'Método',
+};
+
+const MONETARY_PARAMS = new Set(['valor_en_libros', 'materialidad_ejecucion', 'error_esperado']);
+const PCT_PARAMS      = new Set(['nivel_confianza', 'tasa_desviacion_tolerable', 'tasa_desviacion_esperada']);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,16 +99,15 @@ function amtError(raw: string, maxAmt: number | undefined): string | null {
 }
 
 // ─── Client-side MUS walk (NIA 530) ─────────────────────────────────────────
-// Each physical item appears at most once, even if its value spans multiple intervals.
-// Items where value > interval are "always selected" (individually significant items).
-// Returns { selected, monetaryUnits } where monetaryUnits = theoretical BV/interval count.
+// Returns selectedIndices = population indices of selected items (deduplicated).
+// Each physical item appears at most once even if its value spans multiple intervals.
 
 function musSelect(
   records:    ParsedRow[],
   sampleSize: number,
   bv:         number,
-): { selected: ParsedRow[]; monetaryUnits: number } {
-  if (bv <= 0 || sampleSize <= 0) return { selected: [], monetaryUnits: 0 };
+): { selected: ParsedRow[]; monetaryUnits: number; selectedIndices: number[] } {
+  if (bv <= 0 || sampleSize <= 0) return { selected: [], monetaryUnits: 0, selectedIndices: [] };
   const interval  = bv / sampleSize;
   const start     = Math.random() * interval;
   const selected: ParsedRow[] = [];
@@ -100,7 +120,6 @@ function musSelect(
     const amt = typeof record.monto === 'number' ? record.monto : parseAmount(String(record.monto));
     if (amt <= 0) continue;
     cumulative += amt;
-    // Advance through all sampling points that fall inside this item
     while (nextTarget <= cumulative) {
       if (!seenIdx.has(i)) {
         seenIdx.add(i);
@@ -109,30 +128,32 @@ function musSelect(
       nextTarget += interval;
     }
   }
-  return { selected, monetaryUnits: sampleSize };
+  const selectedIndices = Array.from(seenIdx).sort((a, b) => a - b);
+  return { selected, monetaryUnits: sampleSize, selectedIndices };
 }
 
 // ─── Client-side attribute selection ─────────────────────────────────────────
 
-function randomSelect(records: ParsedRow[], n: number): ParsedRow[] {
-  const arr = [...records];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+function randomSelect(records: ParsedRow[], n: number): { selected: ParsedRow[]; indices: number[] } {
+  const indexed = records.map((r, i) => ({ r, i }));
+  for (let j = indexed.length - 1; j > 0; j--) {
+    const k = Math.floor(Math.random() * (j + 1));
+    [indexed[j], indexed[k]] = [indexed[k], indexed[j]];
   }
-  return arr.slice(0, Math.min(n, arr.length));
+  const taken = indexed.slice(0, Math.min(n, indexed.length)).sort((a, b) => a.i - b.i);
+  return { selected: taken.map(x => x.r), indices: taken.map(x => x.i) };
 }
 
-function systematicSelect(records: ParsedRow[], n: number): ParsedRow[] {
-  if (records.length <= n) return [...records];
+function systematicSelect(records: ParsedRow[], n: number): { selected: ParsedRow[]; indices: number[] } {
+  if (records.length <= n) return { selected: [...records], indices: records.map((_, i) => i) };
   const interval = records.length / n;
   const start    = Math.random() * interval;
-  const selected: ParsedRow[] = [];
+  const indices: number[] = [];
   for (let i = 0; i < n; i++) {
     const idx = Math.floor(start + i * interval);
-    if (idx < records.length) selected.push({ ...records[idx] });
+    if (idx < records.length) indices.push(idx);
   }
-  return selected;
+  return { selected: indices.map(i => records[i]), indices };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -166,7 +187,7 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
   const [error,    setError]    = useState('');
   const [showSaved, setShowSaved] = useState(false);
 
-  // Row-level annotation state (resets on each new execution)
+  // Row annotations keyed by POPULATION INDEX (index in allRecords / selected)
   const [rowAnnotations, setRowAnnotations] = useState<Record<number, RowAnnotation>>({});
   const [evidenceFiles,  setEvidenceFiles]  = useState<Record<number, File[]>>({});
 
@@ -235,8 +256,7 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
         confidence_level:       parseInt(musCL) as 95,
       });
 
-      // MUS walk client-side — deduplicated: each physical item appears at most once
-      const { selected, monetaryUnits } = musSelect(normalized, calc.sample_size, bv);
+      const { selected, monetaryUnits, selectedIndices } = musSelect(normalized, calc.sample_size, bv);
 
       const result: SamplingResultData = {
         mode:     'MUS',
@@ -248,12 +268,14 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
           nivel_confianza:        parseInt(musCL),
           factor_confianza:       calc.confidence_factor,
         },
-        sample_size:       selected.length,     // ítems físicos únicos seleccionados
-        monetary_units:    monetaryUnits,        // unidades monetarias teóricas (BV/intervalo)
+        sample_size:       selected.length,
+        monetary_units:    monetaryUnits,
         total_items:       records.length,
         sampling_interval: calc.sampling_interval,
         seed_used:         null,
         selected,
+        allRecords:       normalized,
+        selectedIndices,
       };
 
       setResults(result);
@@ -287,7 +309,7 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
         confidence_level:         parseInt(attrCL) as 95,
       });
 
-      const selected = attrSel === 'RANDOM'
+      const { selected, indices } = attrSel === 'RANDOM'
         ? randomSelect(normalized, calc.sample_size)
         : systematicSelect(normalized, calc.sample_size);
 
@@ -301,10 +323,12 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
           nivel_confianza:           parseInt(attrCL),
           metodo_seleccion:          attrSel,
         },
-        sample_size: selected.length,
-        total_items: records.length,
-        seed_used:   null,
+        sample_size:     selected.length,
+        total_items:     records.length,
+        seed_used:       null,
         selected,
+        allRecords:      normalized,
+        selectedIndices: indices,
       };
 
       setResults(result);
@@ -320,32 +344,37 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
 
   // ── Row annotation helpers ────────────────────────────────────────────────────
 
-  const handleRowAnnotationChange = useCallback((idx: number, ann: RowAnnotation) => {
-    setRowAnnotations(prev => ({ ...prev, [idx]: ann }));
+  const handleRowAnnotationChange = useCallback((populationIdx: number, ann: RowAnnotation) => {
+    setRowAnnotations(prev => ({ ...prev, [populationIdx]: ann }));
   }, []);
 
-  const handleEvidenceChange = useCallback((idx: number, files: File[]) => {
-    setEvidenceFiles(prev => ({ ...prev, [idx]: files }));
+  const handleEvidenceChange = useCallback((populationIdx: number, files: File[]) => {
+    setEvidenceFiles(prev => ({ ...prev, [populationIdx]: files }));
   }, []);
 
   // ── Export ───────────────────────────────────────────────────────────────────
 
   function exportResults(data: SamplingResultData) {
-    const rows = data.selected.map((r, i) => {
-      const ann = rowAnnotations[i];
-      const evFiles = evidenceFiles[i];
+    const selectedSet   = new Set(data.selectedIndices ?? data.selected.map((_, i) => i));
+    const sourceRecords = data.allRecords ?? data.selected;
+
+    const rows = sourceRecords.map((r, i) => {
+      const isSelected = selectedSet.has(i);
+      const ann        = isSelected ? (rowAnnotations[i] ?? { observedAmt: '', observation: '', deviation: '' }) : null;
+      const evFiles    = isSelected ? evidenceFiles[i] : null;
       return {
-        '#': i + 1,
+        '#':           i + 1,
+        'En Muestra':  isSelected ? 'SÍ' : 'NO',
         ...r,
-        ...(data.mode === 'ATTRIBUTES' ? { 'Desviación encontrada': ann?.deviation ?? '' } : {}),
+        ...(data.mode === 'ATTRIBUTES' && isSelected ? { 'Desviación encontrada': ann?.deviation ?? '' } : {}),
         'Monto Observado (US$)': ann?.observedAmt ?? '',
         Observaciones:           ann?.observation ?? '',
         ...(evFiles?.length ? { 'Archivos adjuntos': evFiles.map(f => f.name).join('; ') } : {}),
       };
     });
-    const ws  = XLSX.utils.json_to_sheet(rows);
-    const wb  = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Muestra');
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Población y Muestra');
 
     const paramsRows = Object.entries(data.parameters).map(([k, v]) => ({ Parámetro: k, Valor: v }));
     const wsP = XLSX.utils.json_to_sheet(paramsRows);
@@ -358,9 +387,12 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
 
   const displayResults = results ?? (showSaved && saved ? saved as SamplingResultData : null);
 
-  const previewCols = displayResults
-    ? Object.keys(displayResults.selected[0] ?? {}).filter(k => k !== 'item').slice(0, 7)
-    : [];
+  const previewCols = useMemo(() => {
+    if (!displayResults) return [];
+    const source = displayResults.allRecords ?? displayResults.selected;
+    if (source.length === 0) return [];
+    return Object.keys(source[0]).filter(k => k !== 'item').slice(0, 6);
+  }, [displayResults]);
 
   return (
     <div className="border border-blue-200 bg-blue-50/20 rounded-2xl p-5 space-y-5">
@@ -517,8 +549,8 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
                 hint="Auto-tomada del panel de materialidad"
               />
               <LabeledInput
-                label="Error Esperado (EE)"
-                hint="Default 0 — sin error anticipado"
+                label="Error Esperado (EE — US$)"
+                hint="Monto monetario esperado de errores. Default $0"
                 value={musEE}
                 onChange={setMusEE}
                 type="number" min={0} placeholder="0"
@@ -609,8 +641,8 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
         <div className="flex items-center justify-between text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
           <div>
             <span className="font-medium text-gray-700">Última ejecución guardada: </span>
-            {(saved as SamplingResultData).mode} — {(saved as SamplingResultData).sample_size} ítems
-            seleccionados de {(saved as SamplingResultData).total_items}
+            {(saved as SamplingResultData).mode} — {(saved as SamplingResultData).sample_size} partidas
+            seleccionadas de {(saved as SamplingResultData).total_items}
             <span className="ml-2 text-gray-400">
               · {new Date((saved as SamplingResultData).executed_at).toLocaleString('es-SV')}
             </span>
@@ -655,9 +687,9 @@ function ResultsBlock({
   onExport:               () => void;
   previewCols:            string[];
   rowAnnotations:         Record<number, RowAnnotation>;
-  onRowAnnotationChange:  (idx: number, ann: RowAnnotation) => void;
+  onRowAnnotationChange:  (populationIdx: number, ann: RowAnnotation) => void;
   evidenceFiles:          Record<number, File[]>;
-  onEvidenceChange:       (idx: number, files: File[]) => void;
+  onEvidenceChange:       (populationIdx: number, files: File[]) => void;
 }) {
   const isMUS  = data.mode === 'MUS';
   const isAttr = data.mode === 'ATTRIBUTES';
@@ -665,11 +697,28 @@ function ResultsBlock({
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
+  const [tableFilter, setTableFilter] = useState<TableFilter>('selected');
+
   const evidenceInputRef  = useRef<HTMLInputElement>(null);
   const [targetRow, setTargetRow] = useState<number | null>(null);
 
-  function handleEvidenceClick(idx: number) {
-    setTargetRow(idx);
+  // Build selected set and source records (population-indexed)
+  const selectedSet = useMemo(() => {
+    if (data.selectedIndices) return new Set(data.selectedIndices);
+    return new Set(data.selected.map((_, i) => i));
+  }, [data]);
+
+  const sourceRecords = data.allRecords ?? data.selected;
+
+  // Rows to display after filter
+  const displayedRows = useMemo(() => {
+    return sourceRecords
+      .map((row, i) => ({ row, populationIdx: i, isSelected: selectedSet.has(i) }))
+      .filter(({ isSelected }) => tableFilter === 'all' || isSelected);
+  }, [sourceRecords, selectedSet, tableFilter]);
+
+  function handleEvidenceClick(populationIdx: number) {
+    setTargetRow(populationIdx);
     setTimeout(() => evidenceInputRef.current?.click(), 0);
   }
 
@@ -680,6 +729,9 @@ function ResultsBlock({
     onEvidenceChange(targetRow, [...existing, ...newFiles]);
     e.target.value = '';
   }
+
+  const all100pct = isMUS && data.sample_size === data.total_items &&
+    data.monetary_units != null && data.monetary_units > data.total_items;
 
   return (
     <div className="space-y-4">
@@ -709,8 +761,8 @@ function ResultsBlock({
         </button>
       </div>
 
-      {/* MUS: 100%-selection warning when every item was individually significant */}
-      {isMUS && data.sample_size === data.total_items && data.monetary_units != null && data.monetary_units > data.total_items && (
+      {/* 100% selection warning */}
+      {all100pct && (
         <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
           <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600" />
           <div>
@@ -718,50 +770,98 @@ function ResultsBlock({
             <p className="mt-0.5 text-amber-700">
               El intervalo de muestreo ({fmtCurrency(data.sampling_interval ?? 0)}) es menor al valor
               promedio de las transacciones ({fmtCurrency(data.total_items > 0 ? (data.parameters.valor_en_libros as number) / data.total_items : 0)}).
-              Cada transacción abarca múltiples intervalos, lo que resulta en la selección de toda la población.
-              Considera aumentar la Materialidad de Ejecución o aplicar MUS solo al estrato de ítems por debajo del umbral.
+              Considera aumentar la Materialidad de Ejecución o aplicar MUS solo al estrato de ítems por debajo del intervalo.
             </p>
           </div>
         </div>
       )}
 
-      {/* Metric cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <MetricCard
-          label="Ítems únicos seleccionados"
-          value={String(data.sample_size)}
-          color="blue"
-          sub={isMUS && data.monetary_units != null ? `${data.monetary_units} unid. MUS teóricas` : undefined}
-        />
-        <MetricCard label="Población total" value={String(data.total_items)} color="gray" />
-        {isMUS && data.sampling_interval != null && (
+      {/* Metric cards — MUS: 4 cards; Attributes: 3 cards */}
+      {isMUS ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <MetricCard
-            label="Intervalo de muestreo"
-            value={fmtCurrency(data.sampling_interval)}
+            label="n — Tamaño de Muestra MUS"
+            value={String(data.monetary_units ?? '—')}
+            color="violet"
+            sub="unidades monetarias (BV ÷ IMM)"
+          />
+          <MetricCard
+            label="Partidas en Muestra"
+            value={String(data.sample_size)}
+            color="blue"
+            sub={all100pct ? 'Selección 100% ⚠' : undefined}
+          />
+          <MetricCard
+            label="Partidas en Población (N)"
+            value={String(data.total_items)}
+            color="gray"
+          />
+          <MetricCard
+            label="Intervalo de Muestreo (IMM)"
+            value={data.sampling_interval != null ? fmtCurrency(data.sampling_interval) : '—'}
             color="violet"
           />
-        )}
-        {isAttr && (
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-3">
+          <MetricCard label="Muestra (n)" value={String(data.sample_size)} color="blue" />
+          <MetricCard label="Partidas en Población (N)" value={String(data.total_items)} color="gray" />
           <MetricCard
-            label="Método selección"
+            label="Método de Selección"
             value={String(data.parameters.metodo_seleccion ?? '—')}
             color="violet"
           />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Parameters summary */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {Object.entries(data.parameters).map(([k, v]) => (
-          <div key={k} className="text-xs bg-white border border-gray-200 rounded-lg px-2.5 py-1.5">
-            <span className="text-gray-400 capitalize">{k.replace(/_/g, ' ')}: </span>
-            <span className="font-medium text-gray-700">
-              {typeof v === 'number' && v > 1000
-                ? fmtCurrency(v)
-                : String(v)}
-            </span>
-          </div>
-        ))}
+        {Object.entries(data.parameters)
+          .filter(([k]) => k !== 'metodo_seleccion')
+          .map(([k, v]) => {
+            const label      = PARAM_LABELS[k] ?? k.replace(/_/g, ' ');
+            const isMonetary = MONETARY_PARAMS.has(k);
+            const isPct      = PCT_PARAMS.has(k);
+            const numV       = Number(v);
+            return (
+              <div key={k} className="text-xs bg-white border border-gray-200 rounded-lg px-2.5 py-1.5">
+                <span className="text-gray-400">{label}: </span>
+                <span className="font-medium text-gray-700 font-mono">
+                  {isMonetary ? fmtCurrency(numV)
+                    : isPct   ? `${v}%`
+                    : String(v)}
+                </span>
+              </div>
+            );
+          })}
+      </div>
+
+      {/* Filter toggle */}
+      <div className="flex items-center gap-3">
+        <ListFilter className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+          <button
+            onClick={() => setTableFilter('selected')}
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              tableFilter === 'selected' ? 'bg-white shadow-sm text-blue-700' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Solo muestra <span className="font-bold ml-1">{data.sample_size}</span>
+          </button>
+          <button
+            onClick={() => setTableFilter('all')}
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+              tableFilter === 'all' ? 'bg-white shadow-sm text-blue-700' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Toda la población <span className="text-gray-400 ml-1">{sourceRecords.length}</span>
+          </button>
+        </div>
+        {tableFilter === 'all' && (
+          <span className="text-[10px] text-gray-400">
+            Los ítems no seleccionados aparecen atenuados sin columnas de trabajo
+          </span>
+        )}
       </div>
 
       {/* Results table */}
@@ -770,6 +870,7 @@ function ResultsBlock({
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-3 py-2 text-left font-semibold text-gray-500 w-10">#</th>
+              <th className="px-3 py-2 text-left font-semibold text-gray-500 whitespace-nowrap">Muestra</th>
               {previewCols.map(c => (
                 <th key={c} className="px-3 py-2 text-left font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{c}</th>
               ))}
@@ -782,24 +883,42 @@ function ResultsBlock({
             </tr>
           </thead>
           <tbody>
-            {data.selected.map((row, i) => {
-              const ann      = rowAnnotations[i] ?? { observedAmt: '', observation: '', deviation: '' };
+            {displayedRows.map(({ row, populationIdx, isSelected }, displayIdx) => {
+              const ann      = rowAnnotations[populationIdx] ?? { observedAmt: '', observation: '', deviation: '' };
               const rowMonto = typeof row.monto === 'number'
                 ? row.monto
                 : (typeof row.monto === 'string' ? parseAmount(row.monto) : undefined);
-              const amtErr   = amtError(ann.observedAmt, rowMonto);
-              const evCount  = evidenceFiles[i]?.length ?? 0;
-              const evNames  = evidenceFiles[i]?.map(f => f.name).join(', ') ?? '';
+              const amtErr   = isSelected ? amtError(ann.observedAmt, rowMonto) : null;
+              const evCount  = isSelected ? (evidenceFiles[populationIdx]?.length ?? 0) : 0;
+              const evNames  = isSelected ? (evidenceFiles[populationIdx]?.map(f => f.name).join(', ') ?? '') : '';
 
               return (
-                <tr key={i} className={`border-t border-gray-100 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
-                  <td className="px-3 py-2 text-gray-400 font-mono">{i + 1}</td>
+                <tr
+                  key={populationIdx}
+                  className={`border-t border-gray-100 ${
+                    !isSelected
+                      ? 'opacity-40 bg-gray-50/50'
+                      : displayIdx % 2 === 1 ? 'bg-blue-50/20' : ''
+                  }`}
+                >
+                  <td className="px-3 py-2 text-gray-400 font-mono">{populationIdx + 1}</td>
+
+                  {/* Selection badge */}
+                  <td className="px-3 py-2">
+                    {isSelected ? (
+                      <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap">
+                        ✓ Muestra
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 text-[10px]">—</span>
+                    )}
+                  </td>
 
                   {previewCols.map(c => {
                     const val   = row[c];
                     const isMnt = c === 'monto' && isMUS;
                     return (
-                      <td key={c} className={`px-3 py-2 whitespace-nowrap ${isMnt ? 'font-mono text-blue-700 font-medium' : 'text-gray-700'}`}>
+                      <td key={c} className={`px-3 py-2 whitespace-nowrap ${isMnt && isSelected ? 'font-mono text-blue-700 font-medium' : isMnt ? 'font-mono text-gray-500' : 'text-gray-700'}`}>
                         {isMnt && typeof val === 'number'
                           ? fmtCurrency(val)
                           : isMnt && typeof val === 'string'
@@ -809,70 +928,78 @@ function ResultsBlock({
                     );
                   })}
 
-                  {/* Deviation (attributes only) */}
+                  {/* Annotation columns — only interactive for selected items */}
                   {isAttr && (
                     <td className="px-3 py-2">
-                      <select
-                        value={ann.deviation}
-                        onChange={e => onRowAnnotationChange(i, { ...ann, deviation: e.target.value })}
-                        className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
-                      >
-                        <option value="">— Pendiente —</option>
-                        <option value="NO">No (conforme)</option>
-                        <option value="SI">Sí (desviación)</option>
-                        <option value="NA">N/A</option>
-                      </select>
+                      {isSelected ? (
+                        <select
+                          value={ann.deviation}
+                          onChange={e => onRowAnnotationChange(populationIdx, { ...ann, deviation: e.target.value })}
+                          className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+                        >
+                          <option value="">— Pendiente —</option>
+                          <option value="NO">No (conforme)</option>
+                          <option value="SI">Sí (desviación)</option>
+                          <option value="NA">N/A</option>
+                        </select>
+                      ) : <span className="text-gray-300">—</span>}
                     </td>
                   )}
 
                   {/* Observed amount */}
                   <td className="px-3 py-2">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1">
-                        <span className="text-gray-400 text-[10px] font-mono">US$</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={ann.observedAmt}
-                          onChange={e => {
-                            const sanitized = sanitizeAmount(e.target.value);
-                            onRowAnnotationChange(i, { ...ann, observedAmt: sanitized });
-                          }}
-                          placeholder="0.00"
-                          className={`text-xs border rounded px-2 py-1 w-24 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300 font-mono ${
-                            amtErr ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200'
-                          }`}
-                        />
+                    {isSelected ? (
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-400 text-[10px] font-mono">US$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={ann.observedAmt}
+                            onChange={e => {
+                              const sanitized = sanitizeAmount(e.target.value);
+                              onRowAnnotationChange(populationIdx, { ...ann, observedAmt: sanitized });
+                            }}
+                            placeholder="0.00"
+                            className={`text-xs border rounded px-2 py-1 w-24 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300 font-mono ${
+                              amtErr ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200'
+                            }`}
+                          />
+                        </div>
+                        {amtErr && <p className="text-[10px] text-red-500 leading-tight">{amtErr}</p>}
                       </div>
-                      {amtErr && <p className="text-[10px] text-red-500 leading-tight">{amtErr}</p>}
-                    </div>
+                    ) : <span className="text-gray-300 text-[10px]">—</span>}
                   </td>
 
-                  {/* Observation text */}
+                  {/* Observation */}
                   <td className="px-3 py-2">
-                    <input
-                      type="text"
-                      value={ann.observation}
-                      onChange={e => onRowAnnotationChange(i, { ...ann, observation: e.target.value })}
-                      placeholder="Observación..."
-                      className="text-xs border border-gray-200 rounded px-2 py-1 w-36 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
-                    />
+                    {isSelected ? (
+                      <input
+                        type="text"
+                        value={ann.observation}
+                        onChange={e => onRowAnnotationChange(populationIdx, { ...ann, observation: e.target.value })}
+                        placeholder="Observación..."
+                        className="text-xs border border-gray-200 rounded px-2 py-1 w-36 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+                      />
+                    ) : <span className="text-gray-300 text-[10px]">—</span>}
                   </td>
 
-                  {/* Evidence attachment */}
+                  {/* Evidence */}
                   <td className="px-3 py-2">
-                    <button
-                      onClick={() => handleEvidenceClick(i)}
-                      title={evNames || 'Adjuntar evidencias a este ítem'}
-                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors whitespace-nowrap ${
-                        evCount > 0
-                          ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100'
-                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Paperclip className="w-3 h-3 shrink-0" />
-                      {evCount > 0 ? `${evCount} arch.` : 'Adjuntar'}
-                    </button>
+                    {isSelected ? (
+                      <button
+                        onClick={() => handleEvidenceClick(populationIdx)}
+                        title={evNames || 'Adjuntar evidencias a este ítem'}
+                        className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors whitespace-nowrap ${
+                          evCount > 0
+                            ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100'
+                            : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Paperclip className="w-3 h-3 shrink-0" />
+                        {evCount > 0 ? `${evCount} arch.` : 'Adjuntar'}
+                      </button>
+                    ) : <span className="text-gray-300 text-[10px]">—</span>}
                   </td>
                 </tr>
               );
@@ -883,8 +1010,8 @@ function ResultsBlock({
 
       <p className="text-[11px] text-gray-400">
         {isMUS
-          ? 'Monto Observado: saldo auditado de cada ítem. Los archivos adjuntos se incluyen en el Excel exportado.'
-          : 'Completa Desviación y Observaciones por ítem. Los archivos adjuntos se incluyen en el Excel exportado.'}
+          ? 'Monto Observado: saldo auditado de cada ítem. Exportar Excel incluye toda la población con indicador de muestra.'
+          : 'Completa Desviación y Observaciones por ítem seleccionado. Exportar Excel incluye toda la población.'}
       </p>
     </div>
   );

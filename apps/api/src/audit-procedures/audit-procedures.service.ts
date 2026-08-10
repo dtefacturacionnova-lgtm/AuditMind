@@ -1,8 +1,10 @@
 import {
-  Injectable, NotFoundException, ForbiddenException,
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   ProcStatus, StepStatus, StepConclusion, TestType, AuditNature, AuditTiming,
 } from '@prisma/client';
@@ -60,9 +62,21 @@ export interface UpdateStepDto extends Partial<CreateStepDto> {}
 
 @Injectable()
 export class AuditProceduresService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger        = new Logger(AuditProceduresService.name);
+  private readonly supabase:     SupabaseClient;
+  private readonly geminiUrl     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
-  // ─── Access guard ──────────────────────────────────────────────────────────
+  constructor(
+    private readonly prisma:  PrismaService,
+    private readonly config:  ConfigService,
+  ) {
+    this.supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+  }
+
+  // ─── Access guards ─────────────────────────────────────────────────────────
 
   private async assertSectionAccess(sectionId: string, user: AuthUser) {
     const section = await this.prisma.paperSection.findUnique({
@@ -202,8 +216,20 @@ export class AuditProceduresService {
   }
 
   async updateStep(id: string, dto: UpdateStepDto, user: AuthUser) {
-    await this.assertStepAccess(id, user);
-    return this.prisma.auditStep.update({
+    const existing = await this.assertStepAccess(id, user);
+
+    // Status machine validation: SUBMITTED requires executor + date
+    if (dto.status === StepStatus.SUBMITTED) {
+      const name = dto.performedByName ?? existing.performedByName;
+      const date = dto.datePerformed   ?? (existing.datePerformed ? existing.datePerformed.toISOString() : null);
+      if (!name || !date) {
+        throw new BadRequestException(
+          'Para marcar como "En revisión" se requiere el nombre del auditor ejecutor y la fecha de ejecución.',
+        );
+      }
+    }
+
+    const updated = await this.prisma.auditStep.update({
       where: { id },
       data:  {
         ...(dto.refNumber        !== undefined && { refNumber:        dto.refNumber }),
@@ -233,10 +259,272 @@ export class AuditProceduresService {
       },
       include: { evidences: true },
     });
+
+    // Auto-update parent ProcStatus based on all sibling steps
+    await this.syncProcStatus(existing.procedureId);
+
+    return updated;
   }
 
   async deleteStep(id: string, user: AuthUser) {
-    await this.assertStepAccess(id, user);
-    return this.prisma.auditStep.delete({ where: { id } });
+    const step = await this.assertStepAccess(id, user);
+    await this.prisma.auditStep.delete({ where: { id } });
+    await this.syncProcStatus(step.procedureId);
+  }
+
+  // ─── Evidence ──────────────────────────────────────────────────────────────
+
+  async createEvidence(
+    stepId: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    user: AuthUser,
+  ) {
+    await this.assertStepAccess(stepId, user);
+
+    const safeName   = file.originalname.replace(/[^\w.\-]/g, '_');
+    const path       = `procedures/steps/${stepId}/${Date.now()}_${safeName}`;
+
+    const { error: upErr } = await this.supabase.storage
+      .from('audit-files')
+      .upload(path, file.buffer, {
+        contentType: file.mimetype || 'application/octet-stream',
+        cacheControl: '3600',
+        upsert: false,
+      });
+    if (upErr) throw new BadRequestException(`Error al subir archivo: ${upErr.message}`);
+
+    return this.prisma.stepEvidence.create({
+      data: {
+        stepId,
+        fileName:      file.originalname,
+        storageKey:    path,
+        mimeType:      file.mimetype,
+        size:          file.size,
+        uploadedByName: user.email,
+        uploadedById:  user.id,
+      },
+    });
+  }
+
+  async deleteEvidence(evidenceId: string, stepId: string, user: AuthUser) {
+    await this.assertStepAccess(stepId, user);
+
+    const evidence = await this.prisma.stepEvidence.findUnique({ where: { id: evidenceId } });
+    if (!evidence || evidence.stepId !== stepId) throw new NotFoundException('Evidencia no encontrada');
+
+    await this.supabase.storage.from('audit-files').remove([evidence.storageKey]);
+    await this.prisma.stepEvidence.delete({ where: { id: evidenceId } });
+    return { deleted: true };
+  }
+
+  // ─── AI auto-suggest ───────────────────────────────────────────────────────
+
+  async suggestAndCreateProcedures(sectionId: string, user: AuthUser) {
+    const section = await this.assertSectionAccess(sectionId, user);
+    const apiKey  = this.config.get<string>('GEMINI_API_KEY', '');
+
+    if (!apiKey) {
+      throw new BadRequestException('GEMINI_API_KEY no configurado. Configure la clave en las variables de entorno.');
+    }
+
+    // Load context: paper info + sibling papers of the same audit
+    const paper = await this.prisma.workingPaper.findUnique({
+      where: { id: section.paperId },
+      select: { auditId: true },
+    });
+    if (!paper) throw new NotFoundException('Papel no encontrado');
+
+    const audit = await this.prisma.audit.findUnique({
+      where:   { id: paper.auditId },
+      select:  { title: true, auditPeriodEnd: true },
+    });
+
+    const siblingPapers = await this.prisma.workingPaper.findMany({
+      where:   { auditId: paper.auditId, paperCode: { in: ['PT-A5', 'PT-A2', 'PT-A3'] } },
+      include: { sections: { orderBy: { sortOrder: 'asc' } } },
+    });
+
+    // Extract relevant sections from sibling papers
+    const a5Paper  = siblingPapers.find(p => p.paperCode === 'PT-A5');
+    const rmmText  = a5Paper?.sections.find(s => s.sectionKey === 'S1')?.value ?? '';
+    const sigRisks = a5Paper?.sections.find(s => s.sectionKey === 'S3')?.value ?? '';
+    const strategy = a5Paper?.sections.find(s => s.sectionKey === 'S4')?.value ?? '';
+
+    const a2Paper  = siblingPapers.find(p => p.paperCode === 'PT-A2');
+    const areas    = a2Paper?.sections.find(s => s.sectionKey === 'S1')?.value ?? '';
+
+    const auditName = audit?.title ?? 'Auditoría';
+    const year      = audit?.auditPeriodEnd?.getFullYear() ?? new Date().getFullYear();
+    const paperLabel = section.label ?? 'Programa de Auditoría';
+
+    const prompt = `
+Eres un auditor de Big 4 experto en NIAs (normas IAASB). Genera un programa de auditoría estructurado para el papel "${paperLabel}" del encargo "${auditName}" (año ${year}).
+
+## Contexto de riesgo disponible:
+
+### Áreas auditadas (PT-A2 S1):
+${areas || '(No disponible)'}
+
+### Matriz RMM por área (PT-A5 S1):
+${rmmText || '(No disponible)'}
+
+### Riesgos Significativos (PT-A5 S3):
+${sigRisks || '(No disponible)'}
+
+### Estrategia por área (PT-A5 S4):
+${strategy || '(No disponible)'}
+
+## Instrucciones:
+Genera entre 3 y 8 procedimientos de auditoría (nivel 1) con sus actividades ejecutables (nivel 2).
+Cada procedimiento debe tener entre 2 y 5 actividades.
+Usa aserciones NIA 315 (EXI, VAL, COM, OCC, EXA, COR, CLA).
+RMM levels: BAJO, MODERADO, ALTO, MUY_ALTO.
+Responde ÚNICAMENTE con JSON válido, sin texto adicional ni markdown.
+
+JSON schema:
+{
+  "procedures": [
+    {
+      "refNumber": "P-01",
+      "description": "Descripción del procedimiento (1 oración)",
+      "assertions": ["EXI", "VAL"],
+      "significantRisk": false,
+      "rmmLevel": "MODERADO",
+      "steps": [
+        {
+          "refNumber": "P-01.1",
+          "description": "Descripción de la actividad ejecutable",
+          "assertions": ["EXI"],
+          "testType": "DETAIL",
+          "nature": "INSPECTION",
+          "timing": "YEAR_END",
+          "extent": "100% de los items > $10,000",
+          "population": "Saldos al 31/12"
+        }
+      ]
+    }
+  ]
+}
+
+testType values: DETAIL, ANALYTICAL, CONTROL
+nature values: INSPECTION, OBSERVATION, INQUIRY, CONFIRMATION, RECALCULATION, REPERFORMANCE, ANALYTICAL
+timing values: INTERIM, YEAR_END, ROLLFORWARD
+`;
+
+    let parsed: { procedures: Array<{
+      refNumber: string; description: string; assertions?: string[];
+      significantRisk?: boolean; rmmLevel?: string;
+      steps: Array<{
+        refNumber: string; description: string; assertions?: string[];
+        testType?: string; nature?: string; timing?: string;
+        extent?: string; population?: string;
+      }>;
+    }> };
+
+    try {
+      const raw = await this.callGeminiText(apiKey, prompt);
+      const cleaned = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      this.logger.error('AI suggest parse error', e);
+      throw new BadRequestException('La IA no pudo generar procedimientos válidos. Intente de nuevo.');
+    }
+
+    const baseCount = await this.prisma.auditProcedure.count({ where: { sectionId } });
+
+    const created = [];
+    for (let pi = 0; pi < parsed.procedures.length; pi++) {
+      const p = parsed.procedures[pi];
+      const proc = await this.prisma.auditProcedure.create({
+        data: {
+          sectionId,
+          refNumber:       p.refNumber,
+          description:     p.description,
+          assertions:      p.assertions   ?? [],
+          significantRisk: p.significantRisk ?? false,
+          rmmLevel:        p.rmmLevel     ?? null,
+          sortOrder:       baseCount + pi,
+        },
+      });
+
+      const steps = [];
+      for (let si = 0; si < (p.steps ?? []).length; si++) {
+        const s = p.steps[si];
+        const step = await this.prisma.auditStep.create({
+          data: {
+            procedureId:  proc.id,
+            refNumber:    s.refNumber,
+            description:  s.description,
+            assertions:   s.assertions  ?? [],
+            testType:     (s.testType   as TestType)     ?? TestType.DETAIL,
+            nature:       (s.nature     as AuditNature)  ?? AuditNature.INSPECTION,
+            timing:       (s.timing     as AuditTiming)  ?? AuditTiming.YEAR_END,
+            extent:       s.extent      ?? null,
+            population:   s.population  ?? null,
+            sortOrder:    si,
+          },
+          include: { evidences: true },
+        });
+        steps.push(step);
+      }
+      created.push({ ...proc, steps });
+    }
+
+    return created;
+  }
+
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  private async syncProcStatus(procedureId: string) {
+    const steps = await this.prisma.auditStep.findMany({
+      where:  { procedureId },
+      select: { status: true },
+    });
+
+    if (steps.length === 0) return;
+
+    const terminal = [StepStatus.CLEARED, StepStatus.APPROVED] as StepStatus[];
+    const active   = [StepStatus.IN_PROGRESS, StepStatus.SUBMITTED, StepStatus.REVIEWED] as StepStatus[];
+
+    let newStatus: ProcStatus;
+    if (steps.every(s => terminal.includes(s.status))) {
+      newStatus = ProcStatus.COMPLETED;
+    } else if (steps.some(s => active.includes(s.status) || terminal.includes(s.status))) {
+      newStatus = ProcStatus.IN_PROGRESS;
+    } else {
+      newStatus = ProcStatus.PENDING;
+    }
+
+    await this.prisma.auditProcedure.update({
+      where: { id: procedureId },
+      data:  { status: newStatus },
+    });
+  }
+
+  private async callGeminiText(apiKey: string, prompt: string): Promise<string> {
+    const res = await fetch(`${this.geminiUrl}?key=${apiKey}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`Gemini HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+    }
+
+    const data = await res.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      error?: { message: string };
+    };
+
+    if (data.error) throw new Error(`Gemini error: ${data.error.message}`);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    if (!text.trim()) throw new Error('Gemini returned empty text');
+    return text.trim();
   }
 }

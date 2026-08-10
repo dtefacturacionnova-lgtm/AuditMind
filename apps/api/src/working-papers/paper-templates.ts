@@ -353,6 +353,16 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       defaultValue: '[Nombre de la Empresa Auditada]',
       aiHint:       'Ingrese el nombre legal completo de la sociedad auditada.',
     },
+    {
+      sectionKey:   'S24',
+      label:        'Evaluación de Continuidad del Encargo (auto desde PT-INDEP)',
+      description:  'Resultado de la evaluación de aceptación/continuación del encargo según NIA 220 §12. Auto-completado desde PT-INDEP S3.',
+      fieldType:    FieldType.REFERENCE,
+      isRequired:   false,
+      isAutoFilled: true,
+      sourceRef:    'PT-INDEP::S3',
+      sortOrder:    24,
+    },
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -1562,7 +1572,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       description:  'Consolidación de Riesgo Inherente (PT-A2) + Riesgo de Control (PT-A3) = RMM por área/aserción. Pre-cargada con datos de PT-A2 S4 y PT-A3 S5. Completar y validar por auditor.',
       fieldType:    FieldType.MATRIX,
       isRequired:   true,
-      isAutoFilled: false,
+      isAutoFilled: true,
       sourceRef:    'PT-A2::S4,PT-A3::S5',
       sortOrder:    1,
       aiHint:       'Columnas: Área/Ciclo | Cuenta/Saldo estimado | Aserción principal (EXI/VAL/COM/OCC/COR/CLA — NIA 315) | RI (BAJO/MODERADO/ALTO/MUY_ALTO — de PT-A2 S4) | RC (BAJO/MODERADO/ALTO/MUY_ALTO — de PT-A3 S5) | RMM = RI×RC (ver fórmula abajo) | ¿Riesgo Significativo? (S/N) | Tipo de Respuesta (Solo_Sustantivo/Controles+Sustantivo/100%_Sustantivo) | Enfoque específico | Ref. papel de ejecución (ej. C-01, B-03). FÓRMULA RMM: BAJO×BAJO=BAJO · BAJO×MOD=BAJO · MOD×MOD=MODERADO · ALTO×MOD=ALTO · ALTO×ALTO=MUY_ALTO · MUY_ALTO×cualquiera=MUY_ALTO. Marcar Riesgo Significativo: (a) toda combinación con RMM=MUY_ALTO, (b) riesgo catalogado como significativo en PT-A2 S6, (c) presunciones NIA 240 (ingresos + management override). Para áreas sin PT-A3 evaluado, usar RC=ALTO por defecto (máxima prudencia). REGLA DE TIPO DE RESPUESTA: RMM=BAJO → Controles+Sustantivo reducido. RMM=MODERADO → Controles+Sustantivo. RMM=ALTO → Solo_Sustantivo ampliado. RMM=MUY_ALTO → 100%_Sustantivo.',
@@ -1644,6 +1654,16 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       sortOrder:    3,
     },
     {
+      sectionKey:   'S3B',
+      label:        '¿Reliance en controles? (NIA 330 §8)',
+      description:  'Indicar si el programa incluye pruebas de controles como respuesta al riesgo. Marcar "Sí" si se planea confiar en la efectividad de controles internos para reducir pruebas sustantivas.',
+      fieldType:    FieldType.BOOLEAN,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'NIA 330 §8: el auditor puede decidir confiar en evidencia de períodos anteriores sobre efectividad de controles. Si se marca "Sí", incluir en S5 procedimientos de tipo CONTROL (TestType=CONTROL) para las áreas con RC=BAJO o MODERADO en PT-A5 S1.',
+    },
+    {
       sectionKey:   'S4',
       label:        'Base RMM por Área (auto desde PT-A5)',
       description:  'Nivel de riesgo de error material evaluado por área/aserción. Auto-completado desde PT-A5 S1 (Matriz RMM) y S3 (Riesgos Significativos). Determina la naturaleza y extensión de procedimientos.',
@@ -1651,7 +1671,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:   false,
       isAutoFilled: true,
       sourceRef:    'PT-A5::S1,PT-A5::S3',
-      sortOrder:    4,
+      sortOrder:    5,
     },
     {
       sectionKey:   'S5',
@@ -1660,7 +1680,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       fieldType:    FieldType.PROCEDURE_GRID,
       isRequired:   true,
       isAutoFilled: false,
-      sortOrder:    5,
+      sortOrder:    6,
     },
     {
       sectionKey:   'S6',
@@ -1669,7 +1689,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       fieldType:    FieldType.TEXTAREA,
       isRequired:   true,
       isAutoFilled: false,
-      sortOrder:    6,
+      sortOrder:    7,
       aiHint:       'Redacta la conclusión general del programa indicando: (1) si los objetivos de auditoría se lograron, (2) procedimientos clave ejecutados, (3) excepciones significativas y su disposición, (4) cobertura de aserciones relevantes, (5) si hay evidencia suficiente y apropiada (NIA 500).',
     },
     {
@@ -1679,7 +1699,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       fieldType:    FieldType.MATRIX,
       isRequired:   true,
       isAutoFilled: false,
-      sortOrder:    7,
+      sortOrder:    8,
       aiHint:       'Columnas: Rol | Nombre | Fecha | Firma | Observaciones.',
     },
   ],

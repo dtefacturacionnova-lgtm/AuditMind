@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   ChevronDown, ChevronRight, Plus, Trash2, Save, X,
   CheckCircle2, Clock, AlertCircle, MinusCircle, Loader2,
-  ShieldAlert, FileText,
+  ShieldAlert, FileText, Sparkles, Paperclip, Upload,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
@@ -581,12 +581,16 @@ interface StepRowProps {
   step: AuditStep;
   onUpdate: (stepId: string, data: Partial<AuditStep>) => Promise<void>;
   onDelete: (stepId: string) => Promise<void>;
+  onAddEvidence: (stepId: string, file: File) => Promise<StepEvidence>;
+  onDeleteEvidence: (stepId: string, evidenceId: string) => Promise<void>;
   readOnly: boolean;
 }
 
-function StepRow({ step, onUpdate, onDelete, readOnly }: StepRowProps) {
-  const [editing, setEditing] = useState(false);
-  const [saving,  setSaving]  = useState(false);
+function StepRow({ step, onUpdate, onDelete, onAddEvidence, onDeleteEvidence, readOnly }: StepRowProps) {
+  const [editing,       setEditing]    = useState(false);
+  const [saving,        setSaving]     = useState(false);
+  const [uploading,     setUploading]  = useState(false);
+  const [showEvidence,  setShowEvid]   = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const handleSave = async (data: Partial<AuditStep>) => {
@@ -604,6 +608,21 @@ function StepRow({ step, onUpdate, onDelete, readOnly }: StepRowProps) {
     finally { setDeleting(false); }
   };
 
+  const handleEvidenceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      await onAddEvidence(step.id, file);
+      setShowEvid(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al subir archivo');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
   if (editing) {
     return (
       <div className="mt-2">
@@ -619,73 +638,124 @@ function StepRow({ step, onUpdate, onDelete, readOnly }: StepRowProps) {
   }
 
   return (
-    <div className="flex items-start gap-3 py-2.5 px-3 rounded-lg hover:bg-gray-50 transition-colors group">
-      {/* Left: ref + indicators */}
-      <div className="flex-shrink-0 min-w-[80px]">
-        <span className="text-xs font-mono font-semibold text-indigo-600">{step.refNumber}</span>
-      </div>
+    <div className="py-2.5 px-3 rounded-lg hover:bg-gray-50 transition-colors group">
+      {/* Main row: ref | description | actions */}
+      <div className="flex items-start gap-3">
+        {/* Left: ref */}
+        <div className="flex-shrink-0 min-w-[80px]">
+          <span className="text-xs font-mono font-semibold text-indigo-600">{step.refNumber}</span>
+        </div>
 
-      {/* Center: description + metadata */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-800 leading-snug">{step.description}</p>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          {step.assertions.length > 0 && (
-            <span className="text-[10px] text-gray-500">
-              {step.assertions.join(' · ')}
-            </span>
-          )}
-          <span className="text-[10px] text-gray-400">•</span>
-          <span className="text-[10px] text-gray-500">{TEST_TYPE_LABEL[step.testType]}</span>
-          <span className="text-[10px] text-gray-400">•</span>
-          <span className="text-[10px] text-gray-500">{NATURE_LABEL[step.nature]}</span>
-          <span className="text-[10px] text-gray-400">•</span>
-          <span className="text-[10px] text-gray-500">{TIMING_LABEL[step.timing]}</span>
-          {step.extent && (
+        {/* Center: description + metadata */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-gray-800 leading-snug">{step.description}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {step.assertions.length > 0 && (
+              <span className="text-[10px] text-gray-500">
+                {step.assertions.join(' · ')}
+              </span>
+            )}
+            <span className="text-[10px] text-gray-400">•</span>
+            <span className="text-[10px] text-gray-500">{TEST_TYPE_LABEL[step.testType]}</span>
+            <span className="text-[10px] text-gray-400">•</span>
+            <span className="text-[10px] text-gray-500">{NATURE_LABEL[step.nature]}</span>
+            <span className="text-[10px] text-gray-400">•</span>
+            <span className="text-[10px] text-gray-500">{TIMING_LABEL[step.timing]}</span>
+            {step.extent && (
+              <>
+                <span className="text-[10px] text-gray-400">•</span>
+                <span className="text-[10px] text-gray-500">{step.extent}</span>
+              </>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {step.performedByName && (
+              <span className="text-[10px] text-gray-600">
+                ✍ {step.performedByName}
+                {step.datePerformed && ` · ${new Date(step.datePerformed).toLocaleDateString('es-CL')}`}
+              </span>
+            )}
+            {step.wpRef && (
+              <span className="text-[10px] font-mono bg-gray-100 px-1 py-0.5 rounded text-gray-700">
+                📎 {step.wpRef}
+              </span>
+            )}
+            <ConclusionBadge conclusion={step.conclusion} />
+            {step.conclusion === 'EXCEPTION' && step.exceptionText && (
+              <span className="text-[10px] text-red-700 bg-red-50 px-1.5 py-0.5 rounded">
+                ⚠ {step.exceptionText.slice(0, 60)}{step.exceptionText.length > 60 ? '…' : ''}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Right: actions */}
+        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => setShowEvid(v => !v)}
+            className={`flex items-center p-1 rounded transition-colors ${step.evidences.length > 0 ? 'text-amber-600 hover:bg-amber-100' : 'text-gray-400 hover:bg-gray-100'}`}
+            title={`${step.evidences.length} archivo(s) de evidencia`}
+          >
+            <Paperclip className="w-3.5 h-3.5" />
+            {step.evidences.length > 0 && (
+              <span className="ml-0.5 text-[9px] font-bold">{step.evidences.length}</span>
+            )}
+          </button>
+          {!readOnly && (
             <>
-              <span className="text-[10px] text-gray-400">•</span>
-              <span className="text-[10px] text-gray-500">{step.extent}</span>
+              <button
+                onClick={() => setEditing(true)}
+                className="p-1 rounded hover:bg-indigo-100 text-indigo-600 transition-colors"
+                title="Editar actividad"
+              >
+                <FileText className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="p-1 rounded hover:bg-red-100 text-red-500 transition-colors"
+                title="Eliminar actividad"
+              >
+                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              </button>
             </>
           )}
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          {step.performedByName && (
-            <span className="text-[10px] text-gray-600">
-              ✍ {step.performedByName}
-              {step.datePerformed && ` · ${new Date(step.datePerformed).toLocaleDateString('es-CL')}`}
-            </span>
-          )}
-          {step.wpRef && (
-            <span className="text-[10px] font-mono bg-gray-100 px-1 py-0.5 rounded text-gray-700">
-              📎 {step.wpRef}
-            </span>
-          )}
-          <ConclusionBadge conclusion={step.conclusion} />
-          {step.conclusion === 'EXCEPTION' && step.exceptionText && (
-            <span className="text-[10px] text-red-700 bg-red-50 px-1.5 py-0.5 rounded">
-              ⚠ {step.exceptionText.slice(0, 60)}{step.exceptionText.length > 60 ? '…' : ''}
-            </span>
-          )}
-        </div>
       </div>
 
-      {/* Right: actions */}
-      {!readOnly && (
-        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => setEditing(true)}
-            className="p-1 rounded hover:bg-indigo-100 text-indigo-600 transition-colors"
-            title="Editar actividad"
-          >
-            <FileText className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="p-1 rounded hover:bg-red-100 text-red-500 transition-colors"
-            title="Eliminar actividad"
-          >
-            {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-          </button>
+      {/* Evidence panel (below, full-width) */}
+      {showEvidence && (
+        <div className="ml-[92px] mt-2 space-y-1.5">
+          {step.evidences.map(ev => (
+            <div key={ev.id} className="flex items-center gap-2 text-xs bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+              <Paperclip className="w-3 h-3 text-amber-600 flex-shrink-0" />
+              <span className="flex-1 truncate text-gray-700">{ev.fileName}</span>
+              <span className="text-gray-400 text-[10px]">{(ev.size / 1024).toFixed(0)} KB</span>
+              {!readOnly && (
+                <button
+                  onClick={() => onDeleteEvidence(step.id, ev.id)}
+                  className="text-red-400 hover:text-red-600"
+                  title="Eliminar evidencia"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+          {!readOnly && (
+            <label className="flex items-center gap-1.5 cursor-pointer text-xs text-indigo-600 hover:text-indigo-800">
+              {uploading
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <Upload className="w-3 h-3" />}
+              <span>{uploading ? 'Subiendo…' : 'Adjuntar archivo (máx 25 MB)'}</span>
+              <input
+                type="file"
+                className="hidden"
+                onChange={handleEvidenceUpload}
+                disabled={uploading}
+              />
+            </label>
+          )}
         </div>
       )}
     </div>
@@ -696,16 +766,19 @@ function StepRow({ step, onUpdate, onDelete, readOnly }: StepRowProps) {
 
 interface ProcCardProps {
   proc: AuditProcedure;
-  onUpdateProc: (id: string, data: Partial<AuditProcedure>) => Promise<void>;
-  onDeleteProc: (id: string) => Promise<void>;
-  onCreateStep: (procedureId: string, data: Partial<AuditStep>) => Promise<void>;
-  onUpdateStep: (stepId: string, data: Partial<AuditStep>) => Promise<void>;
-  onDeleteStep: (stepId: string) => Promise<void>;
+  onUpdateProc:    (id: string, data: Partial<AuditProcedure>) => Promise<void>;
+  onDeleteProc:    (id: string) => Promise<void>;
+  onCreateStep:    (procedureId: string, data: Partial<AuditStep>) => Promise<void>;
+  onUpdateStep:    (stepId: string, data: Partial<AuditStep>) => Promise<void>;
+  onDeleteStep:    (stepId: string) => Promise<void>;
+  onAddEvidence:   (stepId: string, file: File) => Promise<StepEvidence>;
+  onDeleteEvidence:(stepId: string, evidenceId: string) => Promise<void>;
   readOnly: boolean;
 }
 
 function ProcCard({
-  proc, onUpdateProc, onDeleteProc, onCreateStep, onUpdateStep, onDeleteStep, readOnly,
+  proc, onUpdateProc, onDeleteProc, onCreateStep, onUpdateStep, onDeleteStep,
+  onAddEvidence, onDeleteEvidence, readOnly,
 }: ProcCardProps) {
   const [open,       setOpen]      = useState(false);
   const [editingProc, setEditProc] = useState(false);
@@ -831,6 +904,8 @@ function ProcCard({
                   step={step}
                   onUpdate={onUpdateStep}
                   onDelete={onDeleteStep}
+                  onAddEvidence={onAddEvidence}
+                  onDeleteEvidence={onDeleteEvidence}
                   readOnly={readOnly}
                 />
               ))}
@@ -873,6 +948,7 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
   const [error,      setError]      = useState<string | null>(null);
   const [addingProc, setAddProc]    = useState(false);
   const [saving,     setSaving]     = useState(false);
+  const [aiLoading,  setAiLoading]  = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -935,6 +1011,46 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
       ...p,
       steps: p.steps.filter(s => s.id !== stepId),
     })));
+  };
+
+  // ─── Evidence ops
+
+  const handleAddEvidence = async (stepId: string, file: File): Promise<StepEvidence> => {
+    const form = new FormData();
+    form.append('file', file);
+    const evidence = await apiClient.postForm<StepEvidence>(`/audit-procedures/steps/${stepId}/evidences`, form);
+    setProcedures(prev => prev.map(p => ({
+      ...p,
+      steps: p.steps.map(s =>
+        s.id === stepId ? { ...s, evidences: [...s.evidences, evidence] } : s,
+      ),
+    })));
+    return evidence;
+  };
+
+  const handleDeleteEvidence = async (stepId: string, evidenceId: string) => {
+    await apiClient.delete(`/audit-procedures/steps/${stepId}/evidences/${evidenceId}`);
+    setProcedures(prev => prev.map(p => ({
+      ...p,
+      steps: p.steps.map(s =>
+        s.id === stepId ? { ...s, evidences: s.evidences.filter(e => e.id !== evidenceId) } : s,
+      ),
+    })));
+  };
+
+  // ─── AI suggest
+
+  const handleAiSuggest = async () => {
+    if (!confirm('¿Generar procedimientos con IA basados en el contexto de riesgo (PT-A5)? Se agregarán a los procedimientos existentes.')) return;
+    setAiLoading(true);
+    try {
+      const created = await apiClient.post<AuditProcedure[]>(`/audit-procedures/section/${sectionId}/ai-suggest`, {});
+      setProcedures(prev => [...prev, ...created]);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Error al generar procedimientos con IA');
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   // ─── Stats
@@ -1001,12 +1117,14 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
             onCreateStep={handleCreateStep}
             onUpdateStep={handleUpdateStep}
             onDeleteStep={handleDeleteStep}
+            onAddEvidence={handleAddEvidence}
+            onDeleteEvidence={handleDeleteEvidence}
             readOnly={readOnly}
           />
         ))}
       </div>
 
-      {/* Add procedure form or button */}
+      {/* Add procedure form or buttons */}
       {addingProc ? (
         <ProcForm
           onSave={handleCreateProc}
@@ -1014,13 +1132,26 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
           saving={saving}
         />
       ) : !readOnly ? (
-        <button
-          onClick={() => setAddProc(true)}
-          className="w-full flex items-center justify-center gap-2 py-3 text-sm text-indigo-600 border-2 border-dashed border-indigo-200 rounded-xl hover:bg-indigo-50 hover:border-indigo-400 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Agregar procedimiento
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setAddProc(true)}
+            className="flex-1 flex items-center justify-center gap-2 py-3 text-sm text-indigo-600 border-2 border-dashed border-indigo-200 rounded-xl hover:bg-indigo-50 hover:border-indigo-400 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Agregar procedimiento
+          </button>
+          <button
+            onClick={handleAiSuggest}
+            disabled={aiLoading}
+            className="flex items-center justify-center gap-2 px-4 py-3 text-sm text-violet-700 bg-violet-50 border-2 border-dashed border-violet-300 rounded-xl hover:bg-violet-100 hover:border-violet-500 disabled:opacity-60 transition-colors"
+            title="Generar procedimientos automáticamente con IA basados en PT-A5"
+          >
+            {aiLoading
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Sparkles className="w-4 h-4" />}
+            {aiLoading ? 'Generando…' : 'IA genera programa'}
+          </button>
+        </div>
       ) : procedures.length === 0 ? (
         <p className="text-sm text-gray-400 italic text-center py-6">
           Sin procedimientos definidos.

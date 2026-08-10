@@ -1,8 +1,10 @@
 import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, HttpCode, HttpStatus,
+  UseInterceptors, UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { IsString, IsArray, IsBoolean, IsNumber, IsOptional, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -257,6 +259,15 @@ export class AuditProceduresController {
     return this.svc.createProcedure(sectionId, dto, user);
   }
 
+  @Post('section/:sectionId/ai-suggest')
+  @ApiOperation({ summary: 'Generar procedimientos automáticamente con IA (Gemini)' })
+  aiSuggest(
+    @Param('sectionId') sectionId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.suggestAndCreateProcedures(sectionId, user);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Actualizar procedimiento' })
   updateProcedure(
@@ -307,5 +318,30 @@ export class AuditProceduresController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.svc.deleteStep(stepId, user);
+  }
+
+  // Evidence
+
+  @Post('steps/:stepId/evidences')
+  @ApiOperation({ summary: 'Subir archivo de evidencia a una actividad' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  createEvidence(
+    @Param('stepId') stepId: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.createEvidence(stepId, file, user);
+  }
+
+  @Delete('steps/:stepId/evidences/:evidenceId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Eliminar archivo de evidencia' })
+  deleteEvidence(
+    @Param('stepId') stepId: string,
+    @Param('evidenceId') evidenceId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.deleteEvidence(evidenceId, stepId, user);
   }
 }

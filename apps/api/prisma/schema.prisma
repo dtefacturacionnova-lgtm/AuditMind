@@ -146,6 +146,7 @@ enum FieldType {
   AUDIT_REPORTS    // Grid editable de informes de auditoría interna emitidos con adjunto por fila
   CHECKLIST        // Tabla editable Sí/No/N/A por criterio + conclusión global + fundamento
   COMMUNICATION_LOG // Grid de comunicaciones con AI: fecha/participantes/tema/asuntos/adjunto
+  PROCEDURE_GRID   // Grid jerárquico 2 niveles: Procedimiento → Actividad (NIA 230/330)
 }
 
 // Tipo de mapeo entre papeles en el grafo
@@ -1294,7 +1295,8 @@ model PaperSection {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  paper  WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  paper      WorkingPaper     @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  procedures AuditProcedure[]
 
   @@unique([paperId, sectionKey])
   @@index([paperId])
@@ -2022,4 +2024,136 @@ model ConnectorImport {
   @@index([sourceId])
   @@index([auditId])
   @@map("connector_imports")
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  PT-PROG: PROGRAMA DE AUDITORÍA — Grid de Procedimientos (NIA 230/330)
+//  AuditProcedure (nivel 1) → AuditStep (nivel 2) → StepEvidence (adjuntos)
+// ══════════════════════════════════════════════════════════════════════════════
+
+enum ProcStatus {
+  PENDING      // Sin comenzar
+  IN_PROGRESS  // Al menos un paso iniciado
+  COMPLETED    // Todos los pasos aprobados
+  NA           // No aplicable
+}
+
+enum StepStatus {
+  DRAFT        // Borrador — no enviado a revisión
+  IN_PROGRESS  // En ejecución
+  SUBMITTED    // Enviado a primera revisión
+  REVIEWED     // Revisado (puede tener notas)
+  CLEARED      // Notas del revisor limpiadas
+  APPROVED     // Socio/CAE aprobado
+}
+
+enum StepConclusion {
+  PENDING      // Sin conclusión aún
+  NO_EXCEPTION // Sin excepción — objetivo cumplido
+  EXCEPTION    // Con excepción — ver exceptionText/exceptionAmount
+  NA           // No aplicable
+}
+
+enum TestType {
+  DETAIL      // Prueba de detalle (inspección, confirmación, recálculo)
+  ANALYTICAL  // Procedimiento analítico sustantivo (NIA 520)
+  CONTROL     // Prueba de controles (NIA 330 §8)
+}
+
+enum AuditNature {
+  INSPECTION      // Inspección de documentos y registros
+  OBSERVATION     // Observación de un proceso
+  INQUIRY         // Indagación a la gerencia
+  CONFIRMATION    // Confirmación externa (NIA 505)
+  RECALCULATION   // Recálculo de cómputos
+  REPERFORMANCE   // Rejecución de procedimientos del cliente
+  ANALYTICAL      // Procedimientos analíticos
+}
+
+enum AuditTiming {
+  INTERIM     // Interino (antes del cierre)
+  YEAR_END    // Al cierre del período
+  ROLLFORWARD // Puente interino → cierre
+}
+
+// Nivel 1 — Procedimiento de auditoría por área/aserción
+model AuditProcedure {
+  id             String     @id @default(cuid())
+  sectionId      String     // FK → PaperSection (PROCEDURE_GRID)
+  refNumber      String     // "B-AR-01", "PROC-01"
+  description    String
+  assertions     String[]   // ["EXI","VAL","COM","OCC","COM","EXA","COR","CLA","PRE"]
+  significantRisk Boolean   @default(false) // ISA 330 §18 — flag binario
+  rmmLevel       String?    // "BAJO" | "MODERADO" | "ALTO" | "MUY_ALTO"
+  rmmRiskRef     String?    // Ref a fila de PT-A5 (ISA 330 §28c)
+  conclusionText String?
+  status         ProcStatus @default(PENDING)
+  sortOrder      Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  section  PaperSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  steps    AuditStep[]
+
+  @@index([sectionId])
+  @@index([sectionId, status])
+  @@map("audit_procedures")
+}
+
+// Nivel 2 — Actividad/Paso dentro de un procedimiento
+model AuditStep {
+  id                String         @id @default(cuid())
+  procedureId       String         // FK → AuditProcedure
+  refNumber         String         // "B-AR-01-A"
+  description       String
+  assertions        String[]       // puede diferir del padre
+  testType          TestType       @default(DETAIL)
+  nature            AuditNature    @default(INSPECTION)
+  timing            AuditTiming    @default(YEAR_END)
+  extent            String?        // "45 ítems MUS", "100% de saldo"
+  population        String?        // fuente de datos / universo
+  performedByName   String?        // ISA 230 §9
+  performedById     String?
+  datePerformed     DateTime?      // ISA 230 §9 — debe ser ≤ fecha informe
+  reviewedByName    String?
+  reviewedById      String?
+  dateReviewed      DateTime?
+  wpRef             String?        // "AR-03-01" — referencia al papel de evidencia
+  resultDescription String?        // ISA 330 §28(d)
+  conclusion        StepConclusion @default(PENDING)
+  exceptionText     String?        // condicional: descripción de la excepción
+  exceptionAmount   Decimal?       @db.Decimal(15, 2) // monto observado
+  difRef            String?        // referencia a PT-DIFS si hay excepción
+  hoursPlanned      Float?
+  hoursActual       Float?
+  status            StepStatus     @default(DRAFT)
+  sortOrder         Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  procedure  AuditProcedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  evidences  StepEvidence[]
+
+  @@index([procedureId])
+  @@index([procedureId, status])
+  @@map("audit_steps")
+}
+
+// Adjuntos por actividad (cédulas B-01, confirmaciones, etc.)
+model StepEvidence {
+  id             String   @id @default(cuid())
+  stepId         String   // FK → AuditStep
+  fileName       String
+  storageKey     String   // Supabase Storage key
+  wpRef          String?  // "AR-03-01"
+  mimeType       String
+  size           Int      @default(0) // bytes
+  uploadedByName String?
+  uploadedById   String?
+  uploadedAt     DateTime @default(now())
+
+  step  AuditStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@index([stepId])
+  @@map("step_evidences")
 }

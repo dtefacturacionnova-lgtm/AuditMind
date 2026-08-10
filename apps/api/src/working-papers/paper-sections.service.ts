@@ -39,9 +39,46 @@ export class PaperSectionsService {
 
   /**
    * Get all sections for a paper ordered by sortOrder.
+   * Lazy-sync: any template sections not yet in the DB are auto-created on first load.
+   * Existing sections (and their values) are never modified here.
    */
   async getSections(paperId: string, user: AuthUser) {
     await this.assertPaperAccess(paperId, user);
+
+    const paper = await this.prisma.workingPaper.findUnique({
+      where:  { id: paperId },
+      select: { paperCode: true },
+    });
+
+    if (paper?.paperCode && PAPER_TEMPLATES[paper.paperCode]) {
+      const existing = await this.prisma.paperSection.findMany({
+        where:  { paperId },
+        select: { sectionKey: true },
+      });
+      const existingKeys = new Set(existing.map(s => s.sectionKey));
+      const missing = PAPER_TEMPLATES[paper.paperCode].filter(
+        t => !existingKeys.has(t.sectionKey),
+      );
+      if (missing.length > 0) {
+        await this.prisma.paperSection.createMany({
+          data: missing.map(t => ({
+            paperId,
+            sectionKey:   t.sectionKey,
+            label:        t.label,
+            description:  t.description ?? null,
+            fieldType:    t.fieldType as any,
+            isRequired:   t.isRequired  ?? false,
+            isAutoFilled: t.isAutoFilled ?? false,
+            sourceRef:    t.sourceRef   ?? null,
+            sortOrder:    t.sortOrder   ?? 0,
+            aiHint:       t.aiHint      ?? null,
+            options:      t.options ? (t.options as any) : undefined,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
     return this.prisma.paperSection.findMany({
       where:   { paperId },
       orderBy: { sortOrder: 'asc' },

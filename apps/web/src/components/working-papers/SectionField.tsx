@@ -17,6 +17,7 @@ import { ChecklistPanel } from './ChecklistPanel';
 import type { ChecklistValue } from './ChecklistPanel';
 import { ComunicacionAIPanel } from './ComunicacionAIPanel';
 import type { ComunicacionRow } from './ComunicacionAIPanel';
+import { ProcedureGridPanel } from './ProcedureGridPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -522,7 +523,8 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
     section.fieldType === 'LEGAL_MATRIX' ||
     section.fieldType === 'AUDIT_REPORTS' ||
     section.fieldType === 'CHECKLIST' ||
-    section.fieldType === 'COMMUNICATION_LOG';
+    section.fieldType === 'COMMUNICATION_LOG' ||
+    section.fieldType === 'PROCEDURE_GRID';
 
   const isAutoAndLocked = section.isAutoFilled && !overriding && !editing;
 
@@ -783,6 +785,14 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
               />
             )}
 
+            {/* Procedure Grid — grid jerárquico 2 niveles: Procedimiento → Actividad (NIA 230/330) */}
+            {section.fieldType === 'PROCEDURE_GRID' && section.id && (
+              <ProcedureGridPanel
+                sectionId={section.id}
+                readOnly={readonly}
+              />
+            )}
+
             {/* Communication Log — grid de comunicaciones con AI + adjunto por fila */}
             {section.fieldType === 'COMMUNICATION_LOG' && paperId && (
               <ComunicacionAIPanel
@@ -827,7 +837,7 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
             )}
 
             {/* All text-like */}
-            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG'].includes(section.fieldType) && (
+            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG', 'PROCEDURE_GRID'].includes(section.fieldType) && (
               <p className={`text-sm leading-relaxed ${
                 effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== ''
                   ? 'text-gray-700'

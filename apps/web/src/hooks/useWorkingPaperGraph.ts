@@ -23,7 +23,8 @@ export type SectionFieldType =
   | 'LEGAL_MATRIX'
   | 'AUDIT_REPORTS'
   | 'CHECKLIST'
-  | 'COMMUNICATION_LOG';
+  | 'COMMUNICATION_LOG'
+  | 'PROCEDURE_GRID';
 
 export interface PaperSection {
   id: string;

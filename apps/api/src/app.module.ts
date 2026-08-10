@@ -31,6 +31,7 @@ import { AuditProjectsModule } from './audit-projects/audit-projects.module';
 import { EmailModule } from './email/email.module';
 import { PdfModule } from './pdf/pdf.module';
 import { FiscalModule } from './fiscal/fiscal.module';
+import { AuditProceduresModule } from './audit-procedures/audit-procedures.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { FiscalModule } from './fiscal/fiscal.module';
     CatalogsModule,
     StrategicModule,
     AuditProjectsModule,
+    AuditProceduresModule,
   ],
   providers: [
     // Guards globales — aplican a todos los endpoints excepto los @Public()

@@ -1,0 +1,858 @@
+<title>AuditMind — Flujo de Datos Financieros entre Papeles de Trabajo</title>
+<style>
+:root {
+  --c-fuente:  #1565C0;
+  --c-sumaria: #1B7F4E;
+  --c-resumen: #6A3EA6;
+  --c-ind:     #B5460E;
+  --c-cierre:  #3949AB;
+  --c-plan:    #37626E;
+
+  --bg:        #F4F6F9;
+  --surface:   #FFFFFF;
+  --border:    #D8DFE8;
+  --text:      #1A2035;
+  --muted:     #5A6A82;
+  --recibe-bg: #EBF5FB;
+  --emite-bg:  #EAFAF1;
+  --shadow:    0 1px 4px rgba(0,0,0,.10), 0 0 0 1px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:       #0E1117;
+    --surface:  #1A2030;
+    --border:   #2A3448;
+    --text:     #D8E1EE;
+    --muted:    #7D90AA;
+    --recibe-bg:#0D2235;
+    --emite-bg: #0B2218;
+    --shadow:   0 1px 6px rgba(0,0,0,.40), 0 0 0 1px rgba(255,255,255,.06);
+  }
+}
+:root[data-theme="light"] {
+  --bg:#F4F6F9; --surface:#FFFFFF; --border:#D8DFE8; --text:#1A2035;
+  --muted:#5A6A82; --recibe-bg:#EBF5FB; --emite-bg:#EAFAF1;
+  --shadow:0 1px 4px rgba(0,0,0,.10),0 0 0 1px rgba(0,0,0,.06);
+}
+:root[data-theme="dark"] {
+  --bg:#0E1117; --surface:#1A2030; --border:#2A3448; --text:#D8E1EE;
+  --muted:#7D90AA; --recibe-bg:#0D2235; --emite-bg:#0B2218;
+  --shadow:0 1px 6px rgba(0,0,0,.40),0 0 0 1px rgba(255,255,255,.06);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ── page header ── */
+.page-header {
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.page-header h1 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.2px;
+  color: var(--text);
+}
+.page-header p {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* ── diagram scroll wrapper ── */
+.diagram-outer {
+  overflow-x: auto;
+  padding: 24px 20px 32px;
+}
+.diagram {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-width: 1180px;
+  position: relative;
+}
+
+/* ── phase column ── */
+.phase-col {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.phase-col .phase-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 4px 0 8px;
+}
+.col-fuente  { width: 195px; } .col-fuente  .phase-label { color: var(--c-fuente); }
+.col-sumaria { width: 185px; } .col-sumaria .phase-label { color: var(--c-sumaria); }
+.col-resumen { width: 175px; } .col-resumen .phase-label { color: var(--c-resumen); }
+.col-ind     { width: 180px; } .col-ind     .phase-label { color: var(--c-ind); }
+.col-cierre  { width: 175px; } .col-cierre  .phase-label { color: var(--c-cierre); }
+
+/* ── arrow gap ── */
+.arrow-gap {
+  flex: 0 0 42px;
+  display: flex;
+  flex-direction: column;
+  padding-top: 34px; /* align with cards (past phase-label) */
+}
+
+/* ── cards ── */
+.card {
+  background: var(--surface);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: relative;
+}
+.card-head {
+  padding: 7px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.card-head .code {
+  font-family: "Consolas", "Cascadia Code", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  color: #fff;
+}
+.card-head .name {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: rgba(255,255,255,.88);
+}
+.card-body { padding: 7px 10px; }
+
+/* RECIBE / EMITE blocks */
+.io-block { margin-top: 5px; }
+.io-block:first-child { margin-top: 0; }
+.io-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.io-label.recibe { color: #1565C0; }
+.io-label.emite  { color: #1B7F4E; }
+:root[data-theme="dark"] .io-label.recibe,
+@media (prefers-color-scheme: dark) { .io-label.recibe } { color: #64B5F6; }
+:root[data-theme="dark"] .io-label.emite  { color: #69F0AE; }
+.io-items {
+  border-radius: 4px;
+  padding: 4px 7px;
+  font-size: 10px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.io-items.r { background: var(--recibe-bg); }
+.io-items.e { background: var(--emite-bg);  }
+.io-items li { list-style: none; padding-left: 10px; position: relative; }
+.io-items li::before { content: "·"; position: absolute; left: 0; color: var(--muted); }
+
+/* section pills */
+.sections { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
+.sec-pill {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0,0,0,.07);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Color heads */
+.h-fuente  { background: var(--c-fuente);  }
+.h-sumaria { background: var(--c-sumaria); }
+.h-resumen { background: var(--c-resumen); }
+.h-ind     { background: var(--c-ind);     }
+.h-cierre  { background: var(--c-cierre);  }
+.h-plan    { background: var(--c-plan);    }
+
+/* ── separator inside col ── */
+.col-sep {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 4px 0 2px 2px;
+}
+
+/* ── SVG overlay ── */
+#arrows-svg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* ── legend ── */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.legend-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10.5px; color: var(--muted);
+}
+.legend-line {
+  width: 28px; height: 2px;
+}
+.legend-line.solid    { border-top: 2px solid var(--muted); }
+.legend-line.dashed   { border-top: 2px dashed var(--muted); }
+.legend-dot {
+  width: 10px; height: 10px; border-radius: 2px;
+}
+
+/* ── ref note boxes (planning context) ── */
+.ref-note {
+  border: 1.5px dashed var(--c-plan);
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: transparent;
+}
+.ref-note .rn-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--c-plan);
+  margin-bottom: 2px;
+}
+.ref-note .rn-body {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+</style>
+
+<div class="page-header">
+  <h1>AuditMind — Flujo de alimentación de datos entre Papeles de Trabajo Financieros</h1>
+  <p>Desde la importación del Balance de Comprobación hasta las Cédulas Individuales y la Consolidación de Diferencias · PT-FIN-B00 → Cédulas Sumarias → Cédulas Resúmenes → PT-B series → PT-DIFS</p>
+</div>
+
+<div class="diagram-outer">
+  <div class="diagram" id="diagram">
+    <svg id="arrows-svg"></svg>
+
+    <!-- ─── COL 1: FUENTE ─── -->
+    <div class="phase-col col-fuente">
+      <div class="phase-label">Fuente Primaria</div>
+
+      <div class="card" id="b00">
+        <div class="card-head h-fuente">
+          <span class="code">PT-FIN-B00</span>
+          <span class="name">Balance de Comprobación</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Archivo Excel/CSV del cliente</li>
+              <li>Columnas: <code>cuenta, descripcion, saldo_actual, saldo_anterior, saldo_anterior2</code></li>
+              <li>3 ejercicios en un solo archivo</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Saldos por cuenta para clasificación</li>
+              <li>Totales por sub-sumaria (S4)</li>
+              <li>Lista de cuentas materiales (S6)</li>
+              <li>Cuadre global Σ ≈ 0 (S3)</li>
+            </ul>
+          </div>
+          <div class="sections">
+            <span class="sec-pill">S1 Importado</span>
+            <span class="sec-pill">S2 Clasificador</span>
+            <span class="sec-pill">S3 Cuadre</span>
+            <span class="sec-pill">S4 Totales</span>
+            <span class="sec-pill">S6 Semáforo</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:10px"></div>
+      <div class="ref-note" id="ref-plan">
+        <div class="rn-label">Contexto de Planificación</div>
+        <div class="rn-body">
+          <strong>PT-A5</strong> Matriz RMM · materialidad<br>
+          <strong>PT-PROG</strong> Alcance y procedimientos<br>
+          <strong>PT-A2/A3</strong> Entendimiento del cliente<br>
+          <em>→ alimentan el riesgo y alcance de cada PT-B</em>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── ARROW GAP 1 ─── -->
+    <div class="arrow-gap" id="gap1"></div>
+
+    <!-- ─── COL 2: CÉDULAS SUMARIAS ─── -->
+    <div class="phase-col col-sumaria">
+      <div class="phase-label">Cédulas Sumarias</div>
+
+      <div class="col-sep">Estado de Situación Financiera</div>
+
+      <div class="card" id="cs-esf">
+        <div class="card-head h-sumaria">
+          <span class="code">PT-CS-ESF</span>
+          <span class="name">Situación Financiera</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Totales de B00 S4: Activos, Pasivos, Patrimonio</li>
+              <li>3 ejercicios comparativos</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Saldo auditado por grupo ESF</li>
+              <li>Variaciones absolutas y %</li>
+              <li>Totales de sección a cédulas resumen</li>
+            </ul>
+          </div>
+          <div class="sections">
+            <span class="sec-pill">Activo Total</span>
+            <span class="sec-pill">Pasivo Total</span>
+            <span class="sec-pill">Patrimonio</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:8px"></div>
+      <div class="col-sep">Estado de Resultados</div>
+
+      <div class="card" id="cs-er">
+        <div class="card-head h-sumaria">
+          <span class="code">PT-CS-ER</span>
+          <span class="name">Estado de Resultados</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Totales de B00 S4: Ingresos, Costos, Gastos</li>
+              <li>3 ejercicios comparativos</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Utilidad/pérdida bruta y neta</li>
+              <li>Márgenes %</li>
+              <li>Totales a cédulas resumen ER</li>
+            </ul>
+          </div>
+          <div class="sections">
+            <span class="sec-pill">Ingresos</span>
+            <span class="sec-pill">Costos</span>
+            <span class="sec-pill">Gastos Op.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── ARROW GAP 2 ─── -->
+    <div class="arrow-gap" id="gap2"></div>
+
+    <!-- ─── COL 3: CÉDULAS RESÚMENES ─── -->
+    <div class="phase-col col-resumen">
+      <div class="phase-label">Cédulas Resúmenes</div>
+
+      <!-- ESF resúmenes -->
+      <div class="col-sep">Del ESF — Activos</div>
+
+      <div class="card" id="cr-ac">
+        <div class="card-head h-resumen">
+          <span class="code">PT-CR-AC</span>
+          <span class="name">Activo Corriente</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Subtotales del ESF — grupo AC</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Saldo CxC → PT-B01</li>
+              <li>Saldo Inventarios → PT-B02</li>
+              <li>Saldo Caja/Bancos → PT-B0x</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="cr-anc">
+        <div class="card-head h-resumen">
+          <span class="code">PT-CR-ANC</span>
+          <span class="name">Activo No Corriente</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r"><li>Subtotales ESF — grupo ANC</li></ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Saldo PPE → PT-B0x</li>
+              <li>Saldo Intangibles → PT-B0x</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-sep">Del ESF — Pasivos</div>
+
+      <div class="card" id="cr-pc">
+        <div class="card-head h-resumen">
+          <span class="code">PT-CR-PC</span>
+          <span class="name">Pasivo Corriente</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r"><li>Subtotales ESF — grupo PC</li></ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Saldo CxP → PT-B0x</li>
+              <li>Impuestos → PT-B0x</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="cr-pnc">
+        <div class="card-head h-resumen">
+          <span class="code">PT-CR-PNC</span>
+          <span class="name">Pasivo No Corriente</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r"><li>Subtotales ESF — grupo PNC</li></ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Deuda LP → PT-B0x</li>
+              <li>Provisiones → PT-B0x</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- ER resúmenes -->
+      <div class="col-sep">Del ER</div>
+
+      <div class="card" id="cr-ing">
+        <div class="card-head h-resumen">
+          <span class="code">PT-CR-ING</span>
+          <span class="name">Ingresos</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r"><li>Subtotales ER — Ingresos operativos y otros</li></ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Ingresos por línea → PT-B03</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="cr-cog">
+        <div class="card-head h-resumen">
+          <span class="code">PT-CR-CGV</span>
+          <span class="name">Costos y Gastos</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r"><li>Subtotales ER — Costo ventas, Gastos op.</li></ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Costo ventas → PT-B02</li>
+              <li>Gastos → PT-B0x</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── ARROW GAP 3 ─── -->
+    <div class="arrow-gap" id="gap3"></div>
+
+    <!-- ─── COL 4: PAPELES INDIVIDUALES ─── -->
+    <div class="phase-col col-ind">
+      <div class="phase-label">Papeles Individuales</div>
+
+      <div class="col-sep">Activo Corriente</div>
+
+      <div class="card" id="b01">
+        <div class="card-head h-ind">
+          <span class="code">PT-B01</span>
+          <span class="name">Cuentas por Cobrar</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Saldo CxC de PT-CR-AC</li>
+              <li>Riesgo de PT-A5</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Confirmaciones / respuestas</li>
+              <li>Diferencias → PT-DIFS</li>
+            </ul>
+          </div>
+          <div class="sections">
+            <span class="sec-pill">Confirmaciones</span>
+            <span class="sec-pill">Corte</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="b02">
+        <div class="card-head h-ind">
+          <span class="code">PT-B02</span>
+          <span class="name">Inventario</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Saldo Inventarios de PT-CR-AC</li>
+              <li>Costo ventas de PT-CR-CGV</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Conteo físico vs. libro</li>
+              <li>Diferencias → PT-DIFS</li>
+            </ul>
+          </div>
+          <div class="sections">
+            <span class="sec-pill">Conteo</span>
+            <span class="sec-pill">Valuación</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-sep">Estado de Resultados</div>
+
+      <div class="card" id="b03">
+        <div class="card-head h-ind">
+          <span class="code">PT-B03</span>
+          <span class="name">Ingresos</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Saldo Ingresos de PT-CR-ING</li>
+              <li>Riesgo de PT-A5 (ocurrencia)</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Test corte / reconocimiento</li>
+              <li>Diferencias → PT-DIFS</li>
+            </ul>
+          </div>
+          <div class="sections">
+            <span class="sec-pill">Corte</span>
+            <span class="sec-pill">Ocurrencia</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-sep">Otras Áreas</div>
+
+      <div class="card" id="b0n">
+        <div class="card-head h-ind">
+          <span class="code">PT-B04 … PT-Bnn</span>
+          <span class="name">Otras Áreas Auditadas</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Saldo de cédula resumen correspondiente</li>
+              <li>Alcance de PT-PROG</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Evidencia + conclusión por área</li>
+              <li>Diferencias → PT-DIFS</li>
+            </ul>
+          </div>
+          <div class="sections">
+            <span class="sec-pill">Un papel por área</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── ARROW GAP 4 ─── -->
+    <div class="arrow-gap" id="gap4"></div>
+
+    <!-- ─── COL 5: CONSOLIDACIÓN ─── -->
+    <div class="phase-col col-cierre">
+      <div class="phase-label">Consolidación / Cierre</div>
+
+      <div class="card" id="pt-difs">
+        <div class="card-head h-cierre">
+          <span class="code">PT-DIFS</span>
+          <span class="name">Diferencias y Excepciones (NIA 450)</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Diferencias de PT-B01..Bnn</li>
+              <li>Excepciones detectadas</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Ajustes acumulados</li>
+              <li>Impacto en EF vs. materialidad</li>
+              <li>Conclusión para el informe</li>
+            </ul>
+          </div>
+          <div class="sections">
+            <span class="sec-pill">NIA 450</span>
+            <span class="sec-pill">Acumulado</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="card" id="informe">
+        <div class="card-head" style="background: #455A64;">
+          <span class="code">Informe del Auditor</span>
+          <span class="name">NIA 700 / 705</span>
+        </div>
+        <div class="card-body">
+          <div class="io-block">
+            <div class="io-label recibe">▲ Recibe</div>
+            <ul class="io-items r">
+              <li>Conclusión de PT-DIFS</li>
+              <li>Cierre de todos los PT-B</li>
+              <li>PT-FIN-ENCARGO + PT-INDEP</li>
+            </ul>
+          </div>
+          <div class="io-block">
+            <div class="io-label emite">▼ Emite</div>
+            <ul class="io-items e">
+              <li>Opinión sin modificar / modificada</li>
+              <li><em>(no es papel de trabajo)</em></li>
+            </ul>
+          </div>
+          <div class="sections">
+            <span class="sec-pill">Manual</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /.diagram -->
+</div><!-- /.diagram-outer -->
+
+<div class="legend">
+  <strong style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Leyenda</strong>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-fuente)"></div> Fuente primaria (importación)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-sumaria)"></div> Cédulas Sumarias (nivel EF)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-resumen)"></div> Cédulas Resúmenes (sub-sumaria)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-ind)"></div> Papeles Individuales (pruebas)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-cierre)"></div> Consolidación / Cierre</div>
+  <div class="legend-item"><div class="legend-line solid"></div> Flujo de saldos (alimentación directa)</div>
+  <div class="legend-item"><div class="legend-line dashed"></div> Referencia de contexto / planificación</div>
+  <div class="legend-item" style="background:var(--recibe-bg);padding:2px 8px;border-radius:4px;">▲ RECIBE = datos/saldos que entran al papel</div>
+  <div class="legend-item" style="background:var(--emite-bg);padding:2px 8px;border-radius:4px;">▼ EMITE = resultados que produce el papel</div>
+</div>
+
+<script>
+// Draw arrows between cards using SVG
+(function() {
+  const diag = document.getElementById('diagram');
+  const svg  = document.getElementById('arrows-svg');
+
+  function cx(el, side) {
+    const r  = el.getBoundingClientRect();
+    const dr = diag.getBoundingClientRect();
+    const y  = r.top - dr.top + r.height / 2;
+    const x  = side === 'right' ? r.right - dr.left : r.left - dr.left;
+    return { x, y };
+  }
+  function midY(el) { return cx(el,'left').y; }
+
+  function arrow(x1,y1,x2,y2, dashed=false, color='#94A3B8') {
+    const d = `M${x1},${y1} C${(x1+x2)/2},${y1} ${(x1+x2)/2},${y2} ${x2},${y2}`;
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill','none');
+    p.setAttribute('stroke', color);
+    p.setAttribute('stroke-width', dashed ? '1.3' : '1.8');
+    if (dashed) p.setAttribute('stroke-dasharray','5,4');
+    p.setAttribute('stroke-linecap','round');
+    // arrowhead
+    const m = document.createElementNS('http://www.w3.org/2000/svg','marker');
+    const mid = Math.random().toString(36).slice(2,8);
+    m.setAttribute('id','ah'+mid); m.setAttribute('markerWidth','7'); m.setAttribute('markerHeight','7');
+    m.setAttribute('refX','6'); m.setAttribute('refY','3'); m.setAttribute('orient','auto');
+    const poly = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    poly.setAttribute('points','0 0, 7 3, 0 6'); poly.setAttribute('fill', color);
+    m.appendChild(poly);
+    svg.appendChild(m);
+    p.setAttribute('marker-end',`url(#ah${mid})`);
+    svg.appendChild(p);
+  }
+
+  function drawAll() {
+    svg.innerHTML = '';
+    const BLUE   = '#1565C0';
+    const GREEN  = '#1B7F4E';
+    const PURPLE = '#6A3EA6';
+    const ORANGE = '#B5460E';
+    const INDIGO = '#3949AB';
+    const SLATE  = '#64748B';
+
+    const b00   = document.getElementById('b00');
+    const esf   = document.getElementById('cs-esf');
+    const er    = document.getElementById('cs-er');
+    const crAc  = document.getElementById('cr-ac');
+    const crAnc = document.getElementById('cr-anc');
+    const crPc  = document.getElementById('cr-pc');
+    const crPnc = document.getElementById('cr-pnc');
+    const crIng = document.getElementById('cr-ing');
+    const crCog = document.getElementById('cr-cog');
+    const b01   = document.getElementById('b01');
+    const b02   = document.getElementById('b02');
+    const b03   = document.getElementById('b03');
+    const b0n   = document.getElementById('b0n');
+    const difs  = document.getElementById('pt-difs');
+    const inf   = document.getElementById('informe');
+    const plan  = document.getElementById('ref-plan');
+
+    // B00 → ESF
+    let s = cx(b00,'right'); let e = cx(esf,'left');
+    arrow(s.x, s.y, e.x, e.y, false, GREEN);
+    // B00 → ER
+    e = cx(er,'left');
+    arrow(s.x, s.y, e.x, e.y, false, GREEN);
+
+    // ESF → CR-AC, CR-ANC, CR-PC, CR-PNC
+    s = cx(esf,'right');
+    [crAc, crAnc, crPc, crPnc].forEach(el => {
+      e = cx(el,'left');
+      arrow(s.x, s.y, e.x, e.y, false, PURPLE);
+    });
+    // ER → CR-ING, CR-COG
+    s = cx(er,'right');
+    [crIng, crCog].forEach(el => {
+      e = cx(el,'left');
+      arrow(s.x, s.y, e.x, e.y, false, PURPLE);
+    });
+
+    // CR-AC → B01, B02
+    s = cx(crAc,'right');
+    [b01, b02].forEach(el => {
+      e = cx(el,'left');
+      arrow(s.x, s.y, e.x, e.y, false, ORANGE);
+    });
+    // CR-ANC → B0n
+    s = cx(crAnc,'right');
+    e = cx(b0n,'left');
+    arrow(s.x, s.y, e.x, e.y, false, ORANGE);
+
+    // CR-PC → B0n
+    s = cx(crPc,'right');
+    arrow(s.x, s.y, e.x, e.y, false, ORANGE);
+
+    // CR-PNC → B0n
+    s = cx(crPnc,'right');
+    arrow(s.x, s.y, e.x, e.y, false, ORANGE);
+
+    // CR-ING → B03
+    s = cx(crIng,'right');
+    e = cx(b03,'left');
+    arrow(s.x, s.y, e.x, e.y, false, ORANGE);
+
+    // CR-COG → B02, B0n
+    s = cx(crCog,'right');
+    e = cx(b02,'left');
+    arrow(s.x, s.y, e.x, e.y, false, ORANGE);
+    e = cx(b0n,'left');
+    arrow(s.x, s.y, e.x, e.y, false, ORANGE);
+
+    // B01..B0n → DIFS
+    e = cx(difs,'left');
+    [b01, b02, b03, b0n].forEach(el => {
+      s = cx(el,'right');
+      arrow(s.x, s.y, e.x, e.y, false, INDIGO);
+    });
+
+    // DIFS → Informe
+    s = cx(difs,'right');
+    e = cx(inf,'left');
+    arrow(s.x, s.y, e.x, e.y, false, '#455A64');
+
+    // Planning ref (dashed from plan note to B01/B02/B03)
+    s = cx(plan,'right');
+    [b01,b02,b03].forEach(el => {
+      e = cx(el,'left');
+      arrow(s.x, s.y, e.x, e.y, true, SLATE);
+    });
+  }
+
+  // draw after layout
+  setTimeout(drawAll, 80);
+  window.addEventListener('resize', drawAll);
+})();
+</script>

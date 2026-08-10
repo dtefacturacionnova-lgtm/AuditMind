@@ -1,0 +1,607 @@
+<title>AuditMind — Flujo de Planificación · Auditoría Financiera Externa</title>
+<style>
+:root {
+  --c-inicio:  #14406A;
+  --c-entend:  #185C48;
+  --c-riesgo:  #532D85;
+  --c-prog:    #923610;
+  --c-memo:    #1A4D80;
+  --c-bridge:  #2E6B35;
+  --c-ref:     #4A5568;
+
+  --bg:        #F2F5F9;
+  --surface:   #FFFFFF;
+  --border:    #D5DCE8;
+  --text:      #18202E;
+  --muted:     #566577;
+  --recibe-bg: #EBF3FC;
+  --emite-bg:  #E9F7EE;
+  --shadow:    0 1px 4px rgba(0,0,0,.10), 0 0 0 1px rgba(0,0,0,.055);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#0C1118; --surface:#18222F; --border:#28384A;
+    --text:#D0DBE8; --muted:#7A8EA4;
+    --recibe-bg:#0A1E30; --emite-bg:#08201A;
+    --shadow:0 1px 6px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.055);
+  }
+}
+:root[data-theme="light"] {
+  --bg:#F2F5F9; --surface:#FFFFFF; --border:#D5DCE8; --text:#18202E;
+  --muted:#566577; --recibe-bg:#EBF3FC; --emite-bg:#E9F7EE;
+  --shadow:0 1px 4px rgba(0,0,0,.10),0 0 0 1px rgba(0,0,0,.055);
+}
+:root[data-theme="dark"] {
+  --bg:#0C1118; --surface:#18222F; --border:#28384A; --text:#D0DBE8;
+  --muted:#7A8EA4; --recibe-bg:#0A1E30; --emite-bg:#08201A;
+  --shadow:0 1px 6px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.055);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+     background:var(--bg);color:var(--text);font-size:12px;line-height:1.45;}
+
+/* ── header ── */
+.ph{padding:18px 22px 12px;border-bottom:1px solid var(--border);background:var(--surface);}
+.ph h1{font-size:14.5px;font-weight:700;letter-spacing:-.2px;}
+.ph p{font-size:10.5px;color:var(--muted);margin-top:3px;}
+
+/* ── scroll wrap ── */
+.outer{overflow-x:auto;padding:20px 18px 28px;}
+.diagram{display:flex;align-items:flex-start;gap:0;min-width:1220px;position:relative;}
+
+/* ── columns ── */
+.col{flex:0 0 auto;display:flex;flex-direction:column;gap:7px;}
+.col .plabel{font-size:9.5px;font-weight:700;letter-spacing:.8px;
+  text-transform:uppercase;text-align:center;padding:3px 0 7px;}
+
+.c1{width:192px;} .c1 .plabel{color:var(--c-inicio);}
+.c2{width:186px;} .c2 .plabel{color:var(--c-entend);}
+.c3{width:186px;} .c3 .plabel{color:var(--c-riesgo);}
+.c4{width:186px;} .c4 .plabel{color:var(--c-prog);}
+.c5{width:180px;} .c5 .plabel{color:var(--c-memo);}
+
+/* ── arrow gap ── */
+.ag{flex:0 0 40px;display:flex;flex-direction:column;padding-top:32px;}
+
+/* ── cards ── */
+.card{background:var(--surface);border-radius:7px;box-shadow:var(--shadow);overflow:hidden;}
+.ch{padding:6px 9px 5px;display:flex;flex-direction:column;gap:1px;}
+.ch .code{font-family:"Consolas","Cascadia Code",monospace;font-size:10.5px;
+  font-weight:700;color:#fff;letter-spacing:.15px;}
+.ch .name{font-size:10px;font-weight:600;color:rgba(255,255,255,.87);}
+.cb{padding:6px 9px;}
+
+.io{margin-top:4px;}
+.io:first-child{margin-top:0;}
+.iol{font-size:9px;font-weight:700;letter-spacing:.45px;text-transform:uppercase;
+  margin-bottom:2px;display:flex;align-items:center;gap:3px;}
+.iol.r{color:#1565C0;} .iol.e{color:#1B7F4E;}
+:root[data-theme="dark"] .iol.r{color:#64B5F6;}
+:root[data-theme="dark"] .iol.e{color:#69F0AE;}
+.ioi{border-radius:4px;padding:3px 6px;font-size:9.5px;
+  color:var(--text);line-height:1.5;}
+.ioi.r{background:var(--recibe-bg);} .ioi.e{background:var(--emite-bg);}
+.ioi li{list-style:none;padding-left:9px;position:relative;}
+.ioi li::before{content:"·";position:absolute;left:0;color:var(--muted);}
+
+.pills{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;}
+.pill{font-size:8.5px;padding:1px 5px;border-radius:3px;
+  background:rgba(0,0,0,.07);color:var(--muted);font-weight:600;}
+
+/* color heads */
+.hi{background:var(--c-inicio);}
+.he{background:var(--c-entend);}
+.hr{background:var(--c-riesgo);}
+.hp{background:var(--c-prog);}
+.hm{background:var(--c-memo);}
+.hb{background:var(--c-bridge);}
+
+/* sub-label */
+.slabel{font-size:9px;font-weight:700;letter-spacing:.4px;
+  text-transform:uppercase;color:var(--muted);padding:3px 0 1px 1px;}
+
+/* nia badge */
+.nia{display:inline-block;font-size:8px;font-weight:700;
+  background:rgba(255,255,255,.22);color:#fff;
+  border-radius:3px;padding:0 4px;margin-left:4px;letter-spacing:.2px;}
+
+/* bridge / connect box */
+.bridge-box{border:2px dashed var(--c-bridge);border-radius:7px;
+  padding:8px 10px;background:transparent;}
+.bridge-box .btitle{font-size:9.5px;font-weight:700;
+  color:var(--c-bridge);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+.bridge-box .bbody{font-size:9.5px;color:var(--muted);line-height:1.5;}
+
+/* ref note */
+.refnote{border:1.5px dashed var(--c-ref);border-radius:6px;padding:6px 9px;}
+.refnote .rnl{font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--c-ref);margin-bottom:2px;}
+.refnote .rnb{font-size:9.5px;color:var(--muted);line-height:1.5;}
+
+/* SVG overlay */
+#asvg{position:absolute;top:0;left:0;width:100%;height:100%;
+  pointer-events:none;overflow:visible;}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:10px 22px;
+  padding:12px 22px 16px;border-top:1px solid var(--border);background:var(--surface);}
+.li2{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);}
+.ll{width:26px;height:2px;}
+.ll.s{border-top:2px solid var(--muted);}
+.ll.d{border-top:2px dashed var(--muted);}
+.ld{width:10px;height:10px;border-radius:2px;}
+</style>
+
+<div class="ph">
+  <h1>AuditMind — Flujo de Planificación · Auditoría Financiera Externa</h1>
+  <p>Desde la aceptación del encargo hasta el Memorando de Planificación aprobado · NIA 200, 210, 240, 290, 300, 315, 320, 330, 530, 610</p>
+</div>
+
+<div class="outer">
+<div class="diagram" id="diagram">
+  <svg id="asvg"></svg>
+
+  <!-- ═══ COL 1: INICIO DEL ENCARGO ═══ -->
+  <div class="col c1">
+    <div class="plabel">Inicio del Encargo</div>
+
+    <div class="card" id="encargo">
+      <div class="ch hi">
+        <span class="code">PT-FIN-ENCARGO <span class="nia">NIA 210</span></span>
+        <span class="name">Carta de Encargo</span>
+      </div>
+      <div class="cb">
+        <div class="io">
+          <div class="iol r">▲ Recibe</div>
+          <ul class="ioi r">
+            <li>Solicitud del cliente</li>
+            <li>Alcance y términos acordados</li>
+            <li>S24 ← PT-INDEP::S3 (continuidad)</li>
+          </ul>
+        </div>
+        <div class="io">
+          <div class="iol e">▼ Emite</div>
+          <ul class="ioi e">
+            <li>Términos firmados (NIA 210)</li>
+            <li>Habilita inicio formal</li>
+            <li>Marco de referencia → todos PT</li>
+          </ul>
+        </div>
+        <div class="pills">
+          <span class="pill">S1–S23 Términos</span>
+          <span class="pill">S24 Continuidad</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="indep">
+      <div class="ch hi">
+        <span class="code">PT-INDEP <span class="nia">NIA 290</span></span>
+        <span class="name">Independencia del Auditor</span>
+      </div>
+      <div class="cb">
+        <div class="io">
+          <div class="iol r">▲ Recibe</div>
+          <ul class="ioi r">
+            <li>Equipo de auditoría</li>
+            <li>Clientes y partes relacionadas</li>
+            <li>Intereses financieros / vínculos</li>
+          </ul>
+        </div>
+        <div class="io">
+          <div class="iol e">▼ Emite</div>
+          <ul class="ioi e">
+            <li>Declaración de independencia</li>
+            <li>S3 Evaluación continuidad → PT-ENCARGO::S24</li>
+            <li>Conclusión → PT-MEMO</li>
+          </ul>
+        </div>
+        <div class="pills">
+          <span class="pill">S1 Declaración</span>
+          <span class="pill">S2 Amenazas</span>
+          <span class="pill">S3 Continuidad</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ag" id="g1"></div>
+
+  <!-- ═══ COL 2: ENTENDIMIENTO ═══ -->
+  <div class="col c2">
+    <div class="plabel">Entendimiento (NIA 315)</div>
+
+    <div class="card" id="a2">
+      <div class="ch he">
+        <span class="code">PT-A2 <span class="nia">NIA 315</span></span>
+        <span class="name">Conocimiento del Cliente y Entorno</span>
+      </div>
+      <div class="cb">
+        <div class="io">
+          <div class="iol r">▲ Recibe</div>
+          <ul class="ioi r">
+            <li>Entrevistas con gerencia</li>
+            <li>Documentación interna</li>
+            <li>Información sectorial / regulatoria</li>
+          </ul>
+        </div>
+        <div class="io">
+          <div class="iol e">▼ Emite</div>
+          <ul class="ioi e">
+            <li>Naturaleza y ciclos del negocio</li>
+            <li>Factores de riesgo inherente</li>
+            <li>Partes relacionadas → PT-A5</li>
+          </ul>
+        </div>
+        <div class="pills">
+          <span class="pill">S1 Industria</span>
+          <span class="pill">S2 Regulación</span>
+          <span class="pill">S3 Partes rel.</span>
+          <span class="pill">S4 Ciclos</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="a3">
+      <div class="ch he">
+        <span class="code">PT-A3 <span class="nia">NIA 315</span></span>
+        <span class="name">Comprensión de los EF</span>
+      </div>
+      <div class="cb">
+        <div class="io">
+          <div class="iol r">▲ Recibe</div>
+          <ul class="ioi r">
+            <li>EF año anterior + B00 saldos</li>
+            <li>Manual de políticas contables</li>
+            <li>Notas a los EF</li>
+          </ul>
+        </div>
+        <div class="io">
+          <div class="iol e">▼ Emite</div>
+          <ul class="ioi e">
+            <li>Políticas contables clave</li>
+            <li>Estimaciones significativas</li>
+            <li>Riesgos contables → PT-A5</li>
+          </ul>
+        </div>
+        <div class="pills">
+          <span class="pill">S1 Políticas</span>
+          <span class="pill">S2 Estimaciones</span>
+          <span class="pill">S3 Revelaciones</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="nia610">
+      <div class="ch he">
+        <span class="code">PT-NIA610 <span class="nia">NIA 610</span></span>
+        <span class="name">Auditores Internos</span>
+      </div>
+      <div class="cb">
+        <div class="io">
+          <div class="iol r">▲ Recibe</div>
+          <ul class="ioi r">
+            <li>Reportes de Auditoría Interna</li>
+            <li>Evaluación del departamento AI</li>
+          </ul>
+        </div>
+        <div class="io">
+          <div class="iol e">▼ Emite</div>
+          <ul class="ioi e">
+            <li>Grado de reliance en AI</li>
+            <li>Ajuste naturaleza/extensión → PT-A5</li>
+            <li>S3B Reliance en controles (NIA 330)</li>
+          </ul>
+        </div>
+        <div class="pills">
+          <span class="pill">Checklist</span>
+          <span class="pill">9 secciones</span>
+          <span class="pill">Comm. Log</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ag" id="g2"></div>
+
+  <!-- ═══ COL 3: RIESGOS & MATERIALIDAD ═══ -->
+  <div class="col c3">
+    <div class="plabel">Riesgos y Materialidad</div>
+
+    <div class="card" id="a4">
+      <div class="ch hr">
+        <span class="code">PT-A4 <span class="nia">NIA 320 · 530</span></span>
+        <span class="name">Materialidad y Muestreo</span>
+      </div>
+      <div class="cb">
+        <div class="io">
+          <div class="iol r">▲ Recibe</div>
+          <ul class="ioi r">
+            <li>Saldos de PT-FIN-B00 S4</li>
+            <li>Criterio %: utilidad / ingresos / activos</li>
+          </ul>
+        </div>
+        <div class="io">
+          <div class="iol e">▼ Emite</div>
+          <ul class="ioi e">
+            <li>Materialidad global (MG)</li>
+            <li>Materialidad de ejecución (ME)</li>
+            <li>Parámetros MUS → PT-A5, PT-PROG</li>
+          </ul>
+        </div>
+        <div class="pills">
+          <span class="pill">S1 Cálculo</span>
+          <span class="pill">S2 MUS params</span>
+          <span class="pill">S3 Muestreo</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="a5">
+      <div class="ch hr">
+        <span class="code">PT-A5 <span class="nia">NIA 315 · 330</span></span>
+        <span class="name">Matriz RMM por Área</span>
+      </div>
+      <div class="cb">
+        <div class="io">
+          <div class="iol r">▲ Recibe</div>
+          <ul class="ioi r">
+            <li>Riesgos de negocio ← PT-A2</li>
+            <li>Políticas contables ← PT-A3</li>
+            <li>Reliance AI ← PT-NIA610</li>
+            <li>Materialidad ← PT-A4</li>
+          </ul>
+        </div>
+        <div class="io">
+          <div class="iol e">▼ Emite</div>
+          <ul class="ioi e">
+            <li>Matriz RMM + RC por aseveración</li>
+            <li>Riesgos pervasivos (fraude NIA 240)</li>
+            <li>Estrategia de auditoría → PT-PROG</li>
+            <li>Dirección de riesgo → PT-B series</li>
+          </ul>
+        </div>
+        <div class="pills">
+          <span class="pill">S1 RMM+RC</span>
+          <span class="pill">S2 Pervasivos</span>
+          <span class="pill">S3 NIA 240</span>
+          <span class="pill">S4 Estrategia</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ag" id="g3"></div>
+
+  <!-- ═══ COL 4: PROGRAMA ═══ -->
+  <div class="col c4">
+    <div class="plabel">Programa de Auditoría</div>
+
+    <div class="card" id="prog">
+      <div class="ch hp">
+        <span class="code">PT-PROG <span class="nia">NIA 300</span></span>
+        <span class="name">Programa de Auditoría</span>
+      </div>
+      <div class="cb">
+        <div class="io">
+          <div class="iol r">▲ Recibe</div>
+          <ul class="ioi r">
+            <li>Estrategia de riesgo ← PT-A5</li>
+            <li>Materialidad ← PT-A4 (MG, ME)</li>
+            <li>Alcance acordado ← PT-ENCARGO</li>
+          </ul>
+        </div>
+        <div class="io">
+          <div class="iol e">▼ Emite</div>
+          <ul class="ioi e">
+            <li>Grid de procedimientos por área</li>
+            <li>Asignación equipo / responsables</li>
+            <li>Referencia de alcance → PT-B series</li>
+            <li>Conclusión + firmas → PT-MEMO</li>
+          </ul>
+        </div>
+        <div class="pills">
+          <span class="pill">S_OBJ Objetivo</span>
+          <span class="pill">S_SCOPE Alcance</span>
+          <span class="pill">S_RMM auto</span>
+          <span class="pill">S_PROC Grid</span>
+          <span class="pill">S_CONCL Firmas</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:10px"></div>
+
+    <div class="refnote" id="ref-b00">
+      <div class="rnl">Conexión con EF</div>
+      <div class="rnb">
+        <strong>PT-FIN-B00</strong> alimenta PT-A4 con saldos del balance<br>
+        <strong>PT-A3</strong> recibe B00 como EF a entender<br>
+        <em>→ el balance es insumo de planificación antes de ser objeto de prueba</em>
+      </div>
+    </div>
+  </div>
+
+  <div class="ag" id="g4"></div>
+
+  <!-- ═══ COL 5: MEMORANDO / CIERRE PLANIFICACIÓN ═══ -->
+  <div class="col c5">
+    <div class="plabel">Conclusión Planificación</div>
+
+    <div class="card" id="memo">
+      <div class="ch hm">
+        <span class="code">PT-MEMO <span class="nia">NIA 300</span></span>
+        <span class="name">Memorando de Planificación</span>
+      </div>
+      <div class="cb">
+        <div class="io">
+          <div class="iol r">▲ Recibe</div>
+          <ul class="ioi r">
+            <li>Síntesis de todos los papeles de planificación</li>
+            <li>PT-ENCARGO · PT-INDEP</li>
+            <li>PT-A2 · A3 · A4 · A5 · NIA610</li>
+            <li>PT-PROG (programa aprobado)</li>
+          </ul>
+        </div>
+        <div class="io">
+          <div class="iol e">▼ Emite</div>
+          <ul class="ioi e">
+            <li>Resumen ejecutivo de planificación</li>
+            <li>Aprobación socio / director</li>
+            <li>Habilita fase de EJECUCIÓN</li>
+          </ul>
+        </div>
+        <div class="pills">
+          <span class="pill">S1 Encargo</span>
+          <span class="pill">S2 Equipo</span>
+          <span class="pill">S3 Materialidad</span>
+          <span class="pill">S4 Estrategia</span>
+          <span class="pill">S5 Firmas</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:12px"></div>
+
+    <div class="bridge-box" id="bridge">
+      <div class="btitle">▶ Fase de Ejecución</div>
+      <div class="bbody">
+        <strong>PT-FIN-B00</strong> importación balance<br>
+        <strong>PT-B01…Bnn</strong> papeles por área<br>
+        <strong>PT-DIFS</strong> diferencias NIA 450<br>
+        <em>↗ Ver Diagrama de Ejecución</em>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.diagram -->
+</div><!-- /.outer -->
+
+<div class="legend">
+  <strong style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;align-self:center;">Leyenda</strong>
+  <div class="li2"><div class="ld" style="background:var(--c-inicio)"></div> Inicio del Encargo</div>
+  <div class="li2"><div class="ld" style="background:var(--c-entend)"></div> Entendimiento NIA 315</div>
+  <div class="li2"><div class="ld" style="background:var(--c-riesgo)"></div> Riesgos y Materialidad</div>
+  <div class="li2"><div class="ld" style="background:var(--c-prog)"></div> Programa NIA 300</div>
+  <div class="li2"><div class="ld" style="background:var(--c-memo)"></div> Memorando (cierre plan.)</div>
+  <div class="li2"><div class="ll s"></div> Flujo principal de datos</div>
+  <div class="li2"><div class="ll d"></div> Referencia / síntesis</div>
+  <div class="li2" style="background:var(--recibe-bg);padding:2px 8px;border-radius:4px;">▲ RECIBE = insumos que entran</div>
+  <div class="li2" style="background:var(--emite-bg);padding:2px 8px;border-radius:4px;">▼ EMITE = resultados que produce</div>
+</div>
+
+<script>
+(function(){
+  const diag = document.getElementById('diagram');
+  const svg  = document.getElementById('asvg');
+
+  function pos(el, side){
+    const r  = el.getBoundingClientRect();
+    const dr = diag.getBoundingClientRect();
+    return {
+      x: side==='right' ? r.right - dr.left : r.left - dr.left,
+      y: r.top - dr.top + r.height / 2
+    };
+  }
+
+  let _mid = 0;
+  function arrow(x1,y1,x2,y2, dashed, color){
+    const id  = 'ah'+(++_mid);
+    const d   = `M${x1},${y1} C${(x1+x2)/2},${y1} ${(x1+x2)/2},${y2} ${x2},${y2}`;
+    const p   = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',d); p.setAttribute('fill','none');
+    p.setAttribute('stroke',color);
+    p.setAttribute('stroke-width', dashed ? '1.2' : '1.8');
+    if(dashed) p.setAttribute('stroke-dasharray','5,4');
+    p.setAttribute('stroke-linecap','round');
+    const m = document.createElementNS('http://www.w3.org/2000/svg','marker');
+    m.setAttribute('id',id); m.setAttribute('markerWidth','7'); m.setAttribute('markerHeight','7');
+    m.setAttribute('refX','6'); m.setAttribute('refY','3'); m.setAttribute('orient','auto');
+    const poly = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    poly.setAttribute('points','0 0,7 3,0 6'); poly.setAttribute('fill',color);
+    m.appendChild(poly); svg.appendChild(m);
+    p.setAttribute('marker-end',`url(#${id})`);
+    svg.appendChild(p);
+  }
+
+  function draw(){
+    svg.innerHTML='';
+    const INI  = '#14406A';
+    const ENT  = '#185C48';
+    const RIS  = '#532D85';
+    const PRG  = '#923610';
+    const MEM  = '#1A4D80';
+    const BRG  = '#2E6B35';
+    const GREY = '#6B7C93';
+
+    const enc    = document.getElementById('encargo');
+    const ind    = document.getElementById('indep');
+    const pa2    = document.getElementById('a2');
+    const pa3    = document.getElementById('a3');
+    const n610   = document.getElementById('nia610');
+    const pa4    = document.getElementById('a4');
+    const pa5    = document.getElementById('a5');
+    const prog   = document.getElementById('prog');
+    const memo   = document.getElementById('memo');
+    const brige  = document.getElementById('bridge');
+    const refb00 = document.getElementById('ref-b00');
+
+    // ENCARGO ↔ INDEP (bidirectional via reference)
+    let s = pos(enc,'right'), e = pos(ind,'right');
+    // small arc on the right side showing they cross-reference
+    arrow(s.x+2, s.y, e.x+2, e.y, true, INI);
+
+    // ENCARGO → A2 (scope sets context)
+    s = pos(enc,'right'); e = pos(pa2,'left');
+    arrow(s.x, s.y, e.x, e.y, true, GREY);
+
+    // INDEP → MEMO (conclusion)
+    s = pos(ind,'right'); e = pos(memo,'left');
+    arrow(s.x, s.y, e.x, e.y, true, GREY);
+
+    // A2 → A5
+    s = pos(pa2,'right'); e = pos(pa5,'left');
+    arrow(s.x, s.y, e.x, e.y, false, ENT);
+
+    // A3 → A5
+    s = pos(pa3,'right'); e = pos(pa5,'left');
+    arrow(s.x, s.y, e.x, e.y, false, ENT);
+
+    // 610 → A5
+    s = pos(n610,'right'); e = pos(pa5,'left');
+    arrow(s.x, s.y, e.x, e.y, false, ENT);
+
+    // A4 → A5
+    s = pos(pa4,'right'); e = pos(pa5,'left');
+    arrow(s.x, s.y, e.x, e.y, false, RIS);
+
+    // A4 → PROG
+    s = pos(pa4,'right'); e = pos(prog,'left');
+    arrow(s.x, s.y, e.x, e.y, true, RIS);
+
+    // A5 → PROG  (main feed)
+    s = pos(pa5,'right'); e = pos(prog,'left');
+    arrow(s.x, s.y, e.x, e.y, false, RIS);
+
+    // PROG → MEMO
+    s = pos(prog,'right'); e = pos(memo,'left');
+    arrow(s.x, s.y, e.x, e.y, false, PRG);
+
+    // A5 → MEMO (dashed)
+    s = pos(pa5,'right'); e = pos(memo,'left');
+    arrow(s.x, s.y, e.x, e.y, true, GREY);
+
+    // MEMO → bridge
+    s = pos(memo,'right'); e = pos(brige,'left');
+    arrow(s.x, s.y, e.x, e.y, false, BRG);
+
+    // ENCARGO → PROG (scope direction)
+    s = pos(enc,'right'); e = pos(prog,'left');
+    arrow(s.x, s.y, e.x, e.y, true, INI);
+  }
+
+  setTimeout(draw, 80);
+  window.addEventListener('resize', draw);
+})();
+</script>

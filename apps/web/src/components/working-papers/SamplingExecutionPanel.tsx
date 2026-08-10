@@ -25,7 +25,8 @@ interface SamplingResultData {
   mode:               Mode;
   executed_at:        string;
   parameters:         Record<string, number | string>;
-  sample_size:        number;
+  sample_size:        number;      // unique physical items selected
+  monetary_units?:    number;      // MUS theoretical count (BV/interval); may exceed population
   total_items:        number;
   sampling_interval?: number;
   seed_used:          number | null;
@@ -77,26 +78,38 @@ function amtError(raw: string, maxAmt: number | undefined): string | null {
 }
 
 // ─── Client-side MUS walk (NIA 530) ─────────────────────────────────────────
-// Selects monetary units at regular intervals; large items may appear multiple times.
+// Each physical item appears at most once, even if its value spans multiple intervals.
+// Items where value > interval are "always selected" (individually significant items).
+// Returns { selected, monetaryUnits } where monetaryUnits = theoretical BV/interval count.
 
-function musSelect(records: ParsedRow[], sampleSize: number, bv: number): ParsedRow[] {
-  if (bv <= 0 || sampleSize <= 0) return [];
+function musSelect(
+  records:    ParsedRow[],
+  sampleSize: number,
+  bv:         number,
+): { selected: ParsedRow[]; monetaryUnits: number } {
+  if (bv <= 0 || sampleSize <= 0) return { selected: [], monetaryUnits: 0 };
   const interval  = bv / sampleSize;
   const start     = Math.random() * interval;
   const selected: ParsedRow[] = [];
+  const seenIdx   = new Set<number>();
   let cumulative  = 0;
   let nextTarget  = start;
 
-  for (const record of records) {
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
     const amt = typeof record.monto === 'number' ? record.monto : parseAmount(String(record.monto));
     if (amt <= 0) continue;
     cumulative += amt;
+    // Advance through all sampling points that fall inside this item
     while (nextTarget <= cumulative) {
-      selected.push({ ...record });
+      if (!seenIdx.has(i)) {
+        seenIdx.add(i);
+        selected.push({ ...record });
+      }
       nextTarget += interval;
     }
   }
-  return selected;
+  return { selected, monetaryUnits: sampleSize };
 }
 
 // ─── Client-side attribute selection ─────────────────────────────────────────
@@ -222,8 +235,8 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
         confidence_level:       parseInt(musCL) as 95,
       });
 
-      // MUS walk client-side — avoids the "sample_size > population" API error
-      const selected = musSelect(normalized, calc.sample_size, bv);
+      // MUS walk client-side — deduplicated: each physical item appears at most once
+      const { selected, monetaryUnits } = musSelect(normalized, calc.sample_size, bv);
 
       const result: SamplingResultData = {
         mode:     'MUS',
@@ -235,7 +248,8 @@ export function SamplingExecutionPanel({ sections, readonly, onSave }: Props) {
           nivel_confianza:        parseInt(musCL),
           factor_confianza:       calc.confidence_factor,
         },
-        sample_size:       selected.length,
+        sample_size:       selected.length,     // ítems físicos únicos seleccionados
+        monetary_units:    monetaryUnits,        // unidades monetarias teóricas (BV/intervalo)
         total_items:       records.length,
         sampling_interval: calc.sampling_interval,
         seed_used:         null,
@@ -695,10 +709,31 @@ function ResultsBlock({
         </button>
       </div>
 
+      {/* MUS: 100%-selection warning when every item was individually significant */}
+      {isMUS && data.sample_size === data.total_items && data.monetary_units != null && data.monetary_units > data.total_items && (
+        <div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600" />
+          <div>
+            <p className="font-semibold">Selección 100% — todos los ítems son individualmente significativos</p>
+            <p className="mt-0.5 text-amber-700">
+              El intervalo de muestreo ({fmtCurrency(data.sampling_interval ?? 0)}) es menor al valor
+              promedio de las transacciones ({fmtCurrency(data.total_items > 0 ? (data.parameters.valor_en_libros as number) / data.total_items : 0)}).
+              Cada transacción abarca múltiples intervalos, lo que resulta en la selección de toda la población.
+              Considera aumentar la Materialidad de Ejecución o aplicar MUS solo al estrato de ítems por debajo del umbral.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Metric cards */}
       <div className="grid grid-cols-3 gap-3">
-        <MetricCard label="Ítems seleccionados" value={String(data.sample_size)} color="blue" />
-        <MetricCard label="Población total"     value={String(data.total_items)} color="gray" />
+        <MetricCard
+          label="Ítems únicos seleccionados"
+          value={String(data.sample_size)}
+          color="blue"
+          sub={isMUS && data.monetary_units != null ? `${data.monetary_units} unid. MUS teóricas` : undefined}
+        />
+        <MetricCard label="Población total" value={String(data.total_items)} color="gray" />
         {isMUS && data.sampling_interval != null && (
           <MetricCard
             label="Intervalo de muestreo"
@@ -960,7 +995,7 @@ function LabeledSelect({
   );
 }
 
-function MetricCard({ label, value, color }: { label: string; value: string; color: 'blue' | 'gray' | 'violet' }) {
+function MetricCard({ label, value, color, sub }: { label: string; value: string; color: 'blue' | 'gray' | 'violet'; sub?: string }) {
   const styles: Record<string, string> = {
     blue:   'bg-blue-50   border-blue-200   text-blue-800',
     gray:   'bg-gray-50   border-gray-200   text-gray-800',
@@ -970,6 +1005,7 @@ function MetricCard({ label, value, color }: { label: string; value: string; col
     <div className={`border rounded-xl p-3 ${styles[color]}`}>
       <p className="text-[10px] uppercase tracking-wide opacity-70 font-medium leading-tight">{label}</p>
       <p className="text-lg font-bold font-mono mt-0.5 break-all">{value}</p>
+      {sub && <p className="text-[10px] opacity-60 mt-0.5 font-mono">{sub}</p>}
     </div>
   );
 }

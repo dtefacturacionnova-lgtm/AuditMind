@@ -1,0 +1,192 @@
+<title>AuditMind — Máquina de Estados del Paso de Auditoría</title>
+<style>
+:root{
+  --bg:#F1F4F8;--surf:#FFF;--border:#DDE3EE;--text:#18202E;--muted:#5A6A82;
+  --sh:0 1px 4px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.055);
+}
+@media(prefers-color-scheme:dark){:root{--bg:#0C1118;--surf:#18222F;--border:#28384A;--text:#D0DBE8;--muted:#7A8EA4;--sh:0 1px 6px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.055);}}
+:root[data-theme="light"]{--bg:#F1F4F8;--surf:#FFF;--border:#DDE3EE;--text:#18202E;--muted:#5A6A82;}
+:root[data-theme="dark"]{--bg:#0C1118;--surf:#18222F;--border:#28384A;--text:#D0DBE8;--muted:#7A8EA4;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);font-size:12px;}
+
+.ph{padding:16px 20px 10px;border-bottom:1px solid var(--border);background:var(--surf);}
+.ph h1{font-size:14px;font-weight:700;}
+.ph p{font-size:10.5px;color:var(--muted);margin-top:2px;}
+
+.wrap{padding:22px 18px 18px;overflow-x:auto;}
+.canvas{min-width:960px;position:relative;}
+
+/* SVG machine */
+svg text{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;}
+
+/* bottom panels */
+.panels{display:flex;gap:12px;margin-top:18px;min-width:960px;}
+.panel{flex:1;background:var(--surf);border-radius:8px;border:0.5px solid var(--border);padding:10px 12px;}
+.panel h3{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+.rule{display:flex;align-items:flex-start;gap:6px;margin-bottom:5px;font-size:10.5px;line-height:1.45;}
+.rule .bullet{flex:0 0 auto;width:7px;height:7px;border-radius:50%;margin-top:3px;}
+.bl-blue{background:#1565C0;} .bl-amber{background:#B45309;} .bl-purple{background:#6B21A8;} .bl-teal{background:#0F6B56;} .bl-green{background:#166534;}
+
+.badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px;}
+.b-aud{background:#EBF3FC;color:#1565C0;} .b-sup{background:#FEF3C7;color:#92400E;} .b-soc{background:#F5F3FF;color:#6B21A8;}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 20px 14px;border-top:1px solid var(--border);background:var(--surf);}
+.li{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);}
+.lsq{width:12px;height:12px;border-radius:2px;}
+</style>
+
+<div class="ph">
+  <h1>Máquina de estados — Paso de Auditoría (AuditStep)</h1>
+  <p>Transiciones de estado, validaciones de negocio, roles autorizados y sincronización automática de ProcStatus</p>
+</div>
+
+<div class="wrap">
+<div class="canvas">
+
+<svg id="sm" width="100%" height="340" viewBox="0 0 960 340" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <!-- arrowheads per color -->
+    <marker id="ah-blue"  markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#1565C0"/></marker>
+    <marker id="ah-amber" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#B45309"/></marker>
+    <marker id="ah-purple" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#6B21A8"/></marker>
+    <marker id="ah-teal"  markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#0F6B56"/></marker>
+    <marker id="ah-green" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#166534"/></marker>
+    <marker id="ah-red"   markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#B91C1C"/></marker>
+  </defs>
+
+  <!-- ─── STATE NODES ─── -->
+  <!-- DRAFT -->
+  <rect x="20" y="120" width="110" height="60" rx="8" fill="#E5E7EB" stroke="#9CA3AF" stroke-width="1.5"/>
+  <text x="75" y="142" text-anchor="middle" font-size="9" font-weight="700" fill="#374151" letter-spacing=".4">DRAFT</text>
+  <text x="75" y="156" text-anchor="middle" font-size="9" fill="#6B7280">Borrador</text>
+  <text x="75" y="169" text-anchor="middle" font-size="8" fill="#6B7280">Paso creado</text>
+
+  <!-- IN_PROGRESS -->
+  <rect x="175" y="120" width="120" height="60" rx="8" fill="#DBEAFE" stroke="#1565C0" stroke-width="1.5"/>
+  <text x="235" y="142" text-anchor="middle" font-size="9" font-weight="700" fill="#1565C0" letter-spacing=".4">IN_PROGRESS</text>
+  <text x="235" y="156" text-anchor="middle" font-size="9" fill="#1565C0">En ejecución</text>
+  <text x="235" y="169" text-anchor="middle" font-size="8" fill="#1565C0">Auditor trabaja</text>
+
+  <!-- SUBMITTED -->
+  <rect x="345" y="120" width="120" height="60" rx="8" fill="#FEF3C7" stroke="#B45309" stroke-width="1.5"/>
+  <text x="405" y="142" text-anchor="middle" font-size="9" font-weight="700" fill="#92400E" letter-spacing=".4">SUBMITTED</text>
+  <text x="405" y="156" text-anchor="middle" font-size="9" fill="#92400E">En revisión</text>
+  <text x="405" y="169" text-anchor="middle" font-size="8" fill="#92400E">Auditor envía</text>
+
+  <!-- REVIEWED -->
+  <rect x="515" y="120" width="110" height="60" rx="8" fill="#EDE9FE" stroke="#6B21A8" stroke-width="1.5"/>
+  <text x="570" y="142" text-anchor="middle" font-size="9" font-weight="700" fill="#6B21A8" letter-spacing=".4">REVIEWED</text>
+  <text x="570" y="156" text-anchor="middle" font-size="9" fill="#6B21A8">Revisado</text>
+  <text x="570" y="169" text-anchor="middle" font-size="8" fill="#6B21A8">Supervisor lee</text>
+
+  <!-- CLEARED -->
+  <rect x="675" y="120" width="110" height="60" rx="8" fill="#CCFBF1" stroke="#0F6B56" stroke-width="1.5"/>
+  <text x="730" y="142" text-anchor="middle" font-size="9" font-weight="700" fill="#0F6B56" letter-spacing=".4">CLEARED</text>
+  <text x="730" y="156" text-anchor="middle" font-size="9" fill="#0F6B56">Liberado</text>
+  <text x="730" y="169" text-anchor="middle" font-size="8" fill="#0F6B56">Supervisor aprueba</text>
+
+  <!-- APPROVED -->
+  <rect x="838" y="120" width="106" height="60" rx="8" fill="#DCFCE7" stroke="#166534" stroke-width="2"/>
+  <text x="891" y="142" text-anchor="middle" font-size="9" font-weight="700" fill="#166534" letter-spacing=".4">APPROVED</text>
+  <text x="891" y="156" text-anchor="middle" font-size="9" fill="#166534">Aprobado</text>
+  <text x="891" y="169" text-anchor="middle" font-size="8" fill="#166534">Socio / director</text>
+
+  <!-- ─── FORWARD TRANSITIONS ─── -->
+  <!-- DRAFT → IN_PROGRESS -->
+  <line x1="130" y1="150" x2="173" y2="150" stroke="#9CA3AF" stroke-width="1.7" marker-end="url(#ah-blue)"/>
+  <text x="151" y="144" text-anchor="middle" font-size="8" fill="#6B7280">inicio</text>
+
+  <!-- IN_PROGRESS → SUBMITTED -->
+  <line x1="295" y1="150" x2="343" y2="150" stroke="#1565C0" stroke-width="1.7" marker-end="url(#ah-amber)"/>
+  <!-- validation callout -->
+  <rect x="290" y="90" width="126" height="28" rx="4" fill="#FEF9C3" stroke="#FDE047" stroke-width="1"/>
+  <text x="353" y="101" text-anchor="middle" font-size="8" font-weight="700" fill="#854D0E">⚠ Validación requerida:</text>
+  <text x="353" y="112" text-anchor="middle" font-size="8" fill="#854D0E">nombre auditor + fecha ejecución</text>
+  <line x1="353" y1="118" x2="353" y2="120" stroke="#EAB308" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <!-- SUBMITTED → REVIEWED -->
+  <line x1="465" y1="150" x2="513" y2="150" stroke="#B45309" stroke-width="1.7" marker-end="url(#ah-purple)"/>
+  <text x="489" y="144" text-anchor="middle" font-size="8" fill="#92400E">supervisor</text>
+
+  <!-- REVIEWED → CLEARED -->
+  <line x1="625" y1="150" x2="673" y2="150" stroke="#6B21A8" stroke-width="1.7" marker-end="url(#ah-teal)"/>
+  <text x="649" y="144" text-anchor="middle" font-size="8" fill="#6B21A8">libera</text>
+
+  <!-- CLEARED → APPROVED -->
+  <line x1="785" y1="150" x2="836" y2="150" stroke="#0F6B56" stroke-width="1.7" marker-end="url(#ah-green)"/>
+  <text x="810" y="144" text-anchor="middle" font-size="8" fill="#0F6B56">socio</text>
+
+  <!-- ─── RETURN / REJECTION TRANSITIONS ─── -->
+  <!-- REVIEWED → IN_PROGRESS (return for correction) -->
+  <path d="M570,180 Q570,220 380,220 Q235,220 235,180" fill="none" stroke="#B91C1C" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#ah-red)"/>
+  <text x="380" y="238" text-anchor="middle" font-size="8" fill="#B91C1C">devuelve para corrección</text>
+
+  <!-- CLEARED → REVIEWED (partner sends back) -->
+  <path d="M730,180 Q730,260 570,260 Q570,260 570,180" fill="none" stroke="#B91C1C" stroke-width="1.3" stroke-dasharray="4,3" marker-end="url(#ah-red)"/>
+
+  <!-- ─── ROLE BADGES above states ─── -->
+  <rect x="195" y="98" width="78" height="16" rx="3" fill="#EBF3FC"/>
+  <text x="234" y="109" text-anchor="middle" font-size="8" font-weight="700" fill="#1565C0">AUDITOR</text>
+
+  <rect x="362" y="98" width="86" height="16" rx="3" fill="#FEF3C7"/>
+  <text x="405" y="109" text-anchor="middle" font-size="8" font-weight="700" fill="#92400E">AUDITOR</text>
+
+  <rect x="527" y="98" width="86" height="16" rx="3" fill="#EDE9FE"/>
+  <text x="570" y="109" text-anchor="middle" font-size="8" font-weight="700" fill="#6B21A8">SUPERVISOR</text>
+
+  <rect x="688" y="98" width="86" height="16" rx="3" fill="#EDE9FE"/>
+  <text x="731" y="109" text-anchor="middle" font-size="8" font-weight="700" fill="#6B21A8">SUPERVISOR</text>
+
+  <rect x="849" y="98" width="86" height="16" rx="3" fill="#F5F3FF"/>
+  <text x="892" y="109" text-anchor="middle" font-size="8" font-weight="700" fill="#5B21B6">SOCIO / DIR.</text>
+
+  <!-- ─── INITIAL DOT ─── -->
+  <circle cx="10" cy="150" r="5" fill="#374151"/>
+  <line x1="15" y1="150" x2="19" y2="150" stroke="#374151" stroke-width="1.5" marker-end="url(#ah-red)"/>
+
+  <!-- ─── TERMINAL DOUBLE CIRCLE ─── -->
+  <circle cx="950" cy="150" r="7" fill="none" stroke="#166534" stroke-width="2"/>
+  <circle cx="950" cy="150" r="4" fill="#166534"/>
+  <line x1="944" y1="150" x2="940" y2="150" stroke="#166534" stroke-width="1.5"/>
+
+  <!-- ─── ProcStatus auto-sync label ─── -->
+  <rect x="20" y="295" width="920" height="32" rx="5" fill="#F0FDF4" stroke="#6EE7B7" stroke-width="1"/>
+  <text x="480" y="308" text-anchor="middle" font-size="9" font-weight="700" fill="#166534">⚡ ProcStatus — sincronización automática (auto-sync tras cada cambio de step)</text>
+  <text x="480" y="320" text-anchor="middle" font-size="8.5" fill="#15803D">TODOS terminales (CLEARED/APPROVED) → COMPLETED    ·    ALGUNO activo → IN_PROGRESS    ·    TODOS en DRAFT → PENDING</text>
+</svg>
+
+</div>
+
+<!-- bottom panels -->
+<div class="panels">
+  <div class="panel">
+    <h3>Validaciones de negocio</h3>
+    <div class="rule"><div class="bullet bl-amber"></div><div><strong>SUBMITTED</strong> requiere: <code>performedByName</code> (nombre auditor ejecutor) y <code>datePerformed</code> (fecha de ejecución). Si falta alguno el API lanza BadRequestException.</div></div>
+    <div class="rule"><div class="bullet bl-purple"></div><div><strong>REVIEWED → CLEARED</strong> solo lo puede hacer un usuario con rol Supervisor o superior.</div></div>
+    <div class="rule"><div class="bullet bl-green"></div><div><strong>CLEARED → APPROVED</strong> requiere rol Socio / Director. Es el paso de control de calidad final.</div></div>
+  </div>
+  <div class="panel">
+    <h3>Estados terminales vs. activos</h3>
+    <div class="rule"><div class="bullet bl-teal"></div><div><strong>Terminales</strong>: CLEARED, APPROVED — un paso en este estado cuenta como "completado" para el cálculo de ProcStatus.</div></div>
+    <div class="rule"><div class="bullet bl-blue"></div><div><strong>Activos</strong>: IN_PROGRESS, SUBMITTED, REVIEWED — mantienen ProcStatus en IN_PROGRESS.</div></div>
+    <div class="rule"><div class="bullet" style="background:#9CA3AF;"></div><div><strong>DRAFT</strong>: estado inicial neutro. Si TODOS los steps están en DRAFT → ProcStatus = PENDING.</div></div>
+  </div>
+  <div class="panel">
+    <h3>Evidencia en cada step</h3>
+    <div class="rule"><div class="bullet bl-blue"></div><div>Cada AuditStep puede tener N archivos <code>StepEvidence</code> adjuntos (PDF, Excel, imagen).</div></div>
+    <div class="rule"><div class="bullet bl-teal"></div><div>Upload sube a <strong>Supabase Storage</strong> bucket <code>audit-files</code>, path <code>procedures/steps/{stepId}/</code>.</div></div>
+    <div class="rule"><div class="bullet bl-amber"></div><div>Delete elimina de Storage y de la BD de forma atómica. La evidencia acompaña el step en cualquier estado.</div></div>
+  </div>
+</div>
+</div>
+
+<div class="legend">
+  <strong style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;align-self:center;">Roles</strong>
+  <div class="li"><span class="badge b-aud">AUDITOR</span> Ejecuta y envía el paso</div>
+  <div class="li"><span class="badge b-sup">SUPERVISOR</span> Revisa y libera</div>
+  <div class="li"><span class="badge b-soc">SOCIO / DIR.</span> Aprobación final</div>
+  <div class="li"><div style="width:24px;border-top:2px solid #374151;"></div> Transición normal</div>
+  <div class="li"><div style="width:24px;border-top:2px dashed #B91C1C;"></div> Devolución / rechazo</div>
+  <div class="li"><div style="width:24px;border-top:2px solid #6EE7B7;"></div> Auto-sync ProcStatus</div>
+</div>

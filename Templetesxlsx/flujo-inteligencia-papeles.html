@@ -1,0 +1,344 @@
+<title>AuditMind — Mapa de Inteligencia: Auto-fill, Referencias y IA</title>
+<style>
+:root{
+  --man:#4A5568; --man-bg:#F7F8FA; --man-bd:#C9D0DC;
+  --ref:#1565C0; --ref-bg:#E8F1FC; --ref-bd:#90B8E8;
+  --ai:#6B21A8;  --ai-bg:#F3E8FF;  --ai-bd:#C084FC;
+  --calc:#0E6B3A;--calc-bg:#EAFAF1;--calc-bd:#6EE7B7;
+  --bg:#F1F4F8; --surf:#FFF; --border:#DDE3EE;
+  --text:#18202E; --muted:#5A6A82;
+  --sh:0 1px 4px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.055);
+}
+@media(prefers-color-scheme:dark){:root{
+  --man-bg:#222A35;--man-bd:#3E4A5C;
+  --ref-bg:#0D2038;--ref-bd:#2E5F9E;
+  --ai-bg:#1F0E30; --ai-bd:#7E3FBE;
+  --calc-bg:#082B1C;--calc-bd:#0F6B3A;
+  --bg:#0C1118;--surf:#18222F;--border:#28384A;
+  --text:#D0DBE8;--muted:#7A8EA4;
+  --sh:0 1px 6px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.055);
+}}
+:root[data-theme="light"]{--man-bg:#F7F8FA;--man-bd:#C9D0DC;--ref-bg:#E8F1FC;--ref-bd:#90B8E8;--ai-bg:#F3E8FF;--ai-bd:#C084FC;--calc-bg:#EAFAF1;--calc-bd:#6EE7B7;--bg:#F1F4F8;--surf:#FFF;--border:#DDE3EE;--text:#18202E;--muted:#5A6A82;--sh:0 1px 4px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.055);}
+:root[data-theme="dark"]{--man-bg:#222A35;--man-bd:#3E4A5C;--ref-bg:#0D2038;--ref-bd:#2E5F9E;--ai-bg:#1F0E30;--ai-bd:#7E3FBE;--calc-bg:#082B1C;--calc-bd:#0F6B3A;--bg:#0C1118;--surf:#18222F;--border:#28384A;--text:#D0DBE8;--muted:#7A8EA4;--sh:0 1px 6px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.055);}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);font-size:12px;line-height:1.45;}
+.ph{padding:16px 20px 10px;border-bottom:1px solid var(--border);background:var(--surf);}
+.ph h1{font-size:14px;font-weight:700;}
+.ph p{font-size:10.5px;color:var(--muted);margin-top:2px;}
+.outer{overflow-x:auto;padding:18px 16px 28px;}
+.diagram{min-width:1100px;position:relative;}
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;padding:10px 20px 14px;border-top:1px solid var(--border);background:var(--surf);}
+.li{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);}
+.dot{width:11px;height:11px;border-radius:2px;border:1.5px solid;}
+.dot.m{background:var(--man-bg);border-color:var(--man-bd);}
+.dot.r{background:var(--ref-bg);border-color:var(--ref-bd);}
+.dot.a{background:var(--ai-bg);border-color:var(--ai-bd);}
+.dot.c{background:var(--calc-bg);border-color:var(--calc-bd);}
+.ll{width:24px;height:2px;}
+.ll.rs{border-top:2px solid var(--ref);}
+.ll.ai{border-top:2px solid var(--ai);border-style:dashed;}
+.ll.ca{border-top:2px solid var(--calc);}
+/* columns */
+.cols{display:flex;gap:14px;align-items:flex-start;}
+.col{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;}
+.cw0{width:178px;}
+.cw1{width:168px;}
+.cw2{width:168px;}
+.cw3{width:185px;}
+.cw4{width:178px;}
+.clabel{font-size:9.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;text-align:center;padding:2px 0 6px;}
+/* paper card */
+.pcard{background:var(--surf);border-radius:7px;box-shadow:var(--sh);overflow:hidden;}
+.ph2{padding:5px 9px;display:flex;flex-direction:column;gap:1px;}
+.ph2 .code{font-family:Consolas,"Cascadia Code",monospace;font-size:10px;font-weight:700;color:#fff;letter-spacing:.1px;}
+.ph2 .nm{font-size:9.5px;color:rgba(255,255,255,.85);font-weight:600;}
+.pb{padding:7px 9px;display:flex;flex-direction:column;gap:4px;}
+/* section rows */
+.srow{border-radius:4px;padding:3px 7px;font-size:9.5px;line-height:1.4;border:1px solid;}
+.srow.m {background:var(--man-bg);border-color:var(--man-bd);color:var(--man);}
+.srow.r {background:var(--ref-bg);border-color:var(--ref-bd);color:var(--ref);}
+.srow.a {background:var(--ai-bg); border-color:var(--ai-bd); color:var(--ai);}
+.srow.c {background:var(--calc-bg);border-color:var(--calc-bd);color:var(--calc);}
+.srow .sk{font-family:Consolas,monospace;font-size:8.5px;font-weight:700;margin-right:4px;}
+.srow .icon{font-size:9px;margin-right:3px;}
+/* col head colors */
+.hc0{background:#1A4472;}
+.hc1{background:#185C48;}
+.hc2{background:#532D85;}
+.hc3{background:#923610;}
+.hc4{background:#1A4D80;}
+/* svg */
+#sv{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;}
+/* note box */
+.notebox{border:1.5px dashed var(--border);border-radius:6px;padding:6px 9px;}
+.notebox .nt{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:3px;}
+.notebox .nb{font-size:9.5px;color:var(--muted);line-height:1.5;}
+</style>
+
+<div class="ph">
+  <h1>Mapa de Inteligencia — Auto-fill, Referencias Cruzadas y IA Gemini</h1>
+  <p>Muestra qué secciones el auditor digita manualmente, cuáles el sistema auto-rellena por referencia y dónde entra Gemini AI a generar contenido</p>
+</div>
+
+<div class="outer">
+<div class="diagram" id="diagram">
+<svg id="sv"></svg>
+<div class="cols">
+
+  <!-- COL 0: ENCARGO / INDEP -->
+  <div class="col cw0">
+    <div class="clabel" style="color:#1A4472;">Encargo e Independencia</div>
+
+    <div class="pcard" id="encargo">
+      <div class="ph2 hc0">
+        <span class="code">PT-FIN-ENCARGO</span>
+        <span class="nm">Carta de Encargo</span>
+      </div>
+      <div class="pb">
+        <div class="srow m"><span class="sk">S1-S23</span> Términos encargo (manual)</div>
+        <div class="srow r" id="s24"><span class="icon">🔗</span><span class="sk">S24</span> Continuidad ← PT-INDEP::S3</div>
+      </div>
+    </div>
+
+    <div class="pcard" id="indep">
+      <div class="ph2 hc0">
+        <span class="code">PT-INDEP</span>
+        <span class="nm">Independencia</span>
+      </div>
+      <div class="pb">
+        <div class="srow m"><span class="sk">S1</span> Declaración (manual)</div>
+        <div class="srow m"><span class="sk">S2</span> Amenazas (manual)</div>
+        <div class="srow r" id="indep-s3"><span class="icon">🔗</span><span class="sk">S3</span> Eval. continuidad → S24</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COL 1: ENTENDIMIENTO -->
+  <div class="col cw1">
+    <div class="clabel" style="color:#185C48;">Entendimiento</div>
+
+    <div class="pcard" id="a2">
+      <div class="ph2 hc1">
+        <span class="code">PT-A2</span>
+        <span class="nm">Conocimiento del Cliente</span>
+      </div>
+      <div class="pb">
+        <div class="srow m">S1-S4 Industria, regulación, ciclos (manual)</div>
+        <div class="srow a" id="a2-ai"><span class="icon">✨</span> aiHint → contexto a Gemini</div>
+      </div>
+    </div>
+
+    <div class="pcard" id="a3">
+      <div class="ph2 hc1">
+        <span class="code">PT-A3</span>
+        <span class="nm">Comprensión de EF</span>
+      </div>
+      <div class="pb">
+        <div class="srow m">S1-S3 Políticas, estimaciones (manual)</div>
+        <div class="srow a" id="a3-ai"><span class="icon">✨</span> aiHint → contexto a Gemini</div>
+      </div>
+    </div>
+
+    <div class="pcard" id="nia610">
+      <div class="ph2 hc1">
+        <span class="code">PT-NIA610</span>
+        <span class="nm">Auditores Internos</span>
+      </div>
+      <div class="pb">
+        <div class="srow m">9 secciones evaluación (manual)</div>
+        <div class="srow r" id="s610-rel"><span class="icon">🔗</span> Reliance → PT-A5 S3B</div>
+      </div>
+    </div>
+
+    <div class="pcard" id="a4">
+      <div class="ph2 hc1">
+        <span class="code">PT-A4</span>
+        <span class="nm">Materialidad y Muestreo</span>
+      </div>
+      <div class="pb">
+        <div class="srow m">S1 Criterio % (manual)</div>
+        <div class="srow c" id="a4-mat"><span class="icon">⚡</span> MG/ME calculado de B00</div>
+        <div class="srow c"><span class="icon">⚡</span> Params MUS auto → A5, PROG</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COL 2: RMM / RIESGO -->
+  <div class="col cw2">
+    <div class="clabel" style="color:#532D85;">Riesgo</div>
+
+    <div class="pcard" id="a5">
+      <div class="ph2 hc2">
+        <span class="code">PT-A5</span>
+        <span class="nm">Matriz RMM</span>
+      </div>
+      <div class="pb">
+        <div class="srow r" id="a5-s1"><span class="icon">🔗</span><span class="sk">S1</span> RMM isAutoFilled ← A2,A3,A4</div>
+        <div class="srow m"><span class="sk">S2</span> Riesgos pervasivos (manual)</div>
+        <div class="srow m"><span class="sk">S3</span> Significativos NIA 240 (manual)</div>
+        <div class="srow c" id="a5-s4"><span class="icon">⚡</span><span class="sk">S4</span> Estrategia → PT-PROG</div>
+        <div class="srow a" id="a5-ai"><span class="icon">✨</span> aiHint en cada sección → Gemini</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COL 3: PROGRAMA -->
+  <div class="col cw3">
+    <div class="clabel" style="color:#923610;">Programa de Auditoría</div>
+
+    <div class="pcard" id="prog">
+      <div class="ph2 hc3">
+        <span class="code">PT-PROG</span>
+        <span class="nm">Programa de Auditoría</span>
+      </div>
+      <div class="pb">
+        <div class="srow m">S_OBJ / S_SCOPE (manual)</div>
+        <div class="srow r" id="prog-rmm"><span class="icon">🔗</span><span class="sk">S_RMM</span> isAutoFilled ← PT-A5::S4</div>
+        <div class="srow a" id="prog-ai"><span class="icon">✨</span><span class="sk">S_PROC</span> AI-suggest: Gemini genera procedimientos</div>
+        <div class="srow m">S_CONCL Conclusión + firmas (manual)</div>
+      </div>
+    </div>
+
+    <div style="height:6px"></div>
+
+    <div class="notebox">
+      <div class="nt">Detalle IA en PT-PROG</div>
+      <div class="nb">
+        Gemini recibe: nombre auditoría, período, secciones de PT-A5 · PT-A2 · PT-A3 como contexto<br><br>
+        Gemini emite: lista JSON de procedimientos con pasos y atributos → sistema crea AuditProcedure + AuditStep en BD
+      </div>
+    </div>
+  </div>
+
+  <!-- COL 4: EEFF / B00 -->
+  <div class="col cw4">
+    <div class="clabel" style="color:#1A4D80;">Balance y Evidencia</div>
+
+    <div class="pcard" id="b00">
+      <div class="ph2 hc4">
+        <span class="code">PT-FIN-B00</span>
+        <span class="nm">Balance de Comprobación</span>
+      </div>
+      <div class="pb">
+        <div class="srow m"><span class="sk">S1</span> Importación Excel (manual upload)</div>
+        <div class="srow m"><span class="sk">S2</span> Clasificador cuentas (manual asign.)</div>
+        <div class="srow c"><span class="icon">⚡</span><span class="sk">S3</span> Cuadre Σ≈0 (auto-calculado)</div>
+        <div class="srow c" id="b00-s4"><span class="icon">⚡</span><span class="sk">S4</span> Totales sub-sumaria (auto) → CS</div>
+        <div class="srow c"><span class="icon">⚡</span><span class="sk">S6</span> Semáforo materialidad (auto)</div>
+      </div>
+    </div>
+
+    <div style="height:6px"></div>
+
+    <div class="pcard">
+      <div class="ph2" style="background:#37626E;">
+        <span class="code">StepEvidence</span>
+        <span class="nm">Evidencia de pasos PT-PROG</span>
+      </div>
+      <div class="pb">
+        <div class="srow m">Upload PDF/Excel (manual)</div>
+        <div class="srow c"><span class="icon">⚡</span> Almacén: Supabase Storage</div>
+        <div class="srow c"><span class="icon">⚡</span> path, mimeType, size auto</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.cols -->
+</div><!-- /.diagram -->
+</div><!-- /.outer -->
+
+<div class="legend">
+  <strong style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;align-self:center;">Tipo de sección</strong>
+  <div class="li"><div class="dot m"></div> Manual — el auditor digita</div>
+  <div class="li"><div class="dot r"></div> 🔗 Referencia auto (REFERENCE / isAutoFilled desde otra sección)</div>
+  <div class="li"><div class="dot a"></div> ✨ IA Gemini — el modelo genera el contenido</div>
+  <div class="li"><div class="dot c"></div> ⚡ Calculado — el sistema computa automáticamente</div>
+  <div class="li"><div class="ll rs"></div> Flujo de referencia automática</div>
+  <div class="li"><div class="ll ai"></div> Flujo de contexto a Gemini</div>
+  <div class="li"><div class="ll ca"></div> Flujo de valor calculado</div>
+</div>
+
+<script>
+(function(){
+  const diag=document.getElementById('diagram');
+  const sv=document.getElementById('sv');
+  let _m=0;
+
+  function pos(el,side,pct){
+    if(!el)return{x:0,y:0};
+    const r=el.getBoundingClientRect(), dr=diag.getBoundingClientRect();
+    const p=pct??0.5;
+    return{
+      x:side==='right'?r.right-dr.left:r.left-dr.left,
+      y:r.top-dr.top+r.height*p
+    };
+  }
+  function arrow(x1,y1,x2,y2,style,color,w){
+    const id='m'+(++_m);
+    const cx=(x1+x2)/2;
+    const d=`M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`;
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',d); p.setAttribute('fill','none');
+    p.setAttribute('stroke',color); p.setAttribute('stroke-width',w||1.7);
+    if(style==='dash') p.setAttribute('stroke-dasharray','5,4');
+    if(style==='dot')  p.setAttribute('stroke-dasharray','2,3');
+    p.setAttribute('stroke-linecap','round');
+    const mk=document.createElementNS('http://www.w3.org/2000/svg','marker');
+    mk.setAttribute('id',id); mk.setAttribute('markerWidth','7'); mk.setAttribute('markerHeight','7');
+    mk.setAttribute('refX','6'); mk.setAttribute('refY','3'); mk.setAttribute('orient','auto');
+    const pl=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    pl.setAttribute('points','0 0,7 3,0 6'); pl.setAttribute('fill',color);
+    mk.appendChild(pl); sv.appendChild(mk);
+    p.setAttribute('marker-end',`url(#${id})`); sv.appendChild(p);
+  }
+
+  function draw(){
+    sv.innerHTML='';
+    const REF='#1565C0', AI='#6B21A8', CALC='#0E6B3A', GREY='#6B7C93';
+
+    // INDEP S3 → ENCARGO S24 (REFERENCE)
+    const s=pos(document.getElementById('indep-s3'),'right');
+    const e=pos(document.getElementById('s24'),'left');
+    arrow(s.x,s.y,e.x,e.y,'solid',REF);
+
+    // A2/A3 aiHint → A5 (AI context)
+    const a2ai=pos(document.getElementById('a2-ai'),'right');
+    const a3ai=pos(document.getElementById('a3-ai'),'right');
+    const a5ai=pos(document.getElementById('a5-ai'),'left');
+    arrow(a2ai.x,a2ai.y,a5ai.x,a5ai.y,'dash',AI,1.4);
+    arrow(a3ai.x,a3ai.y,a5ai.x,a5ai.y,'dash',AI,1.4);
+
+    // A610 reliance → A5 S1
+    const s610=pos(document.getElementById('s610-rel'),'right');
+    const a5s1=pos(document.getElementById('a5-s1'),'left');
+    arrow(s610.x,s610.y,a5s1.x,a5s1.y,'solid',REF);
+
+    // A4 mat → A5 S1
+    const a4mat=pos(document.getElementById('a4-mat'),'right');
+    arrow(a4mat.x,a4mat.y,a5s1.x,a5s1.y,'solid',CALC);
+
+    // A5 S4 estrategia → PROG S_RMM (auto-fill)
+    const a5s4=pos(document.getElementById('a5-s4'),'right');
+    const prmm=pos(document.getElementById('prog-rmm'),'left');
+    arrow(a5s4.x,a5s4.y,prmm.x,prmm.y,'solid',REF);
+
+    // A5 aiHint → PROG S_PROC (Gemini context)
+    const a5aiR=pos(document.getElementById('a5-ai'),'right');
+    const pai=pos(document.getElementById('prog-ai'),'left');
+    arrow(a5aiR.x,a5aiR.y,pai.x,pai.y,'dash',AI);
+
+    // A2/A3 aiHint → PROG S_PROC (Gemini context for program generation)
+    arrow(a2ai.x,a2ai.y,pai.x,pai.y,'dot',AI,1.2);
+    arrow(a3ai.x,a3ai.y,pai.x,pai.y,'dot',AI,1.2);
+
+    // B00 S4 → (external: feeds sumarias - just label arrow going right)
+    const b00s4=pos(document.getElementById('b00-s4'),'right');
+    // small arrow to right edge - show it feeds sumarias
+    arrow(b00s4.x,b00s4.y,b00s4.x+30,b00s4.y,'solid',CALC,1.4);
+  }
+
+  setTimeout(draw,80);
+  window.addEventListener('resize',draw);
+})();
+</script>

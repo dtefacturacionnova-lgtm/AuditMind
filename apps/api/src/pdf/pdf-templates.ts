@@ -432,6 +432,21 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
           valStr = renderSamplingResult(val as Record<string, unknown>);
         } else if (typeof val === 'object') {
           valStr = `<pre class="pre-wrap text-small">${esc(JSON.stringify(val, null, 2))}</pre>`;
+        } else if (s.fieldType === 'CURRENCY') {
+          const n = Number(val);
+          valStr = isNaN(n)
+            ? `<span class="pre-wrap">${esc(String(val))}</span>`
+            : `<span class="pre-wrap" style="font-family:monospace;font-weight:600;">${esc(fmtUSD(n))}</span>`;
+        } else if (s.fieldType === 'PERCENTAGE') {
+          valStr = `<span class="pre-wrap">${esc(String(val))}%</span>`;
+        } else if (s.fieldType === 'ENUM_SELECT') {
+          const humanized = String(val)
+            .toLowerCase()
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase());
+          valStr = `<span class="pre-wrap">${esc(humanized)}</span>`;
+        } else if (s.fieldType === 'BOOLEAN') {
+          valStr = `<span class="pre-wrap">${val ? 'Sí' : 'No'}</span>`;
         } else {
           valStr = `<span class="pre-wrap">${esc(String(val))}</span>`;
         }

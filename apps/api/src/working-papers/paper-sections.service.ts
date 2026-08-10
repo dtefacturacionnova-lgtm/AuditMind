@@ -39,8 +39,12 @@ export class PaperSectionsService {
 
   /**
    * Get all sections for a paper ordered by sortOrder.
-   * Lazy-sync: any template sections not yet in the DB are auto-created on first load.
-   * Existing sections (and their values) are never modified here.
+   * Lazy-sync:
+   *   1. Missing sections (sectionKey not in DB) are created from the template.
+   *   2. Existing sections whose fieldType, label, sortOrder or aiHint differ from the
+   *      current template are updated — preserving the value UNLESS the fieldType changed
+   *      to an incompatible structural type (PROCEDURE_GRID, MATRIX, REFERENCE, etc.),
+   *      in which case the stale text value is cleared so the UI renders correctly.
    */
   async getSections(paperId: string, user: AuthUser) {
     await this.assertPaperAccess(paperId, user);
@@ -51,14 +55,16 @@ export class PaperSectionsService {
     });
 
     if (paper?.paperCode && PAPER_TEMPLATES[paper.paperCode]) {
+      const tplSections = PAPER_TEMPLATES[paper.paperCode];
+
       const existing = await this.prisma.paperSection.findMany({
         where:  { paperId },
-        select: { sectionKey: true },
+        select: { sectionKey: true, fieldType: true, label: true, sortOrder: true, aiHint: true },
       });
-      const existingKeys = new Set(existing.map(s => s.sectionKey));
-      const missing = PAPER_TEMPLATES[paper.paperCode].filter(
-        t => !existingKeys.has(t.sectionKey),
-      );
+      const existingMap = new Map(existing.map(s => [s.sectionKey, s]));
+
+      // 1 — create missing sections
+      const missing = tplSections.filter(t => !existingMap.has(t.sectionKey));
       if (missing.length > 0) {
         await this.prisma.paperSection.createMany({
           data: missing.map(t => ({
@@ -75,6 +81,40 @@ export class PaperSectionsService {
             options:      t.options ? (t.options as any) : undefined,
           })),
           skipDuplicates: true,
+        });
+      }
+
+      // 2 — sync metadata of existing sections whose fieldType or sortOrder drifted
+      const STRUCTURAL_TYPES = new Set([
+        'PROCEDURE_GRID', 'MATRIX', 'REFERENCE', 'RISK_REF',
+        'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS',
+        'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG',
+        'ENUM_SELECT',
+      ]);
+      const stale = tplSections.filter(t => {
+        const e = existingMap.get(t.sectionKey);
+        if (!e) return false;
+        return e.fieldType !== (t.fieldType as string)
+          || e.sortOrder  !== (t.sortOrder ?? 0)
+          || e.label      !== t.label;
+      });
+      for (const t of stale) {
+        const e = existingMap.get(t.sectionKey)!;
+        const fieldTypeChanged = e.fieldType !== (t.fieldType as string);
+        // Clear the stored value only when moving to an incompatible structural type
+        const clearValue = fieldTypeChanged && STRUCTURAL_TYPES.has(t.fieldType as string);
+        await this.prisma.paperSection.updateMany({
+          where:  { paperId, sectionKey: t.sectionKey },
+          data: {
+            fieldType:   t.fieldType as any,
+            label:       t.label,
+            description: t.description ?? null,
+            sortOrder:   t.sortOrder   ?? 0,
+            aiHint:      t.aiHint      ?? null,
+            sourceRef:   t.sourceRef   ?? null,
+            options:     t.options ? (t.options as any) : undefined,
+            ...(clearValue ? { value: null } : {}),
+          },
         });
       }
     }

@@ -981,6 +981,95 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
+  // PT-APE04: Seguimiento de Informes y Hallazgos de Auditorías Anteriores
+  // Reemplaza APE-04 STANDARD. Big 4: papel central de planificación.
+  // ISA: 265 §9/§11, 300 §8(b), 315 §14/§24, 330 §13, 450 §8/§12, 510 §6-9
+  // Big 4: EY GAM / Deloitte A&A / PwC Connect / KPMG eAudIT — 7-8 secciones
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-APE04': [
+    {
+      sectionKey:   'S1',
+      label:        'Alcance y Catálogo de Informes Previos Revisados',
+      description:  'Inventario de todas las comunicaciones de auditorías anteriores que están dentro del alcance del seguimiento. Garantiza que ninguna comunicación previa queda fuera del análisis (ISA 300 §8(b) — considerar resultados de períodos anteriores).',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    1,
+      aiHint:       'Columnas: # | Documento / Comunicación | Emisor (Firma auditora / Auditoría Interna / Contraloría) | Destinatario | Fecha de emisión | Período cubierto | N° de hallazgos reportados | Estado general (N implementados / N parciales / N no implementados) | Incluido en este papel (Sí / No — si No, razón de exclusión). Fuentes a incluir: Carta de Gerencia año anterior · Comunicación ISA 265 a TCWG · Resumen de diferencias de auditoría (ajustes pasados) · Informe de auditoría interna relevante · Inspección regulatoria · Notas de transferencia del equipo anterior. Años a cubrir: mínimo últimos 3 ejercicios fiscales; hallazgos más antiguos solo si siguen abiertos.',
+    },
+    {
+      sectionKey:   'S2',
+      label:        'Resumen Ejecutivo — Estado por Ciclo y Severidad',
+      description:  'Dashboard de seguimiento: resumen consolidado de hallazgos por ciclo de negocio y por estado de implementación. Permite al Socio identificar patrones de no-remediación y áreas de riesgo elevado de un vistazo. Requisito de análisis de tendencias de EY GAM / PwC Connect.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    2,
+      aiHint:       'Columnas: Ciclo / Área | Debilidad Material | Def. Significativa | Def. de Control | Observación | Total | Implementado (IM) | Parcial (PI) | No Impl. (NI) | En Proceso (EP) | N/A | % Cierre. Una fila por ciclo principal: Ingresos y CxC · Compras y CxP · Tesorería · Nómina y RRHH · Cierre contable y reporte · Controles Generales TI · Controles de Entidad. Fila final: TOTAL consolidado. Nota de tendencia bajo la tabla: comentar si el % de cierre mejora, empeora o es estable vs. año anterior — un porcentaje decreciente es señal de cultura de control débil (ISA 315 — Entorno de Control).',
+    },
+    {
+      sectionKey:   'S3',
+      label:        'Matriz Principal de Seguimiento de Hallazgos',
+      description:  'Registro trazable de cada hallazgo comunicado en períodos anteriores con su estado actual. Núcleo del papel — 6 grupos de columnas: Identificación · Descripción · Clasificación · Respuesta de gerencia anterior · Evaluación año actual · Firmas. Conforme ISA 265 §9, ISA 315 §24, ISA 330 §13.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    3,
+      aiHint:       'GRUPO A — IDENTIFICACIÓN: Ref. SEG (clave estable año tras año, ej. SEG-24-003 — nunca reasignar) | Año de origen | Fuente (Carta Gerencia / Comunicación TCWG / Informe Regulatorio / Otro) | Ciclo / Área (Ingresos, Compras, Tesorería, Nómina, TI, Entidad) | Sub-proceso específico. GRUPO B — DESCRIPCIÓN: Descripción del hallazgo original (condición encontrada) | Causa raíz (Diseño de control / Operación de control / Ausencia de control / Personas / TI / Políticas) | Aserciones afectadas (EXI/INTEG/VAL/COR/PRES). GRUPO C — CLASIFICACIÓN: Severidad original (Debilidad Material / Def. Significativa / Def. de Control / Observación) | Tipo (Control Interno / Contable-Financiero / Cumplimiento / TI / Operativo) | Repetición (1ra vez / Repetido N años — si N≥2 activar flag de escalación). GRUPO D — RESPUESTA ANTERIOR: Recomendación original (verbatim del informe) | Plan de acción comprometido por gerencia | Responsable designado (nombre y cargo) | Fecha límite comprometida. GRUPO E — EVALUACIÓN AÑO ACTUAL: Estado (IM=Implementado / PI=Parcial / NI=No implementado / EP=En proceso / NA=No aplica / DI=Diferido / SU=Sustituido) | ¿Vencida? (Sí/No — si fecha actual > fecha comprometida y estado ≠ IM) | Descripción del estado actual | Procedimientos de seguimiento aplicados | Evidencia obtenida (tipo, documento, fecha, ref. PT) | Conclusión del auditor | Impacto en auditoría actual (Ninguno / Aumenta RC / Aumenta pruebas sustantivas / Requiere comunicación TCWG) | Ref. PT actual. GRUPO F — FIRMAS: Preparado por (iniciales, fecha) | Revisado por (iniciales, fecha — Def. Significativas: firma Gerente; Debilidad Material: firma Socio).',
+    },
+    {
+      sectionKey:   'S4',
+      label:        'Análisis de Hallazgos No Implementados y Parciales',
+      description:  'Sección OBLIGATORIA cuando existen hallazgos con estado NI o PI. Para cada uno: razón de no remediación, evaluación del auditor, decisión de escalación y efecto documentado en la estrategia. ISA 265 §11 — deficiencias repetidas requieren comunicación explícita al TCWG.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'Completar solo si existen hallazgos NI o PI en S3. Columnas: Ref. SEG | Severidad | Años sin implementar | Razón declarada por gerencia (por qué no se implementó) | Evaluación del auditor (¿la razón es aceptable? ¿existe riesgo real de incorrección material?) | ¿Hallazgo repetido 2+ años? (Sí/No — si Sí: obligatorio escalar a TCWG per ISA 265 §11) | Decisión de escalación (Solo Gerencia / TCWG y Gerencia / Escalar a Comité de Auditoría) | Modificación a la estrategia de auditoría (qué cambia en PT-A3, PT-A5, o PT-PROG a consecuencia de este hallazgo no remediado) | Ref. cruzada a PT-A3 / PT-A5 donde se registra el RC elevado. Regla de agregación ISA 265 A18: si dos o más hallazgos Def. de Control están en el mismo ciclo/aserción y ninguno se ha implementado, evaluar si en conjunto califican como Def. Significativa.',
+    },
+    {
+      sectionKey:   'S5',
+      label:        'Ajustes No Corregidos de Años Anteriores (NIA 450 / NIA 510)',
+      description:  'Seguimiento de los ajustes de auditoría pasados (no registrados) de períodos anteriores. Evalúa si siguen siendo inmateriales en el contexto del ejercicio actual y si afectan los saldos iniciales. ISA 450 §8 exige considerar el efecto acumulado de incorrecciones no corregidas.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    5,
+      aiHint:       'Si no hubo ajustes pasados en años anteriores, indicar "Sin ajustes no corregidos de períodos anteriores". Columnas: Ref. AJE anterior | Cuenta afectada | Descripción del ajuste original | Período en que se originó | Naturaleza (Sobrestimación / Subestimación de activo/pasivo/ingreso/gasto) | Monto original | ¿Se corrigió en el período actual? (Sí / No) | ¿Revirtió naturalmente? (Sí / No — típico en diferencias de corte) | Monto aún presente en saldos iniciales | Evaluación vs. materialidad actual (Material / No material — justificación) | Efecto en saldo de apertura (NIA 510 §7) | Acción requerida (Ajuste en año actual / Revelar / Ninguna). Análisis de acumulación al final: suma de todos los ajustes no corregidos vs. materialidad de desempeño — si la suma supera el 50% de ME, considerar reducir materialidad (NIA 320 §12).',
+    },
+    {
+      sectionKey:   'S6',
+      label:        'Impacto en la Evaluación de Riesgos del Año Actual',
+      description:  'Síntesis del efecto de los hallazgos no implementados sobre la evaluación de riesgo del año actual. Puente entre este papel y los papeles de planificación (PT-A3, PT-A5, PT-PROG). ISA 315 §24 y ISA 330 §8 requieren que la respuesta a los riesgos refleje los hallazgos anteriores no remediados.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    6,
+      aiHint:       'Una fila por hallazgo NI/PI de S3 que tenga impacto en riesgos. Columnas: Ref. SEG | Ciclo / Área | Aserciones afectadas | RC anterior (si se confiaba en control) | RC actualizado (generalmente ALTO si NI) | Efecto en RMM | Modificación a procedimientos de auditoría (qué se amplía o agrega) | Ref. PT donde se documenta el cambio (PT-A3 S5 / PT-A5 S1 / PT-PROG S5). Si no hay hallazgos NI/PI: indicar "Todos los hallazgos previos están implementados — no se requiere modificación a la estrategia de auditoría planificada".',
+    },
+    {
+      sectionKey:   'S7',
+      label:        'Ítems para la Carta de Gerencia / Comunicación TCWG del Año Actual',
+      description:  'Prepara el contenido para la comunicación de control interno del año actual. Distingue entre lo que va a la Carta de Gerencia (todo hallazgo) y lo que va al TCWG (solo Def. Significativas y Debilidades Materiales). ISA 265 §9-§10 y §12 (documentación de comunicaciones).',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    7,
+      aiHint:       'Columnas: Ref. SEG | Descripción resumida | Severidad | ¿Hallazgo nuevo o repetido? | Destinatario (Solo Gerencia / Gerencia + TCWG) | Prioridad en la carta (Alta / Media / Baja) | Texto propuesto para la carta (borrador). Para hallazgos repetidos: incluir en el texto propuesto la frase de referencia al período anterior y énfasis en la urgencia. Para hallazgos resueltos: documentar que no se incluirán en la carta actual. Nuevo hallazgo identificado en este período: agregar fila con Ref. SEG nueva.',
+    },
+    {
+      sectionKey:   'S8',
+      label:        'Conclusión y Firmas de Aprobación',
+      description:  'Conclusión general del papel: resumen del estado del seguimiento, declaración sobre el impacto en la estrategia de auditoría y firmas de quienes prepararon y revisaron (ISA 230 §9).',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    8,
+      aiHint:       'Redactar en 3-4 párrafos: (1) Resumen cuantitativo: "De los [N] hallazgos comunicados en períodos anteriores: [N] Implementados, [N] Parcialmente implementados, [N] No implementados, [N] No aplica." (2) Impacto en riesgo: si los NI/PI modifican materialmente la estrategia, indicarlo explícitamente con referencia a S6. (3) Comunicaciones: qué hallazgos se incluirán en la Carta de Gerencia y/o comunicación al TCWG del año actual (ref. S7). (4) Declaración de cierre: confirmar que todos los hallazgos previos han sido evaluados y que el resultado está reflejado en los papeles de planificación correspondientes. Incluir: Preparado por (nombre, cargo, fecha) · Revisado por (nombre, cargo, fecha) — si hay Def. Significativas o Debilidad Material: firma del Socio con fecha.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
   // PT-COSO: Evaluación COSO 2013 — 5 Componentes / 17 Principios
   // ──────────────────────────────────────────────────────────────────────────
   'PT-COSO': [

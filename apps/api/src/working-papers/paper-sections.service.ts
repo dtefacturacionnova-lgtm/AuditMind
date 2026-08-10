@@ -3,6 +3,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PaperGraphService } from './paper-graph.service';
@@ -113,7 +114,7 @@ export class PaperSectionsService {
             aiHint:      t.aiHint      ?? null,
             sourceRef:   t.sourceRef   ?? null,
             options:     t.options ? (t.options as any) : undefined,
-            ...(clearValue ? { value: null } : {}),
+            ...(clearValue ? { value: Prisma.DbNull } : {}),
           },
         });
       }

@@ -11,6 +11,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { WorkingPaperStatus, UserRole, TickMark, WpKind, SyncStatus, Prisma } from '@prisma/client';
 import { PaperGraphService } from './paper-graph.service';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { PAPER_CATALOGUE, ALLOWED_CODES_BY_AUDIT_TYPE } from './paper-catalogue';
 
 async function generateWpCode(
   prisma: PrismaService,
@@ -121,6 +122,13 @@ export class WorkingPapersService {
       },
       include: INCLUDE_FULL,
     });
+  }
+
+  getCatalogue(auditType?: string) {
+    if (!auditType) return PAPER_CATALOGUE;
+    const allowed = new Set(ALLOWED_CODES_BY_AUDIT_TYPE[auditType] ?? []);
+    if (allowed.size === 0) return PAPER_CATALOGUE;
+    return PAPER_CATALOGUE.filter(p => allowed.has(p.code));
   }
 
   async findAllForAudit(auditId: string, user: AuthUser) {

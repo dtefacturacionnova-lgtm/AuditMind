@@ -153,6 +153,27 @@ export interface CreateWpData {
   code?:          string;
 }
 
+// ─── Paper catalogue ──────────────────────────────────────────────────────────
+export interface PaperCatalogueEntry {
+  code:   string;
+  title:  string;
+  wpKind: 'SMART' | 'MASTER';
+  type:   string;
+  group:  string;
+  hint:   string;
+}
+
+export function usePaperCatalogue(auditType?: string) {
+  return useQuery<PaperCatalogueEntry[]>({
+    queryKey:  ['paper-catalogue', auditType ?? ''],
+    queryFn:   () => {
+      const qs = auditType ? `?auditType=${auditType}` : '';
+      return apiClient.get(`/working-papers/catalogue${qs}`);
+    },
+    staleTime: Infinity,
+  });
+}
+
 // ─── Queries ──────────────────────────────────────────────────────────────────
 export function useWorkingPapersForAudit(auditId: string) {
   return useQuery<WorkingPaper[]>({

@@ -139,6 +139,14 @@ export class WorkingPapersController {
     return this.sectionsService.getMaterialidadByAudit(auditId, user);
   }
 
+  @Get('catalogue')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Catálogo de plantillas de papeles disponibles, opcionalmente filtrado por tipo de auditoría' })
+  @ApiQuery({ name: 'auditType', required: false })
+  getCatalogue(@Query('auditType') auditType?: string) {
+    return this.service.getCatalogue(auditType);
+  }
+
   // ─── Paper CRUD ───────────────────────────────────────────────────────────────
 
   @Get(':id')

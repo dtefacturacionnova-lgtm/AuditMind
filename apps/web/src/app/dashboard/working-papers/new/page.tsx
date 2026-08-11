@@ -41,9 +41,15 @@ const CANONICAL_PAPER_GROUPS: { group: string; items: CanonicalPaper[] }[] = [
       { code: 'PT-A2',   label: 'Evaluación de Riesgo Inherente (RI)',         kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'Aserciones por área y factores de riesgo significativo' },
       { code: 'PT-A3',   label: 'Evaluación de Controles y Riesgo de Control', kind: 'SMART',  type: 'CONTROL_EVALUATION',     hint: 'Diseño y efectividad operativa de controles clave' },
       { code: 'PT-A4',   label: 'Cálculo de Materialidad (NIA 320)',           kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'MG, ME y UAE con benchmark referencial automático' },
+      { code: 'PT-A5',   label: 'Matriz Integrada RMM — Consolidación RI + RC (NIA 315.32)', kind: 'SMART', type: 'CONTROL_EVALUATION', hint: 'Consolida PT-A2 (RI) + PT-A3 (RC) → RMM por área/aserción → alimenta PT-PROG y PT-MEMO' },
       { code: 'PT-COSO', label: 'Evaluación COSO 2013 — SCI (5 Comp./17 P.)', kind: 'SMART',  type: 'CONTROL_EVALUATION',     hint: 'Evaluación del SCI: 5 componentes, 17 principios, semáforo global y enfoque de auditoría' },
+      { code: 'PT-STRAT', label: 'Estrategia Global de Auditoría (NIA 300 §7-9)',              kind: 'SMART',  type: 'PLANNING_UNDERSTANDING', hint: 'Alcance, enfoque, materialidad, especialistas NIA 620, KAMs NIA 701, equipo y cronograma' },
+      { code: 'PT-APE04', label: 'Seguimiento de Hallazgos de Auditorías Anteriores (NIA 265/315/450/510)', kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Catálogo Big 4, dashboard, 18-col seguimiento, No Implementados, impacto en riesgos' },
+      { code: 'PT-APE06', label: 'Políticas Contables y CI — Entendimiento (NIA 315/NIC 8)',  kind: 'SMART',  type: 'CONTROL_EVALUATION',     hint: 'Inventario de políticas NIC 8, cambios, estimaciones NIA 540, checklist CI, conclusión' },
+      { code: 'PT-ITGC',  label: 'Controles Generales de TI — ITGC (NIA 315/COBIT 2019)',    kind: 'SMART',  type: 'CONTROL_EVALUATION',     hint: 'Acceso lógico, gestión cambios, operaciones TI, desarrollo; SOC 1; impacto en controles automatizados' },
       { code: 'PT-MEMO', label: 'Memorando de Planificación',                  kind: 'MASTER', type: 'PLANNING_UNDERSTANDING', hint: 'Consolida entendimiento, riesgo, materialidad y estrategia global' },
       { code: 'PT-PROG', label: 'Programa de Auditoría',                       kind: 'MASTER', type: 'PLANNING_UNDERSTANDING', hint: 'Procedimientos auto-generados desde RI + materialidad' },
+      { code: 'PT-MRCI',  label: 'Matriz de Riesgo, Control e Impacto (MRCI)',                kind: 'MASTER', type: 'CONTROL_EVALUATION',     hint: 'Consolida todos los riesgos identificados con controles mitigantes e impacto en dictamen' },
       { code: 'PT-DIFS', label: 'Cédula de Diferencias y Ajustes',            kind: 'MASTER', type: 'CLOSURE_CONCLUSION',      hint: 'Acumula excepciones, semáforo vs materialidad, propuesta de opinión' },
     ],
   },
@@ -58,6 +64,7 @@ const CANONICAL_PAPER_GROUPS: { group: string; items: CanonicalPaper[] }[] = [
   {
     group: 'Auditoría Financiera — Planificación',
     items: [
+      { code: 'PT-FIN-ENCARGO', label: 'Carta de Encargo y Términos del Trabajo (NIA 210)',       kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Condiciones, alcance, honorarios, responsabilidades, aceptación/continuación del encargo' },
       { code: 'PT-INDEP',     label: 'Independencia, Ética y Aceptación del Encargo (NIA 220/IESBA)', kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Amenazas, salvaguardas, servicios prohibidos, EQR, aceptación/continuación' },
       { code: 'PT-FIN-A3-KC', label: 'Conocimiento del Cliente y Entorno (NIA 315)',                   kind: 'SMART', type: 'PLANNING_UNDERSTANDING', hint: 'Historia, gobierno corporativo, ciclos clave, partes relacionadas' },
       { code: 'PT-FIN-B00',   label: 'Importación Trial Balance y Cédula Madre',                        kind: 'SMART', type: 'SUBSTANTIVE_TEST',        hint: 'Import Excel/CSV/ERP, clasificador de cuentas, semáforo de materialidad' },
@@ -134,7 +141,9 @@ const CANONICAL_BY_CODE = Object.fromEntries(
 const _HALL = ['PT-HALL', 'PT-HALL-COM', 'PT-HALL-RESP'];
 
 const _EXT_FIN = new Set([
-  'PT-INDEP', 'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-COSO', 'PT-MEMO', 'PT-PROG',
+  'PT-FIN-ENCARGO', 'PT-INDEP', 'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-A5',
+  'PT-COSO', 'PT-STRAT', 'PT-APE04', 'PT-APE06', 'PT-ITGC', 'PT-MRCI',
+  'PT-MEMO', 'PT-PROG',
   'PT-NIA250', 'PT-NIA530', 'PT-NIA610', 'PT-NIA620',
   'PT-FIN-A3-KC', 'PT-FIN-B00', 'PT-FIN-B01', 'PT-FIN-B02', 'PT-FIN-B03',
   'PT-FIN-B04', 'PT-FIN-B05', 'PT-FIN-B06', 'PT-FIN-B07', 'PT-FIN-B08', 'PT-FIN-B09',
@@ -145,24 +154,28 @@ const _EXT_FIN = new Set([
 ]);
 
 const _FISCAL = new Set([
-  'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-MEMO', 'PT-PROG',
+  'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-A5', 'PT-STRAT', 'PT-APE04',
+  'PT-MEMO', 'PT-PROG',
   'PT-FISC-INDEP', 'PT-FISC-QC', 'PT-FISC-ENCARGO', 'PT-FISC-RISK',
   'PT-FISC-AML', 'PT-FISC-PT', 'PT-FISC-ZF', 'PT-FISC-DICT',
   ..._HALL,
 ]);
 
 const _INTERNAL = new Set([
-  'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-COSO', 'PT-MEMO', 'PT-PROG', 'PT-DIFS',
+  'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-A5', 'PT-COSO',
+  'PT-STRAT', 'PT-APE04', 'PT-ITGC', 'PT-MRCI',
+  'PT-MEMO', 'PT-PROG', 'PT-DIFS',
   ..._HALL,
 ]);
 
 const _NAIG = new Set([
-  'PT-A1', 'PT-A2', 'PT-A4', 'PT-COSO', 'PT-MEMO', 'PT-PROG', 'PT-GOV-HAL',
+  'PT-A1', 'PT-A2', 'PT-A4', 'PT-A5', 'PT-COSO', 'PT-APE04',
+  'PT-MEMO', 'PT-PROG', 'PT-GOV-HAL',
   ..._HALL,
 ]);
 
 const _IT = new Set([
-  'PT-A1', 'PT-A3', 'PT-MEMO', 'PT-PROG', 'PT-SEC-RISK', 'PT-BIA',
+  'PT-A1', 'PT-A3', 'PT-A5', 'PT-ITGC', 'PT-MEMO', 'PT-PROG', 'PT-SEC-RISK', 'PT-BIA',
   ..._HALL,
 ]);
 

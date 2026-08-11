@@ -175,9 +175,14 @@ export class WorkingPapersService {
         ...INCLUDE_FULL,
         audit: {
           select: {
-            id: true, title: true, organizationId: true,
+            id: true, title: true, type: true, scope: true,
+            organizationId: true,
             isInvestigationMode: true,
-            team: { select: { userId: true } },
+            auditPeriodStart: true,
+            auditPeriodEnd: true,
+            team:         { select: { userId: true } },
+            auditEntity:  { select: { name: true } },
+            organization: { select: { name: true, logoUrl: true } },
           },
         },
       },

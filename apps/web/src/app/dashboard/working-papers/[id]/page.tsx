@@ -36,6 +36,7 @@ import { DocumentEvidencePanel, type DocumentEvidenceRow } from '@/components/wo
 import { useUpdateSection }         from '@/hooks/useWorkingPaperGraph';
 import { type CosoAssessment }      from '@/hooks/useCosoAssessment';
 import { VersionHistoryPanel }      from '@/components/working-papers/VersionHistoryPanel';
+import { PaperHeader }              from '@/components/working-papers/PaperHeader';
 import type { AiDraftConfig } from '@/components/working-papers/SectionField';
 import { apiClient }            from '@/lib/api-client';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
@@ -1266,58 +1267,77 @@ export default function WpDetailPage() {
 
             {/* Cuerpo del encabezado */}
             <div className="p-5">
-              {/* Ref + badges */}
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className="font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-lg text-sm">
-                  {wp.ref ?? wp.paperCode ?? wp.code}
-                </span>
-                <span className={`text-xs font-medium ${typeConf.color}`}>{typeConf.label}</span>
-                <WpKindBadge wpKind={wpKind} />
-                {(wpKind === 'SMART' || wpKind === 'MASTER') && (
-                  <SyncStatusBadge syncStatus={syncStatus} />
-                )}
-                {wp.aiAssisted && (
-                  <span className="flex items-center gap-1 text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
-                    <Bot className="w-2.5 h-2.5" /> IA
-                  </span>
-                )}
-              </div>
+              {(wpKind === 'SMART' || wpKind === 'MASTER') ? (
+                <>
+                  {/* Encabezado estándar NIA */}
+                  <PaperHeader wp={wp} />
 
-              {/* Título */}
-              <h1 className="text-lg font-bold text-gray-900 mb-3">{wp.title}</h1>
+                  {/* Badges secundarios */}
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    <span className={`text-xs font-medium ${typeConf.color}`}>{typeConf.label}</span>
+                    <WpKindBadge wpKind={wpKind} />
+                    <SyncStatusBadge syncStatus={syncStatus} />
+                    {wp.aiAssisted && (
+                      <span className="flex items-center gap-1 text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+                        <Bot className="w-2.5 h-2.5" /> IA
+                      </span>
+                    )}
+                    <span className="text-[10px] text-gray-400 ml-auto">
+                      v{wp.version} · {formatRelativeTime(wp.updatedAt)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Header compacto para papeles STANDARD */}
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-lg text-sm">
+                      {(wp as any).ref ?? wp.paperCode ?? (wp as any).code}
+                    </span>
+                    <span className={`text-xs font-medium ${typeConf.color}`}>{typeConf.label}</span>
+                    <WpKindBadge wpKind={wpKind} />
+                    {wp.aiAssisted && (
+                      <span className="flex items-center gap-1 text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+                        <Bot className="w-2.5 h-2.5" /> IA
+                      </span>
+                    )}
+                  </div>
 
-              {/* Grid de metadatos */}
-              <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs sm:grid-cols-4">
-                <div>
-                  <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Elaborado por</p>
-                  <p className="text-gray-700 font-medium flex items-center gap-1 mt-0.5">
-                    <User className="h-3 w-3 text-gray-400" />
-                    {wp.preparedBy?.name ?? '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Revisado por</p>
-                  <p className="text-gray-700 font-medium flex items-center gap-1 mt-0.5">
-                    <User className="h-3 w-3 text-gray-400" />
-                    {wp.reviewedBy?.name ?? 'Sin asignar'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Período auditado</p>
-                  <p className="text-gray-700 font-medium flex items-center gap-1 mt-0.5">
-                    <Calendar className="h-3 w-3 text-gray-400" />
-                    {wp.periodStart
-                      ? `${formatDate(wp.periodStart)} — ${formatDate(wp.periodEnd ?? wp.periodStart)}`
-                      : '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Versión</p>
-                  <p className="text-gray-700 font-medium mt-0.5">
-                    v{wp.version} · {formatRelativeTime(wp.updatedAt)}
-                  </p>
-                </div>
-              </div>
+                  <h1 className="text-lg font-bold text-gray-900 mb-3">{wp.title}</h1>
+
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs sm:grid-cols-4">
+                    <div>
+                      <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Elaborado por</p>
+                      <p className="text-gray-700 font-medium flex items-center gap-1 mt-0.5">
+                        <User className="h-3 w-3 text-gray-400" />
+                        {wp.preparedBy?.name ?? '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Revisado por</p>
+                      <p className="text-gray-700 font-medium flex items-center gap-1 mt-0.5">
+                        <User className="h-3 w-3 text-gray-400" />
+                        {wp.reviewedBy?.name ?? 'Sin asignar'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Período auditado</p>
+                      <p className="text-gray-700 font-medium flex items-center gap-1 mt-0.5">
+                        <Calendar className="h-3 w-3 text-gray-400" />
+                        {(wp as any).periodStart
+                          ? `${formatDate((wp as any).periodStart)} — ${formatDate((wp as any).periodEnd ?? (wp as any).periodStart)}`
+                          : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 font-medium uppercase tracking-wide text-[10px]">Versión</p>
+                      <p className="text-gray-700 font-medium mt-0.5">
+                        v{wp.version} · {formatRelativeTime(wp.updatedAt)}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Pipeline de estados */}
               <div className="mt-4 flex items-center gap-1 flex-wrap">

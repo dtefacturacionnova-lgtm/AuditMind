@@ -112,9 +112,20 @@ export interface WorkingPaper {
   fileSize?:         number;
   preparedById?:  string;
   reviewedById?:  string;
+  preparedAt?:    string;
+  reviewedAt?:    string;
   createdAt:      string;
   updatedAt:      string;
-  audit?:         { id: string; title: string; type?: string; scope?: string };
+  audit?: {
+    id: string;
+    title: string;
+    type?: string;
+    scope?: string;
+    auditPeriodStart?: string | null;
+    auditPeriodEnd?:   string | null;
+    auditEntity?:      { name: string } | null;
+    organization?:     { name: string; logoUrl?: string | null } | null;
+  };
   folder?:        { id: string; ref: string; name: string; phaseId?: string };
   // ─── Intelligent Papers ────────────────────────────────────────────────────
   sections?:      WpPaperSection[];

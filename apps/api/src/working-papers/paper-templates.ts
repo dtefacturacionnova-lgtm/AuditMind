@@ -2585,7 +2585,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isAutoFilled:false,
       sortOrder:   9,
       tab:         'Alertas y Variaciones',
-      aiHint:      'Columnas: Código | Nombre | Saldo Actual | Saldo Año-1 | Var $ | Var % | Causa probable de la variación | ¿Consistente con sector y actividad? (Sí / No) | Nivel de satisfacción (Satisfactoria / Requiere prueba adicional / Requiere investigación). Genere una fila por cada cuenta de S1 con variación mayor al 20% y monto mayor a la Materialidad de Ejecución (ME). No incluya cuentas sin variación significativa.',
+      aiHint:      'Columnas: Código | Nombre | Saldo Actual | Saldo Año-1 | Var $ | Var % | Causa probable de la variación | ¿Consistente con sector y actividad? (Sí / No) | Nivel de satisfacción (Satisfactoria / Requiere prueba adicional / Requiere investigación). Genere una fila por cada cuenta de S1 con variación mayor al 20% y monto mayor a la Materialidad de Ejecución (ME). No incluya cuentas sin variación significativa. Ordene las filas por magnitud absoluta de Var % de mayor a menor — la variación más significativa primero.',
     },
     {
       sectionKey:  'S10',
@@ -2596,7 +2596,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isAutoFilled:false,
       sortOrder:   10,
       tab:         'Análisis Avanzado',
-      aiHint:      'Columnas: Razón | Fórmula | Año Actual | Año Anterior | Variación | Interpretación (Favorable / Neutral / Señal de Riesgo). Calcule con datos de S1 (balance) y S9 (EEFF compilados): Liquidez Corriente (Activo Corriente / Pasivo Corriente) | Prueba Ácida ((Activo Corriente - Inventarios) / Pasivo Corriente) | Endeudamiento Total (Total Pasivos / Total Activos) | Endeudamiento Patrimonial (Total Pasivos / Patrimonio) | Margen Bruto (Utilidad Bruta / Ingresos) | Margen Neto (Utilidad Neta / Ingresos) | ROA (Utilidad Neta / Total Activos) | ROE (Utilidad Neta / Patrimonio) | Rotación de Inventarios (Costo de Ventas / Inventario Promedio) | Días de Inventario (365 / Rotación Inventarios) | Rotación de CxC (Ventas / CxC Promedio) | Días de Cobro (365 / Rotación CxC). Marque Señal de Riesgo cuando el indicador se deteriora significativamente vs. el año anterior o se aleja de rangos típicos del sector.',
+      aiHint:      'Columnas: Razón | Fórmula | Año Actual | Año Anterior | Variación | Interpretación (Favorable / Neutral / Señal de Riesgo). Calcule con datos de S1 (balance) y S9 (EEFF compilados): Liquidez Corriente (Activo Corriente / Pasivo Corriente) | Prueba Ácida ((Activo Corriente - Inventarios) / Pasivo Corriente) | Endeudamiento Total (Total Pasivos / Total Activos) | Endeudamiento Patrimonial (Total Pasivos / Patrimonio) | Margen Bruto (Utilidad Bruta / Ingresos) | Margen Neto (Utilidad Neta / Ingresos) | ROA (Utilidad Neta / Total Activos) | ROE (Utilidad Neta / Patrimonio) | Rotación de Inventarios (Costo de Ventas / Inventario Promedio) | Días de Inventario (365 / Rotación Inventarios) | Rotación de CxC (Ventas / CxC Promedio) | Días de Cobro (365 / Rotación CxC). Marque Señal de Riesgo cuando el indicador se deteriora significativamente vs. el año anterior o se aleja de rangos típicos del sector. Ordene las filas con Señal de Riesgo primero, seguidas del resto en el orden habitual (liquidez, endeudamiento, rentabilidad, rotación).',
     },
     {
       sectionKey:  'S11',
@@ -2618,7 +2618,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isAutoFilled:false,
       sortOrder:   12,
       tab:         'Análisis Avanzado',
-      aiHint:      'Columnas: Relación Evaluada | Cuenta(s) A | Cuenta(s) B | Indicador Actual | Indicador Año Anterior | ¿Razonable? (Sí / Revisar) | Comentario. Evalúe al menos: Ventas vs. Cuentas por Cobrar (días de cobro implícitos) | Costo de Ventas vs. Inventario (rotación implícita) | Ventas vs. Costo de Ventas (margen bruto estable vs. período anterior) | Gastos de Nómina vs. variación de otras cuentas operativas (consistencia). Marque Revisar cuando la relación entre las cuentas se aparta de forma inconsistente con la variación individual reportada en S7/S7b.',
+      aiHint:      'Columnas: Relación Evaluada | Cuenta(s) A | Cuenta(s) B | Indicador Actual | Indicador Año Anterior | ¿Razonable? (Sí / Revisar) | Comentario. Evalúe al menos: Ventas vs. Cuentas por Cobrar (días de cobro implícitos) | Costo de Ventas vs. Inventario (rotación implícita) | Ventas vs. Costo de Ventas (margen bruto estable vs. período anterior) | Gastos de Nómina vs. variación de otras cuentas operativas (consistencia). Marque Revisar cuando la relación entre las cuentas se aparta de forma inconsistente con la variación individual reportada en S7/S7b. Ordene las filas marcadas Revisar primero, seguidas del resto.',
     },
     {
       sectionKey:  'S13',
@@ -2629,7 +2629,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isAutoFilled:false,
       sortOrder:   13,
       tab:         'Análisis Avanzado',
-      aiHint:      'Columnas: Código | Nombre | Materialidad (🔴 >MG / 🟡 ME-MG / 🟢 <ME, de S6) | Variación (🔴 Crítica / 🟡 Moderada / 🟢 Estable, de S1/S7) | Complejidad o Juicio Contable (Alto / Medio / Bajo) | Score Compuesto (Alto / Medio / Bajo) | Enfoque Sugerido. Combine solo cuentas que ya aparecen en S6 (materiales). Score = Alto si 2 o más de los 3 factores están en nivel alto/crítico; Medio si 1 factor está alto; Bajo en el resto.',
+      aiHint:      'Columnas: Código | Nombre | Materialidad (🔴 >MG / 🟡 ME-MG / 🟢 <ME, de S6) | Variación (🔴 Crítica / 🟡 Moderada / 🟢 Estable, de S1/S7) | Complejidad o Juicio Contable (Alto / Medio / Bajo) | Score Compuesto (Alto / Medio / Bajo) | Enfoque Sugerido. Combine solo cuentas que ya aparecen en S6 (materiales). Score = Alto si 2 o más de los 3 factores están en nivel alto/crítico; Medio si 1 factor está alto; Bajo en el resto. Ordene las filas por Score Compuesto de Alto a Bajo — las cuentas de mayor riesgo primero.',
     },
     {
       sectionKey:  'S14',

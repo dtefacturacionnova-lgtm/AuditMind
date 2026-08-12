@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, X, Sparkles, Loader2, Check } from 'lucide-react';
+import { Plus, Trash2, X, Sparkles, Loader2, Check, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { useAssistSection } from '@/hooks/useWorkingPaperGraph';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -131,6 +131,14 @@ function dedupeLabels(labels: string[]): string[] {
   });
 }
 
+/** Numeric-aware compare: sorts "1,250.00" / "-3.5%" / "$420,000" as numbers when both sides look numeric. */
+function compareValues(a: string, b: string): number {
+  const na = parseFloat(a.replace(/[^\d.-]/g, ''));
+  const nb = parseFloat(b.replace(/[^\d.-]/g, ''));
+  if (Number.isFinite(na) && Number.isFinite(nb) && /\d/.test(a) && /\d/.test(b)) return na - nb;
+  return a.localeCompare(b, 'es');
+}
+
 // ─── Panel principal ──────────────────────────────────────────────────────────
 
 /**
@@ -158,6 +166,15 @@ export function MatrixGridPanel({
   const [aiPreview,  setAiPreview]  = useState<MatrixRow[] | null>(null);
   const [aiUsedReal, setAiUsedReal] = useState(true);
   const [usingSuggested, setUsingSuggested] = useState(initialRows.length === 0 && suggestedShort.length > 0);
+  // Display-only sort — never reorders the persisted rows, just the render order.
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDir,    setSortDir]    = useState<'asc' | 'desc'>('asc');
+
+  function toggleSort(col: string) {
+    if (sortColumn !== col) { setSortColumn(col); setSortDir('asc'); return; }
+    if (sortDir === 'asc') { setSortDir('desc'); return; }
+    setSortColumn(null);
+  }
 
   const assist = useAssistSection();
 
@@ -443,6 +460,21 @@ export function MatrixGridPanel({
                           >
                             {col}
                           </span>
+                          <button
+                            onClick={() => toggleSort(col)}
+                            className={`transition-all ${
+                              sortColumn === col ? 'text-blue-600' : 'text-gray-300 opacity-0 group-hover/col:opacity-100 hover:text-gray-500'
+                            }`}
+                            title={
+                              sortColumn === col
+                                ? (sortDir === 'asc' ? 'Ordenado ascendente — clic para invertir' : 'Ordenado descendente — clic para quitar orden')
+                                : 'Ordenar por esta columna'
+                            }
+                          >
+                            {sortColumn === col
+                              ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)
+                              : <ArrowUpDown className="w-3 h-3" />}
+                          </button>
                           {!readOnly && (
                             <button
                               onClick={() => deleteColumn(col)}
@@ -460,7 +492,15 @@ export function MatrixGridPanel({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => (
+                {(sortColumn
+                  ? rows
+                      .map((row, i) => ({ row, i }))
+                      .sort((a, b) => {
+                        const cmp = compareValues(a.row[sortColumn] ?? '', b.row[sortColumn] ?? '');
+                        return sortDir === 'asc' ? cmp : -cmp;
+                      })
+                  : rows.map((row, i) => ({ row, i }))
+                ).map(({ row, i }) => (
                   <tr key={i} className="group border-b border-gray-100 last:border-0 hover:bg-blue-50/20">
                     {columns.map(col => (
                       <td key={col} className="px-3 py-2 align-top">

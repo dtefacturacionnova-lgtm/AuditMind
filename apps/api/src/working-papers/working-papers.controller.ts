@@ -688,11 +688,17 @@ export class WorkingPapersController {
       },
     });
 
+    const footerNote = [
+      w.paperCode ?? w.code,
+      w.audit?.title,
+      w.preparedBy?.name ? `Elaborado por: ${w.preparedBy.name}` : null,
+    ].filter(Boolean).join(' — ');
+
     const pdf = await this.pdfService.generateBranded({
       title:    `${w.paperCode ?? w.code} — ${w.title}`,
       subtitle: `Papel de Trabajo · ${w.audit?.title ?? ''}`,
       body,
-      options:  { printPageNumbers: true, format: 'A4' },
+      options:  { printPageNumbers: true, format: 'A4', footerNote },
     });
 
     const filename = `auditmind_papel_${(w.paperCode ?? w.code ?? id).replace(/[^\w-]/g, '_')}.pdf`;

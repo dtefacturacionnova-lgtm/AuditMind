@@ -12,6 +12,15 @@ import { Injectable, Logger, OnModuleDestroy, ServiceUnavailableException } from
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Browser = any;
 
+/** Puppeteer footer templates are raw HTML — escape caller-supplied text before interpolating. */
+function escFooter(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export interface PdfOptions {
   /** "A4" por defecto */
   format?:        'A4' | 'Letter' | 'Legal';
@@ -21,6 +30,8 @@ export interface PdfOptions {
   printPageNumbers?: boolean;
   /** Modo paisaje */
   landscape?:     boolean;
+  /** Línea de contexto en el pie (ej. "PT-FIN-B00 — Auditoria Financiera FE&CE 2025") */
+  footerNote?:    string;
 }
 
 @Injectable()
@@ -116,8 +127,11 @@ export class PdfService implements OnModuleDestroy {
       });
 
       const footerTemplate = opts.printPageNumbers
-        ? `<div style="font-size: 9px; color: #94a3b8; width: 100%; text-align: center; padding: 0 16mm;">
-             <span class="pageNumber"></span> / <span class="totalPages"></span>
+        ? `<div style="width: 100%; padding: 0 15mm; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
+             <div style="border-top: 1px solid #E2E8F0; padding-top: 2mm; display: flex; justify-content: space-between; align-items: center; font-size: 8px; color: #94a3b8;">
+               <span>AuditMind &middot; Plataforma de Auditoría Inteligente${opts.footerNote ? ` &middot; ${escFooter(opts.footerNote)}` : ''}</span>
+               <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
+             </div>
            </div>`
         : '<div></div>';
 
@@ -125,7 +139,7 @@ export class PdfService implements OnModuleDestroy {
         format:           opts.format ?? 'A4',
         landscape:        opts.landscape ?? false,
         printBackground:  true,
-        margin:           opts.margin ?? { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
+        margin:           opts.margin ?? { top: '22mm', right: '15mm', bottom: '20mm', left: '15mm' },
         displayHeaderFooter: opts.printPageNumbers ?? true,
         headerTemplate:   '<div></div>',
         footerTemplate,

@@ -27,7 +27,11 @@ export class ReportsService {
       title:    `Informe de Auditoría — ${data.code ?? data.id?.slice(0, 8) ?? ''}`,
       subtitle: data.title,
       body,
-      options:  { printPageNumbers: true, format: 'A4' },
+      options:  {
+        printPageNumbers: true,
+        format: 'A4',
+        footerNote: [data.code ?? data.id?.slice(0, 8), data.title].filter(Boolean).join(' — '),
+      },
     });
   }
 
@@ -69,7 +73,11 @@ export class ReportsService {
       title:    finding.title,
       subtitle: `Hallazgo · ${auditMeta.code} — ${auditMeta.title}`,
       body,
-      options:  { printPageNumbers: true, format: 'A4' },
+      options:  {
+        printPageNumbers: true,
+        format: 'A4',
+        footerNote: `${auditMeta.code} — ${auditMeta.title}`,
+      },
     });
   }
 

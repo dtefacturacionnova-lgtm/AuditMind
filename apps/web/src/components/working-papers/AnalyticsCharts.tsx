@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
 } from 'recharts';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -32,6 +32,16 @@ function parseNumeric(v: unknown): number {
   const cleaned = v.replace(/[^\d.,-]/g, '').replace(/,/g, '');
   const n = parseFloat(cleaned);
   return Number.isFinite(n) ? n : NaN;
+}
+
+/** Compact label for bar-end value tags: 1.5M, 320K, 12.3, etc. */
+function fmtLabel(n: number): string {
+  if (!Number.isFinite(n)) return '';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(1);
 }
 
 interface Props {
@@ -70,8 +80,12 @@ export function RatioTrendChart({ rows }: Props) {
           <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10 }} />
           <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="Anterior" fill="#94a3b8" radius={[0, 4, 4, 0]} />
-          <Bar dataKey="Actual" fill="#4f46e5" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="Anterior" fill="#94a3b8" radius={[0, 4, 4, 0]}>
+            <LabelList dataKey="Anterior" position="right" formatter={fmtLabel} style={{ fontSize: 9, fill: '#64748b' }} />
+          </Bar>
+          <Bar dataKey="Actual" fill="#4f46e5" radius={[0, 4, 4, 0]}>
+            <LabelList dataKey="Actual" position="right" formatter={fmtLabel} style={{ fontSize: 9, fill: '#4f46e5', fontWeight: 600 }} />
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -146,6 +160,7 @@ export function ConcentrationChart({ rows }: Props) {
           <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: number) => v.toLocaleString('es-SV')} />
           <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
             {data.map((d, i) => <Cell key={i} fill={colorForGroup(d.group)} />)}
+            <LabelList dataKey="amount" position="right" formatter={fmtLabel} style={{ fontSize: 9, fill: '#475569', fontWeight: 600 }} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>

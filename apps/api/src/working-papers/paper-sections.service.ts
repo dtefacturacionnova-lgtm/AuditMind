@@ -811,6 +811,158 @@ INSTRUCCIONES DE SALIDA:
     };
   }
 
+  // ─── Auditoría Financiera: propagación de AJEs a B-09 Libro de AJEs ──────────
+
+  /**
+   * Trae al Libro de AJEs (PT-FIN-B09 S1) los asientos aceptados registrados en
+   * PT-FIN-B08 S4 (mismo esquema pareado Debe/Haber — copia directa) y en
+   * PT-ADJ-RECLASIF S1 (una fila por pierna Dr/Cr — se agrupan por "# AJE" para
+   * reconstruir el asiento). No sobrescribe filas agregadas manualmente ni pisa
+   * ediciones ya hechas por el auditor sobre una fila previamente propagada
+   * (Descripción Técnica / Base NIIF/NIA / Estado) — solo refresca las cuentas
+   * y montos, que deben reflejar siempre la fuente.
+   */
+  async propagateAjustes(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-FIN-B09') {
+      throw new BadRequestException(
+        'Solo el papel PT-FIN-B09 puede propagar ajustes desde B-08 y PT-ADJ-RECLASIF',
+      );
+    }
+
+    type AjeRow = Record<string, string>;
+    const asRows = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value : []);
+    const norm = (v: unknown): string => (v == null ? '' : String(v)).trim();
+    const isAccepted = (estado: string) => /acept/i.test(estado);
+
+    // ── Fuente 1: PT-FIN-B08 S4 — mismo esquema pareado, copia directa ────────
+    const b08 = await this.prisma.workingPaper.findFirst({
+      where:   { auditId: wp.auditId, paperCode: 'PT-FIN-B08' },
+      include: { sections: { where: { sectionKey: 'S4' } } },
+    });
+    const fromB08: AjeRow[] = asRows(b08?.sections[0]?.value)
+      .filter(r => isAccepted(norm(r['Estado'])))
+      .map(r => ({
+        '# AJE':              norm(r['# AJE']),
+        'Origen':              'B-08',
+        'Cuenta Debe Código':  norm(r['Cuenta Debe Código']),
+        'Cuenta Debe Nombre':  norm(r['Cuenta Debe Nombre']),
+        'Monto Debe':          norm(r['Monto Debe']),
+        'Cuenta Haber Código': norm(r['Cuenta Haber Código']),
+        'Cuenta Haber Nombre': norm(r['Cuenta Haber Nombre']),
+        'Monto Haber':         norm(r['Monto Haber']),
+        'Descripción Técnica': norm(r['Descripción Técnica']),
+        'Base NIIF/NIA':       norm(r['Base NIIF/NIA']),
+        'Estado':              'Propuesto',
+      }))
+      .filter(r => r['# AJE']);
+
+    // ── Fuente 2: PT-ADJ-RECLASIF S1 — una pierna Dr/Cr por fila, agrupar por # AJE ─
+    const adj = await this.prisma.workingPaper.findFirst({
+      where:   { auditId: wp.auditId, paperCode: 'PT-ADJ-RECLASIF' },
+      include: { sections: { where: { sectionKey: 'S1' } } },
+    });
+    const acceptedAdjLegs = asRows(adj?.sections[0]?.value)
+      .filter(r => norm(r['Estado']).toUpperCase().includes('ACEPTADO'));
+
+    const legsByAje = new Map<string, Record<string, unknown>[]>();
+    for (const r of acceptedAdjLegs) {
+      const key = norm(r['# AJE']);
+      if (!key) continue;
+      if (!legsByAje.has(key)) legsByAje.set(key, []);
+      legsByAje.get(key)!.push(r);
+    }
+
+    const fromAdj: AjeRow[] = [];
+    let skippedIncomplete = 0;
+    for (const [aje, legs] of legsByAje) {
+      const dr = legs.find(l => /^d/i.test(norm(l['Naturaleza (Dr o Cr)'])));
+      const cr = legs.find(l => /^c/i.test(norm(l['Naturaleza (Dr o Cr)'])));
+      if (!dr || !cr) { skippedIncomplete++; continue; }
+      const desc = norm(dr['Descripción del asiento']) || norm(cr['Descripción del asiento']);
+      const ref  = norm(dr['Referencia PT soporte']) || norm(cr['Referencia PT soporte']);
+      fromAdj.push({
+        '# AJE':              aje,
+        'Origen':              'PT-ADJ-RECLASIF',
+        'Cuenta Debe Código':  norm(dr['Cuenta Código']),
+        'Cuenta Debe Nombre':  norm(dr['Cuenta Nombre']),
+        'Monto Debe':          norm(dr['Monto $']),
+        'Cuenta Haber Código': norm(cr['Cuenta Código']),
+        'Cuenta Haber Nombre': norm(cr['Cuenta Nombre']),
+        'Monto Haber':         norm(cr['Monto $']),
+        'Descripción Técnica': ref ? `${desc} (Ref: ${ref})` : desc,
+        'Base NIIF/NIA':       '',
+        'Estado':              'Propuesto',
+      });
+    }
+
+    const incoming = [...fromB08, ...fromAdj];
+    if (incoming.length === 0) {
+      return {
+        propagated: 0,
+        added: 0,
+        updated: 0,
+        skippedIncomplete,
+        message: skippedIncomplete > 0
+          ? `No hay AJEs aceptados para propagar (${skippedIncomplete} de PT-ADJ-RECLASIF omitidos por no tener ambas piernas Debe/Haber).`
+          : 'No hay AJEs aceptados en B-08 ni en PT-ADJ-RECLASIF para propagar.',
+      };
+    }
+
+    // ── Merge con S1 existente ────────────────────────────────────────────────
+    const s1 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+    });
+    const existing = asRows(s1?.value) as AjeRow[];
+    const keyOf = (r: AjeRow) => `${norm(r['Origen'])}::${norm(r['# AJE'])}`;
+
+    let added = 0;
+    let updated = 0;
+    const merged = [...existing];
+    for (const inc of incoming) {
+      const key = keyOf(inc);
+      const idx = merged.findIndex(r => keyOf(r) === key);
+      if (idx === -1) {
+        merged.push(inc);
+        added++;
+      } else {
+        const prev = merged[idx];
+        merged[idx] = {
+          ...prev,
+          'Cuenta Debe Código':  inc['Cuenta Debe Código'],
+          'Cuenta Debe Nombre':  inc['Cuenta Debe Nombre'],
+          'Monto Debe':          inc['Monto Debe'],
+          'Cuenta Haber Código': inc['Cuenta Haber Código'],
+          'Cuenta Haber Nombre': inc['Cuenta Haber Nombre'],
+          'Monto Haber':         inc['Monto Haber'],
+          // Preserve auditor edits made after a prior propagation — only fill if still blank.
+          'Descripción Técnica': norm(prev['Descripción Técnica']) || inc['Descripción Técnica'],
+          'Base NIIF/NIA':       norm(prev['Base NIIF/NIA']) || inc['Base NIIF/NIA'],
+          'Estado':              norm(prev['Estado']) || inc['Estado'],
+        };
+        updated++;
+      }
+    }
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: merged as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S1', merged);
+
+    return {
+      propagated: added + updated,
+      added,
+      updated,
+      skippedIncomplete,
+      total: merged.length,
+      message: `${added} AJE(s) nuevo(s), ${updated} actualizado(s)`
+        + (skippedIncomplete ? `, ${skippedIncomplete} omitido(s) por datos incompletos.` : '.'),
+    };
+  }
+
   // ─── Auditoría Financiera: MG/ME/UAE cross-paper ────────────────────────────
 
   /**

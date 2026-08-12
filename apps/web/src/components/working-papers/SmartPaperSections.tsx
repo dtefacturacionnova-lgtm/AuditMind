@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, Component, type ErrorInfo, type ReactNode } from 'react';
-import { Loader2, LayoutTemplate, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, LayoutTemplate, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
 import {
   usePaperSections,
   useUpdateSection,
@@ -9,14 +9,64 @@ import {
   useMentionIndex,
   useCreateReference,
   usePropagateTrialBalance,
+  usePropagateAjustes,
 } from '@/hooks/useWorkingPaperGraph';
 import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
 import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './TrialBalancePanel';
 import { MaterialidadPanel } from './MaterialidadPanel';
 import { SamplingExecutionPanel } from './SamplingExecutionPanel';
-import { RatioTrendChart, ConcentrationChart, VariationChart } from './AnalyticsCharts';
+import { RatioTrendChart, ConcentrationChart, VariationChart, AjeImpactChart } from './AnalyticsCharts';
 import { MethodologyInfo } from './MethodologyInfo';
+
+// ─── PT-FIN-B09 S1 — botón "Propagar Ajustes" desde B-08 y PT-ADJ-RECLASIF ────
+
+function AjePropagateBar({ paperId }: { paperId: string }) {
+  const propagate = usePropagateAjustes();
+  const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  async function handleClick() {
+    setMsg('');
+    setIsError(false);
+    try {
+      const res = await propagate.mutateAsync(paperId);
+      setMsg(res.message);
+      setIsError(false);
+    } catch (err) {
+      setMsg((err as Error).message || 'Error al propagar los ajustes');
+      setIsError(true);
+    }
+  }
+
+  return (
+    <div className="pt-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-[11px] text-gray-400">
+          Trae los AJEs aceptados de B-08 (Diferencias) y PT-ADJ-RECLASIF sin perder filas ni notas ya editadas aquí.
+        </p>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={propagate.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0"
+          title="Traer AJEs aceptados desde B-08 y PT-ADJ-RECLASIF"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${propagate.isPending ? 'animate-spin' : ''}`} />
+          {propagate.isPending ? 'Propagando…' : 'Propagar Ajustes'}
+        </button>
+      </div>
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 mt-2 text-xs ${
+          isError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-indigo-50 border border-indigo-200 text-indigo-700'
+        }`}>
+          {isError ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Error boundary ───────────────────────────────────────────────────────────
 
@@ -519,6 +569,38 @@ export function SmartPaperSections({
                   </div>
                   {section.sectionKey === 'S1' && <VariationChart rows={rows} />}
                   {section.sectionKey === 'S3' && <RatioTrendChart rows={rows} />}
+                  <SectionField
+                    section={section}
+                    allSections={sorted}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    paperId={paperId}
+                    paperCode={paperCode}
+                    mentionItems={mentionItems}
+                    aiDraftConfig={aiDraftConfig}
+                    onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                      void createReference.mutateAsync({
+                        paperId,
+                        sourceSectionKey: sectionKey,
+                        targetPaperId,
+                        targetSectionKey,
+                      });
+                    }}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            );
+          }
+
+          // PT-FIN-B09 S1: botón "Propagar Ajustes" (B-08 + PT-ADJ-RECLASIF) + gráfico
+          // de impacto neto por cuenta, ambos arriba del grid editable de siempre.
+          if (paperCode === 'PT-FIN-B09' && section.sectionKey === 'S1') {
+            const rows = Array.isArray(section.value) ? section.value as Record<string, unknown>[] : [];
+            return (
+              <SectionErrorBoundary key="S1" label={section.label}>
+                <div>
+                  {!readonly && paperId && <AjePropagateBar paperId={paperId} />}
+                  <AjeImpactChart rows={rows} />
                   <SectionField
                     section={section}
                     allSections={sorted}

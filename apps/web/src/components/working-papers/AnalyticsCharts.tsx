@@ -168,6 +168,61 @@ export function VariationChart({ rows }: Props) {
   );
 }
 
+// ─── Impacto Neto de AJEs por Cuenta (Libro de AJEs, PT-FIN-B09 S1) ───────────
+
+export function AjeImpactChart({ rows }: Props) {
+  if (rows.length === 0) return null;
+  const sample = rows[0];
+  const debeNameKey  = findKey(sample, ['cuenta debe nombre', 'debe nombre']);
+  const debeMontoKey = findKey(sample, ['monto debe']);
+  const haberNameKey = findKey(sample, ['cuenta haber nombre', 'haber nombre']);
+  const haberMontoKey = findKey(sample, ['monto haber']);
+  if (!debeNameKey || !debeMontoKey || !haberNameKey || !haberMontoKey) return null;
+
+  const net = new Map<string, number>();
+  for (const r of rows) {
+    const debeName = String(r[debeNameKey] ?? '').trim();
+    const debeMonto = parseNumeric(r[debeMontoKey]);
+    if (debeName && Number.isFinite(debeMonto)) net.set(debeName, (net.get(debeName) ?? 0) + debeMonto);
+
+    const haberName = String(r[haberNameKey] ?? '').trim();
+    const haberMonto = parseNumeric(r[haberMontoKey]);
+    if (haberName && Number.isFinite(haberMonto)) net.set(haberName, (net.get(haberName) ?? 0) - haberMonto);
+  }
+
+  const data = Array.from(net.entries())
+    .map(([name, amount]) => ({ name, amount }))
+    .filter(d => d.amount !== 0)
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+    .slice(0, 15);
+
+  if (data.length === 0) return null;
+
+  return (
+    <div className="mb-3 bg-white border border-gray-100 rounded-xl p-3">
+      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        Impacto neto de los AJEs por cuenta
+      </p>
+      <ResponsiveContainer width="100%" height={Math.max(220, data.length * 26)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 28, bottom: 4, left: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 10 }} />
+          <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 10 }} />
+          <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: number) => fmtLabel(Number(v))} />
+          <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
+            {data.map((d, i) => <Cell key={i} fill={d.amount >= 0 ? '#4f46e5' : '#ef4444'} />)}
+            <LabelList dataKey="amount" position="right" formatter={fmtLabel} style={{ fontSize: 9, fontWeight: 600, fill: '#334155' }} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      <div className="flex items-center gap-3 mt-2">
+        <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-indigo-600 inline-block" /> Neto Débito</span>
+        <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Neto Crédito</span>
+      </div>
+    </div>
+  );
+}
+
 export function ConcentrationChart({ rows }: Props) {
   if (rows.length === 0) return null;
   const sample = rows[0];

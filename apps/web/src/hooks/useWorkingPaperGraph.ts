@@ -195,6 +195,20 @@ export function usePropagateTrialBalance() {
   });
 }
 
+export function usePropagateAjustes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ propagated: number; added: number; updated: number; skippedIncomplete: number; message: string }>(
+        `/working-papers/${paperId}/propagate-ajustes`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
 export function useInitFromTemplate() {
   const qc = useQueryClient();
   return useMutation({

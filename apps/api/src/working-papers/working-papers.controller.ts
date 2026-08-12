@@ -299,6 +299,13 @@ export class WorkingPapersController {
     return this.sectionsService.propagateTrialBalance(id, user);
   }
 
+  @Post(':id/propagate-ajustes')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Propagar AJEs aceptados de B-08 S4 y PT-ADJ-RECLASIF S1 al Libro de AJEs B-09 S1 (determinista, sin IA)' })
+  propagateAjustes(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateAjustes(id, user);
+  }
+
   @Post(':id/sections/init/:templateKey')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Inicializar secciones de un papel desde una plantilla (PT-A1, PT-A2, PT-A4, PT-MEMO, PT-PROG)' })

@@ -3096,7 +3096,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       sectionKey: 'S4', label: 'Libro de AJEs — Asientos Formales',
       description: 'Asientos de ajuste formales generados para cada diferencia confirmada.',
       fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: false, sortOrder: 4,
-      aiHint: 'Para cada ajuste: AJE-001, AJE-002... | Cuenta Debe (código + nombre) | Monto $ | Cuenta Haber (código + nombre) | Monto $ | Descripción técnica | Base NIIF/NIA | Estado (Propuesto/Aceptado/Rechazado). Los asientos aceptados fluyen automáticamente a B-09 Libro de AJEs.',
+      aiHint: 'Columnas: # AJE | Cuenta Debe Código | Cuenta Debe Nombre | Monto Debe | Cuenta Haber Código | Cuenta Haber Nombre | Monto Haber | Descripción Técnica | Base NIIF/NIA | Estado. # AJE con formato AJE-001, AJE-002... Estado: Propuesto / Aceptado / Rechazado. Los asientos con Estado=Aceptado se propagan a B-09 Libro de AJEs mediante el botón "Propagar Ajustes" de esa sección — use exactamente estos nombres de columna para que la propagación funcione.',
     },
     {
       sectionKey: 'S5', label: 'Respuesta del Cliente a los Ajustes',
@@ -3138,33 +3138,34 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   'PT-FIN-B09': [
     {
       sectionKey: 'S1', label: 'Asientos de Ajuste del Período',
-      description: 'Libro formal de asientos de ajuste propuestos por el auditor. Se genera automáticamente desde los AJEs aceptados en B-08.',
+      description: 'Libro formal de asientos de ajuste propuestos por el auditor. Use el botón "Propagar Ajustes" para traer los AJEs aceptados desde B-08 (diferencias) y PT-ADJ-RECLASIF (ajustes/reclasificaciones del auditor) sin perder las filas que agregue manualmente.',
       fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'B-08::S4', sortOrder: 1,
-      aiHint: 'Formato: AJE-001 | Fecha: [cierre del período] | Cuenta Debe: código, nombre, monto | Cuenta Haber: código, nombre, monto | Descripción técnica (Cicero) | Base: NIIF/NIA específica | Estado: Propuesto/Aceptado. Total Débitos = Total Créditos (verificación automática).',
+      aiHint: 'Columnas: # AJE | Origen | Cuenta Debe Código | Cuenta Debe Nombre | Monto Debe | Cuenta Haber Código | Cuenta Haber Nombre | Monto Haber | Descripción Técnica | Base NIIF/NIA | Estado. # AJE formato AJE-001, AJE-002... Origen: B-08 / PT-ADJ-RECLASIF / Manual. Total de Monto Debe debe cuadrar con el total de Monto Haber (partida doble). Estado: Propuesto / Registrado por Cliente.',
     },
     {
       sectionKey: 'S2', label: 'Descripción Técnica por Ajuste',
-      description: 'Argumento técnico contable para cada AJE, con referencia a la norma NIIF/NIA que lo sustenta.',
-      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 2,
-      aiHint: 'Para cada AJE: "El ajuste AJE-00X corresponde a [descripción]. Conforme [norma], el tratamiento correcto establece que [criterio técnico]. El impacto en los estados financieros es [efecto en líneas específicas del EEFF]. Base: [NIA/NIIF citada]." El Agente Cicero genera este texto; el auditor revisa y aprueba.',
+      description: 'Argumento técnico contable para cada AJE de S1, con referencia a la norma NIIF/NIA que lo sustenta. Una fila por AJE — se agrega automáticamente al registrar un nuevo asiento en S1.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 2,
+      linkedFrom: { sectionKey: 'S1', keyColumns: ['# AJE'] },
+      aiHint: 'Columnas: # AJE | Descripción Técnica. Para cada AJE: "El ajuste AJE-00X corresponde a [descripción]. Conforme [norma], el tratamiento correcto establece que [criterio técnico]. El impacto en los estados financieros es [efecto en líneas específicas del EEFF]. Base: [NIA/NIIF citada]." El Agente Cicero genera este texto a partir de las cuentas y montos de S1; el auditor revisa y aprueba.',
     },
     {
       sectionKey: 'S3', label: 'Carta de Ajustes Propuestos al Cliente',
       description: 'Documento formal para presentar al cliente todos los AJEs propuestos con base técnica y solicitar aceptación.',
       fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 3,
-      aiHint: 'Incluir: fecha, destinatario (Gerente/Director Financiero), resumen de ajustes por área, total impacto en UAI y patrimonio, tabla de AJEs (número, descripción, monto, base), solicitud de confirmación. Espacio para firma del cliente aceptando o rechazando. Formato carta membretada con datos del auditor.',
+      aiHint: 'Incluir: fecha, destinatario (Gerente/Director Financiero), resumen de ajustes por área, total impacto en UAI y patrimonio, tabla de AJEs (número, descripción, monto, base) tomada de S1, solicitud de confirmación. Espacio para firma del cliente aceptando o rechazando. Formato carta membretada con datos del auditor.',
     },
     {
       sectionKey: 'S4', label: 'Impacto Consolidado en EEFF Auditados',
-      description: 'Tabla que muestra cómo cambian los EEFF al aplicar los ajustes aceptados.',
+      description: 'Tabla que muestra cómo cambian los EEFF al aplicar los ajustes de S1.',
       fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: false, sortOrder: 4,
-      aiHint: 'Tres columnas: EEFF s/cliente | Ajustes del período (+/-) | EEFF Auditados. Por cada línea del Balance General y Estado de Resultados. Variación total = Σ AJEs aceptados. Verificar que cuadre: Total Ajustes Débito = Total Ajustes Crédito.',
+      aiHint: 'Columnas: Línea EEFF | EEFF s/Cliente | Ajustes del Período | EEFF Auditados. Por cada línea del Balance General y Estado de Resultados: tome los AJEs registrados en S1 de este mismo papel, sume Monto Debe y reste Monto Haber (o viceversa según la naturaleza de la línea) para obtener el efecto neto por línea, y calcule EEFF Auditados = EEFF s/Cliente + Ajustes del Período. Verificar que cuadre: el total de Ajustes del Período en Activo = Pasivo + Patrimonio + Resultado.',
     },
     {
       sectionKey: 'S5', label: 'Efecto Fiscal de los Ajustes — Mercado SV',
       description: 'Impacto en ISR de los ajustes que afectan la renta gravable, para mercado El Salvador.',
       fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 5,
-      aiHint: 'Para cada AJE que afecte ingresos o gastos: calcular impacto en renta imponible (Código Tributario SV). ISR tasa: 25% para rentas >$150,000 o 30% para rentas >$500,000. Si el encargo incluye dictamen fiscal, referenciar al módulo Fiscal (AF-07 PT-FIN-ISR). El Agente Lex puede calcular el impacto tributario automáticamente.',
+      aiHint: 'Revise los AJEs de S1 de este mismo papel: para cada uno que afecte una cuenta de ingreso o gasto, calcule su impacto en renta imponible (Código Tributario SV). ISR tasa: 25% para rentas >$150,000 o 30% para rentas >$500,000. Si el encargo incluye dictamen fiscal, referenciar al módulo Fiscal (AF-07 PT-FIN-ISR). El Agente Lex puede calcular el impacto tributario automáticamente.',
     },
   ],
 

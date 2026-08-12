@@ -16,6 +16,9 @@ export interface PaperConsolidateEvent {
   // PI.5 — para registrar quién disparó la consolidación
   userId?:    string;
   reason?:    string;
+  // 'merge' (default): preserva nota_auditor/ajustes/adjuntos de las filas de detalle
+  // existentes, emparejando por código de cuenta. 'overwrite': reemplaza todo.
+  mode?:      'overwrite' | 'merge';
 }
 
 export interface SourcePaperData {
@@ -62,8 +65,11 @@ interface LeadScheduleConfig {
   groupName: string;
   prefix: string;
   detailSections: DetailSectionDef[];
-  analysisSectionKey: string;
-  proceduresSectionKey: string;
+  // Only conclusionSectionKey is guaranteed to exist on every lead schedule paper.
+  // analysisSectionKey/proceduresSectionKey are omitted on papers whose template
+  // doesn't have a distinct section for them (their content folds into conclusion).
+  analysisSectionKey?: string;
+  proceduresSectionKey?: string;
   conclusionSectionKey: string;
 }
 
@@ -78,6 +84,7 @@ const LEAD_SCHEDULE_CONFIG: Record<string, LeadScheduleConfig> = {
     ],
     analysisSectionKey: 'S6', proceduresSectionKey: 'S7', conclusionSectionKey: 'S9',
   },
+  // B02/B03: no hay sección separada de "procedimientos sugeridos" en la plantilla real.
   'PT-FIN-B02': {
     groupName: 'Activos No Corrientes', prefix: 'B-02',
     detailSections: [
@@ -85,7 +92,7 @@ const LEAD_SCHEDULE_CONFIG: Record<string, LeadScheduleConfig> = {
       { key: 'S3', label: 'Activos Intangibles',         subSumaria: 'B-02b' },
       { key: 'S4', label: 'Inversiones LP',              subSumaria: 'B-02c' },
     ],
-    analysisSectionKey: 'S5', proceduresSectionKey: 'S6', conclusionSectionKey: 'S8',
+    analysisSectionKey: 'S5', conclusionSectionKey: 'S7',
   },
   'PT-FIN-B03': {
     groupName: 'Pasivos Corrientes', prefix: 'B-03',
@@ -94,21 +101,27 @@ const LEAD_SCHEDULE_CONFIG: Record<string, LeadScheduleConfig> = {
       { key: 'S3', label: 'Obligaciones Financieras CP', subSumaria: 'B-03b' },
       { key: 'S4', label: 'Impuestos y Retenciones',    subSumaria: 'B-03c' },
     ],
-    analysisSectionKey: 'S5', proceduresSectionKey: 'S6', conclusionSectionKey: 'S8',
+    analysisSectionKey: 'S5', conclusionSectionKey: 'S7',
   },
+  // B04/B05/B06: análisis y conclusión están combinados en una sola sección de la
+  // plantilla real — no hay analysisSectionKey ni proceduresSectionKey separados.
   'PT-FIN-B04': {
     groupName: 'Pasivos No Corrientes', prefix: 'B-04',
     detailSections: [
-      { key: 'S2', label: 'Deuda LP y Pasivos Financieros', subSumaria: 'B-04a' },
+      { key: 'S2', label: 'Deuda a Largo Plazo', subSumaria: 'B-04a' },
+      { key: 'S3', label: 'Provisiones LP',      subSumaria: 'B-04b' },
+      { key: 'S4', label: 'Arrendamientos LP (NIIF 16)', subSumaria: 'B-04c' },
     ],
-    analysisSectionKey: 'S3', proceduresSectionKey: 'S4', conclusionSectionKey: 'S6',
+    conclusionSectionKey: 'S5',
   },
   'PT-FIN-B05': {
     groupName: 'Patrimonio', prefix: 'B-05',
     detailSections: [
-      { key: 'S2', label: 'Capital y Reservas', subSumaria: 'B-05a' },
+      { key: 'S2', label: 'Capital Social',       subSumaria: 'B-05a' },
+      { key: 'S3', label: 'Reservas y ORI',       subSumaria: 'B-05b' },
+      { key: 'S4', label: 'Utilidades Retenidas y del Período', subSumaria: 'B-05c' },
     ],
-    analysisSectionKey: 'S3', proceduresSectionKey: 'S4', conclusionSectionKey: 'S6',
+    conclusionSectionKey: 'S6',
   },
   'PT-FIN-B06': {
     groupName: 'Resultados (P&G)', prefix: 'B-06',
@@ -116,9 +129,8 @@ const LEAD_SCHEDULE_CONFIG: Record<string, LeadScheduleConfig> = {
       { key: 'S2', label: 'Ingresos',               subSumaria: 'B-06a' },
       { key: 'S3', label: 'Costo de Ventas',         subSumaria: 'B-06b' },
       { key: 'S4', label: 'Gastos Operativos',       subSumaria: 'B-06c' },
-      { key: 'S5', label: 'Otros Ingresos y Gastos', subSumaria: 'B-06d' },
     ],
-    analysisSectionKey: 'S6', proceduresSectionKey: 'S7', conclusionSectionKey: 'S9',
+    conclusionSectionKey: 'S6',
   },
 };
 
@@ -140,8 +152,8 @@ export class PaperConsolidationService {
 
   @OnEvent('paper.consolidate', { async: true })
   async handleConsolidate(event: PaperConsolidateEvent): Promise<void> {
-    const { paperId, paperCode, auditId, auditTitle, sourceData, userId, reason } = event;
-    this.logger.log(`[Consolidation] Starting: ${paperId} (${paperCode ?? 'no code'})`);
+    const { paperId, paperCode, auditId, auditTitle, sourceData, userId, reason, mode = 'merge' } = event;
+    this.logger.log(`[Consolidation] Starting: ${paperId} (${paperCode ?? 'no code'}, mode=${mode})`);
 
     const lsConfig = paperCode ? LEAD_SCHEDULE_CONFIG[paperCode] : null;
 
@@ -153,6 +165,9 @@ export class PaperConsolidationService {
       let sections: SectionMap;
       if (lsConfig) {
         sections = await this.generateLeadScheduleSections(lsConfig, auditId, auditTitle);
+        if (mode === 'merge') {
+          sections = await this.mergeDetailRows(paperId, lsConfig, sections);
+        }
       } else {
         sections = await this.generateSections(paperCode, sourceData, auditTitle);
       }
@@ -307,11 +322,60 @@ export class PaperConsolidationService {
       }
     }
 
-    if (!aiSections[config.analysisSectionKey]) {
+    if (!aiSections[config.conclusionSectionKey]) {
       aiSections = this.templateFallbackLeadSchedule(config, groupAccounts, totalActual, totalAnterior, auditTitle);
     }
 
     return { ...sections, ...aiSections };
+  }
+
+  /**
+   * "Merge" reconsolidation: preserves the auditor's own work on detail rows
+   * (id, nota_auditor, ajuste_debito, ajuste_credito, attachments) by matching
+   * freshly-generated rows against the currently persisted ones via account code
+   * (`cuenta`). Rows for accounts no longer present are simply dropped (their
+   * evidence attachments become orphaned in content.accountScheduleEvidence,
+   * same as any other row deletion). New accounts get blank annotations.
+   */
+  private async mergeDetailRows(
+    paperId: string,
+    config:  LeadScheduleConfig,
+    fresh:   SectionMap,
+  ): Promise<SectionMap> {
+    const keys = config.detailSections.map(d => d.key);
+    if (keys.length === 0) return fresh;
+
+    const existing = await this.prisma.paperSection.findMany({
+      where:  { paperId, sectionKey: { in: keys } },
+      select: { sectionKey: true, value: true },
+    });
+    const existingByKey = new Map(existing.map(s => [s.sectionKey, s.value]));
+    const PRESERVE_FIELDS = ['id', 'nota_auditor', 'ajuste_debito', 'ajuste_credito', 'attachments'] as const;
+
+    const merged: SectionMap = { ...fresh };
+    for (const key of keys) {
+      const freshRows = fresh[key];
+      if (!Array.isArray(freshRows)) continue;
+      const existingRows = existingByKey.get(key);
+      if (!Array.isArray(existingRows) || existingRows.length === 0) continue;
+
+      const existingByCuenta = new Map(
+        (existingRows as Array<Record<string, unknown>>)
+          .filter(r => r && typeof r.cuenta === 'string')
+          .map(r => [r.cuenta as string, r]),
+      );
+
+      merged[key] = (freshRows as Array<Record<string, unknown>>).map(row => {
+        const prior = existingByCuenta.get(row.cuenta as string);
+        if (!prior) return row;
+        const out: Record<string, unknown> = { ...row };
+        for (const f of PRESERVE_FIELDS) {
+          if (prior[f] !== undefined) out[f] = prior[f];
+        }
+        return out;
+      });
+    }
+    return merged;
   }
 
   // ─── Section generation ───────────────────────────────────────────────────
@@ -471,6 +535,23 @@ INSTRUCCIONES:
 
     const { analysisSectionKey: sk6, proceduresSectionKey: sk7, conclusionSectionKey: sk9 } = config;
 
+    // Not every lead schedule paper has all 3 narrative sections split out — build
+    // the requested JSON shape to match whichever keys this paper's template has.
+    const claims: string[] = [];
+    if (sk6) {
+      claims.push(`  "${sk6}": "Análisis de variaciones del grupo ${config.groupName} en 3-4 párrafos: variación total, sub-áreas con mayor movimiento, causas probables, cuentas que superan 15% de variación. Lenguaje NIA formal. Máx 400 palabras."`);
+    }
+    if (sk7) {
+      claims.push(`  "${sk7}": "Procedimientos sustantivos recomendados en 6-8 ítems numerados: '1. Procedimiento: descripción concisa'. Basados en variaciones y riesgos de ${config.groupName}. Incluir referencia a papeles de detalle. Máx 300 palabras."`);
+    }
+    if (sk6) {
+      claims.push(`  "${sk9}": "Conclusión preliminar del área ${config.groupName} en 2 párrafos: nivel de riesgo identificado, razonabilidad de saldos, indicar que el auditor debe completar con evidencia de campo."`);
+    } else {
+      // No separate analysis section on this paper — fold the variance analysis
+      // INTO the conclusion so that content isn't lost.
+      claims.push(`  "${sk9}": "Análisis de variaciones y conclusión preliminar del área ${config.groupName} en 4-5 párrafos: (1-2) variación total, sub-áreas con mayor movimiento, causas probables, cuentas que superan 15% de variación; (3) nivel de riesgo identificado, razonabilidad de saldos; (4) indicar que el auditor debe completar con evidencia de campo. Lenguaje NIA formal. Máx 500 palabras."`);
+    }
+
     return `Eres un auditor senior experto en NIA/IAASB. Analiza el grupo "${config.groupName}" de la auditoría "${auditTitle}".
 
 CUENTAS DEL GRUPO (código | nombre | saldo actual | saldo año anterior | variación):
@@ -480,9 +561,7 @@ TOTAL GRUPO: $${fmt(totalActual)} (año anterior: $${fmt(totalAnterior)}, variac
 
 Responde EXCLUSIVAMENTE con JSON (sin markdown) con estas claves:
 {
-  "${sk6}": "Análisis de variaciones del grupo ${config.groupName} en 3-4 párrafos: variación total, sub-áreas con mayor movimiento, causas probables, cuentas que superan 15% de variación. Lenguaje NIA formal. Máx 400 palabras.",
-  "${sk7}": "Procedimientos sustantivos recomendados en 6-8 ítems numerados: '1. Procedimiento: descripción concisa'. Basados en variaciones y riesgos de ${config.groupName}. Incluir referencia a papeles de detalle. Máx 300 palabras.",
-  "${sk9}": "Conclusión preliminar del área ${config.groupName} en 2 párrafos: nivel de riesgo identificado, razonabilidad de saldos, indicar que el auditor debe completar con evidencia de campo."
+${claims.join(',\n')}
 }`;
   }
 
@@ -517,20 +596,29 @@ Responde EXCLUSIVAMENTE con JSON (sin markdown) con estas claves:
 
     const { analysisSectionKey: sk6, proceduresSectionKey: sk7, conclusionSectionKey: sk9 } = config;
 
-    return {
-      [sk6]: `El grupo ${config.groupName} de la auditoría "${auditTitle}" totaliza $${fmt(Math.abs(totalActual))} al cierre del período auditado, frente a $${fmt(Math.abs(totalAnterior))} del año anterior, reflejando una variación de ${varPct >= 0 ? '+' : ''}${varPct}%.\n\nCuentas con variaciones relevantes (>15% o >$50,000):\n${significant || '• No se identificaron variaciones individuales significativas.'}\n\nEl auditor debe analizar las causas de cada variación y determinar su consistencia con el entendimiento del negocio. Generado automáticamente el ${now}.`,
+    const analysisText = `El grupo ${config.groupName} de la auditoría "${auditTitle}" totaliza $${fmt(Math.abs(totalActual))} al cierre del período auditado, frente a $${fmt(Math.abs(totalAnterior))} del año anterior, reflejando una variación de ${varPct >= 0 ? '+' : ''}${varPct}%.\n\nCuentas con variaciones relevantes (>15% o >$50,000):\n${significant || '• No se identificaron variaciones individuales significativas.'}\n\nEl auditor debe analizar las causas de cada variación y determinar su consistencia con el entendimiento del negocio. Generado automáticamente el ${now}.`;
 
-      [sk7]: [
-        '1. Procedimiento: Conciliar el total del grupo con el balance de comprobación (B-00) y verificar cuadre con cédula sumaria S1.',
-        '2. Procedimiento: Aplicar procedimientos analíticos a cuentas con variación >15% para identificar causas e inconsistencias.',
-        '3. Procedimiento: Seleccionar partidas para pruebas de detalle según materialidad de PT-A4 y el nivel de riesgo del área.',
-        '4. Procedimiento: Verificar existencia, valuación y presentación de saldos significativos conforme a NIA 500.',
-        '5. Procedimiento: Obtener documentación de soporte para saldos con variación inusual o sin explicación aparente.',
-        '6. Procedimiento: Documentar evidencia obtenida en papeles de trabajo de detalle (C-0x) por cada cuenta examinada.',
-      ].join('\n'),
+    const proceduresText = [
+      '1. Procedimiento: Conciliar el total del grupo con el balance de comprobación (B-00) y verificar cuadre con cédula sumaria S1.',
+      '2. Procedimiento: Aplicar procedimientos analíticos a cuentas con variación >15% para identificar causas e inconsistencias.',
+      '3. Procedimiento: Seleccionar partidas para pruebas de detalle según materialidad de PT-A4 y el nivel de riesgo del área.',
+      '4. Procedimiento: Verificar existencia, valuación y presentación de saldos significativos conforme a NIA 500.',
+      '5. Procedimiento: Obtener documentación de soporte para saldos con variación inusual o sin explicación aparente.',
+      '6. Procedimiento: Documentar evidencia obtenida en papeles de trabajo de detalle (C-0x) por cada cuenta examinada.',
+    ].join('\n');
 
-      [sk9]: `Conclusión preliminar — ${config.groupName}: Con base en el análisis del balance de comprobación, el grupo totaliza $${fmt(Math.abs(totalActual))} con ${accounts.length} cuenta(s) y una variación de ${varPct >= 0 ? '+' : ''}${varPct}% respecto al año anterior.\n\nEsta conclusión es preliminar. El auditor responsable debe completarla con la evidencia de campo obtenida, las excepciones resueltas y la evaluación final de razonabilidad, antes de aprobar y firmar este papel de trabajo. Generado automáticamente el ${now}.`,
-    };
+    const conclusionText = `Conclusión preliminar — ${config.groupName}: Con base en el análisis del balance de comprobación, el grupo totaliza $${fmt(Math.abs(totalActual))} con ${accounts.length} cuenta(s) y una variación de ${varPct >= 0 ? '+' : ''}${varPct}% respecto al año anterior.\n\nEsta conclusión es preliminar. El auditor responsable debe completarla con la evidencia de campo obtenida, las excepciones resueltas y la evaluación final de razonabilidad, antes de aprobar y firmar este papel de trabajo. Generado automáticamente el ${now}.`;
+
+    const result: SectionMap = {};
+    if (sk6) {
+      result[sk6] = analysisText;
+      result[sk9] = conclusionText;
+    } else {
+      // No separate analysis section — fold both into the single conclusion section.
+      result[sk9] = `${analysisText}\n\n${conclusionText}`;
+    }
+    if (sk7) result[sk7] = proceduresText;
+    return result;
   }
 
   // ─── Template fallback ────────────────────────────────────────────────────
@@ -639,8 +727,8 @@ Responde EXCLUSIVAMENTE con JSON (sin markdown) con estas claves:
     const lsConfig = paperCode ? LEAD_SCHEDULE_CONFIG[paperCode] : null;
     if (lsConfig) {
       parts.push(`**${paperCode} — ${lsConfig.groupName} · ${auditTitle}**\n\n`);
-      const s6 = str(sections[lsConfig.analysisSectionKey]);
-      const s7 = str(sections[lsConfig.proceduresSectionKey]);
+      const s6 = lsConfig.analysisSectionKey   ? str(sections[lsConfig.analysisSectionKey])   : '';
+      const s7 = lsConfig.proceduresSectionKey ? str(sections[lsConfig.proceduresSectionKey]) : '';
       const s9 = str(sections[lsConfig.conclusionSectionKey]);
       if (s6) parts.push(`### I. Análisis de Variaciones\n\n${s6}`);
       if (s7) parts.push(`\n\n### II. Procedimientos Sustantivos Recomendados\n\n${s7}`);

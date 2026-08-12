@@ -167,9 +167,12 @@ export function useUpdateSection() {
 export function useConsolidatePaper() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (paperId: string) =>
-      apiClient.post(`/working-papers/${paperId}/consolidate`, {}),
-    onSuccess: (_res, paperId) => {
+    mutationFn: (args: string | { paperId: string; mode?: 'overwrite' | 'merge' }) => {
+      const { paperId, mode } = typeof args === 'string' ? { paperId: args, mode: undefined } : args;
+      return apiClient.post(`/working-papers/${paperId}/consolidate`, mode ? { mode } : {});
+    },
+    onSuccess: (_res, args) => {
+      const paperId = typeof args === 'string' ? args : args.paperId;
       qc.invalidateQueries({ queryKey: ['wp', paperId] });
       qc.invalidateQueries({ queryKey: ['wp', paperId, 'sections'] });
     },

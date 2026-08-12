@@ -2811,13 +2811,19 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       aiHint: 'Variaciones típicas: adquisición de activos (verificar autorización), bajas/ventas (ganancia/pérdida), revaluaciones, deterioro reconocido. Verificar CAPEX vs OPEX.',
     },
     {
+      sectionKey: 'S5b', label: 'Apreciación del Auditor — Activos No Corrientes',
+      description: 'Observaciones propias del auditor adicionales al análisis generado por IA en S5. El análisis de S5 se conserva siempre; este campo es para el criterio del auditor.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Registre aquí su propia apreciación profesional sobre las variaciones de Activos No Corrientes — matices, contexto del cliente o dudas que el análisis automático de S5 no capture.',
+    },
+    {
       sectionKey: 'S6', label: 'Cuadre con B-00', description: 'Total ANC en esta sumaria = total B-02 en B-00 S4.',
-      fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 7,
       aiHint: 'true = cuadra. false = revisar clasificación.',
     },
     {
       sectionKey: 'S7', label: 'Conclusión — Activos No Corrientes', description: 'Conclusión del auditor sobre la razonabilidad de los ANC.',
-      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 7,
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 8,
       aiHint: 'Incluye: política de depreciación aplicada, tasa promedio, activos con posible deterioro, conclusión sobre presentación razonable.',
     },
   ],
@@ -2857,14 +2863,20 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       aiHint: 'Verificar si incremento en CxP indica problemas de flujo. Reducción significativa puede indicar renegociación o pagos anticipados. Evaluar razón de liquidez corriente vs industria.',
     },
     {
+      sectionKey: 'S5b', label: 'Apreciación del Auditor — Pasivos Corrientes',
+      description: 'Observaciones propias del auditor adicionales al análisis generado por IA en S5. El análisis de S5 se conserva siempre; este campo es para el criterio del auditor.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Registre aquí su propia apreciación profesional sobre las variaciones de Pasivos Corrientes — matices, contexto del cliente o dudas que el análisis automático de S5 no capture.',
+    },
+    {
       sectionKey: 'S6', label: 'Cuadre con B-00', description: 'Total PC en esta sumaria = total B-03 en B-00 S4.',
-      fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 7,
       aiHint: 'true = cuadra. false = revisar clasificación.',
     },
     {
       sectionKey: 'S7', label: 'Conclusión — Pasivos Corrientes',
       description: 'Conclusión del auditor sobre la razonabilidad de los pasivos corrientes.',
-      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 7,
+      fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 8,
       aiHint: 'Incluye evaluación de completitud de pasivos (NIA 330: buscar pasivos no registrados), ratios de liquidez, covenants bancarios y conclusión sobre presentación razonable.',
     },
   ],
@@ -2904,7 +2916,13 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       aiHint: 'Evaluar vencimientos LP próximos que requieran reclasificación a CP. Verificar revelaciones requeridas (NIC 1). Conclusión sobre presentación razonable.',
     },
     {
-      sectionKey: 'S6', label: 'Cuadre con B-00', fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 6,
+      sectionKey: 'S5b', label: 'Apreciación del Auditor — Pasivos No Corrientes',
+      description: 'Observaciones propias del auditor adicionales al análisis/conclusión generado por IA en S5. S5 se conserva siempre; este campo es para el criterio del auditor.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 6,
+      aiHint: 'Registre aquí su propia apreciación profesional sobre los Pasivos No Corrientes — matices, contexto del cliente o dudas que el análisis automático de S5 no capture.',
+    },
+    {
+      sectionKey: 'S6', label: 'Cuadre con B-00', fieldType: FieldType.BOOLEAN, isRequired: true, isAutoFilled: false, sortOrder: 7,
       aiHint: 'true = total PNC en sumaria = total B-04 en B-00 S4.',
     },
   ],
@@ -2947,6 +2965,12 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       sectionKey: 'S6', label: 'Cuadre con B-00 y Conclusión', fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
       aiHint: 'Verificar: total patrimonio S1 = total B-05 en B-00 S4. Conclusión sobre si el patrimonio está correctamente presentado, autorizaciones de dividendos documentadas y revelaciones NIC 1 completas.',
     },
+    {
+      sectionKey: 'S6b', label: 'Apreciación del Auditor — Patrimonio',
+      description: 'Observaciones propias del auditor adicionales a la conclusión generada por IA en S6. S6 se conserva siempre; este campo es para el criterio del auditor.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 7,
+      aiHint: 'Registre aquí su propia apreciación profesional sobre el Patrimonio — matices, contexto del cliente o dudas que el análisis automático de S6 no capture.',
+    },
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -2986,6 +3010,12 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     {
       sectionKey: 'S6', label: 'Cuadre con B-00 y Conclusión', fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 6,
       aiHint: 'Verificar: total Ingresos S2 + total CV S3 + total GO S4 + B-06d = saldo de cada grupo en B-00 S4. Conclusión sobre razonabilidad del Estado de Resultados: márgenes explicados, revelaciones completas, reconocimiento de ingresos correcto.',
+    },
+    {
+      sectionKey: 'S6b', label: 'Apreciación del Auditor — Resultados (P&G)',
+      description: 'Observaciones propias del auditor adicionales a la conclusión generada por IA en S6. S6 se conserva siempre; este campo es para el criterio del auditor.',
+      fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 7,
+      aiHint: 'Registre aquí su propia apreciación profesional sobre el Estado de Resultados — matices, contexto del cliente o dudas que el análisis automático de S6 no capture.',
     },
   ],
 

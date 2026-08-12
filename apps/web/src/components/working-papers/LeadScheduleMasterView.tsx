@@ -497,6 +497,82 @@ function ConclusionEditor({
   );
 }
 
+// ─── Reconsolidate modal — merge vs. overwrite ───────────────────────────────
+
+function ReconsolidateModal({
+  onConfirm, onClose,
+}: {
+  onConfirm: (mode: 'overwrite' | 'merge') => Promise<void>;
+  onClose:   () => void;
+}) {
+  const [loadingMode, setLoadingMode] = useState<'overwrite' | 'merge' | null>(null);
+
+  async function handle(mode: 'overwrite' | 'merge') {
+    setLoadingMode(mode);
+    try { await onConfirm(mode); onClose(); }
+    finally { setLoadingMode(null); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+        <div className="px-6 pt-6 pb-3">
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-violet-100">
+            <Sparkles className="h-5 w-5 text-violet-600" />
+          </div>
+          <h3 className="text-sm font-semibold text-gray-800">Reconsolidar con IA</h3>
+          <p className="mt-1 text-xs text-gray-500">
+            Esta área puede tener notas de revisión, ajustes o evidencia cargada por el auditor. ¿Cómo quieres reconsolidar?
+          </p>
+        </div>
+        <div className="px-6 pb-5 space-y-2">
+          <button
+            onClick={() => handle('merge')}
+            disabled={loadingMode !== null}
+            className="w-full flex items-start gap-3 text-left px-4 py-3 rounded-xl border-2 border-blue-200 bg-blue-50 hover:border-blue-400 transition-colors disabled:opacity-50"
+          >
+            <CheckCircle2 className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+            <span>
+              <span className="flex items-center gap-1.5 text-sm font-semibold text-blue-800">
+                Mantener notas y adjuntos
+                {loadingMode === 'merge' && <Loader2 className="w-3 h-3 animate-spin" />}
+              </span>
+              <span className="block text-xs text-blue-600 mt-0.5">
+                Actualiza saldos y análisis con los datos más recientes de B-00, pero conserva tus notas de revisión, ajustes Débito/Crédito y evidencia adjunta por cuenta.
+              </span>
+            </span>
+          </button>
+          <button
+            onClick={() => handle('overwrite')}
+            disabled={loadingMode !== null}
+            className="w-full flex items-start gap-3 text-left px-4 py-3 rounded-xl border-2 border-red-200 bg-red-50 hover:border-red-400 transition-colors disabled:opacity-50"
+          >
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <span>
+              <span className="flex items-center gap-1.5 text-sm font-semibold text-red-800">
+                Sobrescribir todo
+                {loadingMode === 'overwrite' && <Loader2 className="w-3 h-3 animate-spin" />}
+              </span>
+              <span className="block text-xs text-red-600 mt-0.5">
+                Regenera todo desde cero. Se perderán las notas de revisión, ajustes y evidencia cargada por el auditor en esta área.
+              </span>
+            </span>
+          </button>
+        </div>
+        <div className="flex justify-end border-t border-gray-100 px-6 py-3">
+          <button
+            onClick={onClose}
+            disabled={loadingMode !== null}
+            className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sync status badge ────────────────────────────────────────────────────────
 
 function SyncBadge({ syncStatus }: { syncStatus: WpSyncStatus }) {
@@ -523,8 +599,8 @@ export interface LeadScheduleMasterViewProps {
     groupName:             string;
     prefix:                string;
     detailSections:        { key: string; label: string; subSumaria: string }[];
-    analysisSectionKey:    string;
-    proceduresSectionKey:  string;
+    analysisSectionKey?:   string;
+    proceduresSectionKey?: string;
     conclusionSectionKey:  string;
     auditorNotesKey?:      string;
   };
@@ -536,6 +612,17 @@ export function LeadScheduleMasterView({
   const consolidate    = useConsolidatePaper();
   const { data: mat }  = useMaterialidad(auditId);
   const isRegenerating = syncStatus === 'REGENERATING' || consolidate.isPending;
+  const [showReconsolidateModal, setShowReconsolidateModal] = useState(false);
+
+  function requestConsolidate() {
+    // Only ask merge-vs-overwrite when there's existing work that could be lost —
+    // a fresh DRAFT paper has nothing to preserve, so just consolidate directly.
+    if (syncStatus === 'SYNCED' || syncStatus === 'STALE') {
+      setShowReconsolidateModal(true);
+    } else {
+      void consolidate.mutateAsync({ paperId, mode: 'merge' });
+    }
+  }
 
   const sAnalysis     = sections.find(s => s.sectionKey === config.analysisSectionKey);
   const sProcedures   = sections.find(s => s.sectionKey === config.proceduresSectionKey);
@@ -553,7 +640,9 @@ export function LeadScheduleMasterView({
     rows: toAccountRows(sections.find(s => s.sectionKey === det.key)?.value),
   }));
   const groupTotal = detailPairs.flatMap(d => d.rows).reduce((s, r) => s + Math.abs(r.saldo_actual ?? 0), 0);
-  const hasContent = detailPairs.some(d => d.rows.length > 0) || toText(sAnalysis?.value).length > 10;
+  const hasContent = detailPairs.some(d => d.rows.length > 0)
+    || toText(sAnalysis?.value).length > 10
+    || toText(sConclusion?.value).length > 10;
 
   return (
     <div className="space-y-4">
@@ -572,7 +661,7 @@ export function LeadScheduleMasterView({
           </div>
           {!isRegenerating && (
             <button
-              onClick={() => consolidate.mutateAsync(paperId)}
+              onClick={requestConsolidate}
               disabled={consolidate.isPending}
               className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 rounded-xl hover:bg-violet-700 disabled:opacity-50 transition-colors"
             >
@@ -594,7 +683,7 @@ export function LeadScheduleMasterView({
             </div>
           </div>
           <button
-            onClick={() => consolidate.mutateAsync(paperId)}
+            onClick={requestConsolidate}
             disabled={consolidate.isPending}
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-700 disabled:opacity-50 shrink-0"
           >
@@ -635,7 +724,7 @@ export function LeadScheduleMasterView({
             </p>
           </div>
           <button
-            onClick={() => consolidate.mutateAsync(paperId)}
+            onClick={() => consolidate.mutateAsync({ paperId, mode: 'merge' })}
             disabled={consolidate.isPending}
             className="flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-violet-600 rounded-xl hover:bg-violet-700 disabled:opacity-50"
           >
@@ -650,14 +739,16 @@ export function LeadScheduleMasterView({
           {/* ── Materialidad banner (total computed from S2-S5 rows) ── */}
           <MaterialidadBanner auditId={auditId} groupTotal={groupTotal} />
 
-          {/* ── S6: Análisis de Variaciones (AI) ── siempre se conserva ── */}
-          <NarrativeCard
-            icon={TrendingUp}
-            sectionKey={config.analysisSectionKey}
-            title="Análisis de Variaciones"
-            color="bg-blue-50 border-blue-100 text-blue-800"
-            text={toText(sAnalysis?.value)}
-          />
+          {/* ── Análisis de Variaciones (AI) ── siempre se conserva ── */}
+          {config.analysisSectionKey && (
+            <NarrativeCard
+              icon={TrendingUp}
+              sectionKey={config.analysisSectionKey}
+              title="Análisis de Variaciones"
+              color="bg-blue-50 border-blue-100 text-blue-800"
+              text={toText(sAnalysis?.value)}
+            />
+          )}
 
           {/* ── Apreciación propia del auditor, adicional al análisis IA ── */}
           {config.auditorNotesKey && (
@@ -694,18 +785,27 @@ export function LeadScheduleMasterView({
             />
           ))}
 
-          {/* ── S7: Procedimientos sugeridos — propuesta de la IA, editable por el auditor ── */}
-          <ConclusionEditor
-            paperId={paperId}
-            sectionKey={config.proceduresSectionKey}
-            section={sProcedures}
-            title="Procedimientos Sustantivos Recomendados"
-            icon={ClipboardList}
-            color="amber"
-            placeholder="Procedimientos analíticos adicionales sugeridos según las variaciones identificadas…"
-            helperNote="Propuesta generada por IA — edítala libremente; no tiene carácter obligatorio."
-          />
+          {/* ── Procedimientos sugeridos — propuesta de la IA, editable por el auditor ── */}
+          {config.proceduresSectionKey && (
+            <ConclusionEditor
+              paperId={paperId}
+              sectionKey={config.proceduresSectionKey}
+              section={sProcedures}
+              title="Procedimientos Sustantivos Recomendados"
+              icon={ClipboardList}
+              color="amber"
+              placeholder="Procedimientos analíticos adicionales sugeridos según las variaciones identificadas…"
+              helperNote="Propuesta generada por IA — edítala libremente; no tiene carácter obligatorio."
+            />
+          )}
         </>
+      )}
+
+      {showReconsolidateModal && (
+        <ReconsolidateModal
+          onConfirm={async mode => { await consolidate.mutateAsync({ paperId, mode }); }}
+          onClose={() => setShowReconsolidateModal(false)}
+        />
       )}
     </div>
   );

@@ -11,27 +11,34 @@ import { LeadScheduleMasterView } from './LeadScheduleMasterView';
 const LS_CONFIG: Record<string, {
   groupName: string; prefix: string;
   detailSections: { key: string; label: string; subSumaria: string }[];
-  analysisSectionKey: string; proceduresSectionKey: string; conclusionSectionKey: string;
+  analysisSectionKey?: string; proceduresSectionKey?: string; conclusionSectionKey: string;
   auditorNotesKey?: string;
 }> = {
   'PT-FIN-B01': { groupName: 'Activos Corrientes',   prefix: 'B-01',
     detailSections: [{ key:'S2', label:'Caja y Bancos', subSumaria:'B-01a' },{ key:'S3', label:'Cuentas por Cobrar', subSumaria:'B-01b' },{ key:'S4', label:'Inventarios', subSumaria:'B-01c' },{ key:'S5', label:'Otros Activos Corrientes', subSumaria:'B-01d' }],
     analysisSectionKey:'S6', proceduresSectionKey:'S7', conclusionSectionKey:'S9', auditorNotesKey:'S6b' },
+  // B02/B03: no hay sección separada de "procedimientos sugeridos" en la plantilla real.
   'PT-FIN-B02': { groupName: 'Activos No Corrientes', prefix: 'B-02',
     detailSections: [{ key:'S2', label:'Propiedad, Planta y Equipo', subSumaria:'B-02a' },{ key:'S3', label:'Activos Intangibles', subSumaria:'B-02b' },{ key:'S4', label:'Inversiones LP', subSumaria:'B-02c' }],
-    analysisSectionKey:'S5', proceduresSectionKey:'S6', conclusionSectionKey:'S8' },
+    analysisSectionKey:'S5', conclusionSectionKey:'S7', auditorNotesKey:'S5b' },
   'PT-FIN-B03': { groupName: 'Pasivos Corrientes',    prefix: 'B-03',
     detailSections: [{ key:'S2', label:'Proveedores y CxP', subSumaria:'B-03a' },{ key:'S3', label:'Obligaciones Financieras CP', subSumaria:'B-03b' },{ key:'S4', label:'Impuestos y Retenciones', subSumaria:'B-03c' }],
-    analysisSectionKey:'S5', proceduresSectionKey:'S6', conclusionSectionKey:'S8' },
+    analysisSectionKey:'S5', conclusionSectionKey:'S7', auditorNotesKey:'S5b' },
+  // B04: análisis y conclusión están combinados en una sola sección (S5) — se muestra
+  // como conclusión editable; no hay analysisSectionKey ni proceduresSectionKey aparte.
   'PT-FIN-B04': { groupName: 'Pasivos No Corrientes', prefix: 'B-04',
-    detailSections: [{ key:'S2', label:'Deuda LP y Pasivos Financieros', subSumaria:'B-04a' }],
-    analysisSectionKey:'S3', proceduresSectionKey:'S4', conclusionSectionKey:'S6' },
+    detailSections: [{ key:'S2', label:'Deuda a Largo Plazo', subSumaria:'B-04a' },{ key:'S3', label:'Provisiones LP', subSumaria:'B-04b' },{ key:'S4', label:'Arrendamientos LP (NIIF 16)', subSumaria:'B-04c' }],
+    conclusionSectionKey:'S5', auditorNotesKey:'S5b' },
+  // B05: S5 es una MATRIX (Estado de Cambios en el Patrimonio, no narrativa) — no se usa
+  // como analysisSectionKey. Cuadre + conclusión combinados en S6.
   'PT-FIN-B05': { groupName: 'Patrimonio',            prefix: 'B-05',
-    detailSections: [{ key:'S2', label:'Capital y Reservas', subSumaria:'B-05a' }],
-    analysisSectionKey:'S3', proceduresSectionKey:'S4', conclusionSectionKey:'S6' },
+    detailSections: [{ key:'S2', label:'Capital Social', subSumaria:'B-05a' },{ key:'S3', label:'Reservas y ORI', subSumaria:'B-05b' },{ key:'S4', label:'Utilidades Retenidas y del Período', subSumaria:'B-05c' }],
+    conclusionSectionKey:'S6', auditorNotesKey:'S6b' },
+  // B06: S5 es una MATRIX (Análisis de Márgenes y Ratios, no narrativa) — no se usa como
+  // analysisSectionKey. Cuadre + conclusión combinados en S6.
   'PT-FIN-B06': { groupName: 'Resultados (P&G)',       prefix: 'B-06',
-    detailSections: [{ key:'S2', label:'Ingresos', subSumaria:'B-06a' },{ key:'S3', label:'Costo de Ventas', subSumaria:'B-06b' },{ key:'S4', label:'Gastos Operativos', subSumaria:'B-06c' },{ key:'S5', label:'Otros Ingresos/Gastos', subSumaria:'B-06d' }],
-    analysisSectionKey:'S6', proceduresSectionKey:'S7', conclusionSectionKey:'S9' },
+    detailSections: [{ key:'S2', label:'Ingresos', subSumaria:'B-06a' },{ key:'S3', label:'Costo de Ventas', subSumaria:'B-06b' },{ key:'S4', label:'Gastos Operativos', subSumaria:'B-06c' }],
+    conclusionSectionKey:'S6', auditorNotesKey:'S6b' },
 };
 
 // ─── Narrative renderer ───────────────────────────────────────────────────────

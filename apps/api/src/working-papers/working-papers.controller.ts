@@ -382,8 +382,12 @@ export class WorkingPapersController {
   @Post(':id/consolidate')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Disparar consolidación IA de un papel MASTER (pone en REGENERATING, emite evento al módulo AI)' })
-  consolidate(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.service.consolidateMasterPaper(id, user);
+  consolidate(
+    @Param('id') id: string,
+    @Body() body: { mode?: 'overwrite' | 'merge' },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.consolidateMasterPaper(id, user, body?.mode ?? 'merge');
   }
 
   // ─── Sprint 3: Semantic quality gate ──────────────────────────────────────

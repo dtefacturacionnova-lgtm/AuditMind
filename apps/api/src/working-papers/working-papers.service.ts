@@ -1059,7 +1059,7 @@ export class WorkingPapersService {
    * 4. Emits `paper.consolidate` event — PaperConsolidationService handles it
    *    asynchronously: calls Gemini, updates sections, marks SYNCED.
    */
-  async consolidateMasterPaper(id: string, user: AuthUser) {
+  async consolidateMasterPaper(id: string, user: AuthUser, mode: 'overwrite' | 'merge' = 'merge') {
     const wp = await this.findOne(id, user);
 
     if (wp.wpKind !== WpKind.MASTER) {
@@ -1129,6 +1129,7 @@ export class WorkingPapersService {
       // PI.5 — track who triggered the consolidation for version history
       userId:     user.id,
       reason:     wp.syncStatus === 'STALE' ? 'Re-consolidación tras cambios en fuentes' : 'Consolidación inicial',
+      mode,
     });
 
     return {

@@ -83,4 +83,9 @@ export interface SectionTemplate {
   sortOrder:    number;
   aiHint?:      string;
   defaultValue?: unknown;
+  // For MATRIX sections that should start with one row per row of a sibling MATRIX
+  // section in the same paper (e.g. "Pruebas de Controles" seeded from "Controles
+  // Clave Identificados") — keyColumns are matched by column NAME against the
+  // sibling's rows and copied in; the auditor may still add/remove rows freely.
+  linkedFrom?: { sectionKey: string; keyColumns: string[] };
 }

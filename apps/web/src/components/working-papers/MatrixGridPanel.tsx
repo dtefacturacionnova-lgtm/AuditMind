@@ -9,12 +9,16 @@ import { useAssistSection } from '@/hooks/useWorkingPaperGraph';
 type MatrixRow = Record<string, string>;
 
 interface Props {
-  value:      unknown;
-  onChange:   (rows: MatrixRow[]) => void;
-  paperId?:   string;
-  sectionKey: string;
-  aiHint?:    string;
-  readOnly?:  boolean;
+  value:       unknown;
+  onChange:    (rows: MatrixRow[]) => void;
+  paperId?:    string;
+  sectionKey:  string;
+  aiHint?:     string;
+  readOnly?:   boolean;
+  // When set, this section starts with (and keeps) one row per row of the named
+  // sibling MATRIX section, matched/copied by these column names.
+  linkedFrom?:  { sectionKey: string; keyColumns: string[] };
+  sourceValue?: unknown;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -135,7 +139,9 @@ function dedupeLabels(labels: string[]): string[] {
  * reused across ~45 papers with completely different column schemas — there is
  * no per-section fixed schema to render against.
  */
-export function MatrixGridPanel({ value, onChange, paperId, sectionKey, aiHint, readOnly = false }: Props) {
+export function MatrixGridPanel({
+  value, onChange, paperId, sectionKey, aiHint, linkedFrom, sourceValue, readOnly = false,
+}: Props) {
   // aiHint-derived suggestion: short header labels + full phrase per label (for the tooltip)
   const suggestedFull  = parseColumnsFromAiHint(aiHint);
   const suggestedShort = dedupeLabels(suggestedFull.map(shortColumnLabel));
@@ -171,6 +177,27 @@ export function MatrixGridPanel({ value, onChange, paperId, sectionKey, aiHint, 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueSignature]);
+
+  // Reconcile linked rows: ensure at least one row per row of the source section,
+  // matched by keyColumns. Never removes or overwrites rows the auditor already has.
+  const sourceSignature = linkedFrom ? JSON.stringify(sourceValue ?? null) : '';
+  useEffect(() => {
+    if (!linkedFrom) return;
+    const src = parseValue(sourceValue);
+    if (src.length === 0) return;
+    const cols = columns.length > 0 ? columns : linkedFrom.keyColumns;
+    const keyOf = (r: MatrixRow) => JSON.stringify(linkedFrom.keyColumns.map(k => r[k] ?? ''));
+    const existingKeys = new Set(rows.map(keyOf));
+    const additions = src
+      .filter(sr => !existingKeys.has(keyOf(sr)))
+      .map(sr => {
+        const row: MatrixRow = {};
+        for (const c of cols) row[c] = linkedFrom.keyColumns.includes(c) ? (sr[c] ?? '') : '';
+        return row;
+      });
+    if (additions.length > 0) commit([...rows, ...additions], cols);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceSignature]);
 
   function commit(nextRows: MatrixRow[], nextColumns: string[]) {
     const padded = nextRows.map(r => {
@@ -294,6 +321,14 @@ export function MatrixGridPanel({ value, onChange, paperId, sectionKey, aiHint, 
               title="Columnas propuestas según la especificación del papel — puede renombrarlas, quitarlas o agregar más"
             >
               Columnas sugeridas — editables
+            </span>
+          )}
+          {linkedFrom && (
+            <span
+              className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full"
+              title={`Se agrega automáticamente una fila por cada registro de ${linkedFrom.sectionKey} — puede editarlas, eliminarlas o agregar filas extra`}
+            >
+              Filas vinculadas a {linkedFrom.sectionKey}
             </span>
           )}
         </div>

@@ -45,6 +45,10 @@ export interface PaperSection {
   staleReason?: string;
   // Documentos de soporte de la sección
   attachments?: SectionAttachment[];
+  // MATRIX sections that should start with one row per row of a sibling MATRIX
+  // section in the same paper (e.g. "Pruebas de Controles" seeded from
+  // "Controles Clave Identificados") — computed from the template, not stored.
+  linkedFrom?: { sectionKey: string; keyColumns: string[] } | null;
 }
 
 export interface SectionAttachment {

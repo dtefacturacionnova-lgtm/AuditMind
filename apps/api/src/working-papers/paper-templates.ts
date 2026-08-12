@@ -750,7 +750,8 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   3,
-      aiHint:      'Para cada control: técnica aplicada (inspección, rejecución, observación), tamaño de muestra, período muestreado, resultados obtenidos.',
+      aiHint:      'Columnas: # | Descripción del control | Técnica aplicada (Inspección / Reejecución / Observación) | Tamaño de muestra | Período muestreado | Resultados obtenidos. Cada control clave listado en S2 debe tener al menos una prueba (NIA 330.8) — la fila se precarga automáticamente desde S2; agregue más filas si un control requiere más de una prueba.',
+      linkedFrom:  { sectionKey: 'S2', keyColumns: ['#', 'Descripción del control'] },
     },
     {
       sectionKey:  'S4',

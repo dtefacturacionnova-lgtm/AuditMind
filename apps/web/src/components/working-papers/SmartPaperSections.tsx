@@ -436,6 +436,7 @@ export function SmartPaperSections({
             <SectionErrorBoundary key={section.sectionKey} label={section.label}>
               <SectionField
                 section={section}
+                allSections={sorted}
                 readonly={readonly}
                 onSave={handleSave}
                 paperId={paperId}

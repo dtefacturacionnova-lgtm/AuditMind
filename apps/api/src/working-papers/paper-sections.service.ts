@@ -97,7 +97,8 @@ export class PaperSectionsService {
         if (!e) return false;
         return e.fieldType !== (t.fieldType as string)
           || e.sortOrder  !== (t.sortOrder ?? 0)
-          || e.label      !== t.label;
+          || e.label      !== t.label
+          || e.aiHint     !== (t.aiHint ?? null);
       });
       for (const t of stale) {
         const e = existingMap.get(t.sectionKey)!;
@@ -120,10 +121,21 @@ export class PaperSectionsService {
       }
     }
 
-    return this.prisma.paperSection.findMany({
+    const sections = await this.prisma.paperSection.findMany({
       where:   { paperId },
       orderBy: { sortOrder: 'asc' },
     });
+
+    // Attach linkedFrom from the template (not persisted — it's a structural
+    // constant of the paper, recomputed fresh on every read).
+    const tplByKey = paper?.paperCode && PAPER_TEMPLATES[paper.paperCode]
+      ? new Map(PAPER_TEMPLATES[paper.paperCode].map(t => [t.sectionKey, t]))
+      : null;
+    if (!tplByKey) return sections;
+    return sections.map(s => ({
+      ...s,
+      linkedFrom: tplByKey.get(s.sectionKey)?.linkedFrom ?? null,
+    }));
   }
 
   /**

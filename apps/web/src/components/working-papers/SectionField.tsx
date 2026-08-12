@@ -372,6 +372,7 @@ function EditInput({ section, value, onChange, onBlur, mentionItems, onMentionSe
 
 export interface SectionFieldProps {
   section:          PaperSection;
+  allSections?:     PaperSection[];
   readonly?:        boolean;
   onSave:           (sectionKey: string, value: unknown) => void;
   paperId?:         string;
@@ -486,7 +487,7 @@ function SectionAttachments({
   );
 }
 
-export function SectionField({ section, readonly = false, onSave, paperId, mentionItems, onMentionSelect, aiDraftConfig }: SectionFieldProps) {
+export function SectionField({ section, allSections, readonly = false, onSave, paperId, mentionItems, onMentionSelect, aiDraftConfig }: SectionFieldProps) {
   const [editing,      setEditing]   = useState(false);
   const [localValue,   setLocal]     = useState<unknown>(section.value);
   const [overriding,   setOverride]  = useState(false);
@@ -820,6 +821,12 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
                   paperId={paperId}
                   sectionKey={section.sectionKey}
                   aiHint={section.aiHint}
+                  linkedFrom={section.linkedFrom ?? undefined}
+                  sourceValue={
+                    section.linkedFrom
+                      ? allSections?.find(s => s.sectionKey === section.linkedFrom!.sectionKey)?.value
+                      : undefined
+                  }
                   readOnly={readonly}
                 />
               ) : (

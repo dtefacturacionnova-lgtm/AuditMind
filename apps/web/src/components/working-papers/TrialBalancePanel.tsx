@@ -479,7 +479,10 @@ export function AccountClassifier({
     });
   });
   const [saving,      setSaving]      = useState(false);
-  const [dirty,       setDirty]       = useState(false);
+  // If S2 was empty on mount, `mappings` above was auto-generated from S1 — that's
+  // real unsaved data, so Guardar must start enabled or the auditor can never save
+  // it (and Propagar would then fail server-side with "S2 está vacío").
+  const [dirty,       setDirty]       = useState(() => savedMaps.length === 0 && s1Rows.length > 0);
   const [propagating, setPropagating] = useState(false);
   const [propagateMsg, setPropagateMsg] = useState('');
 

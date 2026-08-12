@@ -126,8 +126,8 @@ export class PaperSectionsService {
       orderBy: { sortOrder: 'asc' },
     });
 
-    // Attach linkedFrom from the template (not persisted — it's a structural
-    // constant of the paper, recomputed fresh on every read).
+    // Attach linkedFrom/tab from the template (not persisted — they're structural
+    // constants of the paper, recomputed fresh on every read).
     const tplByKey = paper?.paperCode && PAPER_TEMPLATES[paper.paperCode]
       ? new Map(PAPER_TEMPLATES[paper.paperCode].map(t => [t.sectionKey, t]))
       : null;
@@ -135,6 +135,7 @@ export class PaperSectionsService {
     return sections.map(s => ({
       ...s,
       linkedFrom: tplByKey.get(s.sectionKey)?.linkedFrom ?? null,
+      tab:        tplByKey.get(s.sectionKey)?.tab ?? null,
     }));
   }
 

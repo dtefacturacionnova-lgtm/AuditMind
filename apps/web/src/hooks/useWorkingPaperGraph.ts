@@ -49,6 +49,10 @@ export interface PaperSection {
   // section in the same paper (e.g. "Pruebas de Controles" seeded from
   // "Controles Clave Identificados") — computed from the template, not stored.
   linkedFrom?: { sectionKey: string; keyColumns: string[] } | null;
+  // Groups sections into named tabs within the paper editor (e.g. PT-FIN-B00's
+  // "Importación" / "Clasificación" / "Análisis Avanzado" / "Cierre"). Computed
+  // from the template, not stored. Sections without a tab render in one flat list.
+  tab?: string | null;
 }
 
 export interface SectionAttachment {

@@ -15,6 +15,7 @@ import type { AiDraftConfig } from './SectionField';
 import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './TrialBalancePanel';
 import { MaterialidadPanel } from './MaterialidadPanel';
 import { SamplingExecutionPanel } from './SamplingExecutionPanel';
+import { RatioTrendChart, ConcentrationChart } from './AnalyticsCharts';
 
 // ─── Error boundary ───────────────────────────────────────────────────────────
 
@@ -297,6 +298,9 @@ export function SmartPaperSections({
   const propagateTrialBal   = usePropagateTrialBalance();
   const { data: mentionItems = [] } = useMentionIndex(auditId);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  // Tab selection for papers with many sections grouped via section.tab (e.g. PT-FIN-B00).
+  // Declared before the early returns below to respect the Rules of Hooks.
+  const [activeTab, setActiveTab] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -332,6 +336,19 @@ export function SmartPaperSections({
   // Lookup helpers for PT-FIN-B00 specialized rendering
   const s1Section = sorted.find(s => s.sectionKey === 'S1');
   const s2Section = sorted.find(s => s.sectionKey === 'S2');
+
+  // Group into tabs when the paper's sections declare one (order = first appearance
+  // by sortOrder). Papers without tabs render exactly as before — flat, no tab bar.
+  const tabs = Array.from(new Set(sorted.map(s => s.tab).filter((t): t is string => !!t)));
+  const effectiveTab = tabs.length > 1
+    ? (activeTab && tabs.includes(activeTab) ? activeTab : tabs[0])
+    : null;
+  const visibleSections = effectiveTab ? sorted.filter(s => s.tab === effectiveTab) : sorted;
+  const tabRequiredCount = (t: string) => {
+    const inTab = sorted.filter(s => s.tab === t && s.isRequired);
+    const done  = inTab.filter(s => s.value !== null && s.value !== undefined && s.value !== '');
+    return { done: done.length, total: inTab.length };
+  };
 
   async function handleSave(sectionKey: string, value: unknown) {
     setSavingKey(sectionKey);
@@ -378,9 +395,40 @@ export function SmartPaperSections({
         />
       )}
 
+      {/* Tab bar — only rendered when the paper's sections declare more than one tab */}
+      {tabs.length > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto bg-white rounded-2xl border border-gray-200 shadow-sm p-1.5">
+          {tabs.map(t => {
+            const { done, total } = tabRequiredCount(t);
+            const active = t === effectiveTab;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setActiveTab(t)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors ${
+                  active
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                }`}
+              >
+                {t}
+                {total > 0 && (
+                  <span className={`text-[10px] tabular-nums px-1.5 py-0.5 rounded-full ${
+                    active ? 'bg-white/20' : done === total ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {done}/{total}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Sections */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-5 divide-y divide-gray-100">
-        {sorted.map(section => {
+        {visibleSections.map(section => {
           // PT-FIN-B00: S1 → importador de balance, S2 → clasificador de cuentas
           if (paperCode === 'PT-FIN-B00') {
             if (section.sectionKey === 'S1') {
@@ -422,6 +470,36 @@ export function SmartPaperSections({
                     readonly={readonly}
                     onSave={handleSave}
                   />
+                </SectionErrorBoundary>
+              );
+            }
+            // S10/S11 — grid editable de siempre + gráfico de solo-lectura arriba,
+            // derivado de las mismas filas (no reemplaza la tabla, la complementa).
+            if (section.sectionKey === 'S10' || section.sectionKey === 'S11') {
+              const rows = Array.isArray(section.value) ? section.value as Record<string, unknown>[] : [];
+              return (
+                <SectionErrorBoundary key={section.sectionKey} label={section.label}>
+                  <div>
+                    {section.sectionKey === 'S10' && <RatioTrendChart rows={rows} />}
+                    {section.sectionKey === 'S11' && <ConcentrationChart rows={rows} />}
+                    <SectionField
+                      section={section}
+                      allSections={sorted}
+                      readonly={readonly}
+                      onSave={handleSave}
+                      paperId={paperId}
+                      mentionItems={mentionItems}
+                      aiDraftConfig={aiDraftConfig}
+                      onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                        void createReference.mutateAsync({
+                          paperId,
+                          sourceSectionKey: sectionKey,
+                          targetPaperId,
+                          targetSectionKey,
+                        });
+                      }}
+                    />
+                  </div>
                 </SectionErrorBoundary>
               );
             }

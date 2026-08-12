@@ -306,6 +306,20 @@ const PARAM_LABELS_PDF: Record<string, string> = {
 const MONETARY_PARAM_KEYS = new Set(['valor_en_libros', 'materialidad_ejecucion', 'error_esperado']);
 const PCT_PARAM_KEYS       = new Set(['nivel_confianza', 'tasa_desviacion_tolerable', 'tasa_desviacion_esperada']);
 
+/** MATRIX field values are arrays of row objects — render as a real table, not JSON. */
+function renderMatrixTable(rows: unknown[]): string {
+  const objRows = rows.filter(r => r && typeof r === 'object' && !Array.isArray(r)) as Array<Record<string, unknown>>;
+  if (objRows.length === 0) return '<span class="text-muted text-small">— Sin datos —</span>';
+  const cols = Object.keys(objRows[0]);
+  return `
+    <table class="text-small" style="width: 100%;">
+      <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${objRows.map(r => `<tr>${cols.map(c => `<td>${esc(String(r[c] ?? '—'))}</td>`).join('')}</tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
 function renderSamplingResult(val: Record<string, unknown>): string {
   const mode             = String(val['mode'] ?? 'MUS');
   const isMUS            = mode === 'MUS';
@@ -426,8 +440,11 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
     ? (wp.sections ?? []).map(s => {
         const val = s.value;
         let valStr = '';
-        if (val === null || val === undefined || val === '') {
+        if (val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
           valStr = '<span class="text-muted text-small">— Sin completar —</span>';
+        } else if (Array.isArray(val)) {
+          // MATRIX-type sections: array of row objects → real table, not a JSON dump.
+          valStr = renderMatrixTable(val);
         } else if (typeof val === 'object' && s.sectionKey === 'S_EJE') {
           valStr = renderSamplingResult(val as Record<string, unknown>);
         } else if (typeof val === 'object') {

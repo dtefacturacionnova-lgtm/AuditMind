@@ -88,4 +88,9 @@ export interface SectionTemplate {
   // Clave Identificados") — keyColumns are matched by column NAME against the
   // sibling's rows and copied in; the auditor may still add/remove rows freely.
   linkedFrom?: { sectionKey: string; keyColumns: string[] };
+  // Groups sections into named tabs within the paper editor when a paper has many
+  // sections (e.g. PT-FIN-B00). Purely a display grouping — not persisted, computed
+  // fresh from the template on every read. Sections without a tab render in one
+  // flat list, same as before this existed.
+  tab?: string;
 }

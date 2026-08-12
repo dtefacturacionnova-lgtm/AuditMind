@@ -557,10 +557,13 @@ INSTRUCCIONES DE REDACCIÓN:
     auditTitle: string; auditScope: string; auditType: string; auditSubtype: string;
     userPrompt: string;
   }): string {
+    // MATRIX generation often needs to analyze EVERY row of an upstream table (e.g. flag
+    // accounts from a full trial balance) — the 400-char truncation used for narrative
+    // drafts would only cover 2-3 rows, so structural/tabular siblings get much more room.
     const siblingsText = ctx.siblings
       .filter(s => s.value.trim())
       .slice(0, 8)
-      .map(s => `[${s.key}] ${s.label}: ${s.value.slice(0, 400)}`)
+      .map(s => `[${s.key}] ${s.label}: ${s.value.slice(0, 12000)}`)
       .join('\n');
 
     return `Eres un experto en auditoría (NIA/IAASB/COSO). Estás generando el CONTENIDO TABULAR de una sección de un papel de trabajo — una tabla con filas y columnas, no texto narrativo.
@@ -588,7 +591,8 @@ INSTRUCCIONES DE SALIDA:
 - Cada objeto es una fila. Las claves (keys) de cada objeto deben ser los nombres cortos de columna descritos en la especificación (ej. "Ref. SEG", "Ciclo / Área", "Estado").
 - TODAS las filas deben tener exactamente las mismas claves, en el mismo orden.
 - Si no hay datos reales suficientes en el contexto para poblar filas con contenido verídico, devuelve un array vacío [] en vez de inventar datos del cliente (montos, nombres, fechas específicas).
-- Máximo 12 filas.
+- Si la instrucción pide filtrar (ej. solo cuentas que disparan una alerta, o con variación significativa), evalúa CADA fila de la fuente contra el criterio y genera una fila de salida únicamente para las que califican — no generes una fila por cada fila de la fuente si el criterio es selectivo.
+- Máximo 40 filas.
 - NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto — usa "Pendiente de evidencia" o similar cuando falte información y el campo sea obligatorio.`;
   }
 
@@ -600,7 +604,7 @@ INSTRUCCIONES DE SALIDA:
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.25,
-          maxOutputTokens: 3000,
+          maxOutputTokens: 6000,
           responseMimeType: 'application/json',
         },
       }),

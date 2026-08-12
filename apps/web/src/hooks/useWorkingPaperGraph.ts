@@ -237,6 +237,20 @@ export function usePropagateDiferencias() {
   });
 }
 
+export function usePropagateControlDeficiencias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ consolidated: number; message: string }>(
+        `/working-papers/${paperId}/propagate-control-deficiencias`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
 export function useInitFromTemplate() {
   const qc = useQueryClient();
   return useMutation({

@@ -2006,13 +2006,13 @@ export class AuditTemplatesService {
           // ── D — Cierre ────────────────────────────────────────────────────
           { code: 'D-01', indexSection: 'D',
             title: 'Carta de Representación de la Administración (NIA 580)',
-            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART },
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART, paperCode: 'PT-REP580' },
           { code: 'D-02', indexSection: 'D',
             title: 'Carta de Debilidades de Control Interno (NIA 265)',
-            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.MASTER, paperCode: 'PT-FIN-D02CI' },
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.MASTER, paperCode: 'PT-NIA265' },
           { code: 'D-03', indexSection: 'D',
             title: 'Eventos Posteriores al Cierre (NIA 560)',
-            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART },
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART, paperCode: 'PT-NIA560' },
           // ── E — Informe ───────────────────────────────────────────────────
           { code: 'E-01', indexSection: 'E',
             title: 'Informe del Auditor Independiente — Borrador (NIA 700-720)',

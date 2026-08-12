@@ -65,8 +65,7 @@ export const PAPER_CATALOGUE: PaperCatalogueEntry[] = [
   { code: 'PT-FIN-B09',      group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Libro de AJEs — Base Técnica NIIF',                               hint: 'Desde B-08, justificación técnica NIIF, carta propuesta al cliente' },
   { code: 'PT-REP580',       group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'CLOSURE_CONCLUSION',  title: 'Carta de Representación (NIA 580)',                                hint: 'Representaciones explícitas e implícitas, período, firmantes' },
   { code: 'PT-NIA560',       group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'CLOSURE_CONCLUSION',  title: 'Eventos Posteriores al Cierre (NIA 560)',                          hint: 'Procedimientos de búsqueda, Tipo I (ajuste) y Tipo II (revelación)' },
-  { code: 'PT-NIA265',       group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'MASTER', type: 'CLOSURE_CONCLUSION',  title: 'Carta de Debilidades de CI (NIA 265)',                             hint: 'Deficiencias significativas / materiales vinculadas a COSO, comunicadas a gobierno' },
-  { code: 'PT-FIN-D02CI',    group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'MASTER', type: 'CLOSURE_CONCLUSION',  title: 'Carta de Debilidades CI — Financiera (NIA 265)',                   hint: 'Deficiencias significativas y materiales comunicadas a gobierno (versión financiera)' },
+  { code: 'PT-NIA265',       group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'MASTER', type: 'CLOSURE_CONCLUSION',  title: 'Carta de Debilidades de CI (NIA 265)',                             hint: 'Consolida deficiencias de PT-A3/PT-ITGC, componentes COSO, seguimiento año anterior' },
   { code: 'PT-NIA260',       group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'CLOSURE_CONCLUSION',  title: 'Comunicación con Gobierno Corporativo (NIA 260)',                  hint: 'Responsabilidades del auditor, hallazgos significativos, independencia, representación' },
   { code: 'PT-FIN-DICT',     group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'MASTER', type: 'CLOSURE_CONCLUSION',  title: 'Dictamen del Auditor — NIA 700-720',                               hint: 'Opinión auto-fill desde B-08, KAMs NIA 701, párrafo de énfasis' },
 
@@ -102,7 +101,7 @@ const _EXT_FIN = [
   'PT-ADJ-RECLASIF', 'PT-DIFS', 'PT-CIRC', 'PT-FIN-C-SUST', 'PT-NIA550', 'PT-NIA570',
   'PT-FIN-C-ESTIM', 'PT-FIN-C-GEN',
   'PT-REP580', 'PT-NIA560', 'PT-NIA265', 'PT-NIA260',
-  'PT-FIN-D02CI', 'PT-FIN-DICT',
+  'PT-FIN-DICT',
   ..._HALL,
 ];
 

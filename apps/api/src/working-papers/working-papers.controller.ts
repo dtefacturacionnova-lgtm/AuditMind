@@ -320,6 +320,13 @@ export class WorkingPapersController {
     return this.sectionsService.propagateDiferencias(id, user);
   }
 
+  @Post(':id/propagate-control-deficiencias')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Consolidar deficiencias de control desde PT-A3 S4 y PT-ITGC S1-S4 en PT-NIA265 S1 (determinista, sin IA)' })
+  propagateControlDeficiencias(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateControlDeficiencias(id, user);
+  }
+
   @Post(':id/sections/init/:templateKey')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Inicializar secciones de un papel desde una plantilla (PT-A1, PT-A2, PT-A4, PT-MEMO, PT-PROG)' })

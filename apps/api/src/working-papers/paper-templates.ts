@@ -3627,8 +3627,12 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
-  // PT-FIN-D02CI: Carta de Comunicación de Debilidades CI (NIA 265)
-  // Para D-02 de la plantilla de Auditoría Financiera Externa.
+  // PT-FIN-D02CI: [DEPRECADO — usar PT-NIA265, más completo (componentes COSO,
+  // consolidación real desde PT-A3/PT-ITGC, seguimiento año anterior) y ya
+  // usado por D-04 en "Auditoría Externa (NIA/ISA)"]. Se mantiene solo para
+  // que las instancias ya creadas con este paperCode sigan renderizando.
+  // audit-templates.service.ts ya no lo asigna a papeles nuevos (D-02 ahora
+  // usa PT-NIA265 en ambas plantillas de Auditoría Financiera Externa).
   // ──────────────────────────────────────────────────────────────────────────
   'PT-FIN-D02CI': [
     {

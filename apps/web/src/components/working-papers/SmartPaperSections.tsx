@@ -12,6 +12,7 @@ import {
   usePropagateAjustes,
   usePropagateFinancialAnalysis,
   usePropagateDiferencias,
+  usePropagateControlDeficiencias,
 } from '@/hooks/useWorkingPaperGraph';
 import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
@@ -119,6 +120,55 @@ function DiferenciasPropagateBar({ paperId }: { paperId: string }) {
   );
 }
 
+// ─── PT-NIA265 S1 — botón "Consolidar Deficiencias" desde PT-A3 y PT-ITGC ─────
+
+function DeficienciasCIPropagateBar({ paperId }: { paperId: string }) {
+  const propagate = usePropagateControlDeficiencias();
+  const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  async function handleClick() {
+    setMsg('');
+    setIsError(false);
+    try {
+      const res = await propagate.mutateAsync(paperId);
+      setMsg(res.message);
+      setIsError(false);
+    } catch (err) {
+      setMsg((err as Error).message || 'Error al consolidar las deficiencias');
+      setIsError(true);
+    }
+  }
+
+  return (
+    <div className="pt-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-[11px] text-gray-400">
+          Trae las excepciones de PT-A3 (controles de proceso) y PT-ITGC (controles generales de TI) — distinto de los Hallazgos generales.
+        </p>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={propagate.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0"
+          title="Consolidar deficiencias desde PT-A3 y PT-ITGC"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${propagate.isPending ? 'animate-spin' : ''}`} />
+          {propagate.isPending ? 'Consolidando…' : 'Consolidar Deficiencias'}
+        </button>
+      </div>
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 mt-2 text-xs ${
+          isError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-indigo-50 border border-indigo-200 text-indigo-700'
+        }`}>
+          {isError ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── PT-FIN-B09 S1 — botón "Propagar Ajustes" desde B-08 y PT-ADJ-RECLASIF ────
 
 function AjePropagateBar({ paperId }: { paperId: string }) {
@@ -209,7 +259,7 @@ const _EXT_FIN_KEYS = new Set([
   'PT-FIN-A3-KC','PT-FIN-B00','PT-FIN-B01','PT-FIN-B02','PT-FIN-B03',
   'PT-FIN-B04','PT-FIN-B05','PT-FIN-B06','PT-FIN-B07','PT-FIN-B08','PT-FIN-B09',
   'PT-ADJ-RECLASIF','PT-DIFS','PT-CIRC','PT-FIN-C-SUST','PT-NIA550','PT-NIA570','PT-FIN-C-ESTIM','PT-FIN-C-GEN',
-  'PT-REP580','PT-NIA560','PT-NIA265','PT-NIA260','PT-FIN-D02CI','PT-FIN-DICT',
+  'PT-REP580','PT-NIA560','PT-NIA265','PT-NIA260','PT-FIN-DICT',
   ..._HALL_KEYS,
 ]);
 const _FISCAL_KEYS    = new Set(['PT-A1','PT-A2','PT-A3','PT-A4','PT-MEMO','PT-PROG','PT-FISC-INDEP','PT-FISC-QC','PT-FISC-ENCARGO','PT-FISC-RISK','PT-FISC-AML','PT-FISC-PT','PT-FISC-ZF','PT-FISC-DICT',..._HALL_KEYS]);
@@ -271,7 +321,6 @@ const AVAILABLE_TEMPLATES = [
   { key: 'PT-NIA550',     label: 'Fin.Ext · Partes Relacionadas NIA 550 — C-13 (PT-NIA550)'                    },
   // ── Cierre e Informe ────────────────────────────────────────────────────────────────────────
   { key: 'PT-FIN-DICT',   label: 'Fin.Ext · Dictamen del Auditor Independiente NIA 700-720 (PT-FIN-DICT)'      },
-  { key: 'PT-FIN-D02CI',  label: 'Fin.Ext · Carta de Debilidades Control Interno NIA 265 (PT-FIN-D02CI)'       },
   // ── Planificación / Aceptación del Encargo ────────────────────────────────
   { key: 'PT-FIN-ENCARGO', label: 'Fin.Ext · Carta de Encargo y Términos del Trabajo NIA 210 (PT-FIN-ENCARGO)' },
   // ── Archivo Permanente / Conocimiento ────────────────────────────────────
@@ -671,6 +720,35 @@ export function SmartPaperSections({
                   {section.sectionKey === 'S1' && !readonly && paperId && <BalancePropagateBar paperId={paperId} />}
                   {section.sectionKey === 'S1' && <VariationChart rows={rows} />}
                   {section.sectionKey === 'S3' && <RatioTrendChart rows={rows} />}
+                  <SectionField
+                    section={section}
+                    allSections={sorted}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    paperId={paperId}
+                    paperCode={paperCode}
+                    mentionItems={mentionItems}
+                    aiDraftConfig={aiDraftConfig}
+                    onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                      void createReference.mutateAsync({
+                        paperId,
+                        sourceSectionKey: sectionKey,
+                        targetPaperId,
+                        targetSectionKey,
+                      });
+                    }}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            );
+          }
+
+          // PT-NIA265 S1: botón "Consolidar Deficiencias" (trae PT-A3 S4 + PT-ITGC).
+          if (paperCode === 'PT-NIA265' && section.sectionKey === 'S1') {
+            return (
+              <SectionErrorBoundary key="S1" label={section.label}>
+                <div>
+                  {!readonly && paperId && <DeficienciasCIPropagateBar paperId={paperId} />}
                   <SectionField
                     section={section}
                     allSections={sorted}

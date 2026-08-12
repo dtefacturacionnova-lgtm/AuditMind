@@ -1246,6 +1246,125 @@ INSTRUCCIONES DE SALIDA:
     };
   }
 
+  // ─── Auditoría Financiera: consolidación de deficiencias a PT-NIA265 ────────
+
+  /**
+   * Consolida en PT-NIA265 S1 las deficiencias de control identificadas en
+   * PT-A3 S4 (Excepciones y Desvíos de Control, evaluación de controles de
+   * proceso) y PT-ITGC S1-S4 (los 4 dominios de TI, filtrando solo las filas
+   * cuya Efectividad indique una deficiencia). Deliberadamente NO toma de
+   * PT-HALL (Hallazgos) — "Deficiencia de Control Interno" es un concepto más
+   * angosto y normado (NIA 265) que un hallazgo general de auditoría; se
+   * captura en el punto donde se prueban los controles, no se retro-clasifica
+   * desde un log de hallazgos genérico. Sobrescribe S1 por completo en cada
+   * corrida — es un reflejo directo de las pruebas de control ya ejecutadas.
+   */
+  async propagateControlDeficiencias(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-NIA265') {
+      throw new BadRequestException(
+        'Solo el papel PT-NIA265 puede consolidar deficiencias desde PT-A3 y PT-ITGC',
+      );
+    }
+
+    const norm = (v: unknown): string => (v == null ? '' : String(v)).trim();
+    const asRows = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value : []);
+    const firstOf = (r: Record<string, unknown>, keys: string[]): unknown => {
+      for (const k of keys) if (r[k] !== undefined) return r[k];
+      return undefined;
+    };
+    const severityOf = (raw: string): string => {
+      const n = raw.toLowerCase();
+      if (n.includes('material')) return 'DEFICIENCIA_MATERIAL';
+      if (n.includes('significativ')) return 'DEFICIENCIA_SIGNIFICATIVA';
+      if (n.includes('menor')) return 'DEFICIENCIA_MENOR';
+      return ''; // "Efectivo", vacío, u otro valor no reconocido → no es una deficiencia
+    };
+
+    type ConsolidatedRow = Record<string, string>;
+    const consolidated: ConsolidatedRow[] = [];
+    let seq = 0;
+
+    // ── Fuente 1: PT-A3 S4 — Excepciones y Desvíos de Control ────────────────
+    const a3Papers = await this.prisma.workingPaper.findMany({
+      where:   { auditId: wp.auditId, paperCode: 'PT-A3' },
+      include: { sections: { where: { sectionKey: 'S4' } } },
+    });
+    for (const p of a3Papers) {
+      const rows = asRows(p.sections.find(s => s.sectionKey === 'S4')?.value);
+      for (const r of rows) {
+        const desc = norm(firstOf(r, ['Descripción de la excepción', 'Descripción']));
+        if (!desc || /^sin excepciones/i.test(desc)) continue;
+        const severidad = severityOf(norm(firstOf(r, [
+          'Severidad (Deficiencia Menor / Deficiencia Significativa / Deficiencia Material)', 'Severidad',
+        ])));
+        if (!severidad) continue;
+        seq++;
+        consolidated.push({
+          '#':                             String(seq),
+          'Descripción de la deficiencia': desc,
+          'Componente COSO':               'ACTIVIDADES_CONTROL',
+          'Proceso/Área afectada':         norm(firstOf(r, ['Control afectado (código de S2)', 'Control afectado'])),
+          'Severidad':                     severidad,
+          'Riesgo potencial':              norm(r['Causa raíz']),
+          'Cuentas EEFF afectadas':        '',
+          'Ref. PT origen':                `PT-A3::S4${p.code ? ` (${norm(p.code)})` : ''}`,
+        });
+      }
+    }
+
+    // ── Fuente 2: PT-ITGC S1-S4 — 4 dominios, solo filas con deficiencia ─────
+    const ITGC_DOMAINS: Record<string, string> = {
+      S1: 'TI — Gestión de Acceso Lógico',
+      S2: 'TI — Gestión de Cambios',
+      S3: 'TI — Operaciones de TI',
+      S4: 'TI — Desarrollo de Programas',
+    };
+    const itgcPapers = await this.prisma.workingPaper.findMany({
+      where:   { auditId: wp.auditId, paperCode: 'PT-ITGC' },
+      include: { sections: { where: { sectionKey: { in: Object.keys(ITGC_DOMAINS) } } } },
+    });
+    for (const p of itgcPapers) {
+      for (const [sk, dominio] of Object.entries(ITGC_DOMAINS)) {
+        const rows = asRows(p.sections.find(s => s.sectionKey === sk)?.value);
+        for (const r of rows) {
+          const severidad = severityOf(norm(firstOf(r, [
+            'Efectividad (Efectivo / Def. Menor / Def. Significativa / Def. Material)', 'Efectividad',
+          ])));
+          if (!severidad) continue;
+          const desc = norm(firstOf(r, ['Descripción del control', 'ID Control']));
+          if (!desc) continue;
+          seq++;
+          consolidated.push({
+            '#':                             String(seq),
+            'Descripción de la deficiencia': desc,
+            'Componente COSO':               'ACTIVIDADES_CONTROL',
+            'Proceso/Área afectada':         dominio,
+            'Severidad':                     severidad,
+            'Riesgo potencial':              norm(r['Impacto en auditoría']),
+            'Cuentas EEFF afectadas':        '',
+            'Ref. PT origen':                `PT-ITGC::${sk}${p.code ? ` (${norm(p.code)})` : ''}`,
+          });
+        }
+      }
+    }
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: consolidated as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S1', consolidated);
+
+    return {
+      consolidated: consolidated.length,
+      message: consolidated.length > 0
+        ? `${consolidated.length} deficiencia(s) consolidadas desde PT-A3 (evaluación de controles) y PT-ITGC (controles generales de TI).`
+        : 'No se encontraron excepciones con severidad Menor/Significativa/Material en PT-A3 ni PT-ITGC — puede que aún no se hayan registrado pruebas de control, o que no haya deficiencias.',
+    };
+  }
+
   // ─── Auditoría Financiera: MG/ME/UAE cross-paper ────────────────────────────
 
   /**

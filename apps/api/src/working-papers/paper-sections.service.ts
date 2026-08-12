@@ -811,6 +811,91 @@ INSTRUCCIONES DE SALIDA:
     };
   }
 
+  // ─── Auditoría Financiera: propagación de balances a B-07 Análisis Horizontal ─
+
+  /**
+   * Llena PT-FIN-B07 S1 (Análisis Horizontal) con los saldos de 3 períodos ya
+   * clasificados en PT-FIN-B00 S2 — la misma fuente de la que ya se calculan
+   * B-01..B-06. Determinista (sin IA): S1 declaraba isAutoFilled+sourceRef pero
+   * no existía ninguna propagación real, dejando el grid vacío ("La IA no
+   * encontró información") aunque el balance ya estuviera cargado. Sobrescribe
+   * S1 por completo en cada corrida (igual que propagateTrialBalance), porque
+   * es un reflejo directo del balance, no contiene anotaciones del auditor que
+   * deban preservarse. S2 (Vertical), S3 (Ratios) y S4 (Procedimientos) leen
+   * S1 como contexto de sección hermana en "Generar con IA" — no necesitan
+   * propagación propia una vez S1 tiene datos reales.
+   */
+  async propagateFinancialAnalysis(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-FIN-B07') {
+      throw new BadRequestException(
+        'Solo el papel PT-FIN-B07 puede propagar el Análisis Horizontal desde B-00',
+      );
+    }
+
+    const b00 = await this.prisma.workingPaper.findFirst({
+      where:   { auditId: wp.auditId, paperCode: 'PT-FIN-B00' },
+      include: { sections: { where: { sectionKey: 'S2' } } },
+    });
+
+    type MappingRow = {
+      cuenta: string; descripcion: string;
+      saldo_actual: number; saldo_anterior: number; saldo_anterior2: number;
+    };
+    const accounts = (b00?.sections[0]?.value ?? []) as unknown as MappingRow[];
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      throw new BadRequestException(
+        'El Clasificador de Cuentas de B-00 (S2) está vacío — cargue y clasifique el balance antes de propagar',
+      );
+    }
+
+    const pct = (curr: number, prior: number): string => {
+      if (!prior) return curr ? 'N/A' : '0.00';
+      return (((curr - prior) / Math.abs(prior)) * 100).toFixed(2);
+    };
+    const tendencia = (varPctStr: string): string => {
+      const v = parseFloat(varPctStr);
+      if (!Number.isFinite(v)) return '→ Estable';
+      if (v > 1) return '↑ Creciente';
+      if (v < -1) return '↓ Decreciente';
+      return '→ Estable';
+    };
+
+    const rows = [...accounts]
+      .sort((a, b) => String(a.cuenta ?? '').localeCompare(String(b.cuenta ?? '')))
+      .map(a => {
+        const actual    = Number(a.saldo_actual) || 0;
+        const anterior   = Number(a.saldo_anterior) || 0;
+        const anterior2  = Number(a.saldo_anterior2) || 0;
+        const varPct1    = pct(actual, anterior);
+        return {
+          'Código':                            String(a.cuenta ?? ''),
+          'Cuenta':                             String(a.descripcion ?? ''),
+          'Saldo Año Actual':                   actual.toFixed(2),
+          'Saldo Año Anterior':                 anterior.toFixed(2),
+          'Saldo Año -2':                       anterior2.toFixed(2),
+          'Variación $ Actual vs Anterior':     (actual - anterior).toFixed(2),
+          'Variación % Actual vs Anterior':     varPct1,
+          'Variación $ Anterior vs Año-2':      (anterior - anterior2).toFixed(2),
+          'Variación % Anterior vs Año-2':      pct(anterior, anterior2),
+          'Tendencia':                          tendencia(varPct1),
+        };
+      });
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: rows as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S1', rows);
+
+    return {
+      propagated: rows.length,
+      message: `${rows.length} cuenta(s) propagadas desde el Balance de Comprobación (B-00).`,
+    };
+  }
+
   // ─── Auditoría Financiera: propagación de AJEs a B-09 Libro de AJEs ──────────
 
   /**
@@ -960,6 +1045,168 @@ INSTRUCCIONES DE SALIDA:
       total: merged.length,
       message: `${added} AJE(s) nuevo(s), ${updated} actualizado(s)`
         + (skippedIncomplete ? `, ${skippedIncomplete} omitido(s) por datos incompletos.` : '.'),
+    };
+  }
+
+  // ─── Auditoría Financiera: consolidación de diferencias a B-08 ──────────────
+
+  /**
+   * Consolida en PT-FIN-B08 S1 todas las diferencias registradas en S1 de cada
+   * papel PT-FIN-C-SUST (C-01..C-14) y PT-FIN-C-NORM (C-13/C-15) de la
+   * auditoría, calcula los totales por categoría vs UAE/MG en S2 (leyendo
+   * PT-A4 vía getMaterialidadByAudit) y recalcula el semáforo preliminar de
+   * S3. Sobrescribe S1/S2/S3 por completo en cada corrida — son un reflejo
+   * directo de los papeles de ejecución y de la materialidad vigente, sin
+   * anotaciones propias del auditor que deban preservarse (esas viven en
+   * S4-S9: AJEs, respuesta del cliente, opinión y narrativa).
+   */
+  async propagateDiferencias(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-FIN-B08') {
+      throw new BadRequestException(
+        'Solo el papel PT-FIN-B08 puede consolidar diferencias desde los papeles de ejecución',
+      );
+    }
+
+    const norm = (v: unknown): string => (v == null ? '' : String(v)).trim();
+    const asRows = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value : []);
+    const asNumber = (v: unknown): number => {
+      const n = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''));
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const execPapers = await this.prisma.workingPaper.findMany({
+      where:   { auditId: wp.auditId, paperCode: { in: ['PT-FIN-C-SUST', 'PT-FIN-C-NORM'] } },
+      include: { sections: { where: { sectionKey: 'S1' } } },
+    });
+
+    type Tipo = 'Factual' | 'Por Estimación';
+    type ConsolidatedRow = Record<string, string>;
+
+    const consolidated: ConsolidatedRow[] = [];
+    let seq = 0;
+
+    for (const p of execPapers) {
+      const origen = `${norm(p.code)} · ${norm(p.title)}`;
+      const rows = asRows(p.sections[0]?.value);
+
+      if (p.paperCode === 'PT-FIN-C-SUST') {
+        for (const r of rows) {
+          const diferencia = asNumber(r['Diferencia ($)'] ?? r['Diferencia']);
+          if (!diferencia) continue; // sin diferencia real, no acumular ruido
+          seq++;
+          const naturaleza: string = norm(r['Naturaleza (Error/Estimación/Fraude/No ajustable)'] ?? r['Naturaleza']);
+          const tipo: Tipo = /estimaci/i.test(naturaleza) ? 'Por Estimación' : 'Factual';
+          consolidated.push({
+            '#':               String(seq),
+            'Papel de Origen': origen,
+            'Área/Cuenta':     norm(r['Área/Cuenta']),
+            'Descripción':     norm(r['Descripción de la diferencia'] ?? r['Descripción']),
+            'Saldo s/Cliente': norm(r['Saldo según cliente ($)'] ?? r['Saldo según cliente']),
+            'Saldo s/Auditor': norm(r['Saldo según auditor ($)'] ?? r['Saldo según auditor']),
+            'Diferencia $':    diferencia.toFixed(2),
+            'Tipo':            tipo,
+            'Estado':          norm(r['Proponer AJE (Sí/No/Pendiente)'] ?? r['Proponer AJE']) || 'Pendiente',
+          });
+        }
+      } else {
+        // PT-FIN-C-NORM: hallazgos de cumplimiento — sin saldo cliente/auditor,
+        // el impacto potencial se registra directamente como la diferencia.
+        for (const r of rows) {
+          const diferencia = asNumber(r['Impacto potencial en EEFF ($)'] ?? r['Impacto potencial en EEFF']);
+          if (!diferencia) continue;
+          seq++;
+          consolidated.push({
+            '#':               String(seq),
+            'Papel de Origen': origen,
+            'Área/Cuenta':     norm(r['Área']),
+            'Descripción':     norm(r['Descripción del incumplimiento/riesgo'] ?? r['Descripción']),
+            'Saldo s/Cliente': 'N/A',
+            'Saldo s/Auditor': 'N/A',
+            'Diferencia $':    diferencia.toFixed(2),
+            'Tipo':            'Factual',
+            'Estado':          norm(r['¿Revelar en dictamen? (Sí/No/Evaluar)'] ?? r['¿Revelar en dictamen?']) || 'Pendiente',
+          });
+        }
+      }
+    }
+
+    // ── S1: consolidado ────────────────────────────────────────────────────
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: consolidated as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S1', consolidated);
+
+    // ── S2/S3: totales por categoría vs materialidad ──────────────────────
+    const { mg, uae } = await this.getMaterialidadByAudit(wp.auditId, user);
+
+    if (mg == null) {
+      return {
+        consolidated: consolidated.length,
+        sourcePapers: execPapers.length,
+        message: `${consolidated.length} diferencia(s) consolidadas desde ${execPapers.length} papel(es) de ejecución. `
+          + 'S2 y S3 no se calcularon: defina la materialidad en A-06 (PT-A4) primero.',
+      };
+    }
+
+    const buckets: Record<Tipo, { total: number; count: number }> = {
+      'Factual':        { total: 0, count: 0 },
+      'Por Estimación': { total: 0, count: 0 },
+    };
+    for (const r of consolidated) {
+      const b = buckets[r['Tipo'] as Tipo];
+      b.total += asNumber(r['Diferencia $']);
+      b.count++;
+    }
+    const grandTotal = buckets['Factual'].total + buckets['Por Estimación'].total;
+    const supera = (v: number, threshold: number | null): string =>
+      threshold == null ? 'N/A' : (v >= threshold ? 'Sí' : 'No');
+    const catRow = (categoria: string, total: number, count: number): ConsolidatedRow => ({
+      'Categoría':                categoria,
+      'Total Acumulado':          total.toFixed(2),
+      'UAE (50% MG)':             uae != null ? uae.toFixed(2) : 'N/A',
+      'Materialidad Global (MG)': mg.toFixed(2),
+      '¿Supera UAE?':             supera(total, uae),
+      '¿Supera MG?':              supera(total, mg),
+      '# Diferencias':            String(count),
+    });
+
+    const s2Rows: ConsolidatedRow[] = [
+      catRow('Factual', buckets['Factual'].total, buckets['Factual'].count),
+      catRow('Por Estimación', buckets['Por Estimación'].total, buckets['Por Estimación'].count),
+      catRow('Proyectada', 0, 0),
+      catRow('Total', grandTotal, consolidated.length),
+    ];
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S2' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: s2Rows as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S2', s2Rows);
+
+    const semaforo = grandTotal >= mg
+      ? 'ROJO_SALVEDAD_O_ADVERSA'
+      : (uae != null && grandTotal >= uae)
+        ? 'AMARILLO_EVALUAR_SALVEDAD'
+        : 'VERDE_OPINION_SIN_SALVEDADES';
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S3' } },
+      data:  { value: semaforo, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S3', semaforo);
+
+    return {
+      consolidated: consolidated.length,
+      sourcePapers: execPapers.length,
+      grandTotal,
+      semaforo,
+      message: `${consolidated.length} diferencia(s) consolidadas desde ${execPapers.length} papel(es) de ejecución. `
+        + `Total acumulado: $${grandTotal.toFixed(2)} — semáforo preliminar: ${semaforo.replace(/_/g, ' ')}.`,
     };
   }
 

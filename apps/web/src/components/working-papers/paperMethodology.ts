@@ -73,6 +73,36 @@ export const PAPER_METHODOLOGY: Record<string, Record<string, MethodologyEntry>>
       ],
     },
   },
+  'PT-FIN-B08': {
+    S1: {
+      title: 'Metodología — Diferencias Identificadas (NIA 450)',
+      intro: 'Consolida en una sola tabla todas las excepciones detectadas durante la ejecución, tomándolas directamente de la sección S1 de cada papel de prueba sustantiva (C-01..C-14) y de análisis normativo (C-13/C-15) de esta auditoría.',
+      points: [
+        'Botón "Consolidar Diferencias": recorre S1 de cada PT-FIN-C-SUST y PT-FIN-C-NORM del encargo y copia solo las filas con una diferencia distinta de cero.',
+        'De PT-FIN-C-SUST se copia el saldo según cliente, según auditor y la diferencia entre ambos. De PT-FIN-C-NORM (hallazgos de cumplimiento, sin comparación de saldos) se copia el "Impacto potencial en EEFF" como la diferencia.',
+        'Tipo: se marca "Por Estimación" cuando la Naturaleza de origen menciona una estimación contable; el resto (errores, fraude, no ajustables, hallazgos normativos) se marca "Factual".',
+        'Sobrescribe la tabla completa en cada corrida — no acumula ediciones manuales, porque es un reflejo directo de lo registrado en los papeles de ejecución. Las anotaciones propias del auditor sobre los ajustes viven en S4-S9.',
+      ],
+    },
+    S2: {
+      title: 'Metodología — Totales Acumulados vs Materialidad (NIA 450.A16)',
+      intro: 'Agrupa las diferencias de S1 en tres categorías (Factual, Por Estimación, Proyectada) y las compara contra la Materialidad de Ejecución (UAE) y la Materialidad Global (MG) definidas en A-06 (PT-A4).',
+      points: [
+        'Se recalcula junto con S1 al presionar "Consolidar Diferencias" — si A-06 aún no tiene materialidad definida, esta tabla no puede calcularse y se avisa en el mensaje del botón.',
+        'La categoría "Proyectada" (incorrecciones extrapoladas de una muestra, NIA 530) queda en cero: ningún papel de ejecución produce hoy ese dato de forma estructurada — hay que completarla manualmente si aplica.',
+        '"Total" es la suma de las tres categorías. "¿Supera UAE/MG?" compara ese total contra los umbrales de A-06.',
+      ],
+    },
+    S3: {
+      title: 'Metodología — Semáforo de Opinión',
+      intro: 'Traduce el total acumulado de S2 en una señal de riesgo para la opinión, ANTES de considerar qué ajustes acepta el cliente.',
+      points: [
+        'VERDE: total acumulado < UAE. AMARILLO: UAE ≤ total < MG. ROJO: total ≥ MG.',
+        'Es un semáforo preliminar/bruto: se calcula sobre el total de diferencias identificadas en S1, no sobre las que finalmente queden "no ajustadas" tras la respuesta del cliente en S5 — esa relación fila-a-fila (qué AJE cubre qué diferencia) no está automatizada.',
+        'El auditor debe revisar y, si corresponde, sobrescribir manualmente este valor una vez conocidas las decisiones del cliente sobre cada AJE (S4/S5), antes de fijar la opinión final en S8.',
+      ],
+    },
+  },
 };
 
 export function getMethodology(paperCode: string | null | undefined, sectionKey: string): MethodologyEntry | undefined {

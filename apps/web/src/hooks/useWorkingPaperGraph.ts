@@ -209,6 +209,34 @@ export function usePropagateAjustes() {
   });
 }
 
+export function usePropagateFinancialAnalysis() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ propagated: number; message: string }>(
+        `/working-papers/${paperId}/propagate-financial-analysis`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
+export function usePropagateDiferencias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ consolidated: number; sourcePapers: number; grandTotal?: number; semaforo?: string; message: string }>(
+        `/working-papers/${paperId}/propagate-diferencias`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
 export function useInitFromTemplate() {
   const qc = useQueryClient();
   return useMutation({

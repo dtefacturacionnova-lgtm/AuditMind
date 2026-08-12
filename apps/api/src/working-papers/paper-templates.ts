@@ -3074,23 +3074,23 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   'PT-FIN-B08': [
     {
       sectionKey: 'S1', label: 'Diferencias Identificadas — Todas las Áreas',
-      description: 'Tabla maestra de excepciones detectadas en C-01 a C-15. Se puebla automáticamente cuando un PT de ejecución registra una diferencia.',
-      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'C-01::S_DIFS,C-02::S_DIFS,C-03::S_DIFS,C-04::S_DIFS', sortOrder: 1,
-      aiHint: 'Columnas: # | Área (C-01..C-15) | Descripción del error | Tipo (Factual/Por estimación/Proyectado) | Cuentas afectadas | Debe $ | Haber $ | Impacto en UAI (+/-) | ¿Material? (vs UAE) | Estado (Propuesta/Aceptada/Rechazada). Sin reingreso manual — proviene automáticamente de los PTs de ejecución.',
+      description: 'Tabla maestra de excepciones detectadas en la ejecución. Use el botón "Consolidar Diferencias" para traerlas desde S1 de cada C-01..C-14 (PT-FIN-C-SUST) y C-13/C-15 (PT-FIN-C-NORM) sin reingreso manual.',
+      fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'PT-FIN-C-SUST::S1,PT-FIN-C-NORM::S1', sortOrder: 1,
+      aiHint: 'Columnas: # | Papel de Origen | Área/Cuenta | Descripción | Saldo s/Cliente | Saldo s/Auditor | Diferencia $ | Tipo | Estado. Tipo: Factual / Por Estimación. Se puebla con "Consolidar Diferencias" — use exactamente estos nombres de columna para que la consolidación funcione.',
     },
     {
       sectionKey: 'S2', label: 'Totales Acumulados vs Materialidad',
-      description: 'Comparación del total de diferencias acumuladas vs UAE y MG para determinar impacto en opinión.',
+      description: 'Comparación del total de diferencias acumuladas vs UAE y MG para determinar impacto en opinión. Se calcula junto con S1 al usar "Consolidar Diferencias".',
       fieldType: FieldType.MATRIX, isRequired: true, isAutoFilled: true, sourceRef: 'A-06::S3,S4,S5', sortOrder: 2,
-      aiHint: 'Filas: Diferencias Factuales | Por Estimación | Proyectadas | Total. Columnas: Total acumulado | UAE (50% MG) | Materialidad Global (MG) | ¿Supera UAE? | ¿Supera MG? | Diferencias aceptadas | Diferencias rechazadas/pendientes. Fuente UAE y MG: A-06 PT-A4.',
+      aiHint: 'Columnas: Categoría | Total Acumulado | UAE (50% MG) | Materialidad Global (MG) | ¿Supera UAE? | ¿Supera MG? | # Diferencias. Categorías (filas fijas): Factual | Por Estimación | Proyectada | Total. Fuente UAE y MG: A-06 PT-A4 — si la materialidad aún no está definida, esta tabla no puede calcularse.',
     },
     {
       sectionKey: 'S3', label: 'Semáforo de Opinión',
-      description: 'Estado automático de la opinión basado en diferencias no ajustadas acumuladas vs materialidad.',
+      description: 'Estado automático de la opinión basado en el total de diferencias identificadas (antes de considerar los AJEs de S4/S5) vs materialidad. Reevalúe manualmente una vez el cliente responda los ajustes en S5.',
       fieldType: FieldType.ENUM_SELECT,
       options: ['VERDE_OPINION_SIN_SALVEDADES', 'AMARILLO_EVALUAR_SALVEDAD', 'ROJO_SALVEDAD_O_ADVERSA'],
       isRequired: true, isAutoFilled: true, sortOrder: 3,
-      aiHint: 'VERDE: diferencias no ajustadas < UAE → opinión sin salvedades factible. AMARILLO: UAE ≤ diferencias < MG → solicitar ajuste al cliente o evaluar salvedad. ROJO: diferencias ≥ MG → salvedad o adversa según si el efecto es generalizado. Se recalcula automáticamente cada vez que se registra una nueva diferencia.',
+      aiHint: 'VERDE: diferencias no ajustadas < UAE → opinión sin salvedades factible. AMARILLO: UAE ≤ diferencias < MG → solicitar ajuste al cliente o evaluar salvedad. ROJO: diferencias ≥ MG → salvedad o adversa según si el efecto es generalizado. Se recalcula junto con S1/S2 al usar "Consolidar Diferencias"; el auditor puede sobrescribirlo manualmente tras evaluar las respuestas del cliente en S5.',
     },
     {
       sectionKey: 'S4', label: 'Libro de AJEs — Asientos Formales',
@@ -3100,21 +3100,22 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     },
     {
       sectionKey: 'S5', label: 'Respuesta del Cliente a los Ajustes',
-      description: 'Decisión formal del cliente sobre cada AJE propuesto.',
+      description: 'Decisión formal del cliente sobre cada AJE propuesto en S4. Una fila por AJE — se agrega automáticamente al registrar un nuevo asiento en S4.',
       fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: false, sortOrder: 5,
-      aiHint: 'Columnas: # AJE | Decisión (Acepta / Acepta parcialmente / Rechaza) | Fecha respuesta | ¿Procesado en contabilidad? | Comentario del cliente. Diferencias rechazadas permanecen como "no ajustadas" en el semáforo.',
+      linkedFrom: { sectionKey: 'S4', keyColumns: ['# AJE'] },
+      aiHint: 'Columnas: # AJE | Decisión | Fecha respuesta | ¿Procesado en contabilidad? | Comentario del cliente. Decisión: Acepta / Acepta parcialmente / Rechaza / Pendiente. Diferencias rechazadas o pendientes permanecen como "no ajustadas" en el semáforo de S3.',
     },
     {
       sectionKey: 'S6', label: 'Total Diferencias No Ajustadas',
       description: 'Suma final de diferencias que el cliente no corrigió.',
       fieldType: FieldType.CURRENCY, isRequired: true, isAutoFilled: true, sortOrder: 6,
-      aiHint: 'Total = suma de montos de AJEs rechazados o pendientes. Si > MG: modifica la opinión del auditor. Documentar en carta de representación (NIA 580) para reconocimiento formal del management.',
+      aiHint: 'Tome los AJEs de S4 de este mismo papel cuya fila correspondiente en S5 tenga Decisión = Rechaza o Pendiente, y sume sus montos (Monto Debe o Monto Haber, son iguales por partida doble). Si el total supera la Materialidad Global (MG, de A-06 PT-A4): modifica la opinión del auditor — ver S8. Documentar en carta de representación (NIA 580) para reconocimiento formal del management.',
     },
     {
       sectionKey: 'S7', label: 'EEFF Ajustados — Antes y Después',
       description: 'Estados financieros que muestran el impacto de todos los ajustes aceptados.',
       fieldType: FieldType.MATRIX, isRequired: false, isAutoFilled: false, sortOrder: 7,
-      aiHint: 'Columnas: Línea EEFF | EEFF s/cliente | AJEs aceptados (+/-) | EEFF auditados. Para Balance General y Estado de Resultados. Los EEFF auditados son la base del dictamen E-01.',
+      aiHint: 'Columnas: Línea EEFF | EEFF s/Cliente | AJEs Aceptados | EEFF Auditados. Para Balance General y Estado de Resultados: tome de S4 (de este mismo papel) los AJEs cuya fila en S5 tenga Decisión = Acepta o Acepta parcialmente, sume su efecto neto por línea, y calcule EEFF Auditados = EEFF s/Cliente + AJEs Aceptados. Los EEFF auditados son la base del dictamen E-01.',
     },
     {
       sectionKey: 'S8', label: 'Propuesta de Tipo de Opinión',

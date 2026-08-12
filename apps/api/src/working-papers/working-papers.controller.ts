@@ -306,6 +306,20 @@ export class WorkingPapersController {
     return this.sectionsService.propagateAjustes(id, user);
   }
 
+  @Post(':id/propagate-financial-analysis')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Propagar saldos de 3 períodos de B-00 S2 (Clasificador) al Análisis Horizontal B-07 S1 (determinista, sin IA)' })
+  propagateFinancialAnalysis(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateFinancialAnalysis(id, user);
+  }
+
+  @Post(':id/propagate-diferencias')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Consolidar diferencias de PT-FIN-C-SUST/PT-FIN-C-NORM (S1) y recalcular semáforo en B-08 S1/S2/S3 (determinista, sin IA)' })
+  propagateDiferencias(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateDiferencias(id, user);
+  }
+
   @Post(':id/sections/init/:templateKey')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Inicializar secciones de un papel desde una plantilla (PT-A1, PT-A2, PT-A4, PT-MEMO, PT-PROG)' })

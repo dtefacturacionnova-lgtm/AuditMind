@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, ReferenceLine,
 } from 'recharts';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -218,6 +218,65 @@ export function AjeImpactChart({ rows }: Props) {
       <div className="flex items-center gap-3 mt-2">
         <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-indigo-600 inline-block" /> Neto Débito</span>
         <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Neto Crédito</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Puente de Materialidad — diferencias acumuladas vs UAE/MG (B-08 S2) ──────
+
+export function MaterialityBridgeChart({ rows }: Props) {
+  if (rows.length === 0) return null;
+  const sample = rows[0];
+  const catKey   = findKey(sample, ['categoria']);
+  const totalKey = findKey(sample, ['total acumulado', 'total']);
+  const uaeKey   = findKey(sample, ['uae']);
+  const mgKey    = findKey(sample, ['materialidad global', 'mg']);
+  if (!catKey || !totalKey) return null;
+
+  const data = rows
+    .map(r => ({ name: String(r[catKey] ?? ''), total: parseNumeric(r[totalKey]) }))
+    .filter(d => d.name && Number.isFinite(d.total));
+  if (data.length === 0) return null;
+
+  const uaeVal = uaeKey ? parseNumeric(sample[uaeKey]) : NaN;
+  const mgVal  = mgKey ? parseNumeric(sample[mgKey]) : NaN;
+
+  function colorFor(total: number): string {
+    if (Number.isFinite(mgVal) && total >= mgVal) return '#ef4444';
+    if (Number.isFinite(uaeVal) && total >= uaeVal) return '#f59e0b';
+    return '#10b981';
+  }
+
+  return (
+    <div className="mb-3 bg-white border border-gray-100 rounded-xl p-3">
+      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        Diferencias acumuladas vs materialidad
+      </p>
+      <ResponsiveContainer width="100%" height={Math.max(200, data.length * 44)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 12, right: 28, bottom: 4, left: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 10 }} />
+          <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} />
+          <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: number) => fmtLabel(Number(v))} />
+          {Number.isFinite(uaeVal) && (
+            <ReferenceLine x={uaeVal} stroke="#f59e0b" strokeDasharray="4 4"
+              label={{ value: 'UAE', position: 'insideTopLeft', fontSize: 9, fill: '#b45309' }} />
+          )}
+          {Number.isFinite(mgVal) && (
+            <ReferenceLine x={mgVal} stroke="#ef4444" strokeDasharray="4 4"
+              label={{ value: 'MG', position: 'insideTopLeft', fontSize: 9, fill: '#b91c1c' }} />
+          )}
+          <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+            {data.map((d, i) => <Cell key={i} fill={colorFor(d.total)} />)}
+            <LabelList dataKey="total" position="right" formatter={fmtLabel} style={{ fontSize: 9, fontWeight: 600, fill: '#334155' }} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      <div className="flex items-center gap-3 mt-2 flex-wrap">
+        <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Bajo UAE</span>
+        <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Entre UAE y MG</span>
+        <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> ≥ MG</span>
       </div>
     </div>
   );

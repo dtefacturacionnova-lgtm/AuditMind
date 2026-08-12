@@ -377,7 +377,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   1,
-      aiHint:      'Lista ciclos: Ingresos, Gastos, Nómina, Tesorería, Activos Fijos, etc.',
+      aiHint:      'Columnas: # | Ciclo / Área (ej. Ingresos, Gastos, Nómina, Tesorería, Activos Fijos) | Procesos incluidos | Responsable del proceso. Cubra todos los ciclos significativos de la entidad — esta lista es la base para saldos (S2), score de RI (S4) y riesgos específicos (S5).',
     },
     {
       sectionKey:  'S2',
@@ -387,7 +387,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   2,
-      aiHint:      'Para cada saldo, indica: cuenta, saldo, moneda y afirmaciones clave (completitud, existencia, valuación).',
+      aiHint:      'Columnas: Cuenta / Rubro | Saldo | Moneda | Afirmaciones clave (Existencia / Integridad / Valuación / Derechos y Obligaciones / Presentación). Incluya los saldos y rubros materiales de los EEFF — referencia el umbral de materialidad de PT-A4.',
     },
     {
       sectionKey:  'S3',
@@ -407,7 +407,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   4,
-      aiHint:      'Asigna score: 1=Muy bajo, 2=Bajo, 3=Medio, 4=Alto, 5=Muy alto. Documenta base de la calificación.',
+      aiHint:      'Columnas: Ciclo / Área | Score RI (1-5) | Nivel (Muy Bajo / Bajo / Medio / Alto / Muy Alto) | Base de la calificación (factores considerados). Escala: 1=Muy bajo, 2=Bajo, 3=Medio, 4=Alto, 5=Muy alto. Documente el fundamento de cada puntaje.',
     },
     {
       sectionKey:  'S5',
@@ -417,7 +417,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   5,
-      aiHint:      'Para cada riesgo: descripción, área, probabilidad (A/M/B), impacto (A/M/B), respuesta de auditoría.',
+      aiHint:      'Columnas: # | Descripción del riesgo | Ciclo / Área | Probabilidad (Alta / Media / Baja) | Impacto (Alto / Medio / Bajo) | Respuesta de auditoría planificada. Incluya todo riesgo identificado a nivel de EEFF o de afirmación (NIA 315.25/315.31).',
     },
     {
       sectionKey:  'S6',

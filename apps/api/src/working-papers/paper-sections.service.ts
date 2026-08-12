@@ -9,6 +9,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { PaperGraphService } from './paper-graph.service';
 import { PAPER_TEMPLATES } from './paper-templates';
 import { AiService } from '../ai/ai.service';
+import { SUBSTANTIVE_PROCEDURE_LIBRARY } from './substantive-procedure-library';
 
 @Injectable()
 export class PaperSectionsService {
@@ -1362,6 +1363,78 @@ INSTRUCCIONES DE SALIDA:
       message: consolidated.length > 0
         ? `${consolidated.length} deficiencia(s) consolidadas desde PT-A3 (evaluación de controles) y PT-ITGC (controles generales de TI).`
         : 'No se encontraron excepciones con severidad Menor/Significativa/Material en PT-A3 ni PT-ITGC — puede que aún no se hayan registrado pruebas de control, o que no haya deficiencias.',
+    };
+  }
+
+  // ─── Auditoría Financiera: biblioteca de procedimientos sustantivos ─────────
+
+  /**
+   * Carga en PT-FIN-C-SUST S3 los procedimientos sugeridos de la biblioteca
+   * estática (substantive-procedure-library.ts) para el área del papel
+   * (wp.code, ej. "C-01"). A diferencia de los demás propagateXxx de esta
+   * clase, esto NO sobrescribe — solo AGREGA los procedimientos que aún no
+   * estén en la tabla (comparando por texto), porque S3 tiene datos propios
+   * del auditor por fila (Población, Muestra, Criterio, Período) que nunca
+   * deben perderse al volver a presionar el botón.
+   */
+  async seedSubstantiveProcedures(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-FIN-C-SUST') {
+      throw new BadRequestException(
+        'Solo el papel PT-FIN-C-SUST puede cargar procedimientos de la biblioteca sustantiva',
+      );
+    }
+
+    const library = SUBSTANTIVE_PROCEDURE_LIBRARY[wp.code] ?? [];
+    if (library.length === 0) {
+      return {
+        added: 0,
+        message: `Aún no hay procedimientos en la biblioteca para el área ${wp.code} — puede agregar filas manualmente mientras tanto.`,
+      };
+    }
+
+    const norm = (v: unknown): string => (v == null ? '' : String(v)).trim();
+    const asRows = (value: unknown): Record<string, string>[] =>
+      Array.isArray(value) ? (value as Record<string, string>[]) : [];
+
+    const DEFAULT_COLUMNS = ['N°', 'Procedimiento', 'Técnica', 'Población total', 'Muestra seleccionada', 'Criterio', 'Período cubierto'];
+
+    const s3 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S3' } },
+    });
+    const existing = asRows(s3?.value);
+    const existingDesc = new Set(existing.map(r => norm(r['Procedimiento']).toLowerCase()));
+    const columns = existing.length > 0 ? Object.keys(existing[0]) : DEFAULT_COLUMNS;
+
+    const toAdd = library.filter(p => !existingDesc.has(p.procedimiento.toLowerCase()));
+    if (toAdd.length === 0) {
+      return { added: 0, message: 'Todos los procedimientos de la biblioteca ya están en la tabla — nada que agregar.' };
+    }
+
+    let seq = existing.length;
+    const newRows = toAdd.map(p => {
+      seq++;
+      const row: Record<string, string> = {};
+      for (const c of columns) row[c] = '';
+      row['N°'] = String(seq);
+      row['Procedimiento'] = p.procedimiento;
+      row['Técnica'] = p.tecnica;
+      return row;
+    });
+
+    const merged = [...existing, ...newRows];
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S3' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: merged as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S3', merged);
+
+    return {
+      added: newRows.length,
+      message: `${newRows.length} procedimiento(s) agregados desde la biblioteca de ${wp.code}. Complete Población, Muestra, Criterio y Período para cada uno.`,
     };
   }
 

@@ -327,6 +327,13 @@ export class WorkingPapersController {
     return this.sectionsService.propagateControlDeficiencias(id, user);
   }
 
+  @Post(':id/seed-substantive-procedures')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Cargar procedimientos sugeridos de la biblioteca sustantiva en PT-FIN-C-SUST S3, sin pisar filas existentes' })
+  seedSubstantiveProcedures(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.seedSubstantiveProcedures(id, user);
+  }
+
   @Post(':id/sections/init/:templateKey')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Inicializar secciones de un papel desde una plantilla (PT-A1, PT-A2, PT-A4, PT-MEMO, PT-PROG)' })

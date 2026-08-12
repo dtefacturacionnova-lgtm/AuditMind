@@ -251,6 +251,20 @@ export function usePropagateControlDeficiencias() {
   });
 }
 
+export function useSeedSubstantiveProcedures() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ added: number; message: string }>(
+        `/working-papers/${paperId}/seed-substantive-procedures`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
 export function useInitFromTemplate() {
   const qc = useQueryClient();
   return useMutation({

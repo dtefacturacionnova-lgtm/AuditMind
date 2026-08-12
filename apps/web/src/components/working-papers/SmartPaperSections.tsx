@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, Component, type ErrorInfo, type ReactNode } from 'react';
-import { Loader2, LayoutTemplate, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Loader2, LayoutTemplate, CheckCircle2, AlertTriangle, RefreshCw, Sparkles } from 'lucide-react';
 import {
   usePaperSections,
   useUpdateSection,
@@ -13,6 +13,7 @@ import {
   usePropagateFinancialAnalysis,
   usePropagateDiferencias,
   usePropagateControlDeficiencias,
+  useSeedSubstantiveProcedures,
 } from '@/hooks/useWorkingPaperGraph';
 import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
@@ -111,6 +112,55 @@ function DiferenciasPropagateBar({ paperId }: { paperId: string }) {
       {msg && (
         <div className={`flex items-center gap-2 rounded-lg px-3 py-2 mt-2 text-xs ${
           isError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-indigo-50 border border-indigo-200 text-indigo-700'
+        }`}>
+          {isError ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PT-FIN-C-SUST S3 — botón "Cargar Procedimientos Sugeridos" (biblioteca) ──
+
+function SeedProceduresBar({ paperId }: { paperId: string }) {
+  const seed = useSeedSubstantiveProcedures();
+  const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  async function handleClick() {
+    setMsg('');
+    setIsError(false);
+    try {
+      const res = await seed.mutateAsync(paperId);
+      setMsg(res.message);
+      setIsError(false);
+    } catch (err) {
+      setMsg((err as Error).message || 'Error al cargar los procedimientos');
+      setIsError(true);
+    }
+  }
+
+  return (
+    <div className="pt-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-[11px] text-gray-400">
+          Trae los procedimientos de la biblioteca sustantiva para esta área — nunca borra ni pisa filas ya llenadas.
+        </p>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={seed.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors shrink-0"
+          title="Cargar procedimientos sugeridos de la biblioteca sustantiva"
+        >
+          <Sparkles className={`w-3.5 h-3.5 ${seed.isPending ? 'animate-pulse' : ''}`} />
+          {seed.isPending ? 'Cargando…' : 'Cargar Procedimientos Sugeridos'}
+        </button>
+      </div>
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 mt-2 text-xs ${
+          isError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-violet-50 border border-violet-200 text-violet-700'
         }`}>
           {isError ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
           {msg}
@@ -720,6 +770,35 @@ export function SmartPaperSections({
                   {section.sectionKey === 'S1' && !readonly && paperId && <BalancePropagateBar paperId={paperId} />}
                   {section.sectionKey === 'S1' && <VariationChart rows={rows} />}
                   {section.sectionKey === 'S3' && <RatioTrendChart rows={rows} />}
+                  <SectionField
+                    section={section}
+                    allSections={sorted}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    paperId={paperId}
+                    paperCode={paperCode}
+                    mentionItems={mentionItems}
+                    aiDraftConfig={aiDraftConfig}
+                    onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                      void createReference.mutateAsync({
+                        paperId,
+                        sourceSectionKey: sectionKey,
+                        targetPaperId,
+                        targetSectionKey,
+                      });
+                    }}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            );
+          }
+
+          // PT-FIN-C-SUST S3: botón "Cargar Procedimientos Sugeridos" (biblioteca por área).
+          if (paperCode === 'PT-FIN-C-SUST' && section.sectionKey === 'S3') {
+            return (
+              <SectionErrorBoundary key="S3" label={section.label}>
+                <div>
+                  {!readonly && paperId && <SeedProceduresBar paperId={paperId} />}
                   <SectionField
                     section={section}
                     allSections={sorted}

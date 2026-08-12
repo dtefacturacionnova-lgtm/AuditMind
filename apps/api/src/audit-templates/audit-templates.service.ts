@@ -538,6 +538,8 @@ export class AuditTemplatesService {
       {
         name: 'Auditoría Externa (NIA/ISA)',
         description:
+          '[EN DESARROLLO — para encargos financieros use "Auditoría Financiera Externa v1.0"; ' +
+          'esta plantilla no tiene lead schedules automáticos (B-01..B-04 sin plantilla asignada)] ' +
           'Índice completo para Auditoría Externa de Estados Financieros según NIA/ISA + CVPCPA El Salvador. ' +
           'Incluye planificación, EEFF, sumarias, pruebas sustantivas, cierre e informe del auditor. ' +
           'Aplica a: Externa, Financiera.',
@@ -2013,6 +2015,21 @@ export class AuditTemplatesService {
           { code: 'D-03', indexSection: 'D',
             title: 'Eventos Posteriores al Cierre (NIA 560)',
             type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART, paperCode: 'PT-NIA560' },
+          { code: 'D-05', indexSection: 'D',
+            title: 'Comunicación con Encargados del Gobierno Corporativo (NIA 260)',
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART, paperCode: 'PT-NIA260' },
+          { code: 'D-06', indexSection: 'D',
+            title: 'Uso del Trabajo de un Experto del Auditor (NIA 620)',
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART, paperCode: 'PT-NIA620' },
+          { code: 'D-07', indexSection: 'D',
+            title: 'Hallazgo de Auditoría (5 Elementos + Seguimiento de Respuesta)',
+            type: WorkingPaperType.FINDING, wpKind: WpKind.SMART, paperCode: 'PT-HALL' },
+          { code: 'D-08', indexSection: 'D',
+            title: 'Comunicación Formal de Hallazgos al Cliente / Administración',
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART, paperCode: 'PT-HALL-COM' },
+          { code: 'D-09', indexSection: 'D',
+            title: 'Cédula de Seguimiento — Hallazgos Respondidos, Vigentes y Vencidos',
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.MASTER, paperCode: 'PT-HALL-RESP' },
           // ── E — Informe ───────────────────────────────────────────────────
           { code: 'E-01', indexSection: 'E',
             title: 'Informe del Auditor Independiente — Borrador (NIA 700-720)',
@@ -2069,6 +2086,10 @@ export class AuditTemplatesService {
           // ── D-01 → E-01: carta de representación confirma dictamen ────────
           { sourceCode: 'D-01', targetCode: 'E-01', sourceField: 'S1', targetField: 'S3', mappingType: 'DIRECT',       description: 'Carta de representación → dictamen (NIA 580)' },
           { sourceCode: 'D-02', targetCode: 'E-01', sourceField: 'S1', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Debilidades CI → KAM del informe (NIA 265/701)' },
+          // ── D-05/D-06 → E-01 y entre sí (agregados junto con los papeles) ──
+          { sourceCode: 'D-05', targetCode: 'E-01', sourceField: 'S3', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Asuntos significativos TCWG → Informe' },
+          { sourceCode: 'D-06', targetCode: 'E-01', sourceField: 'S4', targetField: 'S2', mappingType: 'AI_GENERATED', description: 'Evaluación trabajo experto → Informe' },
+          { sourceCode: 'D-06', targetCode: 'D-05', sourceField: 'S5', targetField: 'S3', mappingType: 'DIRECT',       description: 'Conclusión experto → Asuntos significativos TCWG' },
         ],
       },
     ];

@@ -3237,12 +3237,13 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     {
       sectionKey:   'S4',
       label:        'Resultados de Pruebas — Detalle de Ejecución',
-      description:  'Descripción narrativa de los resultados de cada procedimiento aplicado.',
-      fieldType:    FieldType.TEXTAREA,
+      description:  'Resultado de cada procedimiento aplicado. Una fila por procedimiento — se agrega automáticamente al registrar uno nuevo en S3.',
+      fieldType:    FieldType.MATRIX,
       isRequired:   true,
       isAutoFilled: false,
       sortOrder:    4,
-      aiHint:       'Para cada procedimiento de S3: describir lo realizado, evidencia obtenida, elementos examinados y excepciones. Usar formato: "Procedimiento [N°]: [descripción ejecutada]. Resultado: [Sin excepciones / X excepciones de N elementos examinados]. Evidencia: [documentos revisados, adjuntos ref.]." El Agente Cicero puede estructurar los resultados en formato narrativo NIA 500.',
+      linkedFrom:   { sectionKey: 'S3', keyColumns: ['N°', 'Procedimiento'] },
+      aiHint:       'Columnas: N° | Procedimiento | Resultado | Evidencia / Documentos Revisados | Excepciones Encontradas. Para cada procedimiento de S3: Resultado = "Sin excepciones" o "X excepciones de N elementos examinados". Evidencia = documentos revisados, referencia a adjuntos. Excepciones Encontradas: detalle de cada una si las hubo, o "Ninguna". El Agente Cicero puede redactar Resultado/Excepciones a partir del procedimiento y la evidencia adjunta (NIA 500).',
     },
     {
       sectionKey:   'S5',

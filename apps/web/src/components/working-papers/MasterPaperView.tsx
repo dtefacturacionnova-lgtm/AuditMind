@@ -12,10 +12,11 @@ const LS_CONFIG: Record<string, {
   groupName: string; prefix: string;
   detailSections: { key: string; label: string; subSumaria: string }[];
   analysisSectionKey: string; proceduresSectionKey: string; conclusionSectionKey: string;
+  auditorNotesKey?: string;
 }> = {
   'PT-FIN-B01': { groupName: 'Activos Corrientes',   prefix: 'B-01',
     detailSections: [{ key:'S2', label:'Caja y Bancos', subSumaria:'B-01a' },{ key:'S3', label:'Cuentas por Cobrar', subSumaria:'B-01b' },{ key:'S4', label:'Inventarios', subSumaria:'B-01c' },{ key:'S5', label:'Otros Activos Corrientes', subSumaria:'B-01d' }],
-    analysisSectionKey:'S6', proceduresSectionKey:'S7', conclusionSectionKey:'S9' },
+    analysisSectionKey:'S6', proceduresSectionKey:'S7', conclusionSectionKey:'S9', auditorNotesKey:'S6b' },
   'PT-FIN-B02': { groupName: 'Activos No Corrientes', prefix: 'B-02',
     detailSections: [{ key:'S2', label:'Propiedad, Planta y Equipo', subSumaria:'B-02a' },{ key:'S3', label:'Activos Intangibles', subSumaria:'B-02b' },{ key:'S4', label:'Inversiones LP', subSumaria:'B-02c' }],
     analysisSectionKey:'S5', proceduresSectionKey:'S6', conclusionSectionKey:'S8' },
@@ -147,14 +148,15 @@ function SyncStatusBadge({ syncStatus }: { syncStatus: WpSyncStatus }) {
 // ─── MasterPaperView ──────────────────────────────────────────────────────────
 
 interface MasterPaperViewProps {
-  paperId:       string;
-  syncStatus:    WpSyncStatus;
-  narrative?:    string;
-  sections?:     WpPaperSection[];
-  staleCount?:   number;
-  lastSyncedAt?: string;
-  paperCode?:    string | null;
-  auditId?:      string | null;
+  paperId:         string;
+  syncStatus:      WpSyncStatus;
+  narrative?:      string;
+  sections?:       WpPaperSection[];
+  staleCount?:     number;
+  lastSyncedAt?:   string;
+  paperCode?:      string | null;
+  auditId?:        string | null;
+  auditPeriodEnd?: string | null;
 }
 
 export function MasterPaperView({
@@ -166,6 +168,7 @@ export function MasterPaperView({
   lastSyncedAt,
   paperCode,
   auditId,
+  auditPeriodEnd,
 }: MasterPaperViewProps) {
   const consolidate = useConsolidatePaper();
 
@@ -181,6 +184,7 @@ export function MasterPaperView({
         sections={sections}
         lastSyncedAt={lastSyncedAt}
         config={lsConfig}
+        auditPeriodEnd={auditPeriodEnd}
       />
     );
   }

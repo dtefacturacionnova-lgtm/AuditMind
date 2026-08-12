@@ -4,21 +4,29 @@ import { useState, useCallback, useRef } from 'react';
 import {
   Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock,
   Sparkles, TrendingUp, ClipboardList, PenLine, ChevronDown, ChevronUp,
-  Save,
+  Save, Paperclip, X, FileText, Image as ImageIcon, FileSpreadsheet, File as FileGeneric,
 } from 'lucide-react';
-import { useConsolidatePaper, useUpdateSection, useMaterialidad } from '@/hooks/useWorkingPaperGraph';
+import {
+  useConsolidatePaper, useUpdateSection, useMaterialidad,
+  useAttachToAccountSchedule, useRemoveAccountScheduleAttachment,
+} from '@/hooks/useWorkingPaperGraph';
 import type { WpSyncStatus, WpPaperSection } from '@/hooks/useWorkingPapers';
+import type { EvidenceAttachment } from './DocumentEvidencePanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AccountRow {
+  id?:             string;   // generated client-side if missing (legacy rows)
   cuenta:          string;
   descripcion:     string;
   saldo_actual:    number;
   saldo_anterior:  number;
   var_abs:         number;
   var_pct:         number;
+  ajuste_debito?:   number;
+  ajuste_credito?:  number;
   nota_auditor?:   string;
+  attachments?:    EvidenceAttachment[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -29,6 +37,26 @@ const fmtNum = (n: number) =>
 const fmtCurrency = (n: number) =>
   new Intl.NumberFormat('es-SV', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 
+const fmtDate = (iso?: string | null) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+};
+
+/** Comparative (prior-year) cut-off — same calendar date one year before the audited period end. */
+function priorYearIso(iso?: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  d.setFullYear(d.getFullYear() - 1);
+  return d.toISOString();
+}
+
+function genRowId(): string {
+  return `lsr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
 function semaforo(abs: number, mg: number | null, me: number | null) {
   if (!mg && !me) return null;
   if (mg && abs > mg) return { icon: '🔴', label: 'Material',    cls: 'text-red-600 bg-red-50' };
@@ -38,11 +66,27 @@ function semaforo(abs: number, mg: number | null, me: number | null) {
 
 function toAccountRows(value: unknown): AccountRow[] {
   if (!Array.isArray(value)) return [];
-  return (value as AccountRow[]).filter(r => r && typeof r.cuenta === 'string');
+  return (value as AccountRow[])
+    .filter(r => r && typeof r.cuenta === 'string')
+    .map(r => ({ ...r, id: r.id ?? genRowId() }));
 }
 
 function toText(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function fmtSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function FileIcon({ mimeType }: { mimeType: string }) {
+  if (mimeType === 'application/pdf') return <FileText className="w-3.5 h-3.5 shrink-0 text-red-500" />;
+  if (mimeType.startsWith('image/'))  return <ImageIcon className="w-3.5 h-3.5 shrink-0 text-blue-500" />;
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType.includes('csv'))
+    return <FileSpreadsheet className="w-3.5 h-3.5 shrink-0 text-emerald-600" />;
+  return <FileGeneric className="w-3.5 h-3.5 shrink-0 text-gray-400" />;
 }
 
 // ─── Materialidad Banner ──────────────────────────────────────────────────────
@@ -83,42 +127,85 @@ function MaterialidadBanner({
   );
 }
 
-// ─── Account Detail Table (with per-row annotations) ──────────────────────────
+// ─── Account Detail Table (with per-row annotations, adjustments & evidence) ──
 
 function AccountDetailTable({
-  label, sectionKey, paperId, initialRows, mg, me,
+  label, sectionKey, paperId, initialRows, mg, me, fechaActual, fechaAnterior,
 }: {
-  label:        string;
-  sectionKey:   string;
-  paperId:      string;
-  initialRows:  AccountRow[];
-  mg:           number | null;
-  me:           number | null;
+  label:          string;
+  sectionKey:     string;
+  paperId:        string;
+  initialRows:    AccountRow[];
+  mg:             number | null;
+  me:             number | null;
+  fechaActual:    string | null;
+  fechaAnterior:  string | null;
 }) {
   const [open, setOpen]   = useState(true);
   const [rows, setRows]   = useState<AccountRow[]>(initialRows);
-  const [saving, setSaving] = useState<number | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
   const update = useUpdateSection();
+  const attachMutation = useAttachToAccountSchedule();
+  const removeMutation = useRemoveAccountScheduleAttachment();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [removingId,  setRemovingId]  = useState<string | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const total    = rows.reduce((s, r) => s + (r.saldo_actual  ?? 0), 0);
   const totalAnt = rows.reduce((s, r) => s + (r.saldo_anterior ?? 0), 0);
   const totalVar = total - totalAnt;
+  const totalDeb = rows.reduce((s, r) => s + (r.ajuste_debito  ?? 0), 0);
+  const totalCred = rows.reduce((s, r) => s + (r.ajuste_credito ?? 0), 0);
+  const totalAuditado = total + totalDeb - totalCred;
 
-  const updateNota = useCallback((index: number, nota: string) => {
-    const updated = rows.map((r, i) => i === index ? { ...r, nota_auditor: nota } : r);
+  function persist(updated: AccountRow[], rowId: string) {
     setRows(updated);
-
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      setSaving(index);
+      setSaving(rowId);
       try {
         await update.mutateAsync({ paperId, sectionKey, value: updated });
       } finally {
         setSaving(null);
       }
     }, 900);
+  }
+
+  const updateRow = useCallback((rowId: string, patch: Partial<AccountRow>) => {
+    persist(rows.map(r => r.id === rowId ? { ...r, ...patch } : r), rowId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, paperId, sectionKey, update]);
+
+  async function handleUpload(row: AccountRow, file: File) {
+    if (!row.id) return;
+    setUploadingId(row.id);
+    try {
+      const att = await attachMutation.mutateAsync({ paperId, rowId: row.id, file });
+      const updated = rows.map(r => r.id === row.id ? { ...r, attachments: [...(r.attachments ?? []), att] } : r);
+      setRows(updated);
+      await update.mutateAsync({ paperId, sectionKey, value: updated });
+    } catch (e) {
+      alert('Error al subir el adjunto: ' + (e as Error).message);
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function handleRemoveAttachment(row: AccountRow, attachmentId: string) {
+    if (!row.id) return;
+    setRemovingId(attachmentId);
+    try {
+      await removeMutation.mutateAsync({ paperId, rowId: row.id, attachmentId });
+      const updated = rows.map(r => r.id === row.id ? { ...r, attachments: (r.attachments ?? []).filter(a => a.id !== attachmentId) } : r);
+      setRows(updated);
+      await update.mutateAsync({ paperId, sectionKey, value: updated });
+    } catch (e) {
+      alert('Error al quitar el adjunto: ' + (e as Error).message);
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   return (
     <div className="rounded-xl border border-gray-200 overflow-hidden">
@@ -144,31 +231,74 @@ function AccountDetailTable({
               <tr className="bg-gray-50 border-b border-gray-100">
                 <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-left">Código</th>
                 <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-left">Descripción</th>
-                <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-right">Saldo actual</th>
-                <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-right">Saldo ant.</th>
+                <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-right">
+                  Saldo al{fechaAnterior && <span className="block font-normal text-gray-400 normal-case">{fechaAnterior}</span>}
+                </th>
                 <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-right">Var. $</th>
                 <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-right">Var. %</th>
+                <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-right">
+                  Saldo al{fechaActual && <span className="block font-normal text-gray-400 normal-case">{fechaActual}</span>}
+                </th>
+                <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-right" title="Ajustes y/o reclasificaciones — débito">Ajuste Débito</th>
+                <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-right" title="Ajustes y/o reclasificaciones — crédito">Ajuste Crédito</th>
+                <th className="px-3 py-2 text-xs font-semibold text-emerald-700 text-right bg-emerald-50/60">
+                  Saldo{fechaActual && <span className="block font-normal text-emerald-500 normal-case">{fechaActual}</span>} s/Auditoría
+                </th>
                 <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-center">Mat.</th>
-                <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-left min-w-[200px]">
+                <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-left min-w-[180px]">
                   Resultado de revisión
+                </th>
+                <th className="px-3 py-2 text-xs font-semibold text-gray-500 text-left min-w-[160px]">
+                  Evidencia
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {rows.map((row, i) => {
+              {rows.map(row => {
                 const sem = semaforo(Math.abs(row.saldo_actual), mg, me);
                 const varColor = row.var_abs > 0 ? 'text-emerald-600' : row.var_abs < 0 ? 'text-red-500' : 'text-gray-400';
+                const rowId = row.id ?? '';
+                const auditado = row.saldo_actual + (row.ajuste_debito ?? 0) - (row.ajuste_credito ?? 0);
                 return (
-                  <tr key={i} className="hover:bg-gray-50/50 transition-colors align-top">
+                  <tr key={rowId} className="hover:bg-gray-50/50 transition-colors align-top">
                     <td className="px-3 py-2.5 font-mono text-xs text-gray-500 whitespace-nowrap">{row.cuenta}</td>
                     <td className="px-3 py-2.5 text-gray-800 max-w-[180px]">{row.descripcion}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-800 whitespace-nowrap">{fmtNum(row.saldo_actual)}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-gray-400 whitespace-nowrap">{fmtNum(row.saldo_anterior)}</td>
                     <td className={`px-3 py-2.5 text-right font-mono whitespace-nowrap ${varColor}`}>
                       {row.var_abs >= 0 ? '+' : ''}{fmtNum(row.var_abs)}
                     </td>
                     <td className={`px-3 py-2.5 text-right text-xs font-medium whitespace-nowrap ${varColor}`}>
                       {row.var_pct >= 0 ? '+' : ''}{row.var_pct}%
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-800 whitespace-nowrap">{fmtNum(row.saldo_actual)}</td>
+                    <td className="px-2 py-1.5 w-24">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        defaultValue={row.ajuste_debito ? String(row.ajuste_debito) : ''}
+                        onBlur={e => {
+                          const v = parseFloat(e.target.value.replace(/,/g, ''));
+                          updateRow(rowId, { ajuste_debito: isNaN(v) ? 0 : v });
+                        }}
+                        placeholder="0"
+                        className="w-full text-xs text-right text-gray-800 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-blue-400 focus:outline-none py-0.5 tabular-nums placeholder:text-gray-300"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 w-24">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        defaultValue={row.ajuste_credito ? String(row.ajuste_credito) : ''}
+                        onBlur={e => {
+                          const v = parseFloat(e.target.value.replace(/,/g, ''));
+                          updateRow(rowId, { ajuste_credito: isNaN(v) ? 0 : v });
+                        }}
+                        placeholder="0"
+                        className="w-full text-xs text-right text-gray-800 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-blue-400 focus:outline-none py-0.5 tabular-nums placeholder:text-gray-300"
+                      />
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono font-semibold text-emerald-700 whitespace-nowrap bg-emerald-50/60">
+                      {fmtNum(auditado)}
                     </td>
                     <td className="px-3 py-2.5 text-center whitespace-nowrap">
                       {sem ? (
@@ -177,20 +307,60 @@ function AccountDetailTable({
                         </span>
                       ) : '—'}
                     </td>
-                    <td className="px-2 py-1.5 min-w-[200px]">
+                    <td className="px-2 py-1.5 min-w-[180px]">
                       <div className="relative">
                         <textarea
                           value={row.nota_auditor ?? ''}
-                          onChange={e => updateNota(i, e.target.value)}
+                          onChange={e => updateRow(rowId, { nota_auditor: e.target.value })}
                           rows={2}
                           className="w-full text-xs text-gray-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 resize-y focus:outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-gray-300"
                           placeholder="Anote el resultado de la revisión para esta cuenta…"
                         />
-                        {saving === i && (
+                        {saving === rowId && (
                           <span className="absolute top-1 right-1">
                             <Save className="w-3 h-3 text-amber-400 animate-pulse" />
                           </span>
                         )}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2.5 min-w-[160px]">
+                      <div className="flex flex-col gap-1">
+                        {(row.attachments ?? []).map(att => (
+                          <div key={att.id} className="flex items-center gap-1.5 px-1.5 py-1 bg-white border border-gray-100 rounded-md shadow-sm group/chip hover:border-gray-200">
+                            <FileIcon mimeType={att.mimeType} />
+                            <a href={att.url} target="_blank" rel="noreferrer" className="text-[11px] text-blue-600 hover:underline truncate max-w-[80px]" title={att.filename}>
+                              {att.filename}
+                            </a>
+                            <span className="text-[10px] text-gray-400 ml-auto shrink-0">{fmtSize(att.size)}</span>
+                            <button
+                              onClick={() => handleRemoveAttachment(row, att.id)}
+                              disabled={removingId === att.id}
+                              className="opacity-0 group-hover/chip:opacity-100 text-gray-300 hover:text-red-500 transition-all disabled:opacity-50 shrink-0"
+                              title="Quitar adjunto"
+                            >
+                              {removingId === att.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        ))}
+                        <input
+                          ref={el => { fileInputRefs.current[rowId] = el; }}
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.xlsx,.xls,.csv,.docx,.doc,.txt,.zip"
+                          onChange={e => {
+                            const f = e.target.files?.[0];
+                            if (f) handleUpload(row, f);
+                            e.target.value = '';
+                          }}
+                        />
+                        <button
+                          onClick={() => fileInputRefs.current[rowId]?.click()}
+                          disabled={uploadingId === rowId}
+                          className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-700 border border-dashed border-blue-200 hover:border-blue-400 rounded-md px-2 py-1 transition-colors disabled:opacity-50"
+                        >
+                          {uploadingId === rowId ? <Loader2 className="w-3 h-3 animate-spin" /> : <Paperclip className="w-3 h-3" />}
+                          Adjuntar evidencia
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -200,11 +370,15 @@ function AccountDetailTable({
             <tfoot>
               <tr className="bg-gray-50 border-t-2 border-gray-200 font-semibold">
                 <td colSpan={2} className="px-3 py-2 text-xs text-gray-600 uppercase tracking-wide">Total</td>
-                <td className="px-3 py-2 text-right font-mono text-gray-800">{fmtNum(total)}</td>
                 <td className="px-3 py-2 text-right font-mono text-gray-400">{fmtNum(totalAnt)}</td>
                 <td className={`px-3 py-2 text-right font-mono ${totalVar >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                   {totalVar >= 0 ? '+' : ''}{fmtNum(totalVar)}
                 </td>
+                <td />
+                <td className="px-3 py-2 text-right font-mono text-gray-800">{fmtNum(total)}</td>
+                <td className="px-3 py-2 text-right font-mono text-gray-700">{fmtNum(totalDeb)}</td>
+                <td className="px-3 py-2 text-right font-mono text-gray-700">{fmtNum(totalCred)}</td>
+                <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700 bg-emerald-50/60">{fmtNum(totalAuditado)}</td>
                 <td colSpan={3} />
               </tr>
             </tfoot>
@@ -243,18 +417,39 @@ function NarrativeCard({
   );
 }
 
-// ─── Conclusion Editor ────────────────────────────────────────────────────────
+// ─── Editable narrative editor (generic — used for Conclusión, Apreciación del
+// auditor, and Procedimientos editables) ──────────────────────────────────────
+
+interface EditorColorScheme {
+  border: string; headerBg: string; headerBorder: string; iconColor: string; titleColor: string; ring: string;
+}
+const EDITOR_COLORS: Record<'blue' | 'violet' | 'amber', EditorColorScheme> = {
+  blue:   { border: 'border-blue-200',   headerBg: 'bg-blue-50',   headerBorder: 'border-blue-100',   iconColor: 'text-blue-500',   titleColor: 'text-blue-800',   ring: 'focus:ring-blue-200' },
+  violet: { border: 'border-violet-200', headerBg: 'bg-violet-50', headerBorder: 'border-violet-100', iconColor: 'text-violet-500', titleColor: 'text-violet-800', ring: 'focus:ring-violet-200' },
+  amber:  { border: 'border-amber-200',  headerBg: 'bg-amber-50',  headerBorder: 'border-amber-100',  iconColor: 'text-amber-500',  titleColor: 'text-amber-800',  ring: 'focus:ring-amber-200' },
+};
 
 function ConclusionEditor({
   paperId, sectionKey, section,
+  title = 'Conclusión Preliminar del Área',
+  icon: Icon = PenLine,
+  color = 'blue',
+  placeholder = 'Escribe aquí la conclusión preliminar del auditor sobre este grupo de cuentas. Indica si los saldos son razonables y si se requieren procedimientos adicionales…',
+  helperNote,
 }: {
   paperId:    string;
   sectionKey: string;
   section:    WpPaperSection | undefined;
+  title?:     string;
+  icon?:      React.ElementType;
+  color?:     'blue' | 'violet' | 'amber';
+  placeholder?: string;
+  helperNote?: string;
 }) {
   const [text, setText]   = useState(toText(section?.value));
   const [dirty, setDirty] = useState(false);
   const update = useUpdateSection();
+  const c = EDITOR_COLORS[color];
 
   async function handleSave() {
     await update.mutateAsync({ paperId, sectionKey, value: text });
@@ -262,12 +457,12 @@ function ConclusionEditor({
   }
 
   return (
-    <div className="rounded-xl border border-blue-200 overflow-hidden shadow-sm">
-      <div className="flex items-center justify-between px-4 py-3 bg-blue-50 border-b border-blue-100">
+    <div className={`rounded-xl border ${c.border} overflow-hidden shadow-sm`}>
+      <div className={`flex items-center justify-between px-4 py-3 ${c.headerBg} border-b ${c.headerBorder}`}>
         <div className="flex items-center gap-2">
-          <PenLine className="w-4 h-4 text-blue-500" />
-          <span className="text-xs font-bold text-blue-400 uppercase tracking-wide">{sectionKey}</span>
-          <span className="text-sm font-semibold text-blue-800">Conclusión Preliminar del Área</span>
+          <Icon className={`w-4 h-4 ${c.iconColor}`} />
+          <span className={`text-xs font-bold uppercase tracking-wide opacity-60 ${c.titleColor}`}>{sectionKey}</span>
+          <span className={`text-sm font-semibold ${c.titleColor}`}>{title}</span>
         </div>
         <div className="flex items-center gap-2">
           {!dirty && text && (
@@ -287,13 +482,16 @@ function ConclusionEditor({
           )}
         </div>
       </div>
+      {helperNote && (
+        <p className="px-4 pt-2 text-[11px] text-gray-400">{helperNote}</p>
+      )}
       <textarea
         value={text}
         onChange={e => { setText(e.target.value); setDirty(true); }}
         onBlur={() => { if (dirty) handleSave(); }}
         rows={5}
-        className="w-full px-4 py-3 text-sm text-gray-700 resize-y focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-200"
-        placeholder="Escribe aquí la conclusión preliminar del auditor sobre este grupo de cuentas. Indica si los saldos son razonables y si se requieren procedimientos adicionales…"
+        className={`w-full px-4 py-3 text-sm text-gray-700 resize-y focus:outline-none focus:ring-2 focus:ring-inset ${c.ring}`}
+        placeholder={placeholder}
       />
     </div>
   );
@@ -314,12 +512,13 @@ function SyncBadge({ syncStatus }: { syncStatus: WpSyncStatus }) {
 // ─── Lead Schedule Master View (export) ──────────────────────────────────────
 
 export interface LeadScheduleMasterViewProps {
-  paperId:       string;
-  paperCode:     string;
-  auditId:       string;
-  syncStatus:    WpSyncStatus;
-  sections:      WpPaperSection[];
-  lastSyncedAt?: string;
+  paperId:         string;
+  paperCode:       string;
+  auditId:         string;
+  syncStatus:      WpSyncStatus;
+  sections:        WpPaperSection[];
+  lastSyncedAt?:   string;
+  auditPeriodEnd?: string | null;
   config: {
     groupName:             string;
     prefix:                string;
@@ -327,19 +526,26 @@ export interface LeadScheduleMasterViewProps {
     analysisSectionKey:    string;
     proceduresSectionKey:  string;
     conclusionSectionKey:  string;
+    auditorNotesKey?:      string;
   };
 }
 
 export function LeadScheduleMasterView({
-  paperId, paperCode, auditId, syncStatus, sections, lastSyncedAt, config,
+  paperId, paperCode, auditId, syncStatus, sections, lastSyncedAt, config, auditPeriodEnd,
 }: LeadScheduleMasterViewProps) {
   const consolidate    = useConsolidatePaper();
   const { data: mat }  = useMaterialidad(auditId);
   const isRegenerating = syncStatus === 'REGENERATING' || consolidate.isPending;
 
-  const sAnalysis   = sections.find(s => s.sectionKey === config.analysisSectionKey);
-  const sProcedures = sections.find(s => s.sectionKey === config.proceduresSectionKey);
-  const sConclusion = sections.find(s => s.sectionKey === config.conclusionSectionKey);
+  const sAnalysis     = sections.find(s => s.sectionKey === config.analysisSectionKey);
+  const sProcedures   = sections.find(s => s.sectionKey === config.proceduresSectionKey);
+  const sConclusion   = sections.find(s => s.sectionKey === config.conclusionSectionKey);
+  const sAuditorNotes = config.auditorNotesKey ? sections.find(s => s.sectionKey === config.auditorNotesKey) : undefined;
+
+  // Cut-off dates for the column labels — derived from the audit's own examined
+  // period (comparative year = same calendar date, one year earlier).
+  const fechaActual   = fmtDate(auditPeriodEnd);
+  const fechaAnterior = fmtDate(priorYearIso(auditPeriodEnd));
 
   // Compute group total from S2-S5 detail rows (reliable even when S1 is empty)
   const detailPairs = config.detailSections.map(det => ({
@@ -444,7 +650,7 @@ export function LeadScheduleMasterView({
           {/* ── Materialidad banner (total computed from S2-S5 rows) ── */}
           <MaterialidadBanner auditId={auditId} groupTotal={groupTotal} />
 
-          {/* ── S6: Análisis de Variaciones (AI) ── FIRST ── */}
+          {/* ── S6: Análisis de Variaciones (AI) ── siempre se conserva ── */}
           <NarrativeCard
             icon={TrendingUp}
             sectionKey={config.analysisSectionKey}
@@ -453,6 +659,19 @@ export function LeadScheduleMasterView({
             text={toText(sAnalysis?.value)}
           />
 
+          {/* ── Apreciación propia del auditor, adicional al análisis IA ── */}
+          {config.auditorNotesKey && (
+            <ConclusionEditor
+              paperId={paperId}
+              sectionKey={config.auditorNotesKey}
+              section={sAuditorNotes}
+              title="Apreciación del Auditor"
+              icon={PenLine}
+              color="violet"
+              placeholder="Anota tu propio criterio profesional sobre estas variaciones — matices, contexto del cliente o dudas que el análisis automático no capture…"
+            />
+          )}
+
           {/* ── S9: Conclusión Preliminar ── BEFORE tables ── */}
           <ConclusionEditor
             paperId={paperId}
@@ -460,7 +679,7 @@ export function LeadScheduleMasterView({
             section={sConclusion}
           />
 
-          {/* ── S2-S5: Account detail tables (with per-row annotation) ── */}
+          {/* ── S2-S5: Account detail tables (with per-row annotation, adjustments & evidence) ── */}
           {detailPairs.filter(d => d.rows.length > 0).map(det => (
             <AccountDetailTable
               key={det.key}
@@ -470,16 +689,21 @@ export function LeadScheduleMasterView({
               initialRows={det.rows}
               mg={mat?.mg ?? null}
               me={mat?.me ?? null}
+              fechaActual={fechaActual}
+              fechaAnterior={fechaAnterior}
             />
           ))}
 
-          {/* ── S7: Procedimientos sugeridos (AI, at the bottom as reference) ── */}
-          <NarrativeCard
-            icon={ClipboardList}
+          {/* ── S7: Procedimientos sugeridos — propuesta de la IA, editable por el auditor ── */}
+          <ConclusionEditor
+            paperId={paperId}
             sectionKey={config.proceduresSectionKey}
+            section={sProcedures}
             title="Procedimientos Sustantivos Recomendados"
-            color="bg-violet-50 border-violet-100 text-violet-800"
-            text={toText(sProcedures?.value)}
+            icon={ClipboardList}
+            color="amber"
+            placeholder="Procedimientos analíticos adicionales sugeridos según las variaciones identificadas…"
+            helperNote="Propuesta generada por IA — edítala libremente; no tiene carácter obligatorio."
           />
         </>
       )}

@@ -1559,6 +1559,7 @@ export default function WpDetailPage() {
               lastSyncedAt={wp.lastSyncedAt}
               paperCode={wp.paperCode}
               auditId={wp.auditId}
+              auditPeriodEnd={wp.audit?.auditPeriodEnd}
             />
           )}
 

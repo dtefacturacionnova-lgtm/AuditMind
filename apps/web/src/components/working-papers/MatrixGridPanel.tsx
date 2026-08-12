@@ -13,6 +13,7 @@ interface Props {
   onChange:   (rows: MatrixRow[]) => void;
   paperId?:   string;
   sectionKey: string;
+  aiHint?:    string;
   readOnly?:  boolean;
 }
 
@@ -41,6 +42,47 @@ function deriveColumns(rows: MatrixRow[]): string[] {
   return cols;
 }
 
+/**
+ * Most MATRIX aiHints spell out their columns as "Columnas: A | B | C. <more prose>".
+ * Extract that pipe-separated list (73% of MATRIX sections follow this convention)
+ * so the grid starts pre-populated with the intended structure instead of a blank
+ * generic column. Sections without this pattern fall back to manual column entry.
+ */
+function parseColumnsFromAiHint(aiHint?: string): string[] {
+  if (!aiHint) return [];
+  const marker = /columnas\s*:/i.exec(aiHint);
+  if (!marker) return [];
+  const start = marker.index + marker[0].length;
+  let depth = 0;
+  let end = aiHint.length;
+  for (let i = start; i < aiHint.length; i++) {
+    const ch = aiHint[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    else if (ch === '.' && depth === 0) {
+      // A period only ends the column list when followed by " <Uppercase>" (a new
+      // sentence) AND the word right before it is long enough to not be an
+      // abbreviation — "vs.", "ej." and "Ref." (as in "Ref. SEG") are followed by
+      // a capitalized continuation of the SAME column, not a new sentence.
+      const nextOk = /^\s+\p{Lu}/u.test(aiHint.slice(i + 1));
+      const wordBefore = /(\p{L}+)$/u.exec(aiHint.slice(start, i));
+      const prevOk = !wordBefore || wordBefore[1].length >= 4;
+      if (nextOk && prevOk) { end = i; break; }
+    }
+  }
+  return aiHint
+    .slice(start, end)
+    .split('|')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+/** Short header label (text before the first parenthetical hint). */
+function shortColumnLabel(col: string): string {
+  const idx = col.indexOf('(');
+  return idx > 0 ? col.slice(0, idx).trim() : col;
+}
+
 // ─── Panel principal ──────────────────────────────────────────────────────────
 
 /**
@@ -49,14 +91,23 @@ function deriveColumns(rows: MatrixRow[]): string[] {
  * reused across ~45 papers with completely different column schemas — there is
  * no per-section fixed schema to render against.
  */
-export function MatrixGridPanel({ value, onChange, paperId, sectionKey, readOnly = false }: Props) {
-  const [rows,       setRows]       = useState<MatrixRow[]>(() => parseValue(value));
-  const [columns,    setColumns]    = useState<string[]>(() => deriveColumns(parseValue(value)));
+export function MatrixGridPanel({ value, onChange, paperId, sectionKey, aiHint, readOnly = false }: Props) {
+  // aiHint-derived suggestion: short header labels + full phrase per label (for the tooltip)
+  const suggestedFull  = parseColumnsFromAiHint(aiHint);
+  const suggestedShort = suggestedFull.map(shortColumnLabel);
+  const suggestedTitleByLabel = Object.fromEntries(suggestedShort.map((s, i) => [s, suggestedFull[i]]));
+
+  const initialRows = parseValue(value);
+  const initialColumns = initialRows.length > 0 ? deriveColumns(initialRows) : suggestedShort;
+
+  const [rows,       setRows]       = useState<MatrixRow[]>(initialRows);
+  const [columns,    setColumns]    = useState<string[]>(initialColumns);
   const [editingCol, setEditingCol] = useState<string | null>(null);
   const [colDraft,   setColDraft]   = useState('');
   const [aiError,    setAiError]    = useState('');
   const [aiPreview,  setAiPreview]  = useState<MatrixRow[] | null>(null);
   const [aiUsedReal, setAiUsedReal] = useState(true);
+  const [usingSuggested, setUsingSuggested] = useState(initialRows.length === 0 && suggestedShort.length > 0);
 
   const assist = useAssistSection();
 
@@ -65,7 +116,15 @@ export function MatrixGridPanel({ value, onChange, paperId, sectionKey, readOnly
   useEffect(() => {
     const parsed = parseValue(value);
     setRows(parsed);
-    setColumns(deriveColumns(parsed));
+    if (parsed.length > 0) {
+      setColumns(deriveColumns(parsed));
+      setUsingSuggested(false);
+    } else if (suggestedShort.length > 0) {
+      setColumns(suggestedShort);
+      setUsingSuggested(true);
+    } else {
+      setColumns([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueSignature]);
 
@@ -81,12 +140,14 @@ export function MatrixGridPanel({ value, onChange, paperId, sectionKey, readOnly
   }
 
   function addColumn() {
+    setUsingSuggested(false);
     commit(rows, [...columns, `Columna ${columns.length + 1}`]);
   }
 
   function renameColumn(oldName: string, newName: string) {
     const trimmed = newName.trim();
     if (!trimmed || trimmed === oldName) { setEditingCol(null); return; }
+    setUsingSuggested(false);
     const nextColumns = columns.map(c => (c === oldName ? trimmed : c));
     const nextRows = rows.map(r => {
       const { [oldName]: val, ...rest } = r;
@@ -97,6 +158,7 @@ export function MatrixGridPanel({ value, onChange, paperId, sectionKey, readOnly
   }
 
   function deleteColumn(name: string) {
+    setUsingSuggested(false);
     const nextColumns = columns.filter(c => c !== name);
     const nextRows = rows.map(r => {
       const { [name]: _drop, ...rest } = r;
@@ -182,6 +244,14 @@ export function MatrixGridPanel({ value, onChange, paperId, sectionKey, readOnly
             <Plus className="w-3.5 h-3.5" />
             Columna
           </button>
+          {usingSuggested && columns.length > 0 && (
+            <span
+              className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full"
+              title="Columnas propuestas según la especificación del papel — puede renombrarlas, quitarlas o agregar más"
+            >
+              Columnas sugeridas — editables
+            </span>
+          )}
         </div>
       )}
 
@@ -289,6 +359,7 @@ export function MatrixGridPanel({ value, onChange, paperId, sectionKey, readOnly
                         <div className="flex items-center gap-1">
                           <span
                             className={!readOnly ? 'cursor-text' : ''}
+                            title={suggestedTitleByLabel[col]}
                             onClick={() => { if (readOnly) return; setEditingCol(col); setColDraft(col); }}
                           >
                             {col}

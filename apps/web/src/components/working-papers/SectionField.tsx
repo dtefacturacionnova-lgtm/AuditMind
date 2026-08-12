@@ -819,6 +819,7 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
                   onChange={rows => onSave(section.sectionKey, rows)}
                   paperId={paperId}
                   sectionKey={section.sectionKey}
+                  aiHint={section.aiHint}
                   readOnly={readonly}
                 />
               ) : (

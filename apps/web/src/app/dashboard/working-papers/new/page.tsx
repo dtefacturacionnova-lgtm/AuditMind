@@ -54,15 +54,18 @@ function NewWorkingPaperInner() {
   const [type,      setType]      = useState<typeof WORKING_PAPER_TYPES[number]['value']>('PLANNING_UNDERSTANDING');
   const [wpKind,    setWpKind]    = useState<typeof WP_KINDS[number]['value']>('SMART');
 
+  // Muestra SMART y MASTER juntos: elegir un papel ya define su motor (ver
+  // handleSelectPaperCode), así que exigir adivinar el tipo antes de verlo en
+  // la lista es lo que hacía que papeles MASTER como PT-MEMO/PT-PROG "no aparecieran".
   const filteredGroups = useMemo(() => {
     const grouped = new Map<string, PaperCatalogueEntry[]>();
     for (const p of catalogue) {
-      if (p.wpKind !== wpKind) continue;
+      if (p.wpKind !== 'SMART' && p.wpKind !== 'MASTER') continue;
       if (!grouped.has(p.group)) grouped.set(p.group, []);
       grouped.get(p.group)!.push(p);
     }
     return Array.from(grouped.entries()).map(([group, items]) => ({ group, items }));
-  }, [catalogue, wpKind]);
+  }, [catalogue]);
   const [code,      setCode]      = useState('');
   const [paperCode,   setPaperCode]   = useState('');
   const [customCode,  setCustomCode]  = useState(false);
@@ -285,9 +288,12 @@ function NewWorkingPaperInner() {
                       <optgroup key={g.group} label={g.group}>
                         {g.items.map(p => {
                           const used = existingPaperCodes.has(p.code);
+                          const kindTag = p.wpKind === 'MASTER' ? ' (Maestro)' : '';
                           return (
                             <option key={p.code} value={p.code} disabled={used}>
-                              {used ? `✓ ${p.code} — ${p.title} (ya en el encargo)` : `${p.code} — ${p.title}`}
+                              {used
+                                ? `✓ ${p.code} — ${p.title}${kindTag} (ya en el encargo)`
+                                : `${p.code} — ${p.title}${kindTag}`}
                             </option>
                           );
                         })}

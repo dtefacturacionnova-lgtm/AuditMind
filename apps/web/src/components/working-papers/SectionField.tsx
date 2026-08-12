@@ -18,6 +18,7 @@ import type { ChecklistValue } from './ChecklistPanel';
 import { ComunicacionAIPanel } from './ComunicacionAIPanel';
 import type { ComunicacionRow } from './ComunicacionAIPanel';
 import { ProcedureGridPanel } from './ProcedureGridPanel';
+import { MatrixGridPanel } from './MatrixGridPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -810,9 +811,19 @@ export function SectionField({ section, readonly = false, onSave, paperId, menti
               />
             )}
 
-            {/* Matrix */}
+            {/* Matrix — grid editable genérico (columnas dinámicas por sección) */}
             {section.fieldType === 'MATRIX' && (
-              <MatrixDisplay value={effectiveValue} />
+              paperId ? (
+                <MatrixGridPanel
+                  value={effectiveValue}
+                  onChange={rows => onSave(section.sectionKey, rows)}
+                  paperId={paperId}
+                  sectionKey={section.sectionKey}
+                  readOnly={readonly}
+                />
+              ) : (
+                <MatrixDisplay value={effectiveValue} />
+              )
             )}
 
             {/* Reference / Risk ref */}

@@ -250,7 +250,7 @@ export class PaperSectionsService {
     sectionKey: string,
     user:       AuthUser,
     userPrompt?: string,
-  ): Promise<{ suggestion: string; usedAI: boolean }> {
+  ): Promise<{ suggestion: string; usedAI: boolean; isStructured?: boolean }> {
     const wp = await this.assertPaperAccess(paperId, user);
 
     const section = await this.prisma.paperSection.findUnique({
@@ -271,7 +271,7 @@ export class PaperSectionsService {
       select: { title: true, scope: true, type: true, subtype: true },
     });
 
-    const prompt = this.buildSectionAssistPrompt({
+    const baseCtx = {
       paperTitle:   wp.title,
       paperCode:    wp.paperCode ?? wp.code,
       sectionKey:   section.sectionKey,
@@ -289,9 +289,27 @@ export class PaperSectionsService {
       auditType:    audit?.type ?? '',
       auditSubtype: audit?.subtype ?? '',
       userPrompt:   userPrompt ?? '',
-    });
+    };
 
     const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
+
+    // MATRIX sections need structured JSON rows, not free-form prose.
+    if (section.fieldType === 'MATRIX') {
+      if (!apiKey) {
+        this.logger.warn('[AssistSection] GEMINI_API_KEY not set — returning empty matrix fallback');
+        return { suggestion: '[]', usedAI: false, isStructured: true };
+      }
+      try {
+        const rows = await this.callGeminiJson(apiKey, this.buildMatrixAssistPrompt(baseCtx));
+        return { suggestion: JSON.stringify(rows), usedAI: true, isStructured: true };
+      } catch (err) {
+        this.logger.error('[AssistSection] Gemini matrix generation failed, using empty fallback', String(err));
+        return { suggestion: '[]', usedAI: false, isStructured: true };
+      }
+    }
+
+    const prompt = this.buildSectionAssistPrompt(baseCtx);
+
     if (!apiKey) {
       this.logger.warn('[AssistSection] GEMINI_API_KEY not set — returning template fallback');
       return {
@@ -517,6 +535,83 @@ INSTRUCCIONES DE REDACCIÓN:
 - NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto.
 - Si necesitas referenciar otra sección o papel, usa el formato [CODE::SXX].
 - Máximo 400 palabras.`;
+  }
+
+  private buildMatrixAssistPrompt(ctx: {
+    paperTitle: string; paperCode: string;
+    sectionKey: string; sectionLabel: string; sectionDescription: string;
+    currentValue: string; aiHint: string;
+    siblings: Array<{ key: string; label: string; value: string }>;
+    auditTitle: string; auditScope: string; auditType: string; auditSubtype: string;
+    userPrompt: string;
+  }): string {
+    const siblingsText = ctx.siblings
+      .filter(s => s.value.trim())
+      .slice(0, 8)
+      .map(s => `[${s.key}] ${s.label}: ${s.value.slice(0, 400)}`)
+      .join('\n');
+
+    return `Eres un experto en auditoría (NIA/IAASB/COSO). Estás generando el CONTENIDO TABULAR de una sección de un papel de trabajo — una tabla con filas y columnas, no texto narrativo.
+
+CONTEXTO DE LA AUDITORÍA:
+- Título: "${ctx.auditTitle}"
+- Tipo: ${ctx.auditType}${ctx.auditSubtype ? ` / ${ctx.auditSubtype}` : ''}
+- Alcance: ${ctx.auditScope || '(no especificado)'}
+
+PAPEL DE TRABAJO: ${ctx.paperCode} — ${ctx.paperTitle}
+
+TABLA A GENERAR:
+- Clave: ${ctx.sectionKey}
+- Título: ${ctx.sectionLabel}
+- Instrucción: ${ctx.sectionDescription || '(sin descripción explícita)'}
+- Especificación de columnas (úsala para definir las claves del JSON): ${ctx.aiHint || '(sin hint — infiere columnas razonables del título)'}
+- Contenido actual: ${ctx.currentValue && ctx.currentValue !== '[]' ? ctx.currentValue : '(vacío — genera desde cero)'}
+
+OTRAS SECCIONES YA COMPLETADAS DEL MISMO PAPEL (úsalas como fuente de datos reales cuando aplique):
+${siblingsText || '(ninguna)'}
+
+${ctx.userPrompt ? `INSTRUCCIÓN ADICIONAL DEL AUDITOR:\n${ctx.userPrompt}\n` : ''}
+INSTRUCCIONES DE SALIDA:
+- Responde EXCLUSIVAMENTE con un array JSON de objetos — sin markdown, sin \`\`\`json, sin preámbulo, sin comentarios.
+- Cada objeto es una fila. Las claves (keys) de cada objeto deben ser los nombres cortos de columna descritos en la especificación (ej. "Ref. SEG", "Ciclo / Área", "Estado").
+- TODAS las filas deben tener exactamente las mismas claves, en el mismo orden.
+- Si no hay datos reales suficientes en el contexto para poblar filas con contenido verídico, devuelve un array vacío [] en vez de inventar datos del cliente (montos, nombres, fechas específicas).
+- Máximo 12 filas.
+- NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto — usa "Pendiente de evidencia" o similar cuando falte información y el campo sea obligatorio.`;
+  }
+
+  private async callGeminiJson(apiKey: string, prompt: string): Promise<unknown[]> {
+    const res = await fetch(`${this.geminiEndpoint}?key=${apiKey}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.25,
+          maxOutputTokens: 3000,
+          responseMimeType: 'application/json',
+        },
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`Gemini HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+    }
+
+    const data = await res.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      error?: { message: string };
+    };
+
+    if (data.error) throw new Error(`Gemini error: ${data.error.message}`);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    if (!text.trim()) throw new Error('Gemini returned empty text');
+
+    const parsed: unknown = JSON.parse(text);
+    if (!Array.isArray(parsed)) throw new Error('Gemini matrix response is not a JSON array');
+    return parsed;
   }
 
   private async callGeminiText(apiKey: string, prompt: string): Promise<string> {

@@ -207,8 +207,9 @@ export function useInitFromTemplate() {
 // ─── PI.3: AI section-by-section assistant ───────────────────────────────────
 
 export interface SectionAssistResponse {
-  suggestion: string;
-  usedAI:     boolean;
+  suggestion:    string;
+  usedAI:        boolean;
+  isStructured?: boolean;
 }
 
 export function useAssistSection() {

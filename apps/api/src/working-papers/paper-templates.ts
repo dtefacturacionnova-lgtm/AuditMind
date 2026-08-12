@@ -3277,40 +3277,41 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
-  // PT-FIN-C-NORM: Análisis Normativo de Ejecución [EJECUCIÓN]
-  // Usado por C-13 (Partes Relacionadas NIA 550) y C-15 (Continuidad NIA 570).
-  // S1 (Incumplimientos) alimenta B-08 vía grafo de conocimiento.
+  // PT-FIN-C-NORM: Continuidad Operativa / Negocio en Marcha [EJECUCIÓN — C-15]
+  // Antes compartido con C-13 (Partes Relacionadas) — desde que existe PT-NIA550
+  // dedicado, este papel queda enfocado únicamente en NIA 570.
+  // S1 (Indicadores) alimenta B-08 vía grafo de conocimiento.
   // ──────────────────────────────────────────────────────────────────────────
   'PT-FIN-C-NORM': [
     {
       sectionKey:   'S1',
-      label:        'Incumplimientos / Riesgos Identificados',
-      description:  'Registro de incumplimientos normativos o riesgos detectados. Alimenta la cédula consolidada B-08.',
+      label:        'Indicadores de Incertidumbre sobre Continuidad Identificados',
+      description:  'Registro de indicadores de incertidumbre sobre la capacidad de la entidad para continuar en operación. Alimenta la cédula consolidada B-08.',
       fieldType:    FieldType.MATRIX,
       isRequired:   true,
       isAutoFilled: false,
       sortOrder:    1,
-      aiHint:       'Columnas: N° | Área | Descripción del incumplimiento/riesgo | Marco normativo (NIC 24 / NIC 1 / CVPCPA) | Impacto potencial en EEFF ($) | ¿Revelar en dictamen? (Sí/No/Evaluar). C-13: transacciones con partes relacionadas no reveladas o en condiciones distintas a arm\'s length. C-15: indicadores de incertidumbre sobre continuidad per NIA 570.A2-A5 (pérdidas recurrentes, incumplimiento covenants, salida de personal clave). Si sin hallazgos: tabla vacía con nota "Sin incumplimientos identificados".',
+      aiHint:       'Columnas: N° | Tipo de Indicador | Descripción | Marco normativo (NIC 1 / NIA 570) | Impacto potencial en EEFF ($) | ¿Revelar en dictamen? (Sí/No/Evaluar). Tipo de Indicador (NIA 570.A3): Financiero (pérdidas recurrentes, patrimonio negativo, incumplimiento de covenants, flujos de caja negativos), Operativo (pérdida de mercado clave, salida de personal clave, escasez de insumos críticos), Otro (litigios que amenacen la operación, cambios regulatorios adversos, catástrofes sin cobertura de seguro). Si sin hallazgos: tabla vacía con nota "Sin indicadores de incertidumbre identificados".',
     },
     {
       sectionKey:   'S2',
       label:        'Marco Normativo Aplicable y Criterios de Evaluación',
-      description:  'Normas y criterios usados para evaluar el área.',
+      description:  'Normas y criterios usados para evaluar la continuidad operativa.',
       fieldType:    FieldType.TEXTAREA,
       isRequired:   true,
       isAutoFilled: false,
       sortOrder:    2,
-      aiHint:       'C-13 Partes Relacionadas: NIC 24 (definición y revelación), NIA 550 (procedimientos), NIIF para PYMES Sección 33. Criterios: arm\'s length, revelación en notas, aprobación por órgano de gobierno. C-15 Continuidad: NIC 1.25-26 (asunción de negocio en marcha), NIA 570 (responsabilidad del auditor), indicadores NIA 570.A3 (financieros, operacionales, de otro tipo). Período de evaluación: mínimo 12 meses desde la fecha de los EEFF.',
+      aiHint:       'NIC 1.25-26 (asunción de negocio en marcha como base de preparación de los EEFF), NIA 570 (responsabilidad del auditor de evaluar la evaluación de la administración y obtener evidencia suficiente), indicadores NIA 570.A3 (financieros, operacionales, de otro tipo). Período de evaluación: mínimo 12 meses desde la fecha de los EEFF (NIA 570.13).',
     },
     {
       sectionKey:   'S3',
       label:        'Procedimientos de Verificación Realizados',
-      description:  'Procedimientos aplicados para identificar y evaluar riesgos del área.',
+      description:  'Procedimientos aplicados para evaluar la continuidad operativa.',
       fieldType:    FieldType.MATRIX,
       isRequired:   true,
       isAutoFilled: false,
       sortOrder:    3,
-      aiHint:       'Columnas: N° | Procedimiento | Alcance | Documentación revisada | Personas entrevistadas | Evidencia obtenida | Conclusión parcial. C-13: revisar contratos con relacionadas, minutas de junta, transacciones intragrupo >UAE, precios de transferencia. C-15: revisar flujo de caja proyectado 12 meses, líneas de crédito disponibles, compromisos de capital, covenants, eventos posteriores adversos, carta de representación gerencial sobre going concern.',
+      aiHint:       'Columnas: N° | Procedimiento | Alcance | Documentación revisada | Personas entrevistadas | Evidencia obtenida | Conclusión parcial. Revisar flujo de caja proyectado a 12 meses, líneas de crédito disponibles y su vigencia, compromisos de capital, cumplimiento de covenants financieros, eventos posteriores adversos, planes de la administración para mitigar la incertidumbre, carta de representación gerencial sobre negocio en marcha (NIA 570.16-17).',
     },
     {
       sectionKey:   'S4',
@@ -3320,17 +3321,114 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:   false,
       isAutoFilled: false,
       sortOrder:    4,
-      aiHint:       'Para cada hallazgo de S1: evidencia específica, cuantificación del impacto y norma aplicable. Si sin hallazgos: "Se realizaron los procedimientos indicados en S3 y no se encontraron indicios de [incumplimiento / incertidumbre material sobre continuidad]." Referenciar documentos adjuntos. El Agente Cicero puede generar el texto narrativo según los datos de S3.',
+      aiHint:       'Para cada hallazgo de S1: evidencia específica, cuantificación del impacto y norma aplicable. Si sin hallazgos: "Se realizaron los procedimientos indicados en S3 y no se encontraron indicios de incertidumbre material sobre continuidad." Referenciar documentos adjuntos. El Agente Cicero puede generar el texto narrativo según los datos de S3.',
     },
     {
       sectionKey:   'S5',
       label:        'Conclusión del Área',
-      description:  'Conclusión del auditor sobre el área y su efecto en el dictamen.',
+      description:  'Conclusión del auditor sobre continuidad operativa y su efecto en el dictamen.',
       fieldType:    FieldType.TEXTAREA,
       isRequired:   true,
       isAutoFilled: false,
       sortOrder:    5,
-      aiHint:       'C-13: "Las transacciones con partes relacionadas identificadas [han sido / no han sido] adecuadamente reveladas conforme NIC 24. [Sin efecto / Proponer ajuste de revelación / Salvedad por omisión material]." C-15: "Con base en los indicadores evaluados, [no existe / existe] incertidumbre material sobre la capacidad de la entidad para continuar en operación durante los próximos 12 meses. [Sin efecto en dictamen / Párrafo de énfasis NIA 706 / Abstención si incertidumbre muy significativa]." Preparado por: ___ Revisado por: ___ Fecha: ___.',
+      aiHint:       '"Con base en los indicadores evaluados, [no existe / existe] incertidumbre material sobre la capacidad de la entidad para continuar en operación durante los próximos 12 meses. [Sin efecto en dictamen / Párrafo de énfasis NIA 706 / Abstención si incertidumbre muy significativa]." Preparado por: ___ Revisado por: ___ Fecha: ___.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-NIA550: Partes Relacionadas — Identificación y Revelación [EJECUCIÓN — C-13]
+  // Dedicado (antes compartía PT-FIN-C-NORM con C-15/Continuidad, mezclando dos
+  // normas distintas en el mismo aiHint — separado para que cada papel apunte
+  // a una sola norma).
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-NIA550': [
+    {
+      sectionKey:   'S1',
+      label:        'Entendimiento de Relaciones y Transacciones con Partes Relacionadas (NIA 550.13-17)',
+      description:  'Procedimientos aplicados para obtener entendimiento de las relaciones y transacciones de la entidad con partes relacionadas.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    1,
+      aiHint:       'Documentar: (1) Indagación con la administración sobre la identidad de las partes relacionadas, naturaleza de las relaciones y tipos/propósitos de las transacciones. (2) Revisión de registros societarios: libro de accionistas, actas de Junta Directiva y Asamblea de Accionistas. (3) Revisión de declaraciones de conflictos de interés de directivos clave. (4) Indagación sobre los controles establecidos por la administración para identificar, autorizar y revelar partes relacionadas (NIA 550.14). (5) Consulta de registros del Registro de Comercio sobre estructura societaria y de grupo. NIA 550.13: el auditor debe mantenerse alerta durante toda la auditoría ante información sobre relaciones o transacciones no identificadas o reveladas previamente.',
+    },
+    {
+      sectionKey:   'S2',
+      label:        'Registro de Partes Relacionadas Identificadas (NIC 24 / NIA 550.18)',
+      description:  'Inventario de todas las partes relacionadas identificadas conforme a NIC 24.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    2,
+      aiHint:       'Columnas: # | Parte Relacionada | Tipo de Relación | % Participación o Vínculo | Fuente de Identificación | ¿Nueva este Período?. Tipo de Relación: Matriz / Subsidiaria / Asociada / Negocio Conjunto / Accionista Significativo (≥20%) / Director o Directivo Clave / Familiar Cercano de Directivo / Entidad Controlada por Directivo. Fuente de Identificación: Registro societario / Indagación con administración / Declaración de conflictos de interés / Confirmación externa. NIC 24.9 incluye al personal clave de la gerencia y sus familiares cercanos dentro de la definición de partes relacionadas.',
+    },
+    {
+      sectionKey:   'S3',
+      label:        'Transacciones con Partes Relacionadas del Período',
+      description:  'Detalle de las transacciones ocurridas en el período entre la entidad y las partes relacionadas identificadas en S2.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    3,
+      aiHint:       'Columnas: # | Parte Relacionada | Naturaleza de la Transacción | Monto $ | Curso del Negocio | ¿Condiciones Arm\'s Length? | Aprobación (Órgano de Gobierno) | ¿Revelada en Notas?. Naturaleza: ventas/compras intercompañía, préstamos otorgados o recibidos (saldo y tasa), garantías otorgadas o recibidas, contratos de servicios, arrendamientos, compensación a personal clave de la gerencia. Curso del Negocio: Normal / Fuera del Curso Normal — las transacciones marcadas "Fuera del Curso Normal" deben evaluarse en detalle en S4.',
+    },
+    {
+      sectionKey:   'S4',
+      label:        'Evaluación de Transacciones Significativas Fuera del Curso Normal (NIA 550.20-24)',
+      description:  'Para cada transacción significativa de S3 identificada como fuera del curso normal del negocio.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'Para cada transacción significativa fuera del curso normal (NIA 550.20-24): (1) Obtener entendimiento del racional de negocio — ¿es consistente con la explicación de la administración? (2) Evaluar si los términos (precio, condiciones de pago, garantías) son consistentes con lo indicado por la administración. (3) Verificar cómo fue autorizada y aprobada conforme a los estatutos (NIA 550.A39-A42). (4) Considerar si la transacción pudo estructurarse para lograr un objetivo contable, fiscal o legal particular — vínculo con riesgo de fraude (NIA 240). Si no hay transacciones fuera del curso normal: "No se identificaron transacciones con partes relacionadas fuera del curso normal del negocio."',
+    },
+    {
+      sectionKey:   'S5',
+      label:        'Partes Relacionadas o Transacciones No Reveladas por la Administración (NIA 550.22)',
+      description:  'Partes relacionadas o transacciones detectadas por el auditor que la administración no había identificado o revelado inicialmente.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    5,
+      aiHint:       'Columnas: # | Parte Relacionada / Transacción | Cómo se Detectó | Monto $ | ¿Administración la Reconoce al Confrontarla? | Impacto en Riesgo de Fraude (NIA 240) | Acción Tomada. Fuentes típicas de detección: confirmaciones bancarias con garantías cruzadas, circularización de CxC/CxP con nombres inusuales, revisión de contratos de arrendamiento, transacciones significativas o inusuales cerca del cierre de período. Si no se identificó ninguna: "No se identificaron partes relacionadas o transacciones no reveladas por la administración."',
+    },
+    {
+      sectionKey:   'S6',
+      label:        'Evaluación de la Revelación en los EEFF vs NIC 24 (NIA 550.25)',
+      description:  'Comparación de lo requerido por NIC 24 contra lo efectivamente revelado en los estados financieros.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    6,
+      aiHint:       'Columnas: Elemento Requerido por NIC 24 | ¿Revelado en Notas? | Nota # | Observación. Elementos: naturaleza de la relación con cada parte relacionada · monto de las transacciones por tipo · monto de los saldos pendientes, sus términos/condiciones y garantías · deterioro reconocido sobre saldos por cobrar de partes relacionadas · compensación al personal clave de la gerencia, desglosada por categoría (beneficios a corto plazo, post-empleo, otros beneficios a largo plazo, terminación, pagos basados en acciones — NIC 24.17).',
+    },
+    {
+      sectionKey:   'S7',
+      label:        'Representación de la Administración y Comunicación con Gobierno Corporativo (NIA 550.26-27)',
+      description:  'Confirmación escrita de la administración y comunicación de asuntos significativos a los encargados del gobierno corporativo.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    7,
+      aiHint:       '(1) Confirmar que la carta de representación (NIA 580 / D-01) incluye la declaración de la administración de que ha revelado al auditor la identidad de todas las partes relacionadas y que todas las relaciones/transacciones han sido adecuadamente contabilizadas y reveladas conforme al marco de información financiera (NIA 550.26). (2) Documentar los asuntos significativos sobre partes relacionadas que se comunicarán a los encargados del gobierno corporativo (NIA 550.27): transacciones significativas fuera del curso normal, partes relacionadas no reveladas inicialmente, dificultades encontradas al identificar la parte controladora final.',
+    },
+    {
+      sectionKey:   'S8',
+      label:        'Conclusión — Impacto en la Opinión',
+      description:  'Conclusión final del auditor sobre partes relacionadas y su efecto en el dictamen.',
+      fieldType:    FieldType.ENUM_SELECT,
+      options:      [
+        'SIN_HALLAZGOS_REVELACION_ADECUADA',
+        'TRANSACCIONES_IDENTIFICADAS_REVELACION_ADECUADA_SIN_IMPACTO',
+        'REVELACION_INCOMPLETA_AJUSTE_PROPUESTO',
+        'PARTE_NO_REVELADA_POR_ADMINISTRACION_EVALUAR_SALVEDAD',
+        'TRANSACCION_SIN_JUSTIFICACION_DE_NEGOCIO_EVALUAR_SALVEDAD',
+        'INDICIO_DE_FRAUDE_VIA_PARTES_RELACIONADAS',
+      ],
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    8,
+      aiHint:       '"Con base en los procedimientos aplicados conforme a NIA 550, [se identificaron / no se identificaron] partes relacionadas y transacciones con ellas. Las transacciones identificadas [fueron / no fueron] adecuadamente reveladas conforme NIC 24. [Sin efecto en la opinión / Se propuso ajuste de revelación en S6 / Salvedad por omisión material / Indicio de fraude documentado y comunicado conforme NIA 240.43]." Preparado por: ___ Revisado por: ___ Fecha: ___.',
     },
   ],
 

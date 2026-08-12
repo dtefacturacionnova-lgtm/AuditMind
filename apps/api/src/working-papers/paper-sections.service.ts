@@ -547,6 +547,7 @@ INSTRUCCIONES DE REDACCIÓN:
 - Si requiere narrativa, usa 2-4 párrafos máximo.
 - NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto.
 - Si necesitas referenciar otra sección o papel, usa el formato [CODE::SXX].
+- Si la Instrucción o el Hint IA mencionan más de un área/norma (ej. "Área X: ... Área Y: ..." — plantillas genéricas reutilizadas para varios temas), usa EXCLUSIVAMENTE la guía que corresponda al título real de este papel ("${ctx.paperTitle}") e ignora por completo la de las otras áreas mencionadas.
 - Máximo 400 palabras.`;
   }
 
@@ -592,6 +593,7 @@ INSTRUCCIONES DE SALIDA:
 - Cada objeto es una fila. Las claves (keys) de cada objeto deben ser los nombres cortos de columna descritos en la especificación (ej. "Ref. SEG", "Ciclo / Área", "Estado").
 - TODAS las filas deben tener exactamente las mismas claves, en el mismo orden.
 - Si no hay datos reales suficientes en el contexto para poblar filas con contenido verídico, devuelve un array vacío [] en vez de inventar datos del cliente (montos, nombres, fechas específicas).
+- Si la Instrucción o la especificación de columnas mencionan más de un área/norma (ej. "Área X: ... Área Y: ..." — plantillas genéricas reutilizadas para varios temas), genera filas usando EXCLUSIVAMENTE la guía que corresponda al título real de este papel ("${ctx.paperTitle}") e ignora la de las otras áreas mencionadas.
 - Si la instrucción pide filtrar (ej. solo cuentas que disparan una alerta, o con variación significativa), evalúa CADA fila de la fuente contra el criterio y genera una fila de salida únicamente para las que califican — no generes una fila por cada fila de la fuente si el criterio es selectivo.
 - Máximo 40 filas.
 - NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto — usa "Pendiente de evidencia" o similar cuando falte información y el campo sea obligatorio.`;

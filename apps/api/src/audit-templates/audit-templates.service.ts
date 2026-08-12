@@ -1898,10 +1898,10 @@ export class AuditTemplatesService {
           // ── A — Planificación ──────────────────────────────────────────────
           { code: 'A-01', indexSection: 'A',
             title: 'Carta de Encargo y Términos del Trabajo (NIA 210)',
-            type: WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.STANDARD },
+            type: WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART, paperCode: 'PT-FIN-ENCARGO' },
           { code: 'A-02', indexSection: 'A',
             title: 'Evaluación de Independencia y Ética (NIA 220 / CIEPC)',
-            type: WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART },
+            type: WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART, paperCode: 'PT-INDEP' },
           { code: 'A-03', indexSection: 'A',
             title: 'Conocimiento del Cliente y su Entorno (NIA 315)',
             type: WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART, paperCode: 'PT-FIN-A3-KC' },

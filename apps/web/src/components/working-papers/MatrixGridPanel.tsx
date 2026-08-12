@@ -43,44 +43,88 @@ function deriveColumns(rows: MatrixRow[]): string[] {
 }
 
 /**
- * Most MATRIX aiHints spell out their columns as "Columnas: A | B | C. <more prose>".
- * Extract that pipe-separated list (73% of MATRIX sections follow this convention)
- * so the grid starts pre-populated with the intended structure instead of a blank
- * generic column. Sections without this pattern fall back to manual column entry.
+ * Finds the sentence-ending period starting at `from` within `text` — i.e. a "."
+ * followed by " <Uppercase>" whose preceding word is long enough to not be an
+ * abbreviation ("vs.", "ej.", "Ref." are followed by a capitalized continuation
+ * of the SAME clause, not a new sentence). Returns text.length if none is found.
  */
-function parseColumnsFromAiHint(aiHint?: string): string[] {
-  if (!aiHint) return [];
-  const marker = /columnas\s*:/i.exec(aiHint);
-  if (!marker) return [];
-  const start = marker.index + marker[0].length;
+function findSentenceEnd(text: string, from: number): number {
   let depth = 0;
-  let end = aiHint.length;
-  for (let i = start; i < aiHint.length; i++) {
-    const ch = aiHint[i];
+  for (let i = from; i < text.length; i++) {
+    const ch = text[i];
     if (ch === '(') depth++;
     else if (ch === ')') depth = Math.max(0, depth - 1);
     else if (ch === '.' && depth === 0) {
-      // A period only ends the column list when followed by " <Uppercase>" (a new
-      // sentence) AND the word right before it is long enough to not be an
-      // abbreviation — "vs.", "ej." and "Ref." (as in "Ref. SEG") are followed by
-      // a capitalized continuation of the SAME column, not a new sentence.
-      const nextOk = /^\s+\p{Lu}/u.test(aiHint.slice(i + 1));
-      const wordBefore = /(\p{L}+)$/u.exec(aiHint.slice(start, i));
+      const nextOk = /^\s+\p{Lu}/u.test(text.slice(i + 1));
+      const wordBefore = /(\p{L}+)$/u.exec(text.slice(from, i));
       const prevOk = !wordBefore || wordBefore[1].length >= 4;
-      if (nextOk && prevOk) { end = i; break; }
+      if (nextOk && prevOk) return i;
     }
   }
-  return aiHint
-    .slice(start, end)
-    .split('|')
-    .map(s => s.trim())
-    .filter(Boolean);
+  return text.length;
+}
+
+/**
+ * Most MATRIX aiHints spell out their columns as "Columnas: A | B | C. <more prose>".
+ * Extract that pipe-separated list (73% of MATRIX sections follow this convention)
+ * so the grid starts pre-populated with the intended structure instead of a blank
+ * generic column.
+ */
+function parseSimpleColumns(aiHint: string): string[] {
+  const marker = /columnas\s*:/i.exec(aiHint);
+  if (!marker) return [];
+  const start = marker.index + marker[0].length;
+  const end = findSentenceEnd(aiHint, start);
+  return aiHint.slice(start, end).split('|').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * A few complex MATRIX aiHints group columns as "GRUPO A — LABEL: A | B | C.
+ * GRUPO B — LABEL: D | E." (e.g. PT-APE04 S3's 6-group tracking matrix). Flatten
+ * every group's fields into one column list, in order.
+ */
+function parseGroupedColumns(aiHint: string): string[] {
+  const headerRe = /GRUPO\s+[A-ZÁÉÍÓÚÑ]+\s*[—-]\s*[^:]+:/gu;
+  const markers: Array<{ start: number; end: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = headerRe.exec(aiHint))) {
+    markers.push({ start: m.index, end: m.index + m[0].length });
+  }
+  if (markers.length === 0) return [];
+
+  const cols: string[] = [];
+  for (let g = 0; g < markers.length; g++) {
+    const fieldStart = markers[g].end;
+    const fieldEnd = g + 1 < markers.length ? markers[g + 1].start : findSentenceEnd(aiHint, fieldStart);
+    let chunk = aiHint.slice(fieldStart, fieldEnd).trim();
+    if (chunk.endsWith('.')) chunk = chunk.slice(0, -1).trim();
+    cols.push(...chunk.split('|').map(s => s.trim()).filter(Boolean));
+  }
+  return cols;
+}
+
+/** Full (un-shortened) suggested column phrases, trying each known aiHint convention in turn. */
+function parseColumnsFromAiHint(aiHint?: string): string[] {
+  if (!aiHint) return [];
+  const simple = parseSimpleColumns(aiHint);
+  if (simple.length > 0) return simple;
+  return parseGroupedColumns(aiHint);
 }
 
 /** Short header label (text before the first parenthetical hint). */
 function shortColumnLabel(col: string): string {
   const idx = col.indexOf('(');
   return idx > 0 ? col.slice(0, idx).trim() : col;
+}
+
+/** Disambiguate repeated short labels (e.g. across GRUPO sections) by appending " (2)", " (3)", ... */
+function dedupeLabels(labels: string[]): string[] {
+  const seen = new Map<string, number>();
+  return labels.map(l => {
+    const count = seen.get(l) ?? 0;
+    seen.set(l, count + 1);
+    return count === 0 ? l : `${l} (${count + 1})`;
+  });
 }
 
 // ─── Panel principal ──────────────────────────────────────────────────────────
@@ -94,7 +138,7 @@ function shortColumnLabel(col: string): string {
 export function MatrixGridPanel({ value, onChange, paperId, sectionKey, aiHint, readOnly = false }: Props) {
   // aiHint-derived suggestion: short header labels + full phrase per label (for the tooltip)
   const suggestedFull  = parseColumnsFromAiHint(aiHint);
-  const suggestedShort = suggestedFull.map(shortColumnLabel);
+  const suggestedShort = dedupeLabels(suggestedFull.map(shortColumnLabel));
   const suggestedTitleByLabel = Object.fromEntries(suggestedShort.map((s, i) => [s, suggestedFull[i]]));
 
   const initialRows = parseValue(value);

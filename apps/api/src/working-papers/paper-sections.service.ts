@@ -1053,14 +1053,16 @@ INSTRUCCIONES DE SALIDA:
   // ─── Auditoría Financiera: consolidación de diferencias a B-08 ──────────────
 
   /**
-   * Consolida en PT-FIN-B08 S1 todas las diferencias registradas en S1 de cada
-   * papel PT-FIN-C-SUST (C-01..C-14) y PT-FIN-C-NORM (C-13/C-15) de la
-   * auditoría, calcula los totales por categoría vs UAE/MG en S2 (leyendo
-   * PT-A4 vía getMaterialidadByAudit) y recalcula el semáforo preliminar de
-   * S3. Sobrescribe S1/S2/S3 por completo en cada corrida — son un reflejo
-   * directo de los papeles de ejecución y de la materialidad vigente, sin
-   * anotaciones propias del auditor que deban preservarse (esas viven en
-   * S4-S9: AJEs, respuesta del cliente, opinión y narrativa).
+   * Consolida en PT-FIN-B08 S1 las diferencias/hallazgos con impacto ($) de
+   * los papeles de ejecución de la auditoría: PT-FIN-C-SUST S1 (C-01..C-14),
+   * PT-NIA570 S2 (C-15, Continuidad), PT-NIA550 S5 (C-13, Partes Relacionadas
+   * no reveladas) y PT-FIN-C-NORM S1 (legacy — instancias creadas antes de
+   * separar PT-NIA550/PT-NIA570). Calcula los totales por categoría vs UAE/MG
+   * en S2 (leyendo PT-A4 vía getMaterialidadByAudit) y recalcula el semáforo
+   * preliminar de S3. Sobrescribe S1/S2/S3 por completo en cada corrida — son
+   * un reflejo directo de los papeles de ejecución y de la materialidad
+   * vigente, sin anotaciones propias del auditor que deban preservarse (esas
+   * viven en S4-S9: AJEs, respuesta del cliente, opinión y narrativa).
    */
   async propagateDiferencias(paperId: string, user: AuthUser) {
     const wp = await this.assertPaperAccess(paperId, user);
@@ -1077,23 +1079,53 @@ INSTRUCCIONES DE SALIDA:
       const n = parseFloat(String(v ?? '').replace(/[^\d.-]/g, ''));
       return Number.isFinite(n) ? n : 0;
     };
-
-    const execPapers = await this.prisma.workingPaper.findMany({
-      where:   { auditId: wp.auditId, paperCode: { in: ['PT-FIN-C-SUST', 'PT-FIN-C-NORM'] } },
-      include: { sections: { where: { sectionKey: 'S1' } } },
-    });
+    const firstOf = (r: Record<string, unknown>, keys: string[]): unknown => {
+      for (const k of keys) if (r[k] !== undefined) return r[k];
+      return undefined;
+    };
 
     type Tipo = 'Factual' | 'Por Estimación';
     type ConsolidatedRow = Record<string, string>;
+
+    // Papeles genéricos por área (Incumplimientos/Indicadores/No reveladas) — misma forma
+    // de salida (sin saldo cliente/auditor, siempre Factual), distintos nombres de columna
+    // según el papel de origen. C-SUST se maneja aparte porque sí tiene esa comparación.
+    const GENERIC_SOURCES: Array<{
+      paperCode: string; sectionKey: string;
+      areaKeys: string[]; descKeys: string[]; amountKeys: string[]; estadoKeys: string[];
+    }> = [
+      { // legacy — instancias creadas antes de separar PT-NIA550/PT-NIA570
+        paperCode: 'PT-FIN-C-NORM', sectionKey: 'S1',
+        areaKeys: ['Área'], descKeys: ['Descripción del incumplimiento/riesgo', 'Descripción'],
+        amountKeys: ['Impacto potencial en EEFF ($)', 'Impacto potencial en EEFF'],
+        estadoKeys: ['¿Revelar en dictamen? (Sí/No/Evaluar)', '¿Revelar en dictamen?'],
+      },
+      {
+        paperCode: 'PT-NIA570', sectionKey: 'S2',
+        areaKeys: ['Tipo de Indicador'], descKeys: ['Descripción'],
+        amountKeys: ['Impacto Potencial en EEFF ($)', 'Impacto Potencial en EEFF'],
+        estadoKeys: ['¿Mitigado por un Plan de la Administración?'],
+      },
+      {
+        paperCode: 'PT-NIA550', sectionKey: 'S5',
+        areaKeys: ['Parte Relacionada / Transacción'], descKeys: ['Parte Relacionada / Transacción'],
+        amountKeys: ['Monto $'], estadoKeys: ['Acción Tomada'],
+      },
+    ];
+
+    const execPapers = await this.prisma.workingPaper.findMany({
+      where:   { auditId: wp.auditId, paperCode: { in: ['PT-FIN-C-SUST', ...GENERIC_SOURCES.map(s => s.paperCode)] } },
+      include: { sections: { where: { sectionKey: { in: ['S1', 'S2', 'S5'] } } } },
+    });
 
     const consolidated: ConsolidatedRow[] = [];
     let seq = 0;
 
     for (const p of execPapers) {
       const origen = `${norm(p.code)} · ${norm(p.title)}`;
-      const rows = asRows(p.sections[0]?.value);
 
       if (p.paperCode === 'PT-FIN-C-SUST') {
+        const rows = asRows(p.sections.find(s => s.sectionKey === 'S1')?.value);
         for (const r of rows) {
           const diferencia = asNumber(r['Diferencia ($)'] ?? r['Diferencia']);
           if (!diferencia) continue; // sin diferencia real, no acumular ruido
@@ -1112,25 +1144,27 @@ INSTRUCCIONES DE SALIDA:
             'Estado':          norm(r['Proponer AJE (Sí/No/Pendiente)'] ?? r['Proponer AJE']) || 'Pendiente',
           });
         }
-      } else {
-        // PT-FIN-C-NORM: hallazgos de cumplimiento — sin saldo cliente/auditor,
-        // el impacto potencial se registra directamente como la diferencia.
-        for (const r of rows) {
-          const diferencia = asNumber(r['Impacto potencial en EEFF ($)'] ?? r['Impacto potencial en EEFF']);
-          if (!diferencia) continue;
-          seq++;
-          consolidated.push({
-            '#':               String(seq),
-            'Papel de Origen': origen,
-            'Área/Cuenta':     norm(r['Área']),
-            'Descripción':     norm(r['Descripción del incumplimiento/riesgo'] ?? r['Descripción']),
-            'Saldo s/Cliente': 'N/A',
-            'Saldo s/Auditor': 'N/A',
-            'Diferencia $':    diferencia.toFixed(2),
-            'Tipo':            'Factual',
-            'Estado':          norm(r['¿Revelar en dictamen? (Sí/No/Evaluar)'] ?? r['¿Revelar en dictamen?']) || 'Pendiente',
-          });
-        }
+        continue;
+      }
+
+      const cfg = GENERIC_SOURCES.find(s => s.paperCode === p.paperCode);
+      if (!cfg) continue;
+      const rows = asRows(p.sections.find(s => s.sectionKey === cfg.sectionKey)?.value);
+      for (const r of rows) {
+        const diferencia = asNumber(firstOf(r, cfg.amountKeys));
+        if (!diferencia) continue;
+        seq++;
+        consolidated.push({
+          '#':               String(seq),
+          'Papel de Origen': origen,
+          'Área/Cuenta':     norm(firstOf(r, cfg.areaKeys)),
+          'Descripción':     norm(firstOf(r, cfg.descKeys)),
+          'Saldo s/Cliente': 'N/A',
+          'Saldo s/Auditor': 'N/A',
+          'Diferencia $':    diferencia.toFixed(2),
+          'Tipo':            'Factual',
+          'Estado':          norm(firstOf(r, cfg.estadoKeys)) || 'Pendiente',
+        });
       }
     }
 

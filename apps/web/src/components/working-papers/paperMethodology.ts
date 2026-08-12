@@ -76,11 +76,12 @@ export const PAPER_METHODOLOGY: Record<string, Record<string, MethodologyEntry>>
   'PT-FIN-B08': {
     S1: {
       title: 'Metodología — Diferencias Identificadas (NIA 450)',
-      intro: 'Consolida en una sola tabla todas las excepciones detectadas durante la ejecución, tomándolas directamente de la sección S1 de cada papel de prueba sustantiva (C-01..C-14) y de análisis normativo (C-13/C-15) de esta auditoría.',
+      intro: 'Consolida en una sola tabla todas las excepciones con impacto monetario detectadas durante la ejecución, tomándolas directamente de los papeles de cada área de esta auditoría.',
       points: [
-        'Botón "Consolidar Diferencias": recorre S1 de cada PT-FIN-C-SUST y PT-FIN-C-NORM del encargo y copia solo las filas con una diferencia distinta de cero.',
-        'De PT-FIN-C-SUST se copia el saldo según cliente, según auditor y la diferencia entre ambos. De PT-FIN-C-NORM (hallazgos de cumplimiento, sin comparación de saldos) se copia el "Impacto potencial en EEFF" como la diferencia.',
-        'Tipo: se marca "Por Estimación" cuando la Naturaleza de origen menciona una estimación contable; el resto (errores, fraude, no ajustables, hallazgos normativos) se marca "Factual".',
+        'Botón "Consolidar Diferencias": recorre S1 de cada PT-FIN-C-SUST (C-01..C-14), S2 de cada PT-NIA570 (C-15, Continuidad) y S5 de cada PT-NIA550 (C-13, Partes Relacionadas no reveladas) del encargo, y copia solo las filas con un monto distinto de cero.',
+        'De PT-FIN-C-SUST se copia el saldo según cliente, según auditor y la diferencia entre ambos. De PT-NIA570/PT-NIA550 (hallazgos sin comparación de saldos) se copia directamente el monto de impacto como la diferencia.',
+        'Instancias creadas antes de que existieran PT-NIA550/PT-NIA570 (paperCode PT-FIN-C-NORM) siguen consolidándose igual, por compatibilidad.',
+        'Tipo: se marca "Por Estimación" cuando la Naturaleza de origen menciona una estimación contable (solo aplica a PT-FIN-C-SUST); el resto se marca "Factual".',
         'Sobrescribe la tabla completa en cada corrida — no acumula ediciones manuales, porque es un reflejo directo de lo registrado en los papeles de ejecución. Las anotaciones propias del auditor sobre los ajustes viven en S4-S9.',
       ],
     },

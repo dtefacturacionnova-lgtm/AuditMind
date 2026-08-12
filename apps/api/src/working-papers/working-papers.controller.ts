@@ -315,7 +315,7 @@ export class WorkingPapersController {
 
   @Post(':id/propagate-diferencias')
   @Roles(UserRole.AUDITOR)
-  @ApiOperation({ summary: 'Consolidar diferencias de PT-FIN-C-SUST/PT-FIN-C-NORM (S1) y recalcular semáforo en B-08 S1/S2/S3 (determinista, sin IA)' })
+  @ApiOperation({ summary: 'Consolidar diferencias de PT-FIN-C-SUST/PT-NIA570/PT-NIA550 (y PT-FIN-C-NORM legacy) y recalcular semáforo en B-08 S1/S2/S3 (determinista, sin IA)' })
   propagateDiferencias(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.sectionsService.propagateDiferencias(id, user);
   }

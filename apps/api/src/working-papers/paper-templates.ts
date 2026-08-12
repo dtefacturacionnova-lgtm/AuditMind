@@ -3277,10 +3277,10 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
-  // PT-FIN-C-NORM: Continuidad Operativa / Negocio en Marcha [EJECUCIÓN — C-15]
-  // Antes compartido con C-13 (Partes Relacionadas) — desde que existe PT-NIA550
-  // dedicado, este papel queda enfocado únicamente en NIA 570.
-  // S1 (Indicadores) alimenta B-08 vía grafo de conocimiento.
+  // PT-FIN-C-NORM: [DEPRECADO — usar PT-NIA570 para C-15 y PT-NIA550 para C-13]
+  // Se mantiene solo para que las instancias ya creadas con este paperCode
+  // sigan renderizando. audit-templates.service.ts ya no lo asigna a papeles
+  // nuevos. S1 (Indicadores) alimenta B-08 vía grafo de conocimiento.
   // ──────────────────────────────────────────────────────────────────────────
   'PT-FIN-C-NORM': [
     {
@@ -3429,6 +3429,90 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isAutoFilled: false,
       sortOrder:    8,
       aiHint:       '"Con base en los procedimientos aplicados conforme a NIA 550, [se identificaron / no se identificaron] partes relacionadas y transacciones con ellas. Las transacciones identificadas [fueron / no fueron] adecuadamente reveladas conforme NIC 24. [Sin efecto en la opinión / Se propuso ajuste de revelación en S6 / Salvedad por omisión material / Indicio de fraude documentado y comunicado conforme NIA 240.43]." Preparado por: ___ Revisado por: ___ Fecha: ___.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-NIA570: Continuidad Operativa — Negocio en Marcha [EJECUCIÓN — C-15]
+  // Dedicado (antes compartía PT-FIN-C-NORM con C-13/Partes Relacionadas).
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-NIA570': [
+    {
+      sectionKey:   'S1',
+      label:        'Evaluación de la Valoración de la Administración sobre Negocio en Marcha (NIA 570.12-13)',
+      description:  'Evaluación de la valoración que la propia administración realizó sobre la capacidad de la entidad para continuar en operación.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    1,
+      aiHint:       'Documentar: (1) ¿La administración realizó una valoración formal de negocio en marcha? (2) Período cubierto por esa valoración — debe ser de al menos 12 meses desde la fecha de los EEFF (NIA 570.13); si cubre menos, indagar sobre el período restante (ver S3). (3) Metodología y supuestos usados por la administración (proyecciones de flujo de caja, presupuestos, planes de financiamiento). (4) Evaluar si el proceso de la administración es robusto y si los supuestos son razonables y consistentes con el entendimiento del auditor del negocio. NIA 570.12: el auditor debe evaluar la valoración de la administración de la misma manera en que ésta la realizó.',
+    },
+    {
+      sectionKey:   'S2',
+      label:        'Indicadores de Incertidumbre Identificados (Financieros / Operacionales / Otros)',
+      description:  'Registro de indicadores de incertidumbre sobre la capacidad de la entidad para continuar en operación (NIA 570.A3). Alimenta la cédula consolidada B-08.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    2,
+      aiHint:       'Columnas: # | Tipo de Indicador | Descripción | Fuente | Impacto Potencial en EEFF ($) | ¿Mitigado por un Plan de la Administración?. Tipo de Indicador: Financiero (pérdidas recurrentes, patrimonio negativo, incumplimiento de covenants, flujos de caja operativos negativos, incapacidad de pagar deuda a su vencimiento) / Operacional (pérdida de mercado o cliente clave, salida de personal clave, escasez de insumos críticos, pérdida de una franquicia o licencia) / Otro (litigios que amenacen la operación, cambios regulatorios adversos, catástrofes sin cobertura de seguro). Fuente: Valoración de la Administración / Identificado por el Auditor. Si sin indicadores: tabla vacía con nota "Sin indicadores de incertidumbre identificados".',
+    },
+    {
+      sectionKey:   'S3',
+      label:        'Período Posterior a la Valoración de la Administración (NIA 570.14)',
+      description:  'Procedimientos aplicados para cubrir el período no evaluado por la administración, hasta completar mínimo 12 meses desde la fecha de los EEFF.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    3,
+      aiHint:       'Si la valoración de la administración (S1) cubre menos de 12 meses desde la fecha de cierre: indagar con la administración si tiene conocimiento de eventos o condiciones posteriores a ese período que puedan generar dudas significativas sobre la continuidad, y documentar la respuesta y evidencia obtenida. Si la valoración de la administración ya cubre 12 meses o más: "No aplica — la valoración de la administración cubre el período mínimo requerido por NIA 570.13."',
+    },
+    {
+      sectionKey:   'S4',
+      label:        'Procedimientos de Auditoría Adicionales Aplicados (NIA 570.16)',
+      description:  'Procedimientos aplicados cuando se identificaron eventos o condiciones que pueden generar dudas significativas sobre la continuidad.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'Columnas: N° | Procedimiento | Alcance | Documentación Revisada | Evidencia Obtenida | Conclusión Parcial. Procedimientos típicos (NIA 570.16): analizar y discutir con la administración el flujo de caja proyectado y otras proyecciones relevantes · analizar los EEFF intermedios más recientes disponibles · revisar los términos de las obligaciones de deuda y determinar si se han incumplido · leer las actas de Junta Directiva/Asamblea/comités en busca de referencias a dificultades financieras · indagar con el abogado de la entidad sobre litigios y reclamaciones · confirmar la existencia, legalidad y exigibilidad de acuerdos de apoyo financiero con partes relacionadas o terceros · evaluar los planes de la administración para hacer frente a los efectos adversos · evaluar la fiabilidad de la información financiera subyacente usada para el pronóstico. Si no se identificaron indicadores en S2: "No aplica — no se identificaron eventos o condiciones que requieran procedimientos adicionales."',
+    },
+    {
+      sectionKey:   'S5',
+      label:        'Evaluación de la Adecuación de la Revelación en los EEFF (NIA 570.19-20)',
+      description:  'Comparación de lo requerido por NIC 1 contra lo efectivamente revelado, cuando existe incertidumbre material sobre continuidad.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    5,
+      aiHint:       'Columnas: Elemento Requerido | ¿Revelado en Notas? | Nota # | Observación. Elementos (NIC 1.25 y .122): los principales eventos o condiciones que generan la duda significativa · los planes de la administración para hacerles frente · declaración explícita de que existe una incertidumbre material que puede generar dudas significativas sobre la capacidad de la entidad para continuar como negocio en marcha · declaración de que los EEFF fueron preparados bajo la hipótesis de negocio en marcha. Si no hay incertidumbre material identificada en S2: "No aplica — no se identificó incertidumbre material sobre continuidad."',
+    },
+    {
+      sectionKey:   'S6',
+      label:        'Representación de la Administración y Comunicación con Gobierno Corporativo (NIA 570.16(e) / .25)',
+      description:  'Confirmación escrita de la administración sobre sus planes futuros y comunicación de asuntos significativos a los encargados del gobierno corporativo.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    6,
+      aiHint:       '(1) Confirmar que la carta de representación (NIA 580 / D-01) incluye la declaración de la administración sobre la viabilidad y factibilidad de sus planes de acción futura para mejorar la situación (NIA 570.16(e)). (2) Documentar los asuntos significativos sobre continuidad que se comunicarán a los encargados del gobierno corporativo (NIA 570.25): si los eventos o condiciones constituyen una incertidumbre material, si el uso de la hipótesis de negocio en marcha es apropiado, la adecuación de la revelación, y si aplica, las implicaciones para el informe del auditor.',
+    },
+    {
+      sectionKey:   'S7',
+      label:        'Conclusión — Impacto en la Opinión',
+      description:  'Conclusión final del auditor sobre continuidad operativa y su efecto en el dictamen.',
+      fieldType:    FieldType.ENUM_SELECT,
+      options:      [
+        'SIN_INCERTIDUMBRE_HIPOTESIS_APROPIADA',
+        'INCERTIDUMBRE_MATERIAL_ADECUADAMENTE_REVELADA_PARRAFO_NIA706',
+        'INCERTIDUMBRE_MATERIAL_NO_REVELADA_EVALUAR_SALVEDAD_O_ADVERSA',
+        'GERENCIA_NO_DISPUESTA_A_EVALUAR_CONSIDERAR_IMPLICACIONES',
+        'HIPOTESIS_DE_NEGOCIO_EN_MARCHA_INAPROPIADA_OPINION_ADVERSA',
+      ],
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    7,
+      aiHint:       'NIA 570.18: sin incertidumbre material identificada → opinión sin modificar, hipótesis de negocio en marcha apropiada. NIA 570.22: incertidumbre material identificada y adecuadamente revelada → opinión sin modificar CON una sección separada "Incertidumbre Material Relacionada con Negocio en Marcha" (párrafo NIA 706). NIA 570.23: incertidumbre material identificada pero NO adecuadamente revelada → opinión con salvedad o adversa, según la pervasividad. NIA 570.24: la administración no está dispuesta a realizar o extender su valoración → considerar las implicaciones para el informe. NIA 570.21: el uso de la hipótesis de negocio en marcha es inapropiado → opinión adversa. Preparado por: ___ Revisado por: ___ Fecha: ___.',
     },
   ],
 

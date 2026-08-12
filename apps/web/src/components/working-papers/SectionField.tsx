@@ -376,9 +376,21 @@ export interface SectionFieldProps {
   readonly?:        boolean;
   onSave:           (sectionKey: string, value: unknown) => void;
   paperId?:         string;
+  paperCode?:       string | null;
   mentionItems?:    MentionItem[];
   onMentionSelect?: (sectionKey: string, targetPaperId: string, targetSectionKey?: string) => void;
   aiDraftConfig?:   AiDraftConfig;
+}
+
+// Papers/sections where the MATRIX grid gets per-row severity + auditor note + evidence.
+// Opt-in list — keeps the other ~45 MATRIX papers exactly as they were.
+const ROW_EXTRAS_SECTIONS: Record<string, Set<string>> = {
+  'PT-FIN-B07': new Set(['S1', 'S2', 'S3', 'S4']),
+};
+
+function rowExtrasEnabled(paperCode: string | null | undefined, sectionKey: string): boolean {
+  if (!paperCode) return false;
+  return ROW_EXTRAS_SECTIONS[paperCode]?.has(sectionKey) ?? false;
 }
 
 // ─── Section attachments (support documents) ───────────────────────────────────
@@ -487,7 +499,7 @@ function SectionAttachments({
   );
 }
 
-export function SectionField({ section, allSections, readonly = false, onSave, paperId, mentionItems, onMentionSelect, aiDraftConfig }: SectionFieldProps) {
+export function SectionField({ section, allSections, readonly = false, onSave, paperId, paperCode, mentionItems, onMentionSelect, aiDraftConfig }: SectionFieldProps) {
   const [editing,      setEditing]   = useState(false);
   const [localValue,   setLocal]     = useState<unknown>(section.value);
   const [overriding,   setOverride]  = useState(false);
@@ -828,6 +840,7 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
                       : undefined
                   }
                   readOnly={readonly}
+                  enableRowExtras={rowExtrasEnabled(paperCode, section.sectionKey)}
                 />
               ) : (
                 <MatrixDisplay value={effectiveValue} />

@@ -1,12 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Plus, Trash2, X, Sparkles, Loader2, Check, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import { useAssistSection } from '@/hooks/useWorkingPaperGraph';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Plus, Trash2, X, Sparkles, Loader2, Check, ArrowUp, ArrowDown, ArrowUpDown,
+  Paperclip, FileText,
+} from 'lucide-react';
+import { useAssistSection, useAttachToAccountSchedule, useRemoveAccountScheduleAttachment } from '@/hooks/useWorkingPaperGraph';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type MatrixRow = Record<string, string>;
+
+interface RowAttachment {
+  id: string; filename: string; url: string; mimeType: string; size: number; uploadedAt: string;
+}
 
 interface Props {
   value:       unknown;
@@ -19,6 +26,11 @@ interface Props {
   // sibling MATRIX section, matched/copied by these column names.
   linkedFrom?:  { sectionKey: string; keyColumns: string[] };
   sourceValue?: unknown;
+  // Opt-in per-row auditor tooling (severity dot, note, evidence attachments).
+  // Internal state lives in row keys prefixed "_" (id, nota, attachments) which
+  // are never treated as data columns — kept off by default so the other ~45
+  // papers reusing this grid are unaffected.
+  enableRowExtras?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -40,10 +52,83 @@ function deriveColumns(rows: MatrixRow[]): string[] {
   const cols: string[] = [];
   for (const row of rows) {
     for (const k of Object.keys(row)) {
+      if (k.startsWith('_')) continue; // internal row-extras keys (id/nota/attachments), never a data column
       if (!seen.has(k)) { seen.add(k); cols.push(k); }
     }
   }
   return cols;
+}
+
+function genRowId(): string {
+  return `mx_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Assigns a stable "_id" to any row that doesn't already have one — needed to key per-row note/evidence. */
+function withRowIds(rows: MatrixRow[]): MatrixRow[] {
+  return rows.map(r => (r['_id'] ? r : { ...r, _id: genRowId() }));
+}
+
+function parseAttachments(raw?: string): RowAttachment[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as RowAttachment[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function formatBytes(n?: number): string {
+  if (!n || n <= 0) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// ─── Severity (semáforo) ──────────────────────────────────────────────────────
+// Auto-computed (not manually set) from the widest variance found in the row's
+// own "%"/"variación" columns — same spirit as the materiality semáforo used
+// elsewhere (AccountSemaforo), applied here to analytical-review results.
+
+type Severity = 'high' | 'medium' | 'low' | null;
+
+// Only headers that literally name a "variación" count — a bare "%" isn't enough,
+// since composition columns like "% Año Actual" (S2) are a share-of-total, not a
+// change, and would falsely read as high-severity at typical composition sizes.
+function isVarianceHeader(col: string): boolean {
+  const n = col.toLowerCase();
+  return n.includes('variac') && !n.includes('$');
+}
+
+function computeRowSeverity(row: MatrixRow, columns: string[]): Severity {
+  let maxAbs = -1;
+  let usesPp = false; // percentage-point variance (vertical analysis) uses a tighter threshold than a %-change
+  for (const col of columns) {
+    if (!isVarianceHeader(col)) continue;
+    const raw = row[col];
+    if (!raw) continue;
+    const n = parseFloat(raw.replace(/[^\d.-]/g, ''));
+    if (!Number.isFinite(n)) continue;
+    if (col.toLowerCase().includes('pp')) usesPp = true;
+    maxAbs = Math.max(maxAbs, Math.abs(n));
+  }
+  if (maxAbs < 0) return null;
+  const [hi, med] = usesPp ? [5, 3] : [20, 10];
+  if (maxAbs >= hi) return 'high';
+  if (maxAbs >= med) return 'medium';
+  return 'low';
+}
+
+const SEVERITY_STYLE: Record<'high' | 'medium' | 'low', { dot: string; label: string }> = {
+  high:   { dot: 'bg-red-500 ring-red-200',       label: 'Variación significativa (≥20%) — requiere atención' },
+  medium: { dot: 'bg-amber-400 ring-amber-200',   label: 'Variación moderada (10%–20%) — revisar' },
+  low:    { dot: 'bg-emerald-500 ring-emerald-200', label: 'Variación dentro de lo esperado (<10%)' },
+};
+
+function SeverityDot({ severity }: { severity: Severity }) {
+  if (!severity) return <span className="text-gray-300 text-xs">—</span>;
+  const s = SEVERITY_STYLE[severity];
+  return <span className={`inline-block w-2.5 h-2.5 rounded-full ring-4 ${s.dot}`} title={s.label} />;
 }
 
 /**
@@ -149,13 +234,14 @@ function compareValues(a: string, b: string): number {
  */
 export function MatrixGridPanel({
   value, onChange, paperId, sectionKey, aiHint, linkedFrom, sourceValue, readOnly = false,
+  enableRowExtras = false,
 }: Props) {
   // aiHint-derived suggestion: short header labels + full phrase per label (for the tooltip)
   const suggestedFull  = parseColumnsFromAiHint(aiHint);
   const suggestedShort = dedupeLabels(suggestedFull.map(shortColumnLabel));
   const suggestedTitleByLabel = Object.fromEntries(suggestedShort.map((s, i) => [s, suggestedFull[i]]));
 
-  const initialRows = parseValue(value);
+  const initialRows = enableRowExtras ? withRowIds(parseValue(value)) : parseValue(value);
   const initialColumns = initialRows.length > 0 ? deriveColumns(initialRows) : suggestedShort;
 
   const [rows,       setRows]       = useState<MatrixRow[]>(initialRows);
@@ -169,6 +255,10 @@ export function MatrixGridPanel({
   // Display-only sort — never reorders the persisted rows, just the render order.
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDir,    setSortDir]    = useState<'asc' | 'desc'>('asc');
+  // Row extras (severity/note/evidence) — only meaningful when enableRowExtras.
+  const [uploadingRowId, setUploadingRowId] = useState<string | null>(null);
+  const [rowErrors,      setRowErrors]      = useState<Record<string, string>>({});
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   function toggleSort(col: string) {
     if (sortColumn !== col) { setSortColumn(col); setSortDir('asc'); return; }
@@ -177,11 +267,13 @@ export function MatrixGridPanel({
   }
 
   const assist = useAssistSection();
+  const attachMutation = useAttachToAccountSchedule();
+  const removeAttachMutation = useRemoveAccountScheduleAttachment();
 
   // Re-sync local state when the incoming value changes (save confirmation, reload, etc.)
   const valueSignature = JSON.stringify(value ?? null);
   useEffect(() => {
-    const parsed = parseValue(value);
+    const parsed = enableRowExtras ? withRowIds(parseValue(value)) : parseValue(value);
     setRows(parsed);
     if (parsed.length > 0) {
       setColumns(deriveColumns(parsed));
@@ -220,6 +312,11 @@ export function MatrixGridPanel({
     const padded = nextRows.map(r => {
       const out: MatrixRow = {};
       for (const c of nextColumns) out[c] = r[c] ?? '';
+      if (enableRowExtras) {
+        for (const k of Object.keys(r)) {
+          if (k.startsWith('_')) out[k] = r[k];
+        }
+      }
       return out;
     });
     setRows(padded);
@@ -257,7 +354,8 @@ export function MatrixGridPanel({
 
   function addRow() {
     const cols = columns.length > 0 ? columns : ['Campo 1'];
-    commit([...rows, Object.fromEntries(cols.map(c => [c, '']))], cols);
+    const base: MatrixRow = Object.fromEntries(cols.map(c => [c, '']));
+    commit([...rows, enableRowExtras ? { ...base, _id: genRowId() } : base], cols);
   }
 
   function updateCell(rowIdx: number, col: string, val: string) {
@@ -266,6 +364,46 @@ export function MatrixGridPanel({
 
   function deleteRow(idx: number) {
     commit(rows.filter((_, i) => i !== idx), columns);
+  }
+
+  function updateRowNote(idx: number, note: string) {
+    commit(rows.map((r, i) => (i === idx ? { ...r, _nota: note } : r)), columns);
+  }
+
+  async function handleAttach(idx: number, file: File) {
+    if (!paperId) return;
+    const row = rows[idx];
+    const rowId = row['_id'];
+    if (!rowId) return;
+    if (file.size > 25 * 1024 * 1024) {
+      setRowErrors(prev => ({ ...prev, [rowId]: 'El archivo supera el límite de 25MB.' }));
+      return;
+    }
+    setUploadingRowId(rowId);
+    setRowErrors(prev => ({ ...prev, [rowId]: '' }));
+    try {
+      const att = await attachMutation.mutateAsync({ paperId, rowId, file });
+      const next = [...parseAttachments(row['_attachments']), att];
+      commit(rows.map((r, i) => (i === idx ? { ...r, _attachments: JSON.stringify(next) } : r)), columns);
+    } catch (e) {
+      setRowErrors(prev => ({ ...prev, [rowId]: (e as Error).message || 'Error al subir el archivo' }));
+    } finally {
+      setUploadingRowId(null);
+    }
+  }
+
+  async function handleRemoveAttachment(idx: number, attachmentId: string) {
+    if (!paperId) return;
+    const row = rows[idx];
+    const rowId = row['_id'];
+    if (!rowId) return;
+    try {
+      await removeAttachMutation.mutateAsync({ paperId, rowId, attachmentId });
+      const next = parseAttachments(row['_attachments']).filter(a => a.id !== attachmentId);
+      commit(rows.map((r, i) => (i === idx ? { ...r, _attachments: JSON.stringify(next) } : r)), columns);
+    } catch (e) {
+      setRowErrors(prev => ({ ...prev, [rowId]: (e as Error).message || 'Error al quitar el adjunto' }));
+    }
   }
 
   async function generateWithAI() {
@@ -295,11 +433,12 @@ export function MatrixGridPanel({
 
   function applyAiPreview(mode: 'replace' | 'append') {
     if (!aiPreview) return;
-    const previewCols = deriveColumns(aiPreview);
+    const preview = enableRowExtras ? withRowIds(aiPreview) : aiPreview;
+    const previewCols = deriveColumns(preview);
     if (mode === 'replace') {
-      commit(aiPreview, previewCols);
+      commit(preview, previewCols);
     } else {
-      commit([...rows, ...aiPreview], Array.from(new Set([...columns, ...previewCols])));
+      commit([...rows, ...preview], Array.from(new Set([...columns, ...previewCols])));
     }
     setAiPreview(null);
   }
@@ -488,6 +627,21 @@ export function MatrixGridPanel({
                       )}
                     </th>
                   ))}
+                  {enableRowExtras && (
+                    <th className="w-10 px-2 py-2 text-center font-semibold text-gray-500 border-b border-gray-200" title="Nivel de atención — calculado automáticamente según la magnitud de las variaciones de la fila">
+                      Aten.
+                    </th>
+                  )}
+                  {enableRowExtras && (
+                    <th className="px-3 py-2 text-left font-semibold text-gray-600 border-b border-gray-200 min-w-[160px]">
+                      Nota del auditor
+                    </th>
+                  )}
+                  {enableRowExtras && (
+                    <th className="px-3 py-2 text-left font-semibold text-gray-600 border-b border-gray-200 min-w-[140px]">
+                      Evidencia
+                    </th>
+                  )}
                   {!readOnly && <th className="w-7" />}
                 </tr>
               </thead>
@@ -500,7 +654,10 @@ export function MatrixGridPanel({
                         return sortDir === 'asc' ? cmp : -cmp;
                       })
                   : rows.map((row, i) => ({ row, i }))
-                ).map(({ row, i }) => (
+                ).map(({ row, i }) => {
+                  const rowId = row['_id'] ?? '';
+                  const rowError = rowErrors[rowId];
+                  return (
                   <tr key={i} className="group border-b border-gray-100 last:border-0 hover:bg-blue-50/20">
                     {columns.map(col => (
                       <td key={col} className="px-3 py-2 align-top">
@@ -518,6 +675,80 @@ export function MatrixGridPanel({
                         )}
                       </td>
                     ))}
+                    {enableRowExtras && (
+                      <td className="px-2 py-2 align-top text-center">
+                        <SeverityDot severity={computeRowSeverity(row, columns)} />
+                      </td>
+                    )}
+                    {enableRowExtras && (
+                      <td className="px-3 py-2 align-top">
+                        {readOnly ? (
+                          <span className="text-gray-700">{row['_nota'] || '—'}</span>
+                        ) : (
+                          <textarea
+                            value={row['_nota'] ?? ''}
+                            onChange={e => updateRowNote(i, e.target.value)}
+                            rows={1}
+                            placeholder="Apreciación del auditor…"
+                            className="w-full text-xs text-gray-800 bg-transparent border-b border-transparent
+                              hover:border-gray-200 focus:border-blue-400 focus:outline-none py-0.5 resize-none
+                              placeholder:text-gray-300 transition-colors"
+                          />
+                        )}
+                      </td>
+                    )}
+                    {enableRowExtras && (
+                      <td className="px-2 py-2 align-top">
+                        <div className="flex flex-col gap-1">
+                          {parseAttachments(row['_attachments']).map(att => (
+                            <div key={att.id} className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-md px-1.5 py-1 max-w-[220px]">
+                              <FileText className="w-3 h-3 text-gray-400 shrink-0" />
+                              <a
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 min-w-0 truncate text-[10px] text-blue-600 hover:underline"
+                                title={`${att.filename}${att.size ? ' · ' + formatBytes(att.size) : ''}`}
+                              >
+                                {att.filename}
+                              </a>
+                              {!readOnly && (
+                                <button
+                                  onClick={() => handleRemoveAttachment(i, att.id)}
+                                  className="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors shrink-0"
+                                  title="Quitar adjunto"
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {!readOnly && (
+                            <>
+                              <input
+                                ref={el => { fileInputRefs.current[rowId] = el; }}
+                                type="file"
+                                className="hidden"
+                                onChange={e => {
+                                  const file = e.target.files?.[0];
+                                  if (file) void handleAttach(i, file);
+                                  e.target.value = '';
+                                }}
+                              />
+                              <button
+                                onClick={() => fileInputRefs.current[rowId]?.click()}
+                                disabled={uploadingRowId === rowId}
+                                className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600 border border-dashed border-gray-300 hover:border-blue-300 rounded-md px-1.5 py-1 transition-colors disabled:opacity-50"
+                              >
+                                {uploadingRowId === rowId ? <Loader2 className="w-3 h-3 animate-spin" /> : <Paperclip className="w-3 h-3" />}
+                                {uploadingRowId === rowId ? 'Subiendo…' : 'Adjuntar'}
+                              </button>
+                              {rowError && <p className="text-[10px] text-red-600">{rowError}</p>}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    )}
                     {!readOnly && (
                       <td className="px-2 py-2 align-top">
                         <button
@@ -530,7 +761,8 @@ export function MatrixGridPanel({
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

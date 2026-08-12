@@ -15,7 +15,8 @@ import type { AiDraftConfig } from './SectionField';
 import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './TrialBalancePanel';
 import { MaterialidadPanel } from './MaterialidadPanel';
 import { SamplingExecutionPanel } from './SamplingExecutionPanel';
-import { RatioTrendChart, ConcentrationChart } from './AnalyticsCharts';
+import { RatioTrendChart, ConcentrationChart, VariationChart } from './AnalyticsCharts';
+import { MethodologyInfo } from './MethodologyInfo';
 
 // ─── Error boundary ───────────────────────────────────────────────────────────
 
@@ -488,6 +489,7 @@ export function SmartPaperSections({
                       readonly={readonly}
                       onSave={handleSave}
                       paperId={paperId}
+                      paperCode={paperCode}
                       mentionItems={mentionItems}
                       aiDraftConfig={aiDraftConfig}
                       onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -505,6 +507,41 @@ export function SmartPaperSections({
             }
           }
 
+          // PT-FIN-B07: gráfico de solo-lectura arriba (S1 mayores variaciones, S3 ratios
+          // actual vs anterior) + botón "Cómo se calcula" junto al título de cada análisis.
+          if (paperCode === 'PT-FIN-B07' && ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'].includes(section.sectionKey)) {
+            const rows = Array.isArray(section.value) ? section.value as Record<string, unknown>[] : [];
+            return (
+              <SectionErrorBoundary key={section.sectionKey} label={section.label}>
+                <div>
+                  <div className="flex justify-end pt-3">
+                    <MethodologyInfo paperCode={paperCode} sectionKey={section.sectionKey} />
+                  </div>
+                  {section.sectionKey === 'S1' && <VariationChart rows={rows} />}
+                  {section.sectionKey === 'S3' && <RatioTrendChart rows={rows} />}
+                  <SectionField
+                    section={section}
+                    allSections={sorted}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    paperId={paperId}
+                    paperCode={paperCode}
+                    mentionItems={mentionItems}
+                    aiDraftConfig={aiDraftConfig}
+                    onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                      void createReference.mutateAsync({
+                        paperId,
+                        sourceSectionKey: sectionKey,
+                        targetPaperId,
+                        targetSectionKey,
+                      });
+                    }}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            );
+          }
+
           // PT-A4: S1..S5 renderizados por MaterialidadPanel; S_EJE por SamplingExecutionPanel
           if (paperCode === 'PT-A4' && ['S1', 'S1b', 'S2', 'S3', 'S4', 'S5', 'S_EJE'].includes(section.sectionKey)) {
             return null;
@@ -518,6 +555,7 @@ export function SmartPaperSections({
                 readonly={readonly}
                 onSave={handleSave}
                 paperId={paperId}
+                paperCode={paperCode}
                 mentionItems={mentionItems}
                 aiDraftConfig={aiDraftConfig}
                 onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {

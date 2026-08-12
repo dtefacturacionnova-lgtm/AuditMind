@@ -306,16 +306,89 @@ const PARAM_LABELS_PDF: Record<string, string> = {
 const MONETARY_PARAM_KEYS = new Set(['valor_en_libros', 'materialidad_ejecucion', 'error_esperado']);
 const PCT_PARAM_KEYS       = new Set(['nivel_confianza', 'tasa_desviacion_tolerable', 'tasa_desviacion_esperada']);
 
+// ─── MATRIX row extras (severity/note/evidence) — mirrors MatrixGridPanel.tsx ─
+// Internal row keys are prefixed "_" (never a real column). When a paper opts into
+// row extras (currently PT-FIN-B07 S1-S4) those rows carry "_nota"/"_attachments";
+// their presence alone decides whether the PDF grows the extra columns, so any
+// other MATRIX paper's plain rows render exactly as before.
+
+type MatrixSeverity = 'high' | 'medium' | 'low' | null;
+
+function isVarianceHeaderPdf(col: string): boolean {
+  const n = col.toLowerCase();
+  return n.includes('variac') && !n.includes('$');
+}
+
+function computeRowSeverityPdf(row: Record<string, unknown>, cols: string[]): MatrixSeverity {
+  let maxAbs = -1;
+  let usesPp = false;
+  for (const col of cols) {
+    if (!isVarianceHeaderPdf(col)) continue;
+    const raw = row[col];
+    if (raw == null || raw === '') continue;
+    const n = parseFloat(String(raw).replace(/[^\d.-]/g, ''));
+    if (!Number.isFinite(n)) continue;
+    if (col.toLowerCase().includes('pp')) usesPp = true;
+    maxAbs = Math.max(maxAbs, Math.abs(n));
+  }
+  if (maxAbs < 0) return null;
+  const [hi, med] = usesPp ? [5, 3] : [20, 10];
+  if (maxAbs >= hi) return 'high';
+  if (maxAbs >= med) return 'medium';
+  return 'low';
+}
+
+const SEVERITY_BADGE_PDF: Record<'high' | 'medium' | 'low', { label: string; color: string; bg: string }> = {
+  high:   { label: 'Alta',  color: '#B91C1C', bg: '#FEE2E2' },
+  medium: { label: 'Media', color: '#B45309', bg: '#FEF3C7' },
+  low:    { label: 'Baja',  color: '#047857', bg: '#D1FAE5' },
+};
+
+function renderSeverityBadgePdf(sev: MatrixSeverity): string {
+  if (!sev) return '<span style="color:#A0AEC0;">—</span>';
+  const s = SEVERITY_BADGE_PDF[sev];
+  return `<span style="display:inline-block;padding:0.5mm 2mm;border-radius:3mm;font-size:7pt;font-weight:600;color:${s.color};background:${s.bg};">${s.label}</span>`;
+}
+
 /** MATRIX field values are arrays of row objects — render as a real table, not JSON. */
 function renderMatrixTable(rows: unknown[]): string {
   const objRows = rows.filter(r => r && typeof r === 'object' && !Array.isArray(r)) as Array<Record<string, unknown>>;
   if (objRows.length === 0) return '<span class="text-muted text-small">— Sin datos —</span>';
-  const cols = Object.keys(objRows[0]);
+
+  const allKeys  = Object.keys(objRows[0]);
+  const cols     = allKeys.filter(k => !k.startsWith('_'));
+  const hasExtras = allKeys.includes('_nota') || allKeys.includes('_attachments');
+
   return `
     <table class="text-small" style="width: 100%;">
-      <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+      <thead><tr>
+        ${cols.map(c => `<th>${esc(c)}</th>`).join('')}
+        ${hasExtras ? '<th>Nivel de Atención</th><th>Nota del Auditor</th><th>Evidencia</th>' : ''}
+      </tr></thead>
       <tbody>
-        ${objRows.map(r => `<tr>${cols.map(c => `<td>${esc(String(r[c] ?? '—'))}</td>`).join('')}</tr>`).join('')}
+        ${objRows.map(r => {
+          const cells = cols.map(c => `<td>${esc(String(r[c] ?? '—'))}</td>`).join('');
+          if (!hasExtras) return `<tr>${cells}</tr>`;
+
+          const severity = computeRowSeverityPdf(r, cols);
+          const nota = String(r['_nota'] ?? '').trim();
+          let evidenceHtml = '<span class="text-muted">—</span>';
+          try {
+            const atts = JSON.parse(String(r['_attachments'] ?? '[]')) as Array<{ filename?: string }>;
+            if (Array.isArray(atts) && atts.length > 0) {
+              evidenceHtml = atts.map(a => esc(String(a.filename ?? 'archivo'))).join('<br/>');
+            }
+          } catch {
+            // malformed/legacy _attachments payload — show as no evidence rather than breaking the PDF
+          }
+
+          return `<tr>
+            ${cells}
+            <td>${renderSeverityBadgePdf(severity)}</td>
+            <td>${nota ? esc(nota) : '<span class="text-muted">—</span>'}</td>
+            <td style="font-size:7pt;">${evidenceHtml}</td>
+          </tr>`;
+        }).join('')}
       </tbody>
     </table>`;
 }

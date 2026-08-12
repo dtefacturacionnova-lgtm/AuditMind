@@ -113,6 +113,61 @@ function colorForGroup(g: string): string {
   return '#64748b';
 }
 
+// ─── Mayores Variaciones — Top N por magnitud (Análisis Horizontal, NIA 520) ──
+
+function findVarianceKey(row: Record<string, unknown>): string | undefined {
+  const keys = Object.keys(row).filter(k => k.includes('%'));
+  if (keys.length === 0) return undefined;
+  return keys.find(k => normalize(k).includes('actual')) ?? keys[0];
+}
+
+function severityColor(absPct: number): string {
+  if (absPct >= 20) return '#ef4444';
+  if (absPct >= 10) return '#f59e0b';
+  return '#10b981';
+}
+
+export function VariationChart({ rows }: Props) {
+  if (rows.length === 0) return null;
+  const sample = rows[0];
+  const nameKey = findKey(sample, ['cuenta', 'codigo']) ?? Object.keys(sample)[0];
+  const varKey  = findVarianceKey(sample);
+  if (!varKey) return null;
+
+  const data = rows
+    .map(r => ({ name: String(r[nameKey] ?? ''), variacion: parseNumeric(r[varKey]) }))
+    .filter(d => d.name && Number.isFinite(d.variacion))
+    .sort((a, b) => Math.abs(b.variacion) - Math.abs(a.variacion))
+    .slice(0, 12);
+
+  if (data.length === 0) return null;
+
+  return (
+    <div className="mb-3 bg-white border border-gray-100 rounded-xl p-3">
+      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        Mayores variaciones — Top {data.length}
+      </p>
+      <ResponsiveContainer width="100%" height={Math.max(220, data.length * 28)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 28, bottom: 4, left: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
+          <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10 }} />
+          <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} formatter={(v: number) => `${v.toFixed(1)}%`} />
+          <Bar dataKey="variacion" radius={[0, 4, 4, 0]}>
+            {data.map((d, i) => <Cell key={i} fill={severityColor(Math.abs(d.variacion))} />)}
+            <LabelList dataKey="variacion" position="right" formatter={(v: number) => `${Number(v).toFixed(1)}%`} style={{ fontSize: 9, fontWeight: 600, fill: '#334155' }} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      <div className="flex items-center gap-3 mt-2">
+        <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> ≥20%</span>
+        <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> ≥10%</span>
+        <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> &lt;10%</span>
+      </div>
+    </div>
+  );
+}
+
 export function ConcentrationChart({ rows }: Props) {
   if (rows.length === 0) return null;
   const sample = rows[0];

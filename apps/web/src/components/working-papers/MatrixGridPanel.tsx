@@ -224,6 +224,76 @@ function compareValues(a: string, b: string): number {
   return a.localeCompare(b, 'es');
 }
 
+// ─── Column width — bounded auto-fit by content type ──────────────────────────
+// MATRIX has no fixed schema (columns vary per section), so width is inferred from
+// the header text itself: short-value columns (N°, fechas, montos, Sí/No, severidad)
+// stay narrow; narrative columns (descripción, observaciones, salvaguarda…) get much
+// more room. Bounded on both ends so a column never clips to ~4 letters nor balloons
+// to fill the row — the table wraps in a horizontally-scrolling container either way.
+
+interface ColWidth { min: number; max: number }
+
+const NARROW_COL_HINTS = [
+  'n°', 'no.', 'núm', 'numero', 'código', 'code', 'fecha', 'monto', 'saldo', 'valor',
+  '%', 'pct', 'sí/no', 'si/no', 'sí / no', 'estado', 'severidad', 'nivel', 'prioridad',
+  'aplica', 'cumple', 'acuse de recibo', 'año', 'moneda', 'cantidad', 'tipo', 'id',
+];
+const WIDE_COL_HINTS = [
+  'descripci', 'observ', 'situaci', 'detalle', 'justificaci', 'narrativa', 'comentario',
+  'salvaguarda', 'criterio', 'causa', 'efecto', 'condici', 'recomendaci', 'resultado',
+  'evidencia', 'conclusi', 'nota', 'respuesta', 'acción', 'hallazgo', 'fundamento',
+  'riesgo potencial', 'plan de acción',
+];
+
+function columnWidth(col: string): ColWidth {
+  const n = col.toLowerCase();
+  if (NARROW_COL_HINTS.some(k => n.includes(k))) return { min: 90, max: 160 };
+  if (WIDE_COL_HINTS.some(k => n.includes(k))) return { min: 260, max: 440 };
+  return { min: 160, max: 260 };
+}
+
+function colStyle(col: string): { minWidth: string; maxWidth: string } {
+  const w = columnWidth(col);
+  return { minWidth: `${w.min}px`, maxWidth: `${w.max}px` };
+}
+
+// ─── Celda de texto auto-ajustable ─────────────────────────────────────────────
+// Crece en altura con el contenido (en vez de recortar a una sola línea) — el
+// ancho ya viene acotado por colStyle(), así que esta es la otra mitad del
+// "autoajuste al contenido": lo que no cabe a lo ancho, se ve completo a lo alto.
+
+function AutoGrowCell({
+  value, onChange, readOnly, placeholder,
+}: {
+  value: string; onChange: (v: string) => void; readOnly?: boolean; placeholder?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const resize = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  useEffect(resize, [value]);
+
+  if (readOnly) {
+    return <span className="text-gray-700 whitespace-pre-wrap break-words">{value || '—'}</span>;
+  }
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      onInput={resize}
+      rows={1}
+      placeholder={placeholder}
+      className="w-full text-xs text-gray-800 bg-transparent border-b border-transparent
+        hover:border-gray-200 focus:border-blue-400 focus:outline-none py-0.5 resize-none
+        overflow-hidden whitespace-pre-wrap break-words placeholder:text-gray-300 transition-colors"
+    />
+  );
+}
+
 // ─── Panel principal ──────────────────────────────────────────────────────────
 
 /**
@@ -573,11 +643,11 @@ export function MatrixGridPanel({
       ) : (
         <div className="border border-gray-100 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="min-w-full text-xs">
               <thead>
                 <tr className="bg-gray-50">
                   {columns.map(col => (
-                    <th key={col} className="px-3 py-2 text-left font-semibold text-gray-600 border-b border-gray-200 group/col">
+                    <th key={col} style={colStyle(col)} className="px-3 py-2 text-left font-semibold text-gray-600 border-b border-gray-200 group/col align-top">
                       {editingCol === col ? (
                         <input
                           autoFocus
@@ -660,19 +730,12 @@ export function MatrixGridPanel({
                   return (
                   <tr key={i} className="group border-b border-gray-100 last:border-0 hover:bg-blue-50/20">
                     {columns.map(col => (
-                      <td key={col} className="px-3 py-2 align-top">
-                        {readOnly ? (
-                          <span className="text-gray-700">{row[col] || '—'}</span>
-                        ) : (
-                          <textarea
-                            value={row[col] ?? ''}
-                            onChange={e => updateCell(i, col, e.target.value)}
-                            rows={1}
-                            className="w-full text-xs text-gray-800 bg-transparent border-b border-transparent
-                              hover:border-gray-200 focus:border-blue-400 focus:outline-none py-0.5 resize-none
-                              placeholder:text-gray-300 transition-colors"
-                          />
-                        )}
+                      <td key={col} style={colStyle(col)} className="px-3 py-2 align-top">
+                        <AutoGrowCell
+                          value={row[col] ?? ''}
+                          onChange={v => updateCell(i, col, v)}
+                          readOnly={readOnly}
+                        />
                       </td>
                     ))}
                     {enableRowExtras && (
@@ -681,20 +744,13 @@ export function MatrixGridPanel({
                       </td>
                     )}
                     {enableRowExtras && (
-                      <td className="px-3 py-2 align-top">
-                        {readOnly ? (
-                          <span className="text-gray-700">{row['_nota'] || '—'}</span>
-                        ) : (
-                          <textarea
-                            value={row['_nota'] ?? ''}
-                            onChange={e => updateRowNote(i, e.target.value)}
-                            rows={1}
-                            placeholder="Apreciación del auditor…"
-                            className="w-full text-xs text-gray-800 bg-transparent border-b border-transparent
-                              hover:border-gray-200 focus:border-blue-400 focus:outline-none py-0.5 resize-none
-                              placeholder:text-gray-300 transition-colors"
-                          />
-                        )}
+                      <td className="px-3 py-2 align-top min-w-[160px] max-w-[280px]">
+                        <AutoGrowCell
+                          value={row['_nota'] ?? ''}
+                          onChange={v => updateRowNote(i, v)}
+                          readOnly={readOnly}
+                          placeholder="Apreciación del auditor…"
+                        />
                       </td>
                     )}
                     {enableRowExtras && (

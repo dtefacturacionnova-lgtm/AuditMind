@@ -937,11 +937,11 @@ export function AccountSemaforo({
                   </td>
                   <td className="px-3 py-1.5 font-mono text-gray-700">{row.cuenta}</td>
                   <td className="px-3 py-1.5 text-gray-700">{row.descripcion}</td>
-                  <td className={`px-3 py-1.5 text-right font-mono ${row.saldo_actual < 0 ? 'text-red-600' : 'text-gray-700'}`}>
-                    {fmtN(row.saldo_actual)}
+                  <td className={`px-3 py-1.5 text-right font-mono ${(row.saldo_actual ?? 0) < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                    {fmtN(row.saldo_actual ?? 0)}
                   </td>
                   <td className="px-3 py-1.5 text-right font-mono text-gray-500">
-                    {row.pct_total.toFixed(1)}%
+                    {(row.pct_total ?? 0).toFixed(1)}%
                   </td>
                   <td className="px-3 py-1.5 font-mono text-gray-600">{row.sub_sumaria}</td>
                   <td className="px-3 py-1.5 text-gray-500 text-[11px]">{row.enfoque}</td>

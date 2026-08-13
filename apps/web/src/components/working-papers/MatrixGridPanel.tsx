@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Plus, Trash2, X, Sparkles, Loader2, Check, ArrowUp, ArrowDown, ArrowUpDown,
-  Paperclip, FileText,
+  Paperclip, FileText, CircleSlash, AlertTriangle, AlertOctagon,
 } from 'lucide-react';
 import { useAssistSection, useAttachToAccountSchedule, useRemoveAccountScheduleAttachment } from '@/hooks/useWorkingPaperGraph';
 
@@ -129,6 +129,34 @@ function SeverityDot({ severity }: { severity: Severity }) {
   if (!severity) return <span className="text-gray-300 text-xs">—</span>;
   const s = SEVERITY_STYLE[severity];
   return <span className={`inline-block w-2.5 h-2.5 rounded-full ring-4 ${s.dot}`} title={s.label} />;
+}
+
+// ─── Alert-type icon ────────────────────────────────────────────────────────
+// A handful of MATRIX sections classify each row with a short "tipo de alerta"
+// value (e.g. B-00's Detalle de Alertas: CUENTA_NUEVA / SALDO_CERO /
+// VARIACION_CRITICA / DESCUADRE, written either as the raw enum token or the
+// human label). Detected by content, not column name, so it applies wherever
+// this pattern shows up — not just B-00 — and only for a short, enum-like cell
+// value (never inside a narrative sentence that happens to mention "descuadre").
+
+interface AlertKind { icon: typeof Sparkles; label: string; cls: string }
+
+const ALERT_KIND_PATTERNS: Array<{ re: RegExp; kind: AlertKind }> = [
+  { re: /^cuenta[_\s-]*nueva$/,        kind: { icon: Sparkles,       label: 'Cuenta nueva',      cls: 'text-blue-600' } },
+  { re: /^saldo[_\s-]*cero$/,          kind: { icon: CircleSlash,    label: 'Saldo cero',        cls: 'text-gray-500' } },
+  { re: /^variaci[o]n[_\s-]*critica$/, kind: { icon: AlertTriangle,  label: 'Variación crítica', cls: 'text-red-600' } },
+  { re: /^descuadre$/,                 kind: { icon: AlertOctagon,   label: 'Descuadre',         cls: 'text-orange-600' } },
+];
+
+function matchAlertKind(raw: string): AlertKind | null {
+  const v = raw.trim();
+  if (!v || v.length > 40) return null;
+  const stripAccents = (s: string) => s.replace(/[̀-ͯ]/g, '');
+  const norm = stripAccents(v.toLowerCase().normalize('NFD'));
+  for (const { re, kind } of ALERT_KIND_PATTERNS) {
+    if (re.test(norm)) return kind;
+  }
+  return null;
 }
 
 /**
@@ -748,6 +776,7 @@ export function MatrixGridPanel({
                     {columns.map(col => {
                       const isSelectedCol = selectedCell?.col === col;
                       const isSelectedCell = isSelectedRow && isSelectedCol;
+                      const alertKind = matchAlertKind(row[col] ?? '');
                       return (
                       <td
                         key={col}
@@ -758,12 +787,19 @@ export function MatrixGridPanel({
                             : isSelectedCol ? 'bg-blue-50/50' : ''
                         }`}
                       >
-                        <AutoGrowCell
-                          value={row[col] ?? ''}
-                          onChange={v => updateCell(i, col, v)}
-                          readOnly={readOnly}
-                          onFocus={() => setSelectedCell({ row: i, col })}
-                        />
+                        <div className={alertKind ? 'flex items-start gap-1.5' : undefined}>
+                          {alertKind && (
+                            <span title={alertKind.label} className="shrink-0 mt-0.5">
+                              <alertKind.icon className={`w-3.5 h-3.5 ${alertKind.cls}`} />
+                            </span>
+                          )}
+                          <AutoGrowCell
+                            value={row[col] ?? ''}
+                            onChange={v => updateCell(i, col, v)}
+                            readOnly={readOnly}
+                            onFocus={() => setSelectedCell({ row: i, col })}
+                          />
+                        </div>
                       </td>
                       );
                     })}

@@ -48,7 +48,7 @@ export class PaperQualityService {
   private readonly logger = new Logger(PaperQualityService.name);
 
   private readonly geminiEndpoint =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   constructor(
     private readonly prisma:  PrismaService,

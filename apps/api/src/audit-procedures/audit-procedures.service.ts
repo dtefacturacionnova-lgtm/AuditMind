@@ -393,19 +393,22 @@ export class AuditProceduresService {
       select:  { title: true, auditPeriodEnd: true },
     });
 
+    // "Auditoría Financiera Externa v1.0" no tiene un papel PT-A5 dedicado — la
+    // evaluación de riesgos vive en PT-A2 (score RMM por área en S4, riesgos
+    // significativos NIA 315 en S6) y el enfoque por área en PT-STRAT S5.
     const siblingPapers = await this.prisma.workingPaper.findMany({
-      where:   { auditId: paper.auditId, paperCode: { in: ['PT-A5', 'PT-A2', 'PT-A3'] } },
+      where:   { auditId: paper.auditId, paperCode: { in: ['PT-A2', 'PT-STRAT'] } },
       include: { sections: { orderBy: { sortOrder: 'asc' } } },
     });
 
     // Extract relevant sections from sibling papers
-    const a5Paper  = siblingPapers.find(p => p.paperCode === 'PT-A5');
-    const rmmText  = a5Paper?.sections.find(s => s.sectionKey === 'S1')?.value ?? '';
-    const sigRisks = a5Paper?.sections.find(s => s.sectionKey === 'S3')?.value ?? '';
-    const strategy = a5Paper?.sections.find(s => s.sectionKey === 'S4')?.value ?? '';
-
     const a2Paper  = siblingPapers.find(p => p.paperCode === 'PT-A2');
     const areas    = a2Paper?.sections.find(s => s.sectionKey === 'S1')?.value ?? '';
+    const rmmText  = a2Paper?.sections.find(s => s.sectionKey === 'S4')?.value ?? '';
+    const sigRisks = a2Paper?.sections.find(s => s.sectionKey === 'S6')?.value ?? '';
+
+    const stratPaper = siblingPapers.find(p => p.paperCode === 'PT-STRAT');
+    const strategy    = stratPaper?.sections.find(s => s.sectionKey === 'S5')?.value ?? '';
 
     const auditName = audit?.title ?? 'Auditoría';
     const year      = audit?.auditPeriodEnd?.getFullYear() ?? new Date().getFullYear();
@@ -419,13 +422,13 @@ Eres un auditor de Big 4 experto en NIAs (normas IAASB). Genera un programa de a
 ### Áreas auditadas (PT-A2 S1):
 ${areas || '(No disponible)'}
 
-### Matriz RMM por área (PT-A5 S1):
+### Score de Riesgo Inherente por área (PT-A2 S4):
 ${rmmText || '(No disponible)'}
 
-### Riesgos Significativos (PT-A5 S3):
+### Riesgos Significativos NIA 315 (PT-A2 S6):
 ${sigRisks || '(No disponible)'}
 
-### Estrategia por área (PT-A5 S4):
+### Enfoque de auditoría por área (PT-STRAT S5):
 ${strategy || '(No disponible)'}
 
 ## Instrucciones:

@@ -303,8 +303,13 @@ export function MasterPaperView({
         </div>
       )}
 
-      {/* ── Section-level narrative (SYNCED) ── */}
-      {!isRegenerating && syncStatus === 'SYNCED' && hasSectionContent && (
+      {/* ── Section-level narrative (SYNCED, PT-MEMO shape only) ──
+          Other MASTER papers (PT-PROG, etc.) now have a "Secciones" tab where the
+          same consolidated content is shown in its real, editable field — repeating
+          it here as read-only text would just duplicate it. PT-MEMO keeps its own
+          Secciones tab too, but this 4-card view is still a genuinely useful
+          at-a-glance summary of exactly those 4 fields, so it stays for that shape. */}
+      {!isRegenerating && syncStatus === 'SYNCED' && isMemoShape && hasSectionContent && (
         <div className="space-y-3">
           {S2 && (
             <SectionCard
@@ -342,21 +347,22 @@ export function MasterPaperView({
               empty="El auditor debe completar este campo."
             />
           )}
-
-          {/* Full narrative fallback if section view doesn't cover everything */}
-          {narrative && !hasSectionContent && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
-                Narrativa consolidada
-              </p>
-              <NarrativeDisplay text={narrative} />
-            </div>
-          )}
         </div>
       )}
 
-      {/* ── Narrative only (no sections initialized yet) ── */}
-      {!isRegenerating && syncStatus === 'SYNCED' && !hasSectionContent && narrative && (
+      {/* ── Consolidado, sin vista de tarjetas propia (PT-PROG y similares) ──
+          El contenido real y editable está en la pestaña "Secciones". */}
+      {!isRegenerating && syncStatus === 'SYNCED' && !isMemoShape && narrative && (
+        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-4">
+          <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+          <p className="text-sm text-emerald-800">
+            Contenido consolidado — revísalo y edítalo en la pestaña <strong>Secciones</strong>.
+          </p>
+        </div>
+      )}
+
+      {/* ── PT-MEMO consolidado pero sin las 4 secciones esperadas (caso raro) ── */}
+      {!isRegenerating && syncStatus === 'SYNCED' && isMemoShape && !hasSectionContent && narrative && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
             Narrativa consolidada

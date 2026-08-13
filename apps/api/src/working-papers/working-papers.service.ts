@@ -1097,12 +1097,14 @@ export class WorkingPapersService {
       }>,
     }));
 
-    // 2b. Fallback: auto-discover PT-A1, PT-A2, PT-A4 in the same audit
+    // 2b. Fallback: auto-discover source papers in the same audit if no PaperLinks
+    // were instantiated. PT-FIN-A3-KC = entendimiento del cliente ("Auditoría
+    // Financiera Externa v1.0"); PT-A1 kept for older templates that still use it.
     if (sourcePapers.length === 0) {
       const discovered = await this.prisma.workingPaper.findMany({
         where: {
           auditId:   wp.auditId,
-          paperCode: { in: ['PT-A1', 'PT-A2', 'PT-A4'] },
+          paperCode: { in: ['PT-FIN-A3-KC', 'PT-A1', 'PT-A2', 'PT-A4'] },
         },
         include: { sections: { orderBy: { sortOrder: 'asc' } } },
       });

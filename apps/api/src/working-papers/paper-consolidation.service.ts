@@ -470,21 +470,32 @@ export class PaperConsolidationService {
       }
     }
 
-    const hasPTA1 = sourceData.some(p => p.paperCode === 'PT-A1');
+    // NOTA: "Auditoría Financiera Externa v1.0" no usa la nomenclatura genérica
+    // PT-A1..PT-A5 — el entendimiento del cliente es PT-FIN-A3-KC (no "PT-A1"),
+    // y no existe una "Matriz RMM" dedicada (PT-A5) en esta plantilla; A-06B
+    // (PT-STRAT) cubre la estrategia global pero no está vinculado como fuente
+    // de A-07 en el grafo. Mantener también los códigos legacy PT-A1/PT-A5 en el
+    // check por si algún encargo antiguo (plantilla "Auditoría Externa (NIA/ISA)")
+    // sí los usa.
+    const hasEntendimiento = sourceData.some(p => p.paperCode === 'PT-FIN-A3-KC' || p.paperCode === 'PT-A1');
     const hasPTA2 = sourceData.some(p => p.paperCode === 'PT-A2');
     const hasPTA4 = sourceData.some(p => p.paperCode === 'PT-A4');
-    const hasPTA5 = sourceData.some(p => p.paperCode === 'PT-A5');
 
     if (paperCode === 'PT-PROG') {
-      return `Eres un experto en auditoría NIA/IAASB. Con los datos de fuente, genera el Programa de Auditoría (PT-PROG) en español.
+      // PT-PROG's real sections (post-rediseño): S1 Objetivo, S2 Alcance/Población/
+      // Aserciones, S3/S3B/S4 datos puntuales, S5 PROCEDURE_GRID (su propio botón
+      // "Generar con IA", no tocar aquí), S6 Conclusión, S7 Firmas (MATRIX, manual).
+      // Solo generamos S1/S2/S6 — narrativa libre; nunca escribir en S5 ni S7.
+      return `Eres un experto en auditoría NIA/IAASB. Con los datos de fuente, genera el contenido narrativo del Programa de Auditoría (PT-PROG) en español.
 
 DATOS DE FUENTE:
 ${contextLines.join('\n')}
 
 Responde EXCLUSIVAMENTE con un JSON (sin markdown) con estas claves:
 {
-  "S1": "${hasPTA5 ? 'Lista de 10-14 procedimientos de auditoría por área, usando la estrategia RMM de PT-A5: para áreas RMM=ALTO o MUY_ALTO genera procedimientos sustantivos amplios (100% ó muestra grande); para áreas RMM=MODERADO genera mix controles+sustantivos; para áreas RMM=BAJO genera controles + analíticos. Incluye SIEMPRE procedimientos para NIA 240 (reconocimiento de ingresos y management override). Formato: N. [Área]: descripción del procedimiento. [PT-A2][PT-A4][PT-A5]' : 'Lista de 8-12 procedimientos de auditoría específicos, uno por línea con formato N. Procedimiento: descripción. Basado en los riesgos del PT-A2 y materialidad del PT-A4 [PT-A2][PT-A4].'}",
-  "S7": "Notas del auditor: resumen del enfoque de auditoría propuesto, 2 párrafos. ${hasPTA5 ? 'Mencionar nivel RMM global, áreas de mayor atención, estrategia controles vs. sustantivo y cobertura de presunciones NIA 240. [PT-A2][PT-A4][PT-A5]' : 'Incluye citas [PT-A2][PT-A4].'}"
+  "S1": "Objetivo general del programa de auditoría, 2-3 párrafos: (1) alcance general del encargo (áreas/ciclos cubiertos), (2) objetivo referenciando NIA 330, (3) naturaleza del enfoque (sustantivo/mixto/controles) según los riesgos significativos y el nivel de riesgo inherente de PT-A2. Incluye cita [PT-A2]. Máx. 300 palabras.",
+  "S2": "Alcance, población y aserciones relevantes a nivel de encargo, 2-3 párrafos: (1) alcance de las pruebas por área significativa, (2) fuente de datos/población (balance de comprobación, período), (3) aserciones relevantes (Existencia, Integridad, Valuación, Derechos y Obligaciones, Presentación) por tipo de cuenta, referenciando materialidad de PT-A4. Incluye cita [PT-A4]. Máx. 300 palabras.",
+  "S6": "Conclusión general del programa, 1-2 párrafos formales: indica que los procedimientos detallados en la Cédula de Procedimientos y Actividades (S5) responden a los riesgos identificados en PT-A2 y a la materialidad de PT-A4, y que su ejecución y conclusión final quedan sujetas al trabajo de campo. Incluye citas [PT-A2][PT-A4]. Máx. 200 palabras."
 }`;
     }
 
@@ -496,16 +507,16 @@ ${contextLines.join('\n')}
 
 Responde EXCLUSIVAMENTE con un JSON (sin markdown extra) con estas claves:
 {
-  "S2": "${hasPTA1 ? 'Entendimiento del negocio: resumen ejecutivo en 3 párrafos síntesis de PT-A1' : 'Entendimiento del negocio: indica que PT-A1 no está completo y describe los pasos a seguir'}. Incluye cita [PT-A1]. Máx. 350 palabras.",
+  "S2": "${hasEntendimiento ? 'Entendimiento del negocio: resumen ejecutivo en 3 párrafos síntesis del papel de Conocimiento del Cliente y su Entorno (PT-FIN-A3-KC) — usa el contenido real que aparece en DATOS DE FUENTE bajo ese código, no lo trates como no disponible' : 'Entendimiento del negocio: indica que el papel de Conocimiento del Cliente aún no está completo y describe los pasos a seguir'}. Incluye cita [PT-FIN-A3-KC]. Máx. 350 palabras.",
   "S3": "${hasPTA2 ? 'Evaluación del riesgo inherente: 2-3 párrafos con nivel global de RI, riesgos significativos y riesgo de fraude de PT-A2. Incluye presunciones NIA 240 evaluadas.' : 'Evaluación de RI: indica que PT-A2 no está disponible'}. Incluye cita [PT-A2]. Máx. 300 palabras.",
   "S4": "${hasPTA4 ? 'Materialidad NIA 320: 1-2 párrafos con MG, ME, UAE, base y justificación de PT-A4' : 'Materialidad: indica que PT-A4 no está disponible'}. Incluye cita [PT-A4]. Máx. 250 palabras.",
-  "S5": "${hasPTA5 ? 'Enfoque de auditoría basado en Matriz RMM de PT-A5: describe la estrategia por área (áreas con RMM alto → enfoque sustantivo ampliado, áreas con RMM bajo/moderado → mix controles+sustantivo), menciona tratamiento de riesgos significativos y presunciones NIA 240. [PT-A5]' : 'Enfoque de auditoría: describe la estrategia mixta basada en riesgo. Si PT-A5 (Matriz RMM) no está completo, recomendarlo como paso previo.'}. Máx. 200 palabras.",
-  "S8": "Conclusión integral del memorando: 2 párrafos formales que integren entendimiento del negocio, evaluación de riesgos ${hasPTA5 ? '(incluyendo RMM de PT-A5)' : ''} y materialidad para concluir el enfoque de auditoría de '${auditTitle}'. Lenguaje NIA/ISA profesional. Incluye citas [PT-A1][PT-A2][PT-A4]${hasPTA5 ? '[PT-A5]' : ''}."
+  "S5": "Enfoque de auditoría: describe la estrategia mixta basada en riesgo (controles vs. sustantivo) por área, apoyándote en los riesgos significativos y presunciones NIA 240 documentados en PT-A2. Máx. 200 palabras.",
+  "S8": "Conclusión integral del memorando: 2 párrafos formales que integren entendimiento del negocio, evaluación de riesgos y materialidad para concluir el enfoque de auditoría de '${auditTitle}'. Lenguaje NIA/ISA profesional. Incluye citas [PT-FIN-A3-KC][PT-A2][PT-A4]."
 }
 
 INSTRUCCIONES:
 - Redacta en español formal de auditoría (NIA/IAASB)
-- Usa citas [PT-A1], [PT-A2], [PT-A4]${hasPTA5 ? ', [PT-A5]' : ''} al referenciar fuentes
+- Usa citas [PT-FIN-A3-KC], [PT-A2], [PT-A4] al referenciar fuentes — SOLO usa los códigos que efectivamente aparecen en DATOS DE FUENTE arriba, con el contenido real que traen (nunca digas que una fuente "no está disponible" si su bloque aparece en DATOS DE FUENTE)
 - Sé conciso pero completo
 - Solo el JSON, sin texto fuera del objeto`;
   }
@@ -629,7 +640,7 @@ ${claims.join(',\n')}
     auditTitle: string,
   ): SectionMap {
     const now   = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
-    const a1    = sourceData.find(p => p.paperCode === 'PT-A1');
+    const a1    = sourceData.find(p => p.paperCode === 'PT-FIN-A3-KC' || p.paperCode === 'PT-A1');
     const a2    = sourceData.find(p => p.paperCode === 'PT-A2');
     const a4    = sourceData.find(p => p.paperCode === 'PT-A4');
 
@@ -639,7 +650,7 @@ ${claims.join(',\n')}
           .slice(0, 4)
           .map(s => `• ${s.label}: ${this.valToString(s.value).slice(0, 200)}`)
           .join('\n')
-      : 'El papel PT-A1 (Entendimiento del Negocio) aún no ha sido completado.';
+      : 'El papel de Conocimiento del Cliente y su Entorno (PT-FIN-A3-KC) aún no ha sido completado.';
 
     const riConclusion = a2?.sections.find(s => s.sectionKey === 'S8');
     const riLevel      = riConclusion ? this.valToString(riConclusion.value) : 'MODERADO';
@@ -650,23 +661,15 @@ ${claims.join(',\n')}
 
     if (paperCode === 'PT-PROG') {
       return {
-        S1: [
-          '1. Procedimiento: Obtener y revisar el entendimiento del negocio documentado en PT-A1.',
-          '2. Procedimiento: Evaluar el sistema de control interno en las áreas de riesgo significativo identificadas.',
-          '3. Procedimiento: Aplicar pruebas de detalle en saldos de mayor materialidad según PT-A4.',
-          '4. Procedimiento: Verificar la existencia y valuación de activos significativos.',
-          '5. Procedimiento: Evaluar la razonabilidad de estimaciones contables.',
-          '6. Procedimiento: Realizar procedimientos analíticos comparativos.',
-          '7. Procedimiento: Verificar el cumplimiento de obligaciones legales y regulatorias.',
-          '8. Procedimiento: Indagar sobre partes relacionadas y transacciones inusuales.',
-        ].join('\n'),
-        S7: `Enfoque de auditoría para "${auditTitle}": se adoptará un enfoque basado en riesgos [PT-A2] con énfasis en las áreas de mayor riesgo inherente identificadas. Los procedimientos se orientarán a obtener evidencia suficiente y apropiada para las afirmaciones de mayor riesgo [PT-A4].\n\nGenerado automáticamente el ${now}. El auditor debe revisar y ajustar los procedimientos según las circunstancias específicas de la auditoría.`,
+        S1: `Objetivo general del programa de auditoría para "${auditTitle}": conforme a NIA 330, el programa responde a los riesgos de incorrección material identificados en la evaluación de riesgos [PT-A2], aplicando un enfoque combinado de pruebas de controles y procedimientos sustantivos proporcional al nivel de riesgo de cada área.\n\nGenerado automáticamente el ${now}. El auditor debe revisar y ajustar según las circunstancias específicas de la auditoría.`,
+        S2: `El alcance de las pruebas cubre las áreas y saldos significativos de los estados financieros, con la población y período definidos por cada cédula sumaria (B-01 a B-06). Las aserciones relevantes (Existencia, Integridad, Valuación, Derechos y Obligaciones, Presentación) se evalúan por tipo de cuenta conforme a NIA 315 Rev. 2019, referenciando la materialidad de ejecución establecida en [PT-A4].`,
+        S6: `Conclusión general: los procedimientos detallados en la Cédula de Procedimientos y Actividades (S5) responden a los riesgos identificados en [PT-A2] y a la materialidad definida en [PT-A4]. Su ejecución y conclusión final quedan sujetas a la evidencia obtenida en el trabajo de campo.\n\nGenerado automáticamente el ${now}.`,
       };
     }
 
     // PT-MEMO
     return {
-      S2: `Con base en el PT-A1 [PT-A1], se obtuvo el siguiente entendimiento del negocio para la auditoría "${auditTitle}":\n\n${a1Bullets}\n\nEl auditor ha obtenido comprensión suficiente del entorno operativo, regulatorio y de sistemas de la entidad para planificar adecuadamente los procedimientos de auditoría conforme a las NIA.`,
+      S2: `Con base en el papel de Conocimiento del Cliente y su Entorno [PT-FIN-A3-KC], se obtuvo el siguiente entendimiento del negocio para la auditoría "${auditTitle}":\n\n${a1Bullets}\n\nEl auditor ha obtenido comprensión suficiente del entorno operativo, regulatorio y de sistemas de la entidad para planificar adecuadamente los procedimientos de auditoría conforme a las NIA.`,
 
       S3: `La evaluación del riesgo inherente [PT-A2] para la auditoría "${auditTitle}" concluye en un nivel de riesgo inherente global: **${riLevel}**.\n\nSe han identificado áreas de riesgo significativo que requieren procedimientos específicos conforme a NIA 315. El equipo de auditoría aplicará un enfoque basado en riesgos, asignando mayor cobertura a las áreas de riesgo alto e incorporando procedimientos para los riesgos de fraude identificados (NIA 240).`,
 
@@ -679,7 +682,7 @@ ${claims.join(',\n')}
         'Los importes anteriores constituyen la referencia para la identificación de errores materiales durante la ejecución.',
       ].filter(Boolean).join('\n'),
 
-      S8: `Con base en el entendimiento del negocio [PT-A1], la evaluación de riesgo inherente (${riLevel}) [PT-A2] y los parámetros de materialidad establecidos [PT-A4], el equipo de auditoría concluye que la planificación de "${auditTitle}" es adecuada y proporciona una base razonable para la ejecución.\n\nEl enfoque combina pruebas de controles en áreas de menor riesgo con procedimientos sustantivos reforzados en áreas de riesgo significativo, en conformidad con NIA/IAASB. Generado automáticamente el ${now}. El auditor debe revisar y validar este párrafo antes de la aprobación del memorando.`,
+      S8: `Con base en el entendimiento del negocio [PT-FIN-A3-KC], la evaluación de riesgo inherente (${riLevel}) [PT-A2] y los parámetros de materialidad establecidos [PT-A4], el equipo de auditoría concluye que la planificación de "${auditTitle}" es adecuada y proporciona una base razonable para la ejecución.\n\nEl enfoque combina pruebas de controles en áreas de menor riesgo con procedimientos sustantivos reforzados en áreas de riesgo significativo, en conformidad con NIA/IAASB. Generado automáticamente el ${now}. El auditor debe revisar y validar este párrafo antes de la aprobación del memorando.`,
     };
   }
 
@@ -738,8 +741,9 @@ ${claims.join(',\n')}
 
     // ── PT-PROG ───────────────────────────────────────────────────────────
     if (paperCode === 'PT-PROG') {
-      if (sections.S1) parts.push(`### Procedimientos de Auditoría\n\n${str(sections.S1)}`);
-      if (sections.S7) parts.push(`\n\n### Notas del Auditor\n\n${str(sections.S7)}`);
+      if (sections.S1) parts.push(`### Objetivo del Programa\n\n${str(sections.S1)}`);
+      if (sections.S2) parts.push(`\n\n### Alcance, Población y Aserciones\n\n${str(sections.S2)}`);
+      if (sections.S6) parts.push(`\n\n### Conclusión General\n\n${str(sections.S6)}`);
       return parts.join('');
     }
 

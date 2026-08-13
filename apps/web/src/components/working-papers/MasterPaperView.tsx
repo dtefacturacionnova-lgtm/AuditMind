@@ -208,11 +208,15 @@ export function MasterPaperView({
     ? sections.filter(s => s.isStale).length
     : staleCount;
 
-  // Find key sections for structured display
-  const S2 = sections.find(s => s.sectionKey === 'S2');
-  const S3 = sections.find(s => s.sectionKey === 'S3');
-  const S4 = sections.find(s => s.sectionKey === 'S4');
-  const S8 = sections.find(s => s.sectionKey === 'S8');
+  // Find key sections for structured display — S2/S3/S4/S8 with these exact labels
+  // (Entendimiento/RI/Materialidad/Conclusión) is PT-MEMO's shape specifically. Other
+  // MASTER papers (e.g. PT-PROG, whose S1/S2/S6 mean something else entirely) fall
+  // through to the plain "narrative" view instead of being mislabeled under this card set.
+  const isMemoShape = !paperCode || paperCode === 'PT-MEMO';
+  const S2 = isMemoShape ? sections.find(s => s.sectionKey === 'S2') : undefined;
+  const S3 = isMemoShape ? sections.find(s => s.sectionKey === 'S3') : undefined;
+  const S4 = isMemoShape ? sections.find(s => s.sectionKey === 'S4') : undefined;
+  const S8 = isMemoShape ? sections.find(s => s.sectionKey === 'S8') : undefined;
   const hasSectionContent = [S2, S3, S4, S8].some(s => s && valueToText(s.value).length > 10);
 
   return (
@@ -288,9 +292,9 @@ export function MasterPaperView({
             ))}
           </div>
           <div className="text-center">
-            <p className="text-sm text-blue-700 font-semibold">El agente IA está consolidando el memorando…</p>
+            <p className="text-sm text-blue-700 font-semibold">El agente IA está consolidando el papel…</p>
             <p className="text-xs text-gray-400 mt-1">
-              Analizando PT-A1, PT-A2 y PT-A4 · Generando narrativa con Gemini
+              Analizando papeles fuente vinculados · Generando narrativa con Gemini
             </p>
           </div>
           <p className="text-[10px] text-gray-300">
@@ -372,8 +376,8 @@ export function MasterPaperView({
               Este papel maestro aún no tiene contenido consolidado
             </p>
             <p className="text-sm text-gray-400 max-w-sm">
-              Haz clic en &ldquo;Consolidar&rdquo; para que la IA sintetice los datos de PT-A1, PT-A2
-              y PT-A4 en un Memorando de Planificación completo.
+              Haz clic en &ldquo;Consolidar&rdquo; para que la IA sintetice los papeles fuente
+              vinculados en un documento completo.
             </p>
           </div>
           <button

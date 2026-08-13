@@ -1182,8 +1182,16 @@ export default function WpDetailPage() {
   const isLocked = wp.status === 'SIGNED_OFF' || wp.status === 'CLOSED' || wp.status === 'ARCHIVED';
 
   // Determine which tabs to show
-  const isFilePaper     = wpKind === 'FILE';
-  const showSectionsTab = wpKind === 'SMART';
+  const isFilePaper = wpKind === 'FILE';
+  // B-01..B-06 (lead schedules) already get a full custom editing UI inside
+  // MasterPaperView (LeadScheduleMasterView) — the generic Secciones tab would
+  // just duplicate that. Other MASTER papers (PT-MEMO, PT-PROG…) have no other
+  // way to edit their manual fields (team/hours, schedule, procedure grid,
+  // conclusion, signatures) — MasterPaperView only shows the AI-consolidated
+  // narrative, read-only. Those need the Secciones tab as their real editing surface.
+  const LEAD_SCHEDULE_PAPER_CODES = ['PT-FIN-B01', 'PT-FIN-B02', 'PT-FIN-B03', 'PT-FIN-B04', 'PT-FIN-B05', 'PT-FIN-B06'];
+  const isLeadSchedulePaper = !!wp.paperCode && LEAD_SCHEDULE_PAPER_CODES.includes(wp.paperCode);
+  const showSectionsTab = wpKind === 'SMART' || (wpKind === 'MASTER' && !isLeadSchedulePaper);
   const showGraphTab    = wpKind === 'SMART' || wpKind === 'MASTER';
 
   const allTabs: { key: TabKey; label: string; icon: React.ElementType; show: boolean }[] = [
@@ -1753,8 +1761,8 @@ export default function WpDetailPage() {
             </div>
           )}
 
-          {/* ── Tab: Secciones (SMART) ── */}
-          {effectiveTab === 'sections' && wpKind === 'SMART' && (
+          {/* ── Tab: Secciones (SMART, y MASTER sin vista dedicada) ── */}
+          {effectiveTab === 'sections' && showSectionsTab && (
             <div className="space-y-4">
               <SmartPaperSections
                 paperId={params.id}

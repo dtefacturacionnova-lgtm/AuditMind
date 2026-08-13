@@ -538,7 +538,8 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
     section.fieldType === 'AUDIT_REPORTS' ||
     section.fieldType === 'CHECKLIST' ||
     section.fieldType === 'COMMUNICATION_LOG' ||
-    section.fieldType === 'PROCEDURE_GRID';
+    section.fieldType === 'PROCEDURE_GRID' ||
+    section.fieldType === 'ACCOUNT_SCHEDULE';
 
   const isAutoAndLocked = section.isAutoFilled && !overriding && !editing;
 

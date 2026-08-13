@@ -1875,6 +1875,7 @@ export class AuditTemplatesService {
           },
           { ref: 'D',   name: 'Cierre de la Auditoría',                   phaseType: 'REPORTING' },
           { ref: 'E',   name: 'Informe del Auditor Independiente',         phaseType: 'REPORTING' },
+          { ref: 'F',   name: 'Cierre del Encargo y Control de Calidad',   phaseType: 'REPORTING' },
         ],
         papers: [
           // ── APE — Archivo Permanente ─────────────────────────────────────
@@ -2037,6 +2038,16 @@ export class AuditTemplatesService {
           { code: 'E-02', indexSection: 'E',
             title: 'Informe Final con Firma Digital del Socio',
             type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },
+          // ── F — Cierre del Encargo y Control de Calidad ─────────────────────
+          { code: 'F-01', indexSection: 'F',
+            title: 'Lista de Verificación de Cumplimiento',
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART, paperCode: 'PT-COMP-CHK' },
+          { code: 'F-02', indexSection: 'F',
+            title: 'Revisión del Control de Calidad del Encargo',
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART, paperCode: 'PT-EQR' },
+          { code: 'F-03', indexSection: 'F',
+            title: 'Asuntos para Revisiones Futuras',
+            type: WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.SMART, paperCode: 'PT-CARRYFWD' },
         ],
         // ─── Grafo de conocimiento — Auditoría Financiera Externa v1.0 ──────
         links: [

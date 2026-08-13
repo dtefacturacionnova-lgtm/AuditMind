@@ -72,6 +72,9 @@ export const PAPER_CATALOGUE: PaperCatalogueEntry[] = [
   { code: 'PT-NIA265',       group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'MASTER', type: 'CLOSURE_CONCLUSION',  title: 'Carta de Debilidades de CI (NIA 265)',                             hint: 'Consolida deficiencias de PT-A3/PT-ITGC, componentes COSO, seguimiento año anterior' },
   { code: 'PT-NIA260',       group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'CLOSURE_CONCLUSION',  title: 'Comunicación con Gobierno Corporativo (NIA 260)',                  hint: 'Responsabilidades del auditor, hallazgos significativos, independencia, representación' },
   { code: 'PT-FIN-DICT',     group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'MASTER', type: 'CLOSURE_CONCLUSION',  title: 'Dictamen del Auditor — NIA 700-720',                               hint: 'Opinión auto-fill desde B-08, KAMs NIA 701, párrafo de énfasis' },
+  { code: 'PT-COMP-CHK',     group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'CLOSURE_CONCLUSION',  title: 'Lista de Verificación de Cumplimiento',                            hint: 'Gate final antes de fechar el informe — checklist ítem por ítem contra los papeles de cierre' },
+  { code: 'PT-EQR',          group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'CLOSURE_CONCLUSION',  title: 'Revisión del Control de Calidad del Encargo',                     hint: 'Revisor independiente del equipo — procedimientos, confirmaciones, conclusión' },
+  { code: 'PT-CARRYFWD',     group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'CLOSURE_CONCLUSION',  title: 'Asuntos para Revisiones Futuras',                                  hint: 'Notas de traspaso al próximo ejercicio — no es trabajo pendiente del actual' },
 
   // ── Auditoría Fiscal SV (NACOT) ───────────────────────────────────────────
   { code: 'PT-FISC-INDEP',   group: 'Auditoría Fiscal SV (NACOT)', wpKind: 'SMART',  type: 'PLANNING_UNDERSTANDING', title: 'Independencia Fiscal (NACOT Sec. 2)',             hint: '5 amenazas CIEPC, servicios prohibidos, salvaguardas' },
@@ -105,7 +108,7 @@ const _EXT_FIN = [
   'PT-ADJ-RECLASIF', 'PT-DIFS', 'PT-CIRC', 'PT-FIN-C-SUST', 'PT-NIA550', 'PT-NIA570',
   'PT-FIN-C-ESTIM', 'PT-FIN-C-GEN',
   'PT-REP580', 'PT-NIA560', 'PT-NIA265', 'PT-NIA260',
-  'PT-FIN-DICT',
+  'PT-FIN-DICT', 'PT-COMP-CHK', 'PT-EQR', 'PT-CARRYFWD',
   ..._HALL,
 ];
 

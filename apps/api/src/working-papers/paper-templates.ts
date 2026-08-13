@@ -4328,7 +4328,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:   true,
       isAutoFilled: false,
       sortOrder:    1,
-      aiHint:       'Columnas: # | Descripción de la deficiencia | Componente COSO (ver abajo) | Proceso/Área afectada | Severidad (DEFICIENCIA_MENOR / DEFICIENCIA_SIGNIFICATIVA / DEFICIENCIA_MATERIAL) | Riesgo potencial | Cuentas EEFF afectadas | Ref. PT origen (C-xx / A-04 / A-04b). Clasificación por severidad NIA 265: DEFICIENCIA_MENOR: no interfiere significativamente con la detección o prevención de incorrecciones — comunicar solo a la administración. DEFICIENCIA_SIGNIFICATIVA: importante para la supervisión financiera — comunicar a la administración Y al TCWG (D-05). DEFICIENCIA_MATERIAL: alta probabilidad de incorrección material no prevenida — comunicar urgentemente al TCWG e impacta la opinión. Componentes COSO: (1) ENTORNO_CONTROL (P1-P5): ética, supervisión, estructura, competencia, responsabilidad. (2) EVALUACION_RIESGOS (P6-P9): objetivos, riesgos, fraude, cambios. (3) ACTIVIDADES_CONTROL (P10-P12): controles, CGTI, políticas. (4) INFORMACION_COMUNICACION (P13-P15): calidad de info, canales internos, comunicación externa. (5) MONITOREO (P16-P17): evaluaciones continuas, comunicación de deficiencias.',
+      aiHint:       'Columnas: # | Descripción de la deficiencia | Componente COSO (ver abajo) | Proceso/Área afectada | Severidad (DEFICIENCIA_MENOR / DEFICIENCIA_SIGNIFICATIVA / DEFICIENCIA_MATERIAL) | Riesgo potencial | Recomendación | Cuentas EEFF afectadas | Ref. PT origen (C-xx / A-04 / A-04b). Recomendación: acción concreta que la administración debería tomar para subsanar la deficiencia — no repita la descripción, indique el remedio (ej. "Implementar conciliación mensual de X" en vez de "falta conciliación de X"). Clasificación por severidad NIA 265: DEFICIENCIA_MENOR: no interfiere significativamente con la detección o prevención de incorrecciones — comunicar solo a la administración. DEFICIENCIA_SIGNIFICATIVA: importante para la supervisión financiera — comunicar a la administración Y al TCWG (D-05). DEFICIENCIA_MATERIAL: alta probabilidad de incorrección material no prevenida — comunicar urgentemente al TCWG e impacta la opinión. Componentes COSO: (1) ENTORNO_CONTROL (P1-P5): ética, supervisión, estructura, competencia, responsabilidad. (2) EVALUACION_RIESGOS (P6-P9): objetivos, riesgos, fraude, cambios. (3) ACTIVIDADES_CONTROL (P10-P12): controles, CGTI, políticas. (4) INFORMACION_COMUNICACION (P13-P15): calidad de info, canales internos, comunicación externa. (5) MONITOREO (P16-P17): evaluaciones continuas, comunicación de deficiencias.',
     },
     {
       sectionKey:   'S2',
@@ -4385,6 +4385,151 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isAutoFilled: false,
       sortOrder:    6,
       aiHint:       'Esta evaluación determina el alcance de las pruebas sustantivas: SCI_EFECTIVO → puede reducir pruebas sustantivas. SCI_CON_DEFICIENCIAS_SIGNIFICATIVAS → ampliar pruebas en áreas afectadas. SCI_CON_DEFICIENCIA_MATERIAL → pruebas sustantivas extensas e independientes del CI; evaluar énfasis en el informe. Preparado por: ___ | Revisado por: ___ | Fecha: ___.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-COMP-CHK: Lista de Verificación de Cumplimiento (cierre del encargo)
+  // Usado por F-01. Gate final antes de fechar el informe del auditor:
+  // confirma que cada paso de cierre exigido por las NIA relevantes (NIA 220,
+  // 230, 450, 580, 700...) fue completado y documentado en su papel respectivo.
+  // No es un resumen — es una confirmación puntual, ítem por ítem.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-COMP-CHK': [
+    {
+      sectionKey:   'S1',
+      label:        'Lista de Verificación de Cumplimiento',
+      description:  'Confirmación final, ítem por ítem, de que cada paso de cierre exigido por las NIA relevantes fue completado antes de emitir el informe del auditor.',
+      fieldType:    FieldType.CHECKLIST,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    1,
+      options: [
+        'Carta de representación de la administración (D-01) completa, firmada y con cronograma de diferencias no ajustadas',
+        'Archivos permanente (APE), de correspondencia y fiscal revisados y actualizados, con seguimiento de asuntos abiertos',
+        'Todos los papeles de trabajo, confirmaciones y programas firmados como concluidos y revisados',
+        'Evidencia de auditoría suficiente y adecuada confirmada mediante revisión de archivo y debate con el equipo',
+        'Acuerdo documentado del cliente sobre los asientos de ajuste propuestos (B-09)',
+        'Conclusiones documentadas sobre la resolución de todo asunto importante y punto pendiente',
+        'Entendimiento documentado de la razonabilidad comercial de operaciones significativas inusuales o fuera del curso ordinario',
+        'Procedimientos analíticos finales ejecutados — revisión analítica global (B-07)',
+        'Revisión de Control de Calidad del Encargo completada, si aplica (F-02)',
+        'Observaciones de la Carta de Debilidades de Control Interno concluidas (D-02)',
+        'Comunicaciones necesarias cursadas al órgano director / TCWG (D-05)',
+        'Evaluada cualquier demora significativa en la aprobación de los EEFF y su posible relación con negocio en marcha',
+        'Revisión de hechos posteriores completada (D-03)',
+        'Objetivos de las NIA relevantes cumplidos para la planificación y ejecución de la auditoría',
+        'Consultas realizadas documentadas, con sus conclusiones implementadas',
+        'Amenazas a la independencia o la objetividad del equipo tratadas conforme a los requisitos éticos',
+        'Reconfirmada la competencia, independencia e integridad de la firma para aceptar/continuar el encargo',
+        'Estados financieros preparados conforme al marco de información financiera aplicable, con revelaciones adecuadas',
+        'Políticas contables adecuadas y consistentes; estimaciones contables de la gerencia evaluadas como razonables',
+        'Seguridad razonable obtenida de que los EEFF están libres de incorrección material, individual o en conjunto',
+        'Carta de representación firmada recibida antes de la fecha de firma del informe del auditor',
+        'Informe del auditor (E-01) firmado y fechado',
+        'CONCL:Expediente completo — listo para la firma del informe del auditor',
+        'CONCL:Pendientes menores documentados — no bloquean la emisión, seguimiento en F-03',
+        'CONCL:Pendientes significativos — la emisión del informe debe esperar su resolución',
+      ],
+      aiHint: 'NO marque "Sí" salvo que encuentre evidencia clara del ítem en el papel referenciado entre paréntesis — este es un gate de cierre, no un resumen narrativo; ante la duda deje el ítem sin marcar para que el auditor lo confirme manualmente. En Notas de cada ítem, anote la referencia puntual (ej. "D-01 firmado 23/01/2026") y, si corresponde, las iniciales y fecha de quien verificó. Objetivo del auditor (NIA 200/220/230): obtener garantía razonable de que los EEFF están libres de incorrección material y documentar el archivo de forma que un auditor experimentado sin conexión previa con el encargo entienda el trabajo realizado.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-EQR: Revisión del Control de Calidad del Encargo (Engagement Quality
+  // Review). Usado por F-02. Revisor INDEPENDIENTE del equipo de trabajo —
+  // nunca el mismo auditor, revisor o socio que firma el encargo.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-EQR': [
+    {
+      sectionKey:   'S1',
+      label:        '¿Aplica Revisión de Control de Calidad del Encargo?',
+      description:  'Determinación de si este encargo requiere un revisor de control de calidad independiente del equipo.',
+      fieldType:    FieldType.ENUM_SELECT,
+      options:      ['APLICA_ENTIDAD_INTERES_PUBLICO', 'APLICA_POR_RIESGO_O_COMPLEJIDAD', 'APLICA_POR_POLITICA_DE_LA_FIRMA', 'NO_APLICA'],
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    1,
+      aiHint:       'Conforme ISQM 1/NIA 220: la revisión de control de calidad del encargo es obligatoria para auditorías de entidades de interés público y para cualquier encargo que la política de la firma designe como de alto riesgo o alta complejidad. Si NO_APLICA, el resto del papel puede dejarse sin completar — documente igual el motivo en S2.',
+    },
+    {
+      sectionKey:   'S2',
+      label:        'Justificación',
+      description:  'Motivo por el que este encargo requiere (o no) la revisión de control de calidad.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    2,
+      aiHint:       'Explique en 1-2 párrafos el motivo de la determinación de S1 — ej. "la entidad cotiza en bolsa", "riesgo de fraude alto identificado en PT-A2", "primer año del encargo", o "encargo de riesgo bajo/rutinario, no aplica por política de la firma".',
+    },
+    {
+      sectionKey:   'S3',
+      label:        'Datos del Revisor de Control de Calidad',
+      description:  'Identificación del revisor independiente y confirmación de que no participó en el encargo.',
+      fieldType:    FieldType.TEXT,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    3,
+      aiHint:       'Nombre completo del revisor, calificación profesional/matrícula, y confirmación expresa de que no formó parte del equipo de trabajo de este encargo ni participó en las decisiones del equipo.',
+    },
+    {
+      sectionKey:   'S4',
+      label:        'Procedimientos del Revisor',
+      description:  'Registro de los procedimientos de revisión ejecutados sobre los criterios significativos del equipo.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'Columnas: Procedimiento | Aplica (Sí/No) | Ref/Comentarios | Iniciales y fecha. Procedimientos estándar (una fila por cada uno): 1. Debatir los asuntos significativos con el socio del encargo. 2. Revisar los estados financieros u otro asunto para información. 3. Revisar la documentación de auditoría seleccionada en relación con los criterios significativos tomados por el equipo y las conclusiones alcanzadas. 4. Evaluar los riesgos significativos identificados (PT-A2) y las respuestas del equipo. 5. Evaluar los criterios tomados respecto de la materialidad (PT-A4) y de los riesgos significativos. 6. Evaluar la disposición de los errores identificados, corregidos y no corregidos (B-08/B-09). 7. Evaluar los asuntos a informar a la administración, al TCWG y, cuando corresponda, a otras partes. 8. Evaluar las conclusiones alcanzadas en la formulación del informe y determinar si el informe propuesto (E-01) es adecuado. Solo para entidades que cotizan en bolsa, agregue además: 9. Considerar si la evaluación de independencia de la firma realizada por el equipo es suficiente y está completa. 10. Determinar si se hicieron las consultas adecuadas sobre asuntos con diferencias de opinión u otros asuntos difíciles o contenciosos. 11. Determinar si la documentación seleccionada refleja el trabajo realizado y respalda las conclusiones alcanzadas.',
+    },
+    {
+      sectionKey:   'S5',
+      label:        'Confirmaciones del Revisor',
+      description:  'Auto-confirmaciones del revisor sobre su independencia, calificación y la completitud de su revisión.',
+      fieldType:    FieldType.CHECKLIST,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    5,
+      options: [
+        'Realicé una evaluación objetiva de los criterios significativos tomados por el equipo y las conclusiones alcanzadas en la formulación del informe',
+        'Cuento con las calificaciones técnicas, la experiencia y la autoridad necesarias para desempeñarme como revisor de control de calidad',
+        'Mi objetividad no se ve comprometida',
+        'No estuve involucrado en consultas sobre asuntos cuya naturaleza y extensión son significativas para este encargo',
+        'No tomé decisiones por el equipo de trabajo ni participé en la ejecución del encargo',
+        'Completé mi revisión en la fecha del informe del auditor o con anterioridad a ella',
+        'No tengo conocimiento de asuntos irresueltos que me lleven a creer que los criterios y las conclusiones del equipo no fueron adecuados',
+        'CONCL:Aprobado sin observaciones',
+        'CONCL:Aprobado con observaciones resueltas antes de la firma del informe',
+        'CONCL:Pendiente de resolución — el informe no debe fecharse',
+      ],
+      aiHint: 'Estas son declaraciones en primera persona del revisor de control de calidad — solo debe marcarlas él, nunca el equipo de trabajo. Si la conclusión es "Pendiente de resolución", el informe del auditor (E-01) NO debe fecharse hasta que esta revisión se complete.',
+    },
+    {
+      sectionKey:   'S6',
+      label:        'Notas y Comentarios Adicionales',
+      description:  'Cualquier observación adicional del revisor no capturada en las secciones anteriores.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    6,
+      aiHint:       'Documente aquí cualquier diferencia de opinión entre el revisor y el socio del encargo, y cómo se resolvió conforme a las políticas y procedimientos de la firma. Si no hay nada que agregar, deje en blanco.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-CARRYFWD: Asuntos para Revisiones Futuras. Usado por F-03. Notas de
+  // traspaso al próximo ejercicio — NUNCA trabajo pendiente del actual.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-CARRYFWD': [
+    {
+      sectionKey:   'S1',
+      label:        'Asuntos para el Próximo Ejercicio',
+      description:  'Puntos a trasladar al equipo del próximo ejercicio: cambios de contacto, mejoras de metodología, oportunidades identificadas. NO debe usarse para registrar trabajo pendiente o incompleto del ejercicio actual — eso corresponde documentarlo y resolverlo en el papel de trabajo respectivo antes del cierre.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    1,
+      aiHint:       'Columnas: # | Punto | Ref/Comentarios | Resolución sugerida para el próximo ejercicio. Ejemplos válidos: nuevo contacto del cliente, cambio de domicilio fiscal, una forma más eficiente de ejecutar una prueba, un sistema nuevo que el cliente planea implementar. Ejemplos NO válidos para este papel: una confirmación bancaria que no llegó a tiempo, un ajuste pendiente de discutir con el cliente, evidencia que falta obtener — esos son trabajo pendiente y deben resolverse en el papel correspondiente antes del cierre, no trasladarse aquí.',
     },
   ],
 

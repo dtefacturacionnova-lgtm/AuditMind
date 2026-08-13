@@ -310,6 +310,7 @@ const _EXT_FIN_KEYS = new Set([
   'PT-FIN-B04','PT-FIN-B05','PT-FIN-B06','PT-FIN-B07','PT-FIN-B08','PT-FIN-B09',
   'PT-ADJ-RECLASIF','PT-DIFS','PT-CIRC','PT-FIN-C-SUST','PT-NIA550','PT-NIA570','PT-FIN-C-ESTIM','PT-FIN-C-GEN',
   'PT-REP580','PT-NIA560','PT-NIA265','PT-NIA260','PT-FIN-DICT',
+  'PT-COMP-CHK','PT-EQR','PT-CARRYFWD',
   ..._HALL_KEYS,
 ]);
 const _FISCAL_KEYS    = new Set(['PT-A1','PT-A2','PT-A3','PT-A4','PT-MEMO','PT-PROG','PT-FISC-INDEP','PT-FISC-QC','PT-FISC-ENCARGO','PT-FISC-RISK','PT-FISC-AML','PT-FISC-PT','PT-FISC-ZF','PT-FISC-DICT',..._HALL_KEYS]);
@@ -386,6 +387,10 @@ const AVAILABLE_TEMPLATES = [
   { key: 'PT-NIA560',  label: 'NIA 560 · Eventos Posteriores al Cierre (PT-NIA560)' },
   { key: 'PT-NIA265',  label: 'NIA 265 · Carta de Debilidades de CI (PT-NIA265)' },
   { key: 'PT-NIA260',  label: 'NIA 260 · Comunicación con Gobierno Corporativo (PT-NIA260)' },
+  // ── Cierre del Encargo y Control de Calidad ───────────────────────────────
+  { key: 'PT-COMP-CHK', label: 'Fin.Ext · Lista de Verificación de Cumplimiento (PT-COMP-CHK)' },
+  { key: 'PT-EQR',      label: 'Fin.Ext · Revisión del Control de Calidad del Encargo (PT-EQR)' },
+  { key: 'PT-CARRYFWD', label: 'Fin.Ext · Asuntos para Revisiones Futuras (PT-CARRYFWD)' },
   // ── Pruebas de Ejecución (papers adicionales financieros) ─────────────────
   { key: 'PT-CIRC',        label: 'Fin.Ext · Circularización de CxC NIA 505 (PT-CIRC)'                         },
   { key: 'PT-FIN-C-GEN',   label: 'Fin.Ext · Área / Cuenta Adicional — Sustantiva Genérica (PT-FIN-C-GEN)'   },

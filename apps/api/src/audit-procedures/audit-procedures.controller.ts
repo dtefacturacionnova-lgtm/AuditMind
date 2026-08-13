@@ -42,10 +42,16 @@ class CreateProcedureDto {
   @IsString()
   rmmLevel?: string;
 
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  rmmRiskRef?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  rmmRiskRef?: string;
+  wpRef?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -81,10 +87,16 @@ class UpdateProcedureDto {
   @IsString()
   rmmLevel?: string;
 
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  rmmRiskRef?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  rmmRiskRef?: string;
+  wpRef?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -257,6 +269,24 @@ export class AuditProceduresController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.svc.createProcedure(sectionId, dto, user);
+  }
+
+  @Get('section/:sectionId/audit-papers')
+  @ApiOperation({ summary: 'Listar papeles del encargo para referencia cruzada' })
+  getAuditPapers(
+    @Param('sectionId') sectionId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.getAuditPapersForSection(sectionId, user);
+  }
+
+  @Get('section/:sectionId/audit-risks')
+  @ApiOperation({ summary: 'Listar riesgos registrados en el encargo (PT-A2 S5) para vincular' })
+  getAuditRisks(
+    @Param('sectionId') sectionId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.getAuditRisksForSection(sectionId, user);
   }
 
   @Post('section/:sectionId/ai-suggest')

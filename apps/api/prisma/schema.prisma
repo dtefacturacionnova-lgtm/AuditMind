@@ -2085,7 +2085,8 @@ model AuditProcedure {
   assertions     String[]   // ["EXI","VAL","COM","OCC","COM","EXA","COR","CLA","PRE"]
   significantRisk Boolean   @default(false) // ISA 330 §18 — flag binario
   rmmLevel       String?    // "BAJO" | "MODERADO" | "ALTO" | "MUY_ALTO"
-  rmmRiskRef     String?    // Ref a fila de PT-A5 (ISA 330 §28c)
+  rmmRiskRef     String[]   @default([]) // Refs a filas de riesgo (ej. PT-A2::S5::2) — puede haber varios (ISA 330 §28c)
+  wpRef          String?    // Referencia cruzada al papel de trabajo donde se ejecuta/documenta este procedimiento
   conclusionText String?
   status         ProcStatus @default(PENDING)
   sortOrder      Int        @default(0)

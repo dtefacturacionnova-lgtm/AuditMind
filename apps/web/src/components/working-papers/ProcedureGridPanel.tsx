@@ -5,8 +5,10 @@ import {
   ChevronDown, ChevronRight, Plus, Trash2, Save, X,
   CheckCircle2, Clock, AlertCircle, MinusCircle, Loader2,
   ShieldAlert, FileText, Sparkles, Paperclip, Upload,
+  Link2, Target, UserCheck,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { useUser } from '@/hooks/useUser';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,8 +35,10 @@ interface AuditStep {
   extent?:          string;
   population?:      string;
   performedByName?: string;
+  performedById?:   string;
   datePerformed?:   string;
   reviewedByName?:  string;
+  reviewedById?:    string;
   dateReviewed?:    string;
   wpRef?:           string;
   resultDescription?: string;
@@ -56,12 +60,17 @@ interface AuditProcedure {
   assertions:     string[];
   significantRisk: boolean;
   rmmLevel?:      string;
-  rmmRiskRef?:    string;
+  rmmRiskRef?:    string[];
+  wpRef?:         string;
   conclusionText?: string;
   status:         ProcStatus;
   sortOrder:      number;
   steps:          AuditStep[];
 }
+
+// Picker data — fetched once per section, shared by the procedure and every step form.
+interface AuditPaperRef { id: string; code: string; paperCode: string | null; title: string }
+interface AuditRiskRef  { ref: string; label: string }
 
 // ─── Labels & colors ─────────────────────────────────────────────────────────
 
@@ -93,6 +102,169 @@ const RMM_COLOR: Record<string, string> = {
   ALTO: 'bg-orange-100 text-orange-700',
   MUY_ALTO: 'bg-red-100 text-red-700',
 };
+
+// ─── Referenciar papel de trabajo (referencia cruzada) ─────────────────────────
+// Un solo papel por procedimiento/actividad — reemplaza el campo de texto libre
+// "W/P Reference" por un selector de los papeles ya creados en el mismo encargo.
+
+function PaperRefPicker({
+  value, papers, onChange, readOnly,
+}: {
+  value?: string; papers: AuditPaperRef[]; onChange: (code: string | undefined) => void; readOnly?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = papers.find(p => p.code === value || p.paperCode === value);
+
+  if (readOnly) {
+    return value ? (
+      <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-700">
+        <Link2 className="w-2.5 h-2.5" /> {selected ? `${selected.code} — ${selected.title}` : value}
+      </span>
+    ) : null;
+  }
+
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+      >
+        <Link2 className="w-3.5 h-3.5" />
+        {selected ? `${selected.code} — ${selected.title}`.slice(0, 40) : value || 'Referenciar papel'}
+      </button>
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange(undefined)}
+          className="ml-1 text-gray-300 hover:text-red-500"
+          title="Quitar referencia"
+        >
+          <X className="w-3 h-3 inline" />
+        </button>
+      )}
+      {open && (
+        <div className="absolute z-20 left-0 top-full mt-1 w-72 max-h-64 overflow-y-auto bg-white rounded-lg border border-gray-200 shadow-lg p-1">
+          {papers.length === 0 && (
+            <p className="text-xs text-gray-400 px-2 py-2">No hay otros papeles en este encargo.</p>
+          )}
+          {papers.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => { onChange(p.code); setOpen(false); }}
+              className="w-full text-left px-2 py-1.5 rounded-md hover:bg-indigo-50 transition-colors"
+            >
+              <span className="text-xs font-mono font-semibold text-indigo-700">{p.code}</span>
+              <span className="text-xs text-gray-600 ml-1.5">{p.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Vincular riesgo(s) (PT-A2 S5) ──────────────────────────────────────────────
+// Guarda la referencia a la fila de riesgo, nunca su descripción — si el auditor
+// edita el texto del riesgo después, el vínculo sigue apuntando a la fila correcta.
+
+function RiskRefPicker({
+  value, risks, onChange, readOnly,
+}: {
+  value: string[]; risks: AuditRiskRef[]; onChange: (refs: string[]) => void; readOnly?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedLabels = value.map(ref => risks.find(r => r.ref === ref)?.label ?? ref);
+
+  if (readOnly) {
+    return value.length > 0 ? (
+      <div className="flex flex-wrap gap-1">
+        {selectedLabels.map((label, i) => (
+          <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded">
+            <Target className="w-2.5 h-2.5" /> {label}
+          </span>
+        ))}
+      </div>
+    ) : null;
+  }
+
+  function toggle(ref: string) {
+    onChange(value.includes(ref) ? value.filter(r => r !== ref) : [...value, ref]);
+  }
+
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-red-400 hover:text-red-600 transition-colors"
+      >
+        <Target className="w-3.5 h-3.5" />
+        {value.length > 0 ? `${value.length} riesgo(s) vinculado(s)` : 'Vincular riesgo'}
+      </button>
+      {open && (
+        <div className="absolute z-20 left-0 top-full mt-1 w-80 max-h-64 overflow-y-auto bg-white rounded-lg border border-gray-200 shadow-lg p-1">
+          {risks.length === 0 && (
+            <p className="text-xs text-gray-400 px-2 py-2">
+              No hay riesgos registrados en PT-A2 (Evaluación y Respuesta a Riesgos) para este encargo.
+            </p>
+          )}
+          {risks.map(r => (
+            <label
+              key={r.ref}
+              className="flex items-start gap-2 px-2 py-1.5 rounded-md hover:bg-red-50 cursor-pointer transition-colors"
+            >
+              <input
+                type="checkbox"
+                className="mt-0.5 w-3.5 h-3.5 text-red-600 rounded"
+                checked={value.includes(r.ref)}
+                onChange={() => toggle(r.ref)}
+              />
+              <span className="text-xs text-gray-700">{r.label}</span>
+            </label>
+          ))}
+          <div className="border-t border-gray-100 mt-1 pt-1 px-2 pb-1">
+            <button type="button" onClick={() => setOpen(false)} className="text-[11px] text-indigo-600 hover:underline">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+      {selectedLabels.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {selectedLabels.map((label, i) => (
+            <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded">
+              {label}
+              <button type="button" onClick={() => toggle(value[i])} className="hover:text-red-900">
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Asignarme (Realizado por / Revisado por) ──────────────────────────────────
+// Los campos de responsable no se escriben a mano — el botón toma el usuario que
+// tiene la sesión abierta y la fecha de hoy, evitando que alguien firme por otro.
+
+function AssignMeButton({ onAssign, label }: { onAssign: (name: string, id: string, date: string) => void; label: string }) {
+  const { user } = useUser();
+  if (!user) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onAssign(user.name, user.id, new Date().toISOString().slice(0, 10))}
+      className="flex items-center gap-1 text-[10px] text-indigo-600 hover:text-indigo-800 px-1.5 py-0.5 rounded hover:bg-indigo-50 transition-colors"
+      title={`Asignarme como ${label.toLowerCase()} con la fecha de hoy`}
+    >
+      <UserCheck className="w-3 h-3" /> Asignarme
+    </button>
+  );
+}
 
 function ProcStatusBadge({ status }: { status: ProcStatus }) {
   const base = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium';
@@ -134,12 +306,13 @@ const ASSERTIONS_LIST = ['EXI', 'VAL', 'COM', 'OCC', 'EXA', 'COR', 'CLA', 'PRE',
 interface StepFormProps {
   initial?: Partial<AuditStep>;
   procedureRef: string;
+  papers: AuditPaperRef[];
   onSave: (data: Partial<AuditStep>) => void;
   onCancel: () => void;
   saving: boolean;
 }
 
-function StepForm({ initial, procedureRef, onSave, onCancel, saving }: StepFormProps) {
+function StepForm({ initial, procedureRef, papers, onSave, onCancel, saving }: StepFormProps) {
   const [form, setForm] = useState<Partial<AuditStep>>({
     refNumber:    initial?.refNumber    ?? `${procedureRef}-A`,
     description:  initial?.description  ?? '',
@@ -150,8 +323,10 @@ function StepForm({ initial, procedureRef, onSave, onCancel, saving }: StepFormP
     extent:       initial?.extent       ?? '',
     population:   initial?.population   ?? '',
     performedByName: initial?.performedByName ?? '',
+    performedById:   initial?.performedById   ?? '',
     datePerformed:   initial?.datePerformed   ?? '',
     reviewedByName:  initial?.reviewedByName  ?? '',
+    reviewedById:    initial?.reviewedById    ?? '',
     dateReviewed:    initial?.dateReviewed    ?? '',
     wpRef:           initial?.wpRef           ?? '',
     resultDescription: initial?.resultDescription ?? '',
@@ -293,45 +468,58 @@ function StepForm({ initial, procedureRef, onSave, onCancel, saving }: StepFormP
         </div>
       </div>
 
-      {/* Realizado por / Revisado por */}
+      {/* Realizado por / Revisado por — no se escriben a mano: el botón "Asignarme"
+          toma el usuario de la sesión y la fecha de hoy; el campo queda atenuado. */}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Realizado por (ISA 230)</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Realizado por (ISA 230)</label>
+            <AssignMeButton
+              label="realizado por"
+              onAssign={(name, id, date) => setForm(prev => ({ ...prev, performedByName: name, performedById: id, datePerformed: date }))}
+            />
+          </div>
           <input
-            className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            disabled
+            className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-500"
             value={form.performedByName ?? ''}
-            onChange={e => set('performedByName', e.target.value)}
-            placeholder="Nombre del auditor"
+            placeholder="Sin asignar"
           />
         </div>
         <div>
           <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha realizado</label>
           <input
+            disabled
             type="date"
-            className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-500"
             value={form.datePerformed ? form.datePerformed.split('T')[0] : ''}
-            onChange={e => set('datePerformed', e.target.value)}
           />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Revisado por</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Revisado por</label>
+            <AssignMeButton
+              label="revisado por"
+              onAssign={(name, id, date) => setForm(prev => ({ ...prev, reviewedByName: name, reviewedById: id, dateReviewed: date }))}
+            />
+          </div>
           <input
-            className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            disabled
+            className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-500"
             value={form.reviewedByName ?? ''}
-            onChange={e => set('reviewedByName', e.target.value)}
-            placeholder="Nombre del revisor"
+            placeholder="Sin asignar"
           />
         </div>
         <div>
           <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Fecha revisión</label>
           <input
+            disabled
             type="date"
-            className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-500"
             value={form.dateReviewed ? form.dateReviewed.split('T')[0] : ''}
-            onChange={e => set('dateReviewed', e.target.value)}
           />
         </div>
       </div>
@@ -339,13 +527,14 @@ function StepForm({ initial, procedureRef, onSave, onCancel, saving }: StepFormP
       {/* W/P Ref / Conclusión */}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">W/P Reference (ISA 230)</label>
-          <input
-            className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            value={form.wpRef ?? ''}
-            onChange={e => set('wpRef', e.target.value)}
-            placeholder="AR-03-01"
-          />
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Referencia cruzada (ISA 230)</label>
+          <div className="mt-1">
+            <PaperRefPicker
+              value={form.wpRef}
+              papers={papers}
+              onChange={code => set('wpRef', code ?? '')}
+            />
+          </div>
         </div>
         <div>
           <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Conclusión (ISA 330 §28d)</label>
@@ -454,18 +643,22 @@ function StepForm({ initial, procedureRef, onSave, onCancel, saving }: StepFormP
 
 interface ProcFormProps {
   initial?: Partial<AuditProcedure>;
+  papers: AuditPaperRef[];
+  risks: AuditRiskRef[];
   onSave: (data: Partial<AuditProcedure>) => void;
   onCancel: () => void;
   saving: boolean;
 }
 
-function ProcForm({ initial, onSave, onCancel, saving }: ProcFormProps) {
+function ProcForm({ initial, papers, risks, onSave, onCancel, saving }: ProcFormProps) {
   const [form, setForm] = useState<Partial<AuditProcedure>>({
     refNumber:    initial?.refNumber    ?? '',
     description:  initial?.description  ?? '',
     assertions:   initial?.assertions   ?? [],
     significantRisk: initial?.significantRisk ?? false,
     rmmLevel:     initial?.rmmLevel     ?? '',
+    rmmRiskRef:   initial?.rmmRiskRef   ?? [],
+    wpRef:        initial?.wpRef        ?? '',
     status:       initial?.status       ?? 'PENDING',
   });
 
@@ -553,6 +746,22 @@ function ProcForm({ initial, onSave, onCancel, saving }: ProcFormProps) {
         </label>
       </div>
 
+      {/* Referencia cruzada + riesgos vinculados */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Referencia cruzada</label>
+          <div className="mt-1">
+            <PaperRefPicker value={form.wpRef} papers={papers} onChange={code => set('wpRef', code ?? '')} />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Riesgos relacionados (ISA 330 §28c)</label>
+          <div className="mt-1">
+            <RiskRefPicker value={form.rmmRiskRef ?? []} risks={risks} onChange={refs => set('rmmRiskRef', refs)} />
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-end gap-2 pt-1">
         <button
           type="button"
@@ -579,6 +788,7 @@ function ProcForm({ initial, onSave, onCancel, saving }: ProcFormProps) {
 
 interface StepRowProps {
   step: AuditStep;
+  papers: AuditPaperRef[];
   onUpdate: (stepId: string, data: Partial<AuditStep>) => Promise<void>;
   onDelete: (stepId: string) => Promise<void>;
   onAddEvidence: (stepId: string, file: File) => Promise<StepEvidence>;
@@ -586,7 +796,7 @@ interface StepRowProps {
   readOnly: boolean;
 }
 
-function StepRow({ step, onUpdate, onDelete, onAddEvidence, onDeleteEvidence, readOnly }: StepRowProps) {
+function StepRow({ step, papers, onUpdate, onDelete, onAddEvidence, onDeleteEvidence, readOnly }: StepRowProps) {
   const [editing,       setEditing]    = useState(false);
   const [saving,        setSaving]     = useState(false);
   const [uploading,     setUploading]  = useState(false);
@@ -629,6 +839,7 @@ function StepRow({ step, onUpdate, onDelete, onAddEvidence, onDeleteEvidence, re
         <StepForm
           initial={step}
           procedureRef={step.refNumber.split('-').slice(0, -1).join('-')}
+          papers={papers}
           onSave={handleSave}
           onCancel={() => setEditing(false)}
           saving={saving}
@@ -766,6 +977,8 @@ function StepRow({ step, onUpdate, onDelete, onAddEvidence, onDeleteEvidence, re
 
 interface ProcCardProps {
   proc: AuditProcedure;
+  papers: AuditPaperRef[];
+  risks: AuditRiskRef[];
   onUpdateProc:    (id: string, data: Partial<AuditProcedure>) => Promise<void>;
   onDeleteProc:    (id: string) => Promise<void>;
   onCreateStep:    (procedureId: string, data: Partial<AuditStep>) => Promise<void>;
@@ -777,7 +990,7 @@ interface ProcCardProps {
 }
 
 function ProcCard({
-  proc, onUpdateProc, onDeleteProc, onCreateStep, onUpdateStep, onDeleteStep,
+  proc, papers, risks, onUpdateProc, onDeleteProc, onCreateStep, onUpdateStep, onDeleteStep,
   onAddEvidence, onDeleteEvidence, readOnly,
 }: ProcCardProps) {
   const [open,       setOpen]      = useState(false);
@@ -817,6 +1030,8 @@ function ProcCard({
       <div className="border border-indigo-300 rounded-xl overflow-hidden">
         <ProcForm
           initial={proc}
+          papers={papers}
+          risks={risks}
           onSave={handleUpdateProc}
           onCancel={() => setEditProc(false)}
           saving={saving}
@@ -889,9 +1104,11 @@ function ProcCard({
         )}
       </div>
 
-      {/* Steps panel */}
+      {/* Steps panel — sangrado respecto al procedimiento padre, para que se lea
+          visualmente como hijo de éste (una actividad siempre cuelga de un
+          procedimiento, nunca existe por sí sola). */}
       {open && (
-        <div className="border-t border-gray-100 bg-gray-50 px-3 py-3">
+        <div className="border-t border-gray-100 bg-gray-50 px-3 py-3 pl-8 border-l-2 border-l-indigo-100 ml-3">
           {proc.steps.length === 0 && !addingStep ? (
             <p className="text-xs text-gray-400 italic py-2 text-center">
               Sin actividades. Haz clic en "+ Actividad" para agregar.
@@ -902,6 +1119,7 @@ function ProcCard({
                 <StepRow
                   key={step.id}
                   step={step}
+                  papers={papers}
                   onUpdate={onUpdateStep}
                   onDelete={onDeleteStep}
                   onAddEvidence={onAddEvidence}
@@ -916,6 +1134,7 @@ function ProcCard({
             <div className="mt-2">
               <StepForm
                 procedureRef={proc.refNumber}
+                papers={papers}
                 onSave={handleAddStep}
                 onCancel={() => setAddStep(false)}
                 saving={saving}
@@ -944,6 +1163,8 @@ interface ProcedureGridPanelProps {
 
 export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGridPanelProps) {
   const [procedures, setProcedures] = useState<AuditProcedure[]>([]);
+  const [papers,     setPapers]     = useState<AuditPaperRef[]>([]);
+  const [risks,      setRisks]      = useState<AuditRiskRef[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
   const [addingProc, setAddProc]    = useState(false);
@@ -964,6 +1185,15 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
   }, [sectionId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Picker data (referencia cruzada + riesgos vinculables) — solo para lectura/edición,
+  // no bloquea la carga de procedimientos si fallan.
+  useEffect(() => {
+    apiClient.get<AuditPaperRef[]>(`/audit-procedures/section/${sectionId}/audit-papers`)
+      .then(setPapers).catch(() => setPapers([]));
+    apiClient.get<AuditRiskRef[]>(`/audit-procedures/section/${sectionId}/audit-risks`)
+      .then(setRisks).catch(() => setRisks([]));
+  }, [sectionId]);
 
   // ─── Procedure ops
 
@@ -1045,7 +1275,7 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
   // ─── AI suggest
 
   const handleAiSuggest = async () => {
-    if (!confirm('¿Generar procedimientos con IA basados en el contexto de riesgo (PT-A5)? Se agregarán a los procedimientos existentes.')) return;
+    if (!confirm('¿Generar procedimientos con IA basados en el contexto de riesgo del encargo? Se agregarán a los procedimientos existentes.')) return;
     setAiLoading(true);
     try {
       const created = await apiClient.post<AuditProcedure[]>(`/audit-procedures/section/${sectionId}/ai-suggest`, {});
@@ -1116,6 +1346,8 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
           <ProcCard
             key={proc.id}
             proc={proc}
+            papers={papers}
+            risks={risks}
             onUpdateProc={handleUpdateProc}
             onDeleteProc={handleDeleteProc}
             onCreateStep={handleCreateStep}
@@ -1131,6 +1363,8 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
       {/* Add procedure form or buttons */}
       {addingProc ? (
         <ProcForm
+          papers={papers}
+          risks={risks}
           onSave={handleCreateProc}
           onCancel={() => setAddProc(false)}
           saving={saving}
@@ -1148,7 +1382,7 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
             onClick={handleAiSuggest}
             disabled={aiLoading}
             className="flex items-center justify-center gap-2 px-4 py-3 text-sm text-violet-700 bg-violet-50 border-2 border-dashed border-violet-300 rounded-xl hover:bg-violet-100 hover:border-violet-500 disabled:opacity-60 transition-colors"
-            title="Generar procedimientos automáticamente con IA basados en PT-A5"
+            title="Generar procedimientos automáticamente con IA basados en el contexto de riesgo del encargo"
           >
             {aiLoading
               ? <Loader2 className="w-4 h-4 animate-spin" />

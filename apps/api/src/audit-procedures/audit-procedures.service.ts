@@ -15,7 +15,8 @@ export interface CreateProcedureDto {
   assertions?:    string[];
   significantRisk?: boolean;
   rmmLevel?:      string;
-  rmmRiskRef?:    string;
+  rmmRiskRef?:    string[];
+  wpRef?:         string;
   sortOrder?:     number;
 }
 
@@ -25,7 +26,8 @@ export interface UpdateProcedureDto {
   assertions?:    string[];
   significantRisk?: boolean;
   rmmLevel?:      string;
-  rmmRiskRef?:    string;
+  rmmRiskRef?:    string[];
+  wpRef?:         string;
   conclusionText?: string;
   status?:        ProcStatus;
   sortOrder?:     number;
@@ -147,7 +149,8 @@ export class AuditProceduresService {
         assertions:     dto.assertions  ?? [],
         significantRisk: dto.significantRisk ?? false,
         rmmLevel:       dto.rmmLevel    ?? null,
-        rmmRiskRef:     dto.rmmRiskRef  ?? null,
+        rmmRiskRef:     dto.rmmRiskRef  ?? [],
+        wpRef:          dto.wpRef       ?? null,
         sortOrder:      dto.sortOrder   ?? count,
       },
       include: { steps: true },
@@ -165,6 +168,7 @@ export class AuditProceduresService {
         ...(dto.significantRisk !== undefined && { significantRisk: dto.significantRisk }),
         ...(dto.rmmLevel       !== undefined && { rmmLevel:       dto.rmmLevel }),
         ...(dto.rmmRiskRef     !== undefined && { rmmRiskRef:     dto.rmmRiskRef }),
+        ...(dto.wpRef          !== undefined && { wpRef:          dto.wpRef }),
         ...(dto.conclusionText !== undefined && { conclusionText: dto.conclusionText }),
         ...(dto.status         !== undefined && { status:         dto.status }),
         ...(dto.sortOrder      !== undefined && { sortOrder:      dto.sortOrder }),
@@ -176,6 +180,56 @@ export class AuditProceduresService {
   async deleteProcedure(id: string, user: AuthUser) {
     await this.assertProcedureAccess(id, user);
     return this.prisma.auditProcedure.delete({ where: { id } });
+  }
+
+  // ─── Cross-reference pickers (wpRef / rmmRiskRef) ─────────────────────────
+
+  /** List the other working papers of this section's audit, for the "referenciar papel" picker. */
+  async getAuditPapersForSection(sectionId: string, user: AuthUser) {
+    const section = await this.assertSectionAccess(sectionId, user);
+    const paper = await this.prisma.workingPaper.findUnique({
+      where:  { id: section.paperId },
+      select: { auditId: true },
+    });
+    if (!paper) throw new NotFoundException('Papel no encontrado');
+
+    const papers = await this.prisma.workingPaper.findMany({
+      where:   { auditId: paper.auditId },
+      select:  { id: true, code: true, paperCode: true, title: true },
+      orderBy: { code: 'asc' },
+    });
+    return papers.map(p => ({ id: p.id, code: p.code, paperCode: p.paperCode, title: p.title }));
+  }
+
+  /**
+   * List risk rows registered in the audit's risk-assessment paper (PT-A2 S5 —
+   * "Riesgos Específicos Identificados"), for the "vincular riesgo" picker.
+   * Each returned item carries a stable `ref` (paperCode::sectionKey::rowIndex) to
+   * store on the procedure — never the risk's own description, which can be edited
+   * later without silently breaking the link.
+   */
+  async getAuditRisksForSection(sectionId: string, user: AuthUser) {
+    const section = await this.assertSectionAccess(sectionId, user);
+    const paper = await this.prisma.workingPaper.findUnique({
+      where:  { id: section.paperId },
+      select: { auditId: true },
+    });
+    if (!paper) throw new NotFoundException('Papel no encontrado');
+
+    const riskPaper = await this.prisma.workingPaper.findFirst({
+      where:   { auditId: paper.auditId, paperCode: 'PT-A2' },
+      include: { sections: { where: { sectionKey: 'S5' } } },
+    });
+    const rows = riskPaper?.sections[0]?.value;
+    if (!Array.isArray(rows)) return [];
+
+    return (rows as Array<Record<string, unknown>>).map((row, idx) => {
+      const entries = Object.entries(row);
+      const descEntry = entries.find(([k]) => /descrip|riesgo/i.test(k)) ?? entries[0];
+      const areaEntry = entries.find(([k]) => /ciclo|área|area/i.test(k));
+      const label = [descEntry?.[1], areaEntry?.[1]].filter(Boolean).join(' — ') || `Fila ${idx + 1}`;
+      return { ref: `PT-A2::S5::${idx}`, label: String(label).slice(0, 200) };
+    });
   }
 
   // ─── Steps CRUD ────────────────────────────────────────────────────────────

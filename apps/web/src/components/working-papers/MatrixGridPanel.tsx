@@ -263,9 +263,9 @@ function colStyle(col: string): { minWidth: string; maxWidth: string } {
 // "autoajuste al contenido": lo que no cabe a lo ancho, se ve completo a lo alto.
 
 function AutoGrowCell({
-  value, onChange, readOnly, placeholder,
+  value, onChange, readOnly, placeholder, onFocus,
 }: {
-  value: string; onChange: (v: string) => void; readOnly?: boolean; placeholder?: string;
+  value: string; onChange: (v: string) => void; readOnly?: boolean; placeholder?: string; onFocus?: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const resize = () => {
@@ -285,6 +285,7 @@ function AutoGrowCell({
       value={value}
       onChange={e => onChange(e.target.value)}
       onInput={resize}
+      onFocus={onFocus}
       rows={1}
       placeholder={placeholder}
       className="w-full text-xs text-gray-800 bg-transparent border-b border-transparent
@@ -329,6 +330,9 @@ export function MatrixGridPanel({
   const [uploadingRowId, setUploadingRowId] = useState<string | null>(null);
   const [rowErrors,      setRowErrors]      = useState<Record<string, string>>({});
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Excel-style crosshair: the row and column of the last-focused cell stay highlighted
+  // (not cleared on blur) so the auditor keeps a visual anchor while scanning a wide grid.
+  const [selectedCell, setSelectedCell] = useState<{ row: number; col: string } | null>(null);
 
   function toggleSort(col: string) {
     if (sortColumn !== col) { setSortColumn(col); setSortDir('asc'); return; }
@@ -647,7 +651,13 @@ export function MatrixGridPanel({
               <thead>
                 <tr className="bg-gray-50">
                   {columns.map(col => (
-                    <th key={col} style={colStyle(col)} className="px-3 py-2 text-left font-semibold text-gray-600 border-b border-gray-200 group/col align-top">
+                    <th
+                      key={col}
+                      style={colStyle(col)}
+                      className={`px-3 py-2 text-left font-semibold border-b border-gray-200 group/col align-top transition-colors ${
+                        selectedCell?.col === col ? 'bg-blue-100/70 text-blue-800' : 'text-gray-600'
+                      }`}
+                    >
                       {editingCol === col ? (
                         <input
                           autoFocus
@@ -727,17 +737,36 @@ export function MatrixGridPanel({
                 ).map(({ row, i }) => {
                   const rowId = row['_id'] ?? '';
                   const rowError = rowErrors[rowId];
+                  const isSelectedRow = selectedCell?.row === i;
                   return (
-                  <tr key={i} className="group border-b border-gray-100 last:border-0 hover:bg-blue-50/20">
-                    {columns.map(col => (
-                      <td key={col} style={colStyle(col)} className="px-3 py-2 align-top">
+                  <tr
+                    key={i}
+                    className={`group border-b border-gray-100 last:border-0 hover:bg-blue-50/20 transition-colors ${
+                      isSelectedRow ? 'bg-blue-50/60' : i % 2 === 1 ? 'bg-gray-50/60' : ''
+                    }`}
+                  >
+                    {columns.map(col => {
+                      const isSelectedCol = selectedCell?.col === col;
+                      const isSelectedCell = isSelectedRow && isSelectedCol;
+                      return (
+                      <td
+                        key={col}
+                        style={colStyle(col)}
+                        className={`px-3 py-2 align-top transition-colors ${
+                          isSelectedCell
+                            ? 'bg-blue-100/80 ring-1 ring-inset ring-blue-300'
+                            : isSelectedCol ? 'bg-blue-50/50' : ''
+                        }`}
+                      >
                         <AutoGrowCell
                           value={row[col] ?? ''}
                           onChange={v => updateCell(i, col, v)}
                           readOnly={readOnly}
+                          onFocus={() => setSelectedCell({ row: i, col })}
                         />
                       </td>
-                    ))}
+                      );
+                    })}
                     {enableRowExtras && (
                       <td className="px-2 py-2 align-top text-center">
                         <SeverityDot severity={computeRowSeverity(row, columns)} />

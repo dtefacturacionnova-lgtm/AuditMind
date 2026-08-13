@@ -1083,7 +1083,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   1,
-      aiHint:      'Para cada principio registra: evidencia revisada, fortalezas observadas y debilidades detectadas. Califica cada uno como EFECTIVO, DEBILIDAD SIGNIFICATIVA o DEBILIDAD MATERIAL.',
+      aiHint:      'Columnas: Principio | Preguntas Clave de Evaluación | Evidencia y Observaciones | Calificación (Efectivo / Parcialmente Efectivo / Inefectivo). Genere EXACTAMENTE 5 filas, en este orden:\n(1) Principio="P1 — Compromiso con la integridad y los valores éticos", Preguntas="¿Existe un código de ética/conducta formal y comunicado a todo el personal? ¿La alta dirección da el ejemplo (tone at the top)? ¿Existe un proceso para evaluar el cumplimiento y abordar desviaciones con medidas disciplinarias?"\n(2) Principio="P2 — Independencia y supervisión del órgano de gobierno", Preguntas="¿La Junta Directiva / Comité de Auditoría es independiente de la administración? ¿Posee experiencia y competencia relevante para supervisar el sistema de control interno? ¿Supervisa activamente el diseño y funcionamiento del SCI y la gestión de riesgos?"\n(3) Principio="P3 — Estructura organizacional, autoridad y responsabilidad", Preguntas="¿Existe un organigrama formal con líneas de reporte claras? ¿Las autoridades y responsabilidades están definidas y delegadas apropiadamente? ¿Existe segregación de funciones adecuada en los procesos clave?"\n(4) Principio="P4 — Compromiso con la competencia del personal", Preguntas="¿Existen políticas de reclutamiento, capacitación y evaluación de desempeño? ¿El personal clave posee las competencias necesarias para sus funciones? ¿Existen planes de sucesión para posiciones críticas?"\n(5) Principio="P5 — Exigencia de responsabilidad por el control interno", Preguntas="¿Se establecen métricas o incentivos de desempeño ligados al control interno? ¿Existen consecuencias documentadas por incumplimiento de responsabilidades de control? ¿La presión por resultados se gestiona sin incentivar el fraude?"\nEn Evidencia y Observaciones documente lo revisado (entrevistas, documentos, walkthroughs) y en Calificación evalúe cada principio individualmente — esto alimenta la calificación consolidada de S1_EVAL.',
     },
     {
       sectionKey:  'S1_EVAL',
@@ -1105,7 +1105,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   3,
-      aiHint:      'Vincula P7 con el PT-A2 de riesgos inherentes. Para P8 considera el triángulo ACFE. Para P9 documenta cambios en personal clave, sistemas, regulación o modelo de negocio.',
+      aiHint:      'Columnas: Principio | Preguntas Clave de Evaluación | Evidencia y Observaciones | Calificación (Efectivo / Parcialmente Efectivo / Inefectivo). Genere EXACTAMENTE 4 filas, en este orden:\n(1) Principio="P6 — Especificación de objetivos claros", Preguntas="¿Los objetivos operativos, de reporte y de cumplimiento están claramente definidos y documentados? ¿Los objetivos de reporte financiero son consistentes con el marco contable aplicable y la materialidad establecida en PT-A4?"\n(2) Principio="P7 — Identificación y análisis de riesgos", Preguntas="¿Existe un proceso formal de identificación de riesgos a nivel entidad y a nivel de proceso/transacción? ¿Se analiza la probabilidad e impacto de los riesgos identificados? ¿Participan los niveles de gestión adecuados? Vincule este principio con los riesgos inherentes documentados en PT-A2."\n(3) Principio="P8 — Evaluación del riesgo de fraude", Preguntas="¿Se evalúan los tres elementos del triángulo de fraude — presión, oportunidad, racionalización (ACFE)? ¿Se considera tanto el fraude en la información financiera como la apropiación indebida de activos? ¿Existen controles específicos frente al riesgo de sobrepaso de controles por la gerencia (management override, NIA 240.31-33)?"\n(4) Principio="P9 — Identificación y evaluación de cambios significativos", Preguntas="¿Existe un proceso para identificar cambios en el entorno externo (regulatorio, económico, competitivo)? ¿Se evalúan cambios en el modelo de negocio, liderazgo clave o sistemas de información? ¿Estos cambios se comunican oportunamente y se ajustan los controles en consecuencia?"\nEn Evidencia y Observaciones documente lo revisado y en Calificación evalúe cada principio individualmente — esto alimenta la calificación consolidada de S2_EVAL.',
     },
     {
       sectionKey:  'S2_EVAL',
@@ -1127,7 +1127,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   5,
-      aiHint:      'Para P11 evalúa: acceso lógico, respaldo de datos, gestión de cambios TI, segregación de funciones en sistemas. Para P12 verifica que los controles estén documentados en manuales vigentes.',
+      aiHint:      'Columnas: Principio | Preguntas Clave de Evaluación | Evidencia y Observaciones | Calificación (Efectivo / Parcialmente Efectivo / Inefectivo). Genere EXACTAMENTE 3 filas, en este orden:\n(1) Principio="P10 — Selección y desarrollo de actividades de control", Preguntas="¿Los controles están diseñados en respuesta directa a los riesgos evaluados en el Componente 2? ¿Existe una combinación adecuada de controles preventivos y detectivos? ¿Existe segregación de funciones apropiada en los procesos clave (autorización, registro, custodia)?"\n(2) Principio="P11 — Controles generales sobre tecnología (CGTI)", Preguntas="¿Existen controles de acceso lógico apropiados (usuarios, contraseñas, privilegios)? ¿Hay un proceso formal de gestión de cambios a sistemas y aplicaciones? ¿Existen respaldos periódicos de datos y un plan de continuidad/recuperación de TI?"\n(3) Principio="P12 — Implementación mediante políticas y procedimientos", Preguntas="¿Las políticas y procedimientos de control están documentados, aprobados y vigentes? ¿Se asignan responsabilidades claras para la ejecución de cada control? ¿Se revisa periódicamente su vigencia y efectividad operativa?"\nEn Evidencia y Observaciones documente lo revisado (incluyendo hallazgos de PT-ITGC para P11) y en Calificación evalúe cada principio individualmente — esto alimenta la calificación consolidada de S3_EVAL.',
     },
     {
       sectionKey:  'S3_EVAL',
@@ -1149,7 +1149,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   7,
-      aiHint:      'Para P13 evalúa la calidad y oportunidad de la información financiera y operativa. Para P15 incluye canales de denuncia (whistleblowing), comunicación con auditores externos y reguladores.',
+      aiHint:      'Columnas: Principio | Preguntas Clave de Evaluación | Evidencia y Observaciones | Calificación (Efectivo / Parcialmente Efectivo / Inefectivo). Genere EXACTAMENTE 3 filas, en este orden:\n(1) Principio="P13 — Uso de información relevante y de calidad", Preguntas="¿La información financiera y operativa generada es oportuna, completa y precisa? ¿Están identificadas las fuentes de datos internas y externas relevantes para el control? ¿Los sistemas de información soportan la generación de reportes confiables?"\n(2) Principio="P14 — Comunicación interna efectiva", Preguntas="¿Existen canales formales para comunicar información de control interno a todos los niveles de la organización? ¿Existe un mecanismo de denuncia (línea ética / whistleblowing) accesible y confidencial? ¿La comunicación fluye tanto en sentido ascendente como descendente?"\n(3) Principio="P15 — Comunicación con terceros", Preguntas="¿Se comunica oportunamente con reguladores, auditores externos y otras partes relevantes? ¿Existen canales para que clientes y proveedores reporten inquietudes o irregularidades? ¿La comunicación externa cumple con los requerimientos legales y contractuales aplicables?"\nEn Evidencia y Observaciones documente lo revisado y en Calificación evalúe cada principio individualmente — esto alimenta la calificación consolidada de S4_EVAL.',
     },
     {
       sectionKey:  'S4_EVAL',
@@ -1171,7 +1171,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   9,
-      aiHint:      'Para P16 considera el rol de auditoría interna, comité de auditoría y autoevaluaciones de control (CRSA). Para P17 verifica que las deficiencias se reporten a la autoridad competente y se corrijan.',
+      aiHint:      'Columnas: Principio | Preguntas Clave de Evaluación | Evidencia y Observaciones | Calificación (Efectivo / Parcialmente Efectivo / Inefectivo). Genere EXACTAMENTE 2 filas, en este orden:\n(1) Principio="P16 — Evaluaciones continuas e independientes", Preguntas="¿Existe una función de auditoría interna u otra evaluación independiente del SCI? ¿Se realizan autoevaluaciones de control (CRSA — control self-assessment)? ¿La frecuencia y el alcance de las evaluaciones son proporcionales al riesgo de cada área?"\n(2) Principio="P17 — Evaluación y comunicación oportuna de deficiencias", Preguntas="¿Las deficiencias identificadas se documentan y clasifican por severidad (menor/significativa/material)? ¿Se comunican oportunamente a la administración y, cuando corresponde, al órgano de gobierno (TCWG)? ¿Existe seguimiento formal de la implementación de las acciones correctivas comprometidas?"\nEn Evidencia y Observaciones documente lo revisado y en Calificación evalúe cada principio individualmente — esto alimenta la calificación consolidada de S5_EVAL.',
     },
     {
       sectionKey:  'S5_EVAL',
@@ -1211,11 +1211,11 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       sectionKey:  'S8',
       label:       'Deficiencias Comunicables al Management',
       description: 'Deficiencias significativas y materiales que deben ser comunicadas según NIA 265 / NOGAI.',
-      fieldType:   FieldType.TEXTAREA,
+      fieldType:   FieldType.MATRIX,
       isRequired:  false,
       isAutoFilled:false,
       sortOrder:   13,
-      aiHint:      'Para cada deficiencia: descripción, componente COSO afectado, clasificación (significativa/material), riesgo resultante, recomendación de corrección. Las materiales van en carta de gerencia obligatoriamente.',
+      aiHint:      'Columnas: # | Descripción de la Deficiencia | Componente COSO Afectado | Clasificación (Significativa / Material) | Riesgo Resultante | Recomendación. Una fila por cada deficiencia identificada durante la evaluación de S1-S5. Clasificación: SIGNIFICATIVA si afecta un principio de forma relevante pero aislada; MATERIAL si compromete la confiabilidad global del componente. Las deficiencias materiales deben trasladarse obligatoriamente a la carta de gerencia (D-02 / PT-NIA265). Recomendación: acción concreta para subsanar, no repita la descripción.',
     },
     {
       sectionKey:  'S9',

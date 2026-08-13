@@ -970,7 +970,11 @@ export function ProcedureGridPanel({ sectionId, readOnly = false }: ProcedureGri
   const handleCreateProc = async (data: Partial<AuditProcedure>) => {
     setSaving(true);
     try {
-      const created = await apiClient.post<AuditProcedure>(`/audit-procedures/section/${sectionId}`, data);
+      // status isn't accepted by the create DTO — new procedures always start
+      // PENDING server-side; ProcForm's local state includes it only because the
+      // same form component is reused for editing (where status IS updatable).
+      const { status: _status, ...payload } = data;
+      const created = await apiClient.post<AuditProcedure>(`/audit-procedures/section/${sectionId}`, payload);
       setProcedures(prev => [...prev, created]);
       setAddProc(false);
     } catch (e: unknown) {

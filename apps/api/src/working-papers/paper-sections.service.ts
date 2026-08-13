@@ -545,7 +545,8 @@ INSTRUCCIONES DE REDACCIÓN:
 - Responde EXCLUSIVAMENTE con el contenido sugerido para esta sección — sin preámbulo, sin disclaimer.
 - Español formal de auditoría. Tono profesional, conciso.
 - Si la sección requiere un listado, usa viñetas o numeración.
-- Si requiere narrativa, usa 2-4 párrafos máximo.
+- Si el contenido cubre varios temas o normas distintas (ej. "Negocio en marcha (NIA 570): ... Fraude (NIA 240): ... Partes relacionadas (NIA 550): ..."), escribe SIEMPRE cada tema como una viñeta separada por su propia línea ("- Tema (NIA XXX): contenido"), nunca como un párrafo corrido que los mezcle todos.
+- Si requiere narrativa de un solo tema, usa 2-4 párrafos máximo.
 - NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto.
 - Si necesitas referenciar otra sección o papel, usa el formato [CODE::SXX].
 - Si la Instrucción o el Hint IA mencionan más de un área/norma (ej. "Área X: ... Área Y: ..." — plantillas genéricas reutilizadas para varios temas), usa EXCLUSIVAMENTE la guía que corresponda al título real de este papel ("${ctx.paperTitle}") e ignora por completo la de las otras áreas mencionadas.

@@ -870,7 +870,7 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
 
             {/* All text-like */}
             {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG', 'PROCEDURE_GRID'].includes(section.fieldType) && (
-              <p className={`text-sm leading-relaxed ${
+              <p className={`text-sm leading-relaxed whitespace-pre-wrap ${
                 effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== ''
                   ? 'text-gray-700'
                   : 'text-gray-400 italic'

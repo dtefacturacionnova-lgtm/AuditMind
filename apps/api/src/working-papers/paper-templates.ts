@@ -693,7 +693,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  false,
       isAutoFilled:false,
       sortOrder:   9,
-      aiHint:      'Documenta cualquier aspecto que requiere atención especial durante la ejecución.',
+      aiHint:      'Documenta cualquier aspecto que requiere atención especial durante la ejecución. Un tema por viñeta ("- Negocio en marcha (NIA 570): ..."), nunca un párrafo corrido que mezcle varios temas — típicamente: negocio en marcha (NIA 570), fraude (NIA 240), partes relacionadas (NIA 550), hechos posteriores (NIA 560).',
     },
     {
       sectionKey:  'S10',

@@ -9,6 +9,10 @@ export interface PaperCatalogueEntry {
   type:   string;
   group:  string;
   hint:   string;
+  // true = esta plantilla se reutiliza a propósito varias veces en el mismo
+  // encargo (ej. PT-FIN-C-SUST sirve a 11 áreas C-XX distintas) — el selector
+  // de "nuevo papel" no debe deshabilitarla solo porque ya se usó una vez.
+  reusable?: boolean;
 }
 
 export const PAPER_CATALOGUE: PaperCatalogueEntry[] = [
@@ -30,7 +34,7 @@ export const PAPER_CATALOGUE: PaperCatalogueEntry[] = [
   { code: 'PT-DIFS',  group: 'General — Planificación y Riesgo', wpKind: 'MASTER', type: 'CLOSURE_CONCLUSION',     title: 'Cédula de Diferencias y Ajustes',                               hint: 'Acumula excepciones, semáforo vs materialidad, propuesta de opinión' },
 
   // ── Seguimiento de Hallazgos — Universal ──────────────────────────────────
-  { code: 'PT-HALL',      group: 'Seguimiento de Hallazgos', wpKind: 'SMART',  type: 'FINDING',           title: 'Hallazgo Individual (5 elementos + seguimiento de respuesta)',               hint: 'Condición, Criterio, Causa, Efecto, Recomendación + comunicación y estado de cierre' },
+  { code: 'PT-HALL',      group: 'Seguimiento de Hallazgos', wpKind: 'SMART',  type: 'FINDING',           title: 'Hallazgo Individual (5 elementos + seguimiento de respuesta)',               hint: 'Condición, Criterio, Causa, Efecto, Recomendación + comunicación y estado de cierre', reusable: true },
   { code: 'PT-HALL-COM',  group: 'Seguimiento de Hallazgos', wpKind: 'SMART',  type: 'CLOSURE_CONCLUSION', title: 'Comunicación Formal de Hallazgos al Cliente/Área',                           hint: 'Carta estructurada: hallazgos, plazo de respuesta, acuse de recibo, estado' },
   { code: 'PT-HALL-RESP', group: 'Seguimiento de Hallazgos', wpKind: 'MASTER', type: 'CLOSURE_CONCLUSION', title: 'Cédula de Seguimiento — Respondidos, Vigentes y Vencidos',                   hint: 'Consolida todos los hallazgos: tasa de respuesta, vencidos con escalamiento, impacto en informe' },
 
@@ -54,8 +58,8 @@ export const PAPER_CATALOGUE: PaperCatalogueEntry[] = [
   { code: 'PT-FIN-B06', group: 'Auditoría Financiera — Cédulas Sumarias', wpKind: 'MASTER', type: 'SUBSTANTIVE_TEST', title: 'Cédula Sumaria — Resultados (P&G)',       hint: 'Ingresos, costos, gastos, márgenes, EBITDA vs sector' },
 
   // ── Auditoría Financiera — Pruebas y Cierre ───────────────────────────────
-  { code: 'PT-FIN-C-GEN',    group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Área / Cuenta Adicional — Prueba Sustantiva Genérica (comodín)',   hint: 'Para cuentas sin papel C-XX específico: NIIF 16, derivados, biológicos, criptoactivos, etc.' },
-  { code: 'PT-FIN-C-SUST',   group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Prueba Sustantiva por Área (genérico)',                            hint: 'Diferencias auto-push a B-08 cuando superan UAE' },
+  { code: 'PT-FIN-C-GEN',    group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Área / Cuenta Adicional — Prueba Sustantiva Genérica (comodín)',   hint: 'Para cuentas sin papel C-XX específico: NIIF 16, derivados, biológicos, criptoactivos, etc.', reusable: true },
+  { code: 'PT-FIN-C-SUST',   group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Prueba Sustantiva por Área (genérico)',                            hint: 'Diferencias auto-push a B-08 cuando superan UAE — reutilizable: Caja, Inventarios, Activo Fijo, Inversiones, Intangibles, CxP, Oblig. Bancarias, Pasivos LP, Capital, Ingresos, Costos', reusable: true },
   { code: 'PT-CIRC',         group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Circularización de CxC (NIA 505)',                                 hint: 'Universo CxC, selección, envío, seguimiento y evaluación de respuestas' },
   { code: 'PT-FIN-C-ESTIM',  group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Estimaciones Contables (NIA 540 Rev.)',                            hint: 'Espectro de resultados, rango del auditor vs estimación gerencia, indicadores de sesgo' },
   { code: 'PT-NIA570',       group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'NORMATIVE_ANALYSIS', title: 'Continuidad Operativa — Negocio en Marcha (NIA 570)',              hint: 'Valoración de la administración, indicadores, revelación, impacto en dictamen' },

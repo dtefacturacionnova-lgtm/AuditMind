@@ -287,13 +287,15 @@ function NewWorkingPaperInner() {
                     {filteredGroups.map(g => (
                       <optgroup key={g.group} label={g.group}>
                         {g.items.map(p => {
-                          const used = existingPaperCodes.has(p.code);
+                          const usedCount = existingPapers.filter(wp => wp.paperCode === p.code).length;
+                          const used = usedCount > 0 && !p.reusable;
                           const kindTag = p.wpKind === 'MASTER' ? ' (Maestro)' : '';
+                          const reusableTag = p.reusable && usedCount > 0 ? ` (ya usada ${usedCount}×, se puede repetir)` : '';
                           return (
                             <option key={p.code} value={p.code} disabled={used}>
                               {used
                                 ? `✓ ${p.code} — ${p.title}${kindTag} (ya en el encargo)`
-                                : `${p.code} — ${p.title}${kindTag}`}
+                                : `${p.code} — ${p.title}${kindTag}${reusableTag}`}
                             </option>
                           );
                         })}

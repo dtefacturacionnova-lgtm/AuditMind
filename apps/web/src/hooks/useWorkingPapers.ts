@@ -161,6 +161,7 @@ export interface PaperCatalogueEntry {
   type:   string;
   group:  string;
   hint:   string;
+  reusable?: boolean;
 }
 
 export function usePaperCatalogue(auditType?: string) {

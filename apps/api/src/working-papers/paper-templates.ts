@@ -5068,7 +5068,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     {
       sectionKey:   'S1',
       label:        'Parámetros Globales del Encargo — Base de Muestreo',
-      description:  'Parámetros de materialidad y riesgo que determinarán los tamaños de muestra en todo el encargo.',
+      description:  'Parámetros de materialidad y riesgo que determinarán los tamaños de muestra en todo el encargo. Glosario: MG = Materialidad Global · ME = Materialidad de Ejecución (usualmente 60-75% de MG) · UAE = Umbral de Ajuste de Errores — diferencias que se documentan pero, por ser individualmente triviales, no requieren ajuste (normalmente 5% de ME) · RA = Riesgo de Auditoría Aceptable · RI = Riesgo Inherente · RC = Riesgo de Control · RD = Riesgo de Detección (RD = RA / (RI × RC)) · k = factor de confianza para el diseño MUS — a menor RD (mayor aseguramiento requerido), mayor k y muestra más grande.',
       fieldType:    FieldType.MATRIX,
       isRequired:   true,
       isAutoFilled: false,
@@ -5078,7 +5078,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     {
       sectionKey:   'S2',
       label:        'Plan de Muestreo por Área — Tipo y Enfoque',
-      description:  'Definición del enfoque de muestreo para cada área sustantiva del encargo.',
+      description:  'Definición del enfoque de muestreo para cada área sustantiva del encargo. MUS = Monetary Unit Sampling (muestreo por unidad monetaria, estadístico) · Dirigido = selección de ítems por juicio del auditor, no estadístico · 100% = examen total del universo, no requiere proyección de error.',
       fieldType:    FieldType.MATRIX,
       isRequired:   true,
       isAutoFilled: false,
@@ -5088,7 +5088,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     {
       sectionKey:   'S3',
       label:        'Diseño de Muestra — MUS (Monetary Unit Sampling)',
-      description:  'Parámetros y cálculo de tamaño de muestra bajo MUS para las áreas que lo aplican.',
+      description:  'Parámetros y cálculo de tamaño de muestra bajo MUS para las áreas que lo aplican. Glosario: ME = Materialidad de Ejecución (ver S1) · ET = Error Tolerable, el máximo error que la muestra puede pasar por alto sin exceder la materialidad — en este diseño ET = ME · RD = Riesgo de Detección (ver S1), determina el factor k: a menor RD mayor k y muestra más grande.',
       fieldType:    FieldType.MATRIX,
       isRequired:   false,
       isAutoFilled: false,
@@ -5098,7 +5098,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     {
       sectionKey:   'S4',
       label:        'Evaluación de Resultados del Muestreo — Proyección de Errores',
-      description:  'Tabla consolidada post-ejecución: errores encontrados, proyección al universo y comparación con materialidad.',
+      description:  'Tabla consolidada post-ejecución: errores encontrados, proyección al universo y comparación con materialidad. Glosario: UAE = Umbral de Ajuste de Errores — diferencia documentada que, por ser trivial, no requiere ajuste individual · ME = Materialidad de Ejecución — proyección por debajo: sin acción adicional; por encima: ampliar muestra o proponer ajuste · MG = Materialidad Global — proyección por encima: riesgo de modificar la opinión (ver S6).',
       fieldType:    FieldType.MATRIX,
       isRequired:   false,
       isAutoFilled: false,

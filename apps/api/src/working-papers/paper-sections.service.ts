@@ -62,7 +62,7 @@ export class PaperSectionsService {
 
       const existing = await this.prisma.paperSection.findMany({
         where:  { paperId },
-        select: { sectionKey: true, fieldType: true, label: true, sortOrder: true, aiHint: true },
+        select: { sectionKey: true, fieldType: true, label: true, sortOrder: true, aiHint: true, description: true },
       });
       const existingMap = new Map(existing.map(s => [s.sectionKey, s]));
 
@@ -97,10 +97,11 @@ export class PaperSectionsService {
       const stale = tplSections.filter(t => {
         const e = existingMap.get(t.sectionKey);
         if (!e) return false;
-        return e.fieldType !== (t.fieldType as string)
-          || e.sortOrder  !== (t.sortOrder ?? 0)
-          || e.label      !== t.label
-          || e.aiHint     !== (t.aiHint ?? null);
+        return e.fieldType   !== (t.fieldType as string)
+          || e.sortOrder    !== (t.sortOrder ?? 0)
+          || e.label        !== t.label
+          || e.aiHint       !== (t.aiHint ?? null)
+          || e.description  !== (t.description ?? null);
       });
       for (const t of stale) {
         const e = existingMap.get(t.sectionKey)!;

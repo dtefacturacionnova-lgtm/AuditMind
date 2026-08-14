@@ -2,6 +2,7 @@
  * Plantillas HTML para PDF — funciones puras que toman datos y devuelven HTML body.
  * Se envuelven con PdfService.renderBrandedLayout(...).
  */
+import { renderCosoResultsBlock, renderCosoQuestionTable } from './coso-pdf';
 
 // Utilities ────────────────────────────────────────────────────────────────────
 
@@ -267,7 +268,7 @@ export interface WorkingPaperReportData {
     preparedAt?: string | null;
     reviewedAt?: string | null;
     audit: { title: string };
-    sections?: Array<{ sectionKey: string; label: string; value: unknown; fieldType: string;
+    sections?: Array<{ sectionKey: string; label: string; value: unknown; fieldType: string; tab?: string | null;
       attachments?: Array<{ filename: string; url: string; size?: number }>;
     }>;
     content?: { procedures?: Array<{
@@ -505,58 +506,93 @@ function renderSamplingResult(val: Record<string, unknown>): string {
     </div>`;
 }
 
+type ReportSection = NonNullable<WorkingPaperReportData['paper']['sections']>[number];
+
+/** Renders a single section's value+attachments block — shared by the flat and tab-grouped layouts. */
+function renderSectionBlock(s: ReportSection, isCoso: boolean): string {
+  const val = s.value;
+  let valStr = '';
+  const isCosoQuestionGrid = isCoso && ['S1', 'S2', 'S3', 'S4', 'S5'].includes(s.sectionKey) && Array.isArray(val);
+  if (val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
+    valStr = '<span class="text-muted text-small">— Sin completar —</span>';
+  } else if (isCosoQuestionGrid) {
+    // PT-COSO S1-S5: una fila por pregunta, agrupadas por Principio con tally Sí/No/N-A.
+    valStr = renderCosoQuestionTable(val as unknown[]);
+  } else if (Array.isArray(val)) {
+    // MATRIX-type sections: array of row objects → real table, not a JSON dump.
+    valStr = renderMatrixTable(val);
+  } else if (typeof val === 'object' && s.sectionKey === 'S_EJE') {
+    valStr = renderSamplingResult(val as Record<string, unknown>);
+  } else if (typeof val === 'object') {
+    valStr = `<pre class="pre-wrap text-small">${esc(JSON.stringify(val, null, 2))}</pre>`;
+  } else if (s.fieldType === 'CURRENCY') {
+    const n = Number(val);
+    valStr = isNaN(n)
+      ? `<span class="pre-wrap">${esc(String(val))}</span>`
+      : `<span class="pre-wrap" style="font-family:monospace;font-weight:600;">${esc(fmtUSD(n))}</span>`;
+  } else if (s.fieldType === 'PERCENTAGE') {
+    valStr = `<span class="pre-wrap">${esc(String(val))}%</span>`;
+  } else if (s.fieldType === 'ENUM_SELECT') {
+    const humanized = String(val)
+      .toLowerCase()
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+    valStr = `<span class="pre-wrap">${esc(humanized)}</span>`;
+  } else if (s.fieldType === 'BOOLEAN') {
+    valStr = `<span class="pre-wrap">${val ? 'Sí' : 'No'}</span>`;
+  } else {
+    valStr = `<span class="pre-wrap">${esc(String(val))}</span>`;
+  }
+  const sAtts = s.attachments ?? [];
+  const attsHtml = sAtts.length > 0
+    ? `<div style="margin-top: 1.5mm;">
+         <p class="text-small text-muted" style="margin: 0 0 0.5mm 0;">📎 Documentos de soporte:</p>
+         <ul style="margin: 0; padding-left: 5mm;">
+           ${sAtts.map(a => `<li class="text-small">${esc(a.filename)}</li>`).join('')}
+         </ul>
+       </div>`
+    : '';
+  return `
+    <div class="no-break" style="margin-bottom: 4mm;">
+      <h3 style="margin-bottom: 1mm;">${esc(s.label)}</h3>
+      <div>${valStr}</div>
+      ${attsHtml}
+    </div>`;
+}
+
 export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
   const wp = data.paper;
+  const sections = wp.sections ?? [];
+  const isCoso = wp.paperCode === 'PT-COSO';
 
-  // Sections
-  const sectionsHtml = (wp.sections ?? []).length > 0
-    ? (wp.sections ?? []).map(s => {
-        const val = s.value;
-        let valStr = '';
-        if (val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
-          valStr = '<span class="text-muted text-small">— Sin completar —</span>';
-        } else if (Array.isArray(val)) {
-          // MATRIX-type sections: array of row objects → real table, not a JSON dump.
-          valStr = renderMatrixTable(val);
-        } else if (typeof val === 'object' && s.sectionKey === 'S_EJE') {
-          valStr = renderSamplingResult(val as Record<string, unknown>);
-        } else if (typeof val === 'object') {
-          valStr = `<pre class="pre-wrap text-small">${esc(JSON.stringify(val, null, 2))}</pre>`;
-        } else if (s.fieldType === 'CURRENCY') {
-          const n = Number(val);
-          valStr = isNaN(n)
-            ? `<span class="pre-wrap">${esc(String(val))}</span>`
-            : `<span class="pre-wrap" style="font-family:monospace;font-weight:600;">${esc(fmtUSD(n))}</span>`;
-        } else if (s.fieldType === 'PERCENTAGE') {
-          valStr = `<span class="pre-wrap">${esc(String(val))}%</span>`;
-        } else if (s.fieldType === 'ENUM_SELECT') {
-          const humanized = String(val)
-            .toLowerCase()
-            .replace(/_/g, ' ')
-            .replace(/\b\w/g, c => c.toUpperCase());
-          valStr = `<span class="pre-wrap">${esc(humanized)}</span>`;
-        } else if (s.fieldType === 'BOOLEAN') {
-          valStr = `<span class="pre-wrap">${val ? 'Sí' : 'No'}</span>`;
-        } else {
-          valStr = `<span class="pre-wrap">${esc(String(val))}</span>`;
-        }
-        const sAtts = s.attachments ?? [];
-        const attsHtml = sAtts.length > 0
-          ? `<div style="margin-top: 1.5mm;">
-               <p class="text-small text-muted" style="margin: 0 0 0.5mm 0;">📎 Documentos de soporte:</p>
-               <ul style="margin: 0; padding-left: 5mm;">
-                 ${sAtts.map(a => `<li class="text-small">${esc(a.filename)}</li>`).join('')}
-               </ul>
-             </div>`
-          : '';
-        return `
-          <div class="no-break" style="margin-bottom: 4mm;">
-            <h3 style="margin-bottom: 1mm;">${esc(s.label)}</h3>
-            <div>${valStr}</div>
-            ${attsHtml}
-          </div>`;
-      }).join('')
-    : '<p class="text-muted text-small">Este papel no tiene secciones estructuradas.</p>';
+  // Sections — PT-COSO groups by pestaña (tab) with a page break between groups and
+  // inserts the score/bandas/gráficos block at the top of "Resultados y Conclusión",
+  // mirroring the on-screen layout (SmartPaperSections.tsx). Every other paper keeps
+  // the original flat, tab-agnostic layout untouched.
+  let sectionsHtml: string;
+  if (sections.length === 0) {
+    sectionsHtml = '<p class="text-muted text-small">Este papel no tiene secciones estructuradas.</p>';
+  } else if (isCoso && sections.some(s => s.tab)) {
+    const tabOrder: string[] = [];
+    const byTab = new Map<string, ReportSection[]>();
+    for (const s of sections) {
+      const tab = s.tab ?? '';
+      if (!byTab.has(tab)) { byTab.set(tab, []); tabOrder.push(tab); }
+      byTab.get(tab)!.push(s);
+    }
+    sectionsHtml = tabOrder.map((tab, i) => {
+      const tabSections = byTab.get(tab)!;
+      const isResultsTab = /resultados/i.test(tab);
+      return `
+        ${i > 0 ? '<div class="page-break"></div>' : ''}
+        <h1>${esc(tab || 'Otras secciones')}</h1>
+        ${isResultsTab ? renderCosoResultsBlock(sections.map(s => ({ sectionKey: s.sectionKey, value: s.value }))) : ''}
+        ${tabSections.map(s => renderSectionBlock(s, isCoso)).join('')}
+      `;
+    }).join('');
+  } else {
+    sectionsHtml = sections.map(s => renderSectionBlock(s, isCoso)).join('');
+  }
 
   // Procedures
   const procedures = wp.content?.procedures ?? [];
@@ -716,7 +752,7 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
 
     ${wp.narrative ? `<h2>Narrativa</h2><p class="pre-wrap">${esc(wp.narrative)}</p>` : ''}
 
-    <h2>Secciones del Papel</h2>
+    ${isCoso ? '' : '<h2>Secciones del Papel</h2>'}
     ${sectionsHtml}
 
     ${proceduresHtml ? `<h2>Procedimientos</h2>${proceduresHtml}` : ''}

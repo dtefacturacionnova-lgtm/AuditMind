@@ -67,6 +67,7 @@ import { PaperVersionsService } from './paper-versions.service';
 import { AiService } from '../ai/ai.service';
 import { PdfService } from '../pdf/pdf.service';
 import { renderWorkingPaperBody } from '../pdf/pdf-templates';
+import { PAPER_TEMPLATES } from './paper-templates';
 import type { Response } from 'express';
 import { Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -681,6 +682,12 @@ export class WorkingPapersController {
       ? await this.service.getUserName(w.signedOffById).catch(() => null)
       : null;
 
+    // Pestaña (tab) por sección — solo vive en la plantilla estática, no en la fila
+    // de BD; se busca aquí para que el PDF pueda agrupar por pestaña (ej. PT-COSO).
+    const tplByKey = new Map(
+      (PAPER_TEMPLATES[w.paperCode ?? ''] ?? []).map(t => [t.sectionKey, t]),
+    );
+
     const body = renderWorkingPaperBody({
       paper: {
         code:         w.code,
@@ -701,6 +708,7 @@ export class WorkingPapersController {
         audit:        { title: w.audit?.title ?? '' },
         sections:     (w.sections ?? []).map((s: Record<string, unknown>) => ({
           sectionKey: s.sectionKey, label: s.label, value: s.value, fieldType: s.fieldType,
+          tab: tplByKey.get(s.sectionKey as string)?.tab ?? null,
           attachments: Array.isArray(s.attachments) ? s.attachments : [],
         })),
         content:      w.content,

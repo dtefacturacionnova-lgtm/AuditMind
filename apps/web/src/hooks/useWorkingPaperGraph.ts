@@ -24,7 +24,9 @@ export type SectionFieldType =
   | 'AUDIT_REPORTS'
   | 'CHECKLIST'
   | 'COMMUNICATION_LOG'
-  | 'PROCEDURE_GRID';
+  | 'PROCEDURE_GRID'
+  | 'SAMPLE_ITEM_REGISTER'
+  | 'SAMPLING_EVALUATION';
 
 export interface PaperSection {
   id: string;
@@ -273,6 +275,20 @@ export function useRecalculateCosoComponentAnalysis() {
     mutationFn: (paperId: string) =>
       apiClient.post<{ recalculated: boolean; totalDeficiencias: number; componentesConDeficiencias: number; message: string }>(
         `/working-papers/${paperId}/recalculate-coso-component-analysis`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
+export function useRecalculateSamplingEvaluation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ recalculated: boolean; areas: number; areasEnAccion: number; message: string }>(
+        `/working-papers/${paperId}/recalculate-sampling-evaluation`,
         {},
       ),
     onSuccess: (_res, paperId) => {

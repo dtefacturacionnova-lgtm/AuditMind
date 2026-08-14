@@ -19,6 +19,10 @@ import { ComunicacionAIPanel } from './ComunicacionAIPanel';
 import type { ComunicacionRow } from './ComunicacionAIPanel';
 import { ProcedureGridPanel } from './ProcedureGridPanel';
 import { MatrixGridPanel } from './MatrixGridPanel';
+import { SampleItemRegisterPanel } from './SampleItemRegisterPanel';
+import type { SampleItemRow } from './SampleItemRegisterPanel';
+import { SamplingEvaluationPanel } from './SamplingEvaluationPanel';
+import type { SamplingEvaluationValue } from './SamplingEvaluationPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -558,7 +562,9 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
     section.fieldType === 'CHECKLIST' ||
     section.fieldType === 'COMMUNICATION_LOG' ||
     section.fieldType === 'PROCEDURE_GRID' ||
-    section.fieldType === 'ACCOUNT_SCHEDULE';
+    section.fieldType === 'ACCOUNT_SCHEDULE' ||
+    section.fieldType === 'SAMPLE_ITEM_REGISTER' ||
+    section.fieldType === 'SAMPLING_EVALUATION';
 
   const isAutoAndLocked = section.isAutoFilled && !overriding && !editing;
 
@@ -844,6 +850,36 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Sample Item Register — registro de ítems de muestra con tainting % por fila (NIA 530) */}
+            {section.fieldType === 'SAMPLE_ITEM_REGISTER' && paperId && (
+              <SampleItemRegisterPanel
+                paperId={paperId}
+                rows={
+                  Array.isArray(effectiveValue)
+                    ? (effectiveValue as SampleItemRow[])
+                    : (() => {
+                        try { return JSON.parse(String(effectiveValue ?? '[]')); }
+                        catch { return []; }
+                      })()
+                }
+                onChange={rows => onSave(section.sectionKey, rows as unknown as string)}
+                readOnly={readonly}
+              />
+            )}
+
+            {/* Sampling Evaluation — panel calculado: MLE/Precisión Básica/UEL + semáforo (NIA 530) */}
+            {section.fieldType === 'SAMPLING_EVALUATION' && paperId && (
+              <SamplingEvaluationPanel
+                paperId={paperId}
+                value={
+                  effectiveValue && typeof effectiveValue === 'object' && !Array.isArray(effectiveValue)
+                    ? (effectiveValue as SamplingEvaluationValue)
+                    : null
+                }
+                readOnly={readonly}
+              />
+            )}
+
             {/* Matrix — grid editable genérico (columnas dinámicas por sección) */}
             {section.fieldType === 'MATRIX' && (
               paperId ? (
@@ -893,7 +929,7 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
             )}
 
             {/* All text-like */}
-            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG', 'PROCEDURE_GRID'].includes(section.fieldType) && (
+            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG', 'PROCEDURE_GRID', 'SAMPLE_ITEM_REGISTER', 'SAMPLING_EVALUATION'].includes(section.fieldType) && (
               <p className={`text-sm leading-relaxed whitespace-pre-wrap ${
                 effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== ''
                   ? 'text-gray-700'

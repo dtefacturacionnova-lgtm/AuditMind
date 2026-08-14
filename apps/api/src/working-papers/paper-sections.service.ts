@@ -10,6 +10,7 @@ import { PaperGraphService } from './paper-graph.service';
 import { PAPER_TEMPLATES } from './paper-templates';
 import { AiService } from '../ai/ai.service';
 import { ContentLibraryService } from '../content-library/content-library.service';
+import { reliabilityFactor } from './reliability-factor';
 
 @Injectable()
 export class PaperSectionsService {
@@ -92,7 +93,7 @@ export class PaperSectionsService {
         'PROCEDURE_GRID', 'MATRIX', 'REFERENCE', 'RISK_REF',
         'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS',
         'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG',
-        'ENUM_SELECT',
+        'ENUM_SELECT', 'SAMPLE_ITEM_REGISTER', 'SAMPLING_EVALUATION',
       ]);
       const stale = tplSections.filter(t => {
         const e = existingMap.get(t.sectionKey);
@@ -1088,7 +1089,7 @@ INSTRUCCIONES DE SALIDA:
       return undefined;
     };
 
-    type Tipo = 'Factual' | 'Por Estimación';
+    type Tipo = 'Factual' | 'Por Estimación' | 'Proyectada';
     type ConsolidatedRow = Record<string, string>;
 
     // Papeles genéricos por área (Incumplimientos/Indicadores/No reveladas) — misma forma
@@ -1118,8 +1119,8 @@ INSTRUCCIONES DE SALIDA:
     ];
 
     const execPapers = await this.prisma.workingPaper.findMany({
-      where:   { auditId: wp.auditId, paperCode: { in: ['PT-FIN-C-SUST', ...GENERIC_SOURCES.map(s => s.paperCode)] } },
-      include: { sections: { where: { sectionKey: { in: ['S1', 'S2', 'S5'] } } } },
+      where:   { auditId: wp.auditId, paperCode: { in: ['PT-FIN-C-SUST', 'PT-NIA530', ...GENERIC_SOURCES.map(s => s.paperCode)] } },
+      include: { sections: { where: { sectionKey: { in: ['S1', 'S2', 'S4', 'S5'] } } } },
     });
 
     const consolidated: ConsolidatedRow[] = [];
@@ -1146,6 +1147,38 @@ INSTRUCCIONES DE SALIDA:
             'Diferencia $':    diferencia.toFixed(2),
             'Tipo':            tipo,
             'Estado':          norm(r['Proponer AJE (Sí/No/Pendiente)'] ?? r['Proponer AJE']) || 'Pendiente',
+          });
+        }
+        continue;
+      }
+
+      if (p.paperCode === 'PT-NIA530') {
+        // Proyección de errores de muestreo (S4, calculada por recalculateSamplingEvaluation).
+        // Solo entran las áreas cuya acción sugerida ya cruzó ME (PROPONER_AJUSTE) o MG
+        // (MODIFICAR_OPINION) — las que solo requieren "ampliar muestra" o están "cerca
+        // del límite" son riesgo de muestreo, no una diferencia real, y no se consolidan.
+        const s4Val = p.sections.find(s => s.sectionKey === 'S4')?.value;
+        const filas = s4Val && typeof s4Val === 'object' && Array.isArray((s4Val as Record<string, unknown>)['filas'])
+          ? (s4Val as { filas: Record<string, unknown>[] }).filas
+          : [];
+        for (const f of filas) {
+          const accion = norm(f['accion']);
+          if (accion !== 'PROPONER_AJUSTE' && accion !== 'MODIFICAR_OPINION') continue;
+          const mle = f['errorMasProbable'];
+          const encontrado = f['erroresEncontrados'];
+          const diferencia = typeof mle === 'number' ? mle : asNumber(encontrado);
+          if (!diferencia) continue;
+          seq++;
+          consolidated.push({
+            '#':               String(seq),
+            'Papel de Origen': origen,
+            'Área/Cuenta':     norm(f['area']),
+            'Descripción':     `Error más probable proyectado por muestreo${f['esMUS'] ? ' (MUS, IC ' + norm(f['nivelConfianzaPct']) + '%)' : ' (no estadístico)'} — ${accion === 'MODIFICAR_OPINION' ? 'supera MG' : 'supera ME'}`,
+            'Saldo s/Cliente': 'N/A',
+            'Saldo s/Auditor': 'N/A',
+            'Diferencia $':    diferencia.toFixed(2),
+            'Tipo':            'Proyectada' as Tipo,
+            'Estado':          'Pendiente',
           });
         }
         continue;
@@ -1195,13 +1228,14 @@ INSTRUCCIONES DE SALIDA:
     const buckets: Record<Tipo, { total: number; count: number }> = {
       'Factual':        { total: 0, count: 0 },
       'Por Estimación': { total: 0, count: 0 },
+      'Proyectada':     { total: 0, count: 0 },
     };
     for (const r of consolidated) {
       const b = buckets[r['Tipo'] as Tipo];
       b.total += asNumber(r['Diferencia $']);
       b.count++;
     }
-    const grandTotal = buckets['Factual'].total + buckets['Por Estimación'].total;
+    const grandTotal = buckets['Factual'].total + buckets['Por Estimación'].total + buckets['Proyectada'].total;
     const supera = (v: number, threshold: number | null): string =>
       threshold == null ? 'N/A' : (v >= threshold ? 'Sí' : 'No');
     const catRow = (categoria: string, total: number, count: number): ConsolidatedRow => ({
@@ -1217,7 +1251,7 @@ INSTRUCCIONES DE SALIDA:
     const s2Rows: ConsolidatedRow[] = [
       catRow('Factual', buckets['Factual'].total, buckets['Factual'].count),
       catRow('Por Estimación', buckets['Por Estimación'].total, buckets['Por Estimación'].count),
-      catRow('Proyectada', 0, 0),
+      catRow('Proyectada', buckets['Proyectada'].total, buckets['Proyectada'].count),
       catRow('Total', grandTotal, consolidated.length),
     ];
 
@@ -1537,6 +1571,268 @@ INSTRUCCIONES DE SALIDA:
     return {
       created, updated,
       message: `${created} hallazgo(s) nuevos y ${updated} actualizados sincronizados al contador del dashboard.${isRecurring ? ' Marcado(s) como seguimiento de período anterior (Reabierto) — no cuentan en el total principal.' : ''}`,
+    };
+  }
+
+  // ─── PT-NIA530: evaluación de resultados del muestreo (extrapolación MUS) ────
+
+  /**
+   * Calcula S4 (Evaluación de Resultados del Muestreo) a partir de S5 (ítems
+   * examinados, uno por fila) + S2 (tipo de muestreo por área) + S3 (intervalo
+   * y factor k por área) + la materialidad real del encargo (PT-A4, NO la copia
+   * narrativa de S1 — misma fuente que usa propagateDiferencias para B08).
+   *
+   * Para áreas MUS: implementa el método de evaluación combinado
+   * atributos-variables (Stringer bound simplificado) — tainting por ítem,
+   * Precisión Básica, Ampliación de Precisión (PGW) y Límite Superior de Error
+   * (UEL). Los factores de confiabilidad se resuelven numéricamente contra la
+   * distribución de Poisson (ver reliability-factor.ts) en vez de una tabla
+   * hardcodeada. Para áreas Dirigidas/100%: sin proyección estadística, se
+   * compara la suma de diferencias encontradas directamente.
+   */
+  async recalculateSamplingEvaluation(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+    if (wp.paperCode !== 'PT-NIA530') {
+      throw new BadRequestException('Solo el papel PT-NIA530 puede recalcular la evaluación de muestreo');
+    }
+
+    const norm = (v: unknown): string => (v == null ? '' : String(v)).trim();
+    const asRows = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value : []);
+    const asNumber = (v: unknown): number | null => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = parseFloat(String(v).replace(/[^\d.-]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    };
+    const findKey = (row: Record<string, unknown>, patterns: string[]): string | undefined => {
+      const keys = Object.keys(row);
+      const norm2 = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      for (const p of patterns) {
+        const found = keys.find(k => norm2(k).includes(p));
+        if (found) return found;
+      }
+      return undefined;
+    };
+    const normArea = (s: string): string =>
+      s.toLowerCase().trim().replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, ' ');
+
+    const sections = await this.prisma.paperSection.findMany({ where: { paperId } });
+    const byKey = new Map(sections.map(s => [s.sectionKey, s]));
+
+    const s2Rows = asRows(byKey.get('S2')?.value);
+    const s3Rows = asRows(byKey.get('S3')?.value);
+    const s5Rows = asRows(byKey.get('S5')?.value) as Array<{
+      area?: string; bookValue?: unknown; auditedValue?: unknown;
+    }>;
+
+    if (s5Rows.length === 0) {
+      return {
+        recalculated: false, areas: 0, areasEnAccion: 0,
+        message: 'S5 (Registro de Selección) no tiene ítems — nada que evaluar. Registre al menos un ítem examinado antes de recalcular.',
+      };
+    }
+
+    // Materialidad real del encargo — PT-A4, la misma fuente que usa el puente a PT-FIN-B08.
+    const { mg, me, uae } = await this.getMaterialidadByAudit(wp.auditId, user);
+
+    // Tipo de muestreo declarado por área (S2)
+    const tipoByArea = new Map<string, string>();
+    if (s2Rows.length > 0) {
+      const areaKey = findKey(s2Rows[0], ['area']);
+      const tipoKey = findKey(s2Rows[0], ['tipo de muestreo']);
+      for (const r of s2Rows) {
+        const area = areaKey ? normArea(norm(r[areaKey])) : '';
+        if (!area) continue;
+        tipoByArea.set(area, tipoKey ? norm(r[tipoKey]) : '');
+      }
+    }
+
+    // Diseño MUS por área (S3): intervalo de muestreo, factor k, n planificado
+    interface DesignInfo { interval: number | null; k: number | null; nPlanned: number | null; }
+    const designByArea = new Map<string, DesignInfo>();
+    if (s3Rows.length > 0) {
+      const areaKey     = findKey(s3Rows[0], ['area']);
+      const intervalKey = findKey(s3Rows[0], ['intervalo de muestreo']);
+      const kKey        = findKey(s3Rows[0], ['factor k']);
+      const nKey        = findKey(s3Rows[0], ['n = k']);
+      for (const r of s3Rows) {
+        const area = areaKey ? normArea(norm(r[areaKey])) : '';
+        if (!area) continue;
+        designByArea.set(area, {
+          interval: intervalKey ? asNumber(r[intervalKey]) : null,
+          k:        kKey ? asNumber(r[kKey]) : null,
+          nPlanned: nKey ? asNumber(r[nKey]) : null,
+        });
+      }
+    }
+
+    // Agrupar ítems examinados de S5 por área
+    interface ItemAgg { bookValue: number; diff: number; }
+    const itemsByArea = new Map<string, ItemAgg[]>();
+    const rawAreaLabel = new Map<string, string>();
+    for (const r of s5Rows) {
+      const rawArea = norm(r.area);
+      if (!rawArea) continue;
+      const area = normArea(rawArea);
+      if (!rawAreaLabel.has(area)) rawAreaLabel.set(area, rawArea);
+      const bv = typeof r.bookValue === 'number' ? r.bookValue : asNumber(r.bookValue);
+      const av = r.auditedValue === null || r.auditedValue === undefined || r.auditedValue === ''
+        ? null
+        : (typeof r.auditedValue === 'number' ? r.auditedValue : asNumber(r.auditedValue));
+      if (av === null || bv === null) continue; // sin examinar todavía, o sin valor en libros
+      if (!itemsByArea.has(area)) itemsByArea.set(area, []);
+      itemsByArea.get(area)!.push({ bookValue: bv, diff: bv - av });
+    }
+
+    type Accion   = 'NINGUNA' | 'CERCA_DEL_LIMITE' | 'AMPLIAR_MUESTRA' | 'PROPONER_AJUSTE' | 'MODIFICAR_OPINION';
+    type Semaforo = 'VERDE' | 'AMARILLO' | 'NARANJA' | 'ROJO';
+
+    interface AreaResult {
+      area: string; tipoMuestreo: string; esMUS: boolean;
+      itemsExaminados: number; itemsConError: number; erroresEncontrados: number;
+      intervaloMuestreo: number | null; factorK: number | null; nivelConfianzaPct: number | null;
+      precisionBasica: number | null; errorMasProbable: number | null;
+      ampliacionPrecision: number | null; limiteSuperiorError: number | null;
+      valorComparado: number; uae: number | null; me: number | null; mg: number | null;
+      superaUAE: boolean; superaME: boolean; superaMG: boolean;
+      accion: Accion; semaforo: Semaforo;
+      ampliacionSugerida: { itemsAdicionales: number; muestraTotalSugerida: number } | null;
+      nota: string | null;
+    }
+
+    const filas: AreaResult[] = [];
+
+    for (const [area, items] of itemsByArea) {
+      const tipoRaw = tipoByArea.get(area) ?? '';
+      const esMUS = /mus/i.test(tipoRaw);
+      const design = designByArea.get(area);
+
+      const itemsExaminados = items.length;
+      const itemsConError = items.filter(i => i.diff !== 0).length;
+      const erroresEncontrados = items.reduce((s, i) => s + Math.abs(i.diff), 0);
+
+      let precisionBasica: number | null = null;
+      let errorMasProbable: number | null = null;
+      let ampliacionPrecision: number | null = null;
+      let limiteSuperiorError: number | null = null;
+      let nivelConfianzaPct: number | null = null;
+      let nota: string | null = null;
+
+      const canEvaluateMUS = esMUS && design?.interval != null && design.interval > 0 && design?.k != null && design.k > 0;
+
+      if (esMUS && !canEvaluateMUS) {
+        nota = 'Sin diseño MUS completo en S3 para esta área (falta intervalo o factor k) — se compara el error encontrado directamente, sin proyectar.';
+      } else if (!tipoRaw) {
+        nota = 'Tipo de muestreo no definido en S2 para esta área — tratada como no estadística (sin proyección).';
+      }
+
+      if (canEvaluateMUS) {
+        const interval = design!.interval as number;
+        const k = design!.k as number;
+        const riskLevel = Math.exp(-k); // k = RF(0, riesgo) = -ln(riesgo) — mismo factor ya usado en S1/S3
+        nivelConfianzaPct = Math.round((1 - riskLevel) * 100);
+
+        // Ítems "ciertos" (valor en libros ≥ intervalo — ya fueron examinados con
+        // certeza, su error entra 100%) vs "logical units" (< intervalo, sujetos
+        // a tainting y al margen de precisión por riesgo de muestreo).
+        const logicalTaintings: number[] = [];
+        let certainErrorSum = 0;
+        let logicalErrorSum = 0;
+        for (const it of items) {
+          if (it.diff === 0 || it.bookValue <= 0) continue;
+          if (it.bookValue >= interval) {
+            certainErrorSum += Math.abs(it.diff);
+          } else {
+            const tainting = Math.min(1, Math.abs(it.diff) / it.bookValue);
+            logicalTaintings.push(tainting);
+            logicalErrorSum += tainting * interval;
+          }
+        }
+        logicalTaintings.sort((a, b) => b - a);
+
+        errorMasProbable = certainErrorSum + logicalErrorSum;
+        precisionBasica  = k * interval;
+
+        let pgw = 0;
+        for (let j = 0; j < logicalTaintings.length; j++) {
+          const incremento = reliabilityFactor(j + 1, riskLevel) - reliabilityFactor(j, riskLevel);
+          pgw += incremento * logicalTaintings[j] * interval;
+        }
+        ampliacionPrecision = pgw;
+        limiteSuperiorError = precisionBasica + errorMasProbable + pgw;
+      }
+
+      const valorComparado = canEvaluateMUS && limiteSuperiorError != null ? limiteSuperiorError : erroresEncontrados;
+      const superaUAE = uae != null && valorComparado >= uae;
+      const superaME  = me  != null && valorComparado >= me;
+      const superaMG  = mg  != null && valorComparado >= mg;
+
+      let accion: Accion = 'NINGUNA';
+      let semaforo: Semaforo = 'VERDE';
+      if (mg != null && valorComparado >= mg) {
+        accion = 'MODIFICAR_OPINION'; semaforo = 'ROJO';
+      } else if (me != null && errorMasProbable != null && errorMasProbable >= me) {
+        // El punto estimado (no solo el margen de riesgo) ya supera la materialidad — error real, no solo riesgo de muestreo.
+        accion = 'PROPONER_AJUSTE'; semaforo = 'NARANJA';
+      } else if (me != null && !canEvaluateMUS && erroresEncontrados >= me) {
+        accion = 'PROPONER_AJUSTE'; semaforo = 'NARANJA';
+      } else if (me != null && valorComparado >= me) {
+        // Solo el UEL (margen de riesgo de muestreo) supera ME — primero intentar ampliar la muestra.
+        accion = 'AMPLIAR_MUESTRA'; semaforo = 'AMARILLO';
+      } else if (me != null && me > 0 && valorComparado >= me * 0.75) {
+        accion = 'CERCA_DEL_LIMITE'; semaforo = 'AMARILLO';
+      }
+
+      let ampliacionSugerida: AreaResult['ampliacionSugerida'] = null;
+      if (canEvaluateMUS && (accion === 'AMPLIAR_MUESTRA' || accion === 'CERCA_DEL_LIMITE')
+        && limiteSuperiorError != null && me != null && me > 0 && itemsExaminados > 0) {
+        const nActual = design?.nPlanned ?? itemsExaminados;
+        const nTotal = Math.ceil(nActual * (limiteSuperiorError / me));
+        const itemsAdicionales = Math.max(0, nTotal - nActual);
+        if (itemsAdicionales > 0) ampliacionSugerida = { itemsAdicionales, muestraTotalSugerida: nTotal };
+      }
+
+      filas.push({
+        area: rawAreaLabel.get(area) ?? area,
+        tipoMuestreo: tipoRaw || 'No especificado (revisar S2)',
+        esMUS,
+        itemsExaminados, itemsConError, erroresEncontrados,
+        intervaloMuestreo: design?.interval ?? null,
+        factorK: design?.k ?? null,
+        nivelConfianzaPct,
+        precisionBasica, errorMasProbable, ampliacionPrecision, limiteSuperiorError,
+        valorComparado, uae, me, mg,
+        superaUAE, superaME, superaMG,
+        accion, semaforo,
+        ampliacionSugerida,
+        nota,
+      });
+    }
+
+    filas.sort((a, b) => b.valorComparado - a.valorComparado);
+
+    const value = {
+      filas,
+      calculadoEn: new Date().toISOString(),
+      totalErrorProyectado: filas.reduce((s, f) => s + (f.errorMasProbable ?? f.erroresEncontrados), 0),
+      mg, me, uae,
+    };
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S4' } },
+      data:  { value: value as unknown as Prisma.InputJsonValue, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S4', value);
+
+    const areasEnAccion = filas.filter(f => f.accion === 'PROPONER_AJUSTE' || f.accion === 'MODIFICAR_OPINION').length;
+
+    return {
+      recalculated: true,
+      areas: filas.length,
+      areasEnAccion,
+      message: `Evaluación recalculada para ${filas.length} área(s). `
+        + (areasEnAccion > 0
+          ? `${areasEnAccion} área(s) requieren proponer ajuste o escalar a socio — ver semáforo.`
+          : 'Todas las áreas dentro de parámetros aceptables.'),
     };
   }
 

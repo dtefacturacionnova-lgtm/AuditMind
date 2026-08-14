@@ -147,6 +147,8 @@ enum FieldType {
   CHECKLIST        // Tabla editable Sí/No/N/A por criterio + conclusión global + fundamento
   COMMUNICATION_LOG // Grid de comunicaciones con AI: fecha/participantes/tema/asuntos/adjunto
   PROCEDURE_GRID   // Grid jerárquico 2 niveles: Procedimiento → Actividad (NIA 230/330)
+  SAMPLE_ITEM_REGISTER // Grid de ítems de muestra con valor en libros/auditado, diferencia y tainting % por fila
+  SAMPLING_EVALUATION  // Panel computado: extrapolación de errores MUS (MLE/Precisión Básica/UEL) + semáforo, derivado de SAMPLE_ITEM_REGISTER
 }
 
 // Tipo de mapeo entre papeles en el grafo

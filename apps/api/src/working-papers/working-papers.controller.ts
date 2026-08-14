@@ -348,6 +348,13 @@ export class WorkingPapersController {
     return this.sectionsService.propagateHallazgosToFindings(id, user);
   }
 
+  @Post(':id/recalculate-sampling-evaluation')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Recalcular PT-NIA530 S4 (extrapolación MUS: MLE/Precisión Básica/UEL, semáforo) a partir de los ítems examinados en S5' })
+  recalculateSamplingEvaluation(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.recalculateSamplingEvaluation(id, user);
+  }
+
   @Post(':id/seed-substantive-procedures')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Cargar procedimientos sugeridos de la biblioteca sustantiva en PT-FIN-C-SUST S3, sin pisar filas existentes' })

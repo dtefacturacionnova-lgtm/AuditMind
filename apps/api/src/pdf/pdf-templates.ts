@@ -3,6 +3,7 @@
  * Se envuelven con PdfService.renderBrandedLayout(...).
  */
 import { renderCosoResultsBlock, renderCosoQuestionTable } from './coso-pdf';
+import { renderSampleItemRegisterTable, renderSamplingEvaluationBlock } from './nia530-pdf';
 
 // Utilities ────────────────────────────────────────────────────────────────────
 
@@ -518,9 +519,15 @@ function renderSectionBlock(s: ReportSection, isCoso: boolean): string {
   } else if (isCosoQuestionGrid) {
     // PT-COSO S1-S5: una fila por pregunta, agrupadas por Principio con tally Sí/No/N-A.
     valStr = renderCosoQuestionTable(val as unknown[]);
+  } else if (s.fieldType === 'SAMPLE_ITEM_REGISTER' && Array.isArray(val)) {
+    // PT-NIA530 S5: ítems de muestra con valor en libros/auditado, diferencia y tainting %.
+    valStr = renderSampleItemRegisterTable(val);
   } else if (Array.isArray(val)) {
     // MATRIX-type sections: array of row objects → real table, not a JSON dump.
     valStr = renderMatrixTable(val);
+  } else if (typeof val === 'object' && s.fieldType === 'SAMPLING_EVALUATION') {
+    // PT-NIA530 S4: MLE/Precisión Básica/UEL calculados + semáforo por área.
+    valStr = renderSamplingEvaluationBlock(val);
   } else if (typeof val === 'object' && s.sectionKey === 'S_EJE') {
     valStr = renderSamplingResult(val as Record<string, unknown>);
   } else if (typeof val === 'object') {

@@ -7,7 +7,7 @@ import {
 import {
   useAttachToDocumentEvidence, useRemoveDocumentEvidenceAttachment, useSamplingExecutionByAudit,
 } from '@/hooks/useWorkingPaperGraph';
-import type { SamplingExecutionItem } from '@/hooks/useWorkingPaperGraph';
+import type { SamplingExecutionItem, SamplingExecutionData } from '@/hooks/useWorkingPaperGraph';
 import type { EvidenceAttachment } from './DocumentEvidencePanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -105,7 +105,14 @@ function ImportFromExecutionModal({
   onClose: () => void;
 }) {
   const { data, isLoading, isError } = useSamplingExecutionByAudit(auditId);
-  const execution = data?.execution ?? null;
+  // S_EJE puede contener texto narrativo heredado en vez de un objeto real de
+  // ejecución (papel nunca corrido por el panel de PT-A4) — validar la forma
+  // antes de confiar en sus campos, en vez de asumir que siempre es el objeto.
+  const rawExecution = data?.execution;
+  const execution: SamplingExecutionData | null =
+    rawExecution && typeof rawExecution === 'object' && Array.isArray((rawExecution as SamplingExecutionData).selected)
+      ? (rawExecution as SamplingExecutionData)
+      : null;
   const [targetArea, setTargetArea] = useState(areaOptions[0] ?? '');
   const [customArea, setCustomArea] = useState('');
   const [selectedIdx, setSelectedIdx] = useState<Set<number>>(new Set());

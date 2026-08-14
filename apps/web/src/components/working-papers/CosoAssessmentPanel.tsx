@@ -214,8 +214,11 @@ export function CosoAssessmentPanel({ paperId, onClose, onInsert }: CosoAssessme
               <p className="text-sm text-gray-600 max-w-xl mx-auto">
                 El agente <strong>Minerva</strong> leerá el contexto del expediente
                 (PT-A1 entendimiento, PT-A2 riesgos, PT-A3 controles, hallazgos previos)
-                y propondrá una valoración estructurada de los 5 componentes y 17 principios COSO 2013.
-                Tú revisas, ajustas y apruebas.
+                y propondrá una lectura de los 5 componentes y 17 principios COSO 2013, como
+                referencia para orientar tu propio checklist de preguntas Sí/No/N-A en el papel.
+                Al insertar, solo se guardan la evaluación consolidada por componente, la
+                conclusión global, el enfoque de auditoría y las deficiencias — el checklist
+                por pregunta lo responde el equipo directamente.
               </p>
               <button
                 onClick={handleRun}

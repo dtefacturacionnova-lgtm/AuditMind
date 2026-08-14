@@ -916,35 +916,8 @@ type TabKey = 'content' | 'sections' | 'graph' | 'review' | 'history' | 'file';
 
 // ─── COSO IA → section mapping helpers ───────────────────────────────────────
 
-const COSO_PRINCIPLE_NAMES: Record<number, string> = {
-  1:  'Integridad y valores éticos',
-  2:  'Independencia del órgano de supervisión',
-  3:  'Estructura, autoridades y responsabilidades',
-  4:  'Competencia del personal',
-  5:  'Responsabilidad por el control',
-  6:  'Objetivos específicos definidos',
-  7:  'Identificación y análisis de riesgos',
-  8:  'Evaluación del riesgo de fraude',
-  9:  'Cambios significativos identificados',
-  10: 'Selección y desarrollo de controles',
-  11: 'Controles Generales de TI',
-  12: 'Implementación mediante políticas y procedimientos',
-  13: 'Información relevante y de calidad',
-  14: 'Comunicación interna efectiva',
-  15: 'Comunicación con terceros',
-  16: 'Evaluaciones continuas e independientes',
-  17: 'Comunicación oportuna de deficiencias',
-};
-
 const COSO_COMP_TO_SECTION: Record<string, string> = {
   CE: 'S1', RA: 'S2', CA: 'S3', IC: 'S4', MA: 'S5',
-};
-
-const COSO_MATURITY_LABEL: Record<string, string> = {
-  EFFECTIVE:             'Efectivo',
-  WITH_DEFICIENCIES:     'Con deficiencias',
-  INEFFECTIVE:           'Inefectivo',
-  INSUFFICIENT_EVIDENCE: 'Evidencia insuficiente',
 };
 
 function cosoToCompEval(m: string): string {
@@ -1914,28 +1887,36 @@ export default function WpDetailPage() {
           onClose={() => setShowCoso(false)}
           onInsert={(assessment: CosoAssessment) => {
             if (wp?.paperCode === 'PT-COSO') {
-              // Populate the 13 structured PT-COSO sections from the AI assessment
+              // Minerva propone la capa narrativa (juicio consolidado por componente,
+              // conclusión global, enfoque y deficiencias) — YA NO escribe las filas de
+              // S1-S5: esas son el checklist Sí/No/N-A por pregunta que responde el
+              // auditor directamente, y tienen un esquema de columnas distinto al que
+              // producía este asistente (Principio/Estado/Justificación). Sobrescribirlas
+              // aquí borraría las respuestas del auditor y dejaría el puntaje en 0%.
               const pid = params.id as string;
               const updates: Promise<unknown>[] = [];
               for (const comp of assessment.components) {
                 const s = COSO_COMP_TO_SECTION[comp.key];
                 if (!s) continue;
-                const compPrinciples = assessment.principles.filter(p => p.componentKey === comp.key);
-                const matrixRows = compPrinciples.map(p => ({
-                  'Principio':     `P${p.id} — ${COSO_PRINCIPLE_NAMES[p.id] ?? ''}`,
-                  'Estado':        COSO_MATURITY_LABEL[p.status] ?? p.status,
-                  'Evidencia':     p.evidenceRef,
-                  'Justificación': p.justification,
-                }));
-                updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: s,           value: matrixRows }));
                 updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: `${s}_EVAL`, value: cosoToCompEval(comp.maturity) }));
               }
               updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: 'S6', value: cosoToS6(assessment.overallMaturity) }));
               updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: 'S7', value: cosoToS7(assessment.overallMaturity) }));
-              const defText = assessment.components
-                .flatMap(c => c.deficiencies.map(d => `[${c.key}] ${d}`))
-                .join('\n');
-              updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: 'S8', value: defText || '(Sin deficiencias identificadas)' }));
+              let n = 0;
+              const deficiencyRows = assessment.components.flatMap(c =>
+                c.deficiencies.map((d, i) => {
+                  n++;
+                  return {
+                    '#': String(n),
+                    'Descripción de la Deficiencia': d,
+                    'Componente COSO Afectado': c.name,
+                    'Clasificación (Significativa / Material)': c.maturity === 'INEFFECTIVE' ? 'Material' : 'Significativa',
+                    'Riesgo Resultante': '',
+                    'Recomendación': c.recommendations[i] ?? '',
+                  };
+                }),
+              );
+              updates.push(updateSection.mutateAsync({ paperId: pid, sectionKey: 'S8', value: deficiencyRows }));
               const conclusionText = [
                 assessment.executiveSummary,
                 '',

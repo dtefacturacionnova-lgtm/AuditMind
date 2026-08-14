@@ -896,6 +896,7 @@ export function SmartPaperSections({
                       onSave={handleSave}
                       paperId={paperId}
                       paperCode={paperCode}
+                      auditId={auditId}
                       mentionItems={mentionItems}
                       aiDraftConfig={aiDraftConfig}
                       onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -933,6 +934,7 @@ export function SmartPaperSections({
                     onSave={handleSave}
                     paperId={paperId}
                     paperCode={paperCode}
+                    auditId={auditId}
                     mentionItems={mentionItems}
                     aiDraftConfig={aiDraftConfig}
                     onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -962,6 +964,7 @@ export function SmartPaperSections({
                     onSave={handleSave}
                     paperId={paperId}
                     paperCode={paperCode}
+                    auditId={auditId}
                     mentionItems={mentionItems}
                     aiDraftConfig={aiDraftConfig}
                     onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -991,6 +994,7 @@ export function SmartPaperSections({
                     onSave={handleSave}
                     paperId={paperId}
                     paperCode={paperCode}
+                    auditId={auditId}
                     mentionItems={mentionItems}
                     aiDraftConfig={aiDraftConfig}
                     onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -1024,6 +1028,7 @@ export function SmartPaperSections({
                     onSave={handleSave}
                     paperId={paperId}
                     paperCode={paperCode}
+                    auditId={auditId}
                     mentionItems={mentionItems}
                     aiDraftConfig={aiDraftConfig}
                     onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -1053,6 +1058,7 @@ export function SmartPaperSections({
                     onSave={handleSave}
                     paperId={paperId}
                     paperCode={paperCode}
+                    auditId={auditId}
                     mentionItems={mentionItems}
                     aiDraftConfig={aiDraftConfig}
                     onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -1082,6 +1088,7 @@ export function SmartPaperSections({
                     onSave={handleSave}
                     paperId={paperId}
                     paperCode={paperCode}
+                    auditId={auditId}
                     mentionItems={mentionItems}
                     aiDraftConfig={aiDraftConfig}
                     onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -1111,6 +1118,7 @@ export function SmartPaperSections({
                     onSave={handleSave}
                     paperId={paperId}
                     paperCode={paperCode}
+                    auditId={auditId}
                     mentionItems={mentionItems}
                     aiDraftConfig={aiDraftConfig}
                     onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -1146,6 +1154,7 @@ export function SmartPaperSections({
                     onSave={handleSave}
                     paperId={paperId}
                     paperCode={paperCode}
+                    auditId={auditId}
                     mentionItems={mentionItems}
                     aiDraftConfig={aiDraftConfig}
                     onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -1178,6 +1187,7 @@ export function SmartPaperSections({
                     onSave={handleSave}
                     paperId={paperId}
                     paperCode={paperCode}
+                    auditId={auditId}
                     mentionItems={mentionItems}
                     aiDraftConfig={aiDraftConfig}
                     onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
@@ -1208,6 +1218,7 @@ export function SmartPaperSections({
                 onSave={handleSave}
                 paperId={paperId}
                 paperCode={paperCode}
+                auditId={auditId}
                 mentionItems={mentionItems}
                 aiDraftConfig={aiDraftConfig}
                 onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {

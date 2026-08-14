@@ -2021,4 +2021,29 @@ INSTRUCCIONES DE SALIDA:
       paperId: paper.id,
     };
   }
+
+  /**
+   * Última ejecución del panel de muestreo real (PT-A4 S_EJE — sube población,
+   * calcula intervalo, selecciona ítems por MUS/sistemático/aleatorio). Se usa
+   * como origen de datos para importar ítems ya seleccionados en PT-NIA530 S5,
+   * en vez de que el auditor los vuelva a tipear a mano.
+   *
+   * Limitación conocida (no resuelta aquí): S_EJE guarda UNA sola ejecución por
+   * auditoría — si el auditor la corre de nuevo para otra área, la anterior se
+   * pierde. El importador de S5 debe usarse justo después de cada ejecución.
+   */
+  async getSamplingExecutionByAudit(auditId: string, user: AuthUser) {
+    const sample = await this.prisma.workingPaper.findFirst({
+      where:  { auditId, audit: { organizationId: user.organizationId } },
+      select: { id: true },
+    });
+    if (!sample) throw new ForbiddenException();
+
+    const paper = await this.prisma.workingPaper.findFirst({
+      where:   { auditId, paperCode: 'PT-A4' },
+      include: { sections: { where: { sectionKey: 'S_EJE' } } },
+    });
+    const value = paper?.sections.find(s => s.sectionKey === 'S_EJE')?.value ?? null;
+    return { execution: value };
+  }
 }

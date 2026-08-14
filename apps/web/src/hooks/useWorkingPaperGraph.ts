@@ -542,6 +542,32 @@ export function useMaterialidadByAudit(auditId: string) {
   });
 }
 
+// ─── PT-A4 → PT-NIA530 S5: importar ítems de la ejecución real de muestreo ────
+
+export interface SamplingExecutionItem {
+  referencia?:  string;
+  descripcion?: string;
+  monto?:       number | string;
+  fecha?:       string;
+  [key: string]: unknown;
+}
+export interface SamplingExecutionData {
+  mode:         'MUS' | 'ATTRIBUTES';
+  executed_at:  string;
+  sample_size:  number;
+  total_items:  number;
+  selected:     SamplingExecutionItem[];
+}
+
+export function useSamplingExecutionByAudit(auditId: string | undefined) {
+  return useQuery<{ execution: SamplingExecutionData | null }>({
+    queryKey: ['sampling-execution', auditId],
+    queryFn:  () => apiClient.get(`/working-papers/audit-sampling-execution/${auditId}`),
+    enabled:  !!auditId,
+    staleTime: 30_000,
+  });
+}
+
 // Aplicar un procedimiento sugerido al papel actual
 export function useAppendProcedure() {
   const qc = useQueryClient();

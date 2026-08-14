@@ -146,6 +146,13 @@ export class WorkingPapersController {
     return this.sectionsService.getMaterialidadByAudit(auditId, user);
   }
 
+  @Get('audit-sampling-execution/:auditId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Obtener la última ejecución del panel de muestreo real (PT-A4 S_EJE) para importar ítems en PT-NIA530 S5' })
+  getSamplingExecution(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.getSamplingExecutionByAudit(auditId, user);
+  }
+
   @Get('catalogue')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Catálogo de plantillas de papeles disponibles, opcionalmente filtrado por tipo de auditoría' })

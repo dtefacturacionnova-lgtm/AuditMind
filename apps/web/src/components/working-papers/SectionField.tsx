@@ -26,6 +26,21 @@ import type { SamplingEvaluationValue } from './SamplingEvaluationPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** PT-NIA530 S5 — lista de áreas ya definidas en S2, para que el auditor elija en vez de re-tipear el nombre. */
+function sampleAreaOptionsFrom(allSections: PaperSection[] | undefined): string[] {
+  const s2 = allSections?.find(s => s.sectionKey === 'S2');
+  const rows = Array.isArray(s2?.value) ? (s2!.value as Record<string, unknown>[]) : [];
+  if (rows.length === 0) return [];
+  const areaKey = Object.keys(rows[0]).find(k => /^área|^area/i.test(k.trim()));
+  if (!areaKey) return [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const v = String(r[areaKey] ?? '').trim();
+    if (v) seen.add(v);
+  }
+  return Array.from(seen);
+}
+
 function displayValue(value: unknown, fieldType: SectionFieldType): string {
   if (value === null || value === undefined || value === '') return '';
   switch (fieldType) {
@@ -381,6 +396,7 @@ export interface SectionFieldProps {
   onSave:           (sectionKey: string, value: unknown) => void;
   paperId?:         string;
   paperCode?:       string | null;
+  auditId?:         string;
   mentionItems?:    MentionItem[];
   onMentionSelect?: (sectionKey: string, targetPaperId: string, targetSectionKey?: string) => void;
   aiDraftConfig?:   AiDraftConfig;
@@ -522,7 +538,7 @@ function SectionAttachments({
   );
 }
 
-export function SectionField({ section, allSections, readonly = false, onSave, paperId, paperCode, mentionItems, onMentionSelect, aiDraftConfig }: SectionFieldProps) {
+export function SectionField({ section, allSections, readonly = false, onSave, paperId, paperCode, auditId, mentionItems, onMentionSelect, aiDraftConfig }: SectionFieldProps) {
   const [editing,      setEditing]   = useState(false);
   const [localValue,   setLocal]     = useState<unknown>(section.value);
   const [overriding,   setOverride]  = useState(false);
@@ -854,6 +870,8 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
             {section.fieldType === 'SAMPLE_ITEM_REGISTER' && paperId && (
               <SampleItemRegisterPanel
                 paperId={paperId}
+                auditId={auditId}
+                areaOptions={sampleAreaOptionsFrom(allSections)}
                 rows={
                   Array.isArray(effectiveValue)
                     ? (effectiveValue as SampleItemRow[])

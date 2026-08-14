@@ -2,9 +2,12 @@
 
 import { useRef, useState } from 'react';
 import {
-  Plus, Trash2, X, FileText, Loader2, Paperclip, HelpCircle,
+  Plus, Trash2, X, FileText, Loader2, Paperclip, HelpCircle, Import, Info,
 } from 'lucide-react';
-import { useAttachToDocumentEvidence, useRemoveDocumentEvidenceAttachment } from '@/hooks/useWorkingPaperGraph';
+import {
+  useAttachToDocumentEvidence, useRemoveDocumentEvidenceAttachment, useSamplingExecutionByAudit,
+} from '@/hooks/useWorkingPaperGraph';
+import type { SamplingExecutionItem } from '@/hooks/useWorkingPaperGraph';
 import type { EvidenceAttachment } from './DocumentEvidencePanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,10 +25,12 @@ export interface SampleItemRow {
 }
 
 interface Props {
-  paperId:  string;
-  rows:     SampleItemRow[];
-  onChange: (rows: SampleItemRow[]) => void;
-  readOnly?: boolean;
+  paperId:      string;
+  auditId?:     string;
+  areaOptions?: string[];
+  rows:         SampleItemRow[];
+  onChange:     (rows: SampleItemRow[]) => void;
+  readOnly?:    boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,6 +75,184 @@ function taintingColor(pct: number): { text: string; bg: string; border: string 
   if (abs < 5)      return { text: 'text-amber-600',   bg: 'bg-amber-50',   border: 'border-amber-200' };
   if (abs < 25)     return { text: 'text-orange-600',  bg: 'bg-orange-50',  border: 'border-orange-200' };
   return              { text: 'text-red-600',      bg: 'bg-red-50',     border: 'border-red-200' };
+}
+
+// ─── Importar de Ejecución de Muestreo (PT-A4) ───────────────────────────────
+
+function looseAmount(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(/[^\d.-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+function looseDate(v: unknown, fallbackIso: string): string {
+  const raw = typeof v === 'string' ? v : '';
+  const tryIso = (s: string) => {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  };
+  return tryIso(raw) ?? tryIso(fallbackIso) ?? '';
+}
+
+function ImportFromExecutionModal({
+  auditId, areaOptions, onImport, onClose,
+}: {
+  auditId: string;
+  areaOptions: string[];
+  onImport: (rows: SampleItemRow[]) => void;
+  onClose: () => void;
+}) {
+  const { data, isLoading, isError } = useSamplingExecutionByAudit(auditId);
+  const execution = data?.execution ?? null;
+  const [targetArea, setTargetArea] = useState(areaOptions[0] ?? '');
+  const [customArea, setCustomArea] = useState('');
+  const [selectedIdx, setSelectedIdx] = useState<Set<number>>(new Set());
+
+  const isMUS = execution?.mode === 'MUS';
+  const items: SamplingExecutionItem[] = isMUS ? (execution?.selected ?? []) : [];
+
+  function toggleAll() {
+    if (selectedIdx.size === items.length) setSelectedIdx(new Set());
+    else setSelectedIdx(new Set(items.map((_, i) => i)));
+  }
+  function toggleOne(i: number) {
+    setSelectedIdx(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  }
+
+  function handleImport() {
+    const area = (areaOptions.length > 0 ? targetArea : customArea).trim();
+    if (!area) { alert('Indique a qué área pertenecen estos ítems.'); return; }
+    const rows: SampleItemRow[] = items
+      .filter((_, i) => selectedIdx.has(i))
+      .map(it => ({
+        id: `smpl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        area,
+        itemRef: String(it.referencia ?? ''),
+        descripcion: String(it.descripcion ?? ''),
+        bookValue: looseAmount(it.monto),
+        auditedValue: null,
+        fecha: looseDate(it.fecha, execution?.executed_at ?? ''),
+        execRef: '',
+        attachments: [],
+      }));
+    onImport(rows);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-5"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-gray-700">Importar de Ejecución de Muestreo (PT-A4)</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+        </div>
+
+        {isLoading && (
+          <p className="text-xs text-gray-400 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando la última ejecución…</p>
+        )}
+        {isError && (
+          <p className="text-xs text-red-600">No se pudo consultar PT-A4 para esta auditoría.</p>
+        )}
+        {!isLoading && !isError && !execution && (
+          <p className="text-xs text-gray-400">
+            Todavía no hay ninguna ejecución guardada en el panel de muestreo de PT-A4 (Materialidad, sección
+            &quot;Ejecución de Muestreo&quot;). Ejecute una selección ahí primero, o siga llenando esta tabla a mano.
+          </p>
+        )}
+        {!isLoading && execution && !isMUS && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5">
+            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            La última ejecución de PT-A4 fue por Atributos (pruebas de control), sin montos monetarios — no aplica
+            para esta tabla, que necesita valor en libros. Ejecute una selección MUS en PT-A4 primero.
+          </p>
+        )}
+
+        {isMUS && execution && (
+          <div className="space-y-3">
+            <p className="text-[11px] text-gray-500">
+              Ejecución MUS del {new Date(execution.executed_at).toLocaleString('es-SV')} — {execution.sample_size} de {execution.total_items} ítems seleccionados.
+              Nota: PT-A4 solo guarda la última ejecución; si ya importó estos mismos ítems antes, evite duplicarlos.
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Área destino en esta tabla</label>
+              {areaOptions.length > 0 ? (
+                <select
+                  value={targetArea}
+                  onChange={e => setTargetArea(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={customArea}
+                  onChange={e => setCustomArea(e.target.value)}
+                  placeholder="Escriba el nombre del área (debe coincidir con S2/S3)"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              )}
+            </div>
+
+            <div className="border border-gray-100 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                <button onClick={toggleAll} className="text-[11px] text-blue-600 hover:underline font-medium">
+                  {selectedIdx.size === items.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                </button>
+                <span className="text-[11px] text-gray-400">{selectedIdx.size} de {items.length} elegidos</span>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-white border-b border-gray-100 text-[10px] text-gray-400 uppercase tracking-wide">
+                      <th className="px-2 py-1.5 w-6"></th>
+                      <th className="px-2 py-1.5 text-left">Referencia</th>
+                      <th className="px-2 py-1.5 text-left">Descripción</th>
+                      <th className="px-2 py-1.5 text-right">Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, i) => (
+                      <tr key={i} className="border-b border-gray-50 last:border-0">
+                        <td className="px-2 py-1"><input type="checkbox" checked={selectedIdx.has(i)} onChange={() => toggleOne(i)} /></td>
+                        <td className="px-2 py-1 font-mono text-gray-600">{String(it.referencia ?? '—')}</td>
+                        <td className="px-2 py-1 text-gray-600">{String(it.descripcion ?? '—')}</td>
+                        <td className="px-2 py-1 text-right font-mono text-gray-700">{looseAmount(it.monto) != null ? fmtUSD(looseAmount(it.monto) as number) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
+              <button
+                onClick={handleImport}
+                disabled={selectedIdx.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                <Import className="w-3.5 h-3.5" /> Importar {selectedIdx.size || ''} ítem{selectedIdx.size === 1 ? '' : 's'}
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400">
+              Se importan como &quot;sin examinar&quot; (Valor auditado vacío) — complételo por ítem al revisar cada uno.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ─── Modal de metodología ─────────────────────────────────────────────────────
@@ -299,10 +482,12 @@ function SampleItemRowItem({ row, index, paperId, readOnly, onUpdate, onDelete }
 
 // ─── Panel principal ──────────────────────────────────────────────────────────
 
-export function SampleItemRegisterPanel({ paperId, rows, onChange, readOnly = false }: Props) {
+export function SampleItemRegisterPanel({ paperId, auditId, areaOptions = [], rows, onChange, readOnly = false }: Props) {
   const [showHelp, setShowHelp] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   function addRow() { onChange([...rows, newRow()]); }
+  function handleImportRows(imported: SampleItemRow[]) { onChange([...rows, ...imported]); }
   function updateRow(id: string, patch: Partial<SampleItemRow>) {
     onChange(rows.map(r => r.id === id ? { ...r, ...patch } : r));
   }
@@ -329,6 +514,23 @@ export function SampleItemRegisterPanel({ paperId, rows, onChange, readOnly = fa
   return (
     <div className="mt-1">
       {showHelp && <MethodologyModal onClose={() => setShowHelp(false)} />}
+      {showImport && auditId && (
+        <ImportFromExecutionModal
+          auditId={auditId}
+          areaOptions={areaOptions}
+          onImport={handleImportRows}
+          onClose={() => setShowImport(false)}
+        />
+      )}
+
+      {!readOnly && auditId && (
+        <button
+          onClick={() => setShowImport(true)}
+          className="mb-2 flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition-colors"
+        >
+          <Import className="w-3.5 h-3.5" /> Importar de Ejecución de Muestreo (PT-A4)
+        </button>
+      )}
 
       {rows.length === 0 ? (
         <div className="py-8 text-center border border-dashed border-gray-200 rounded-xl">

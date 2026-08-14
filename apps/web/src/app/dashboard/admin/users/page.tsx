@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Search, UserPlus, Users, UserCheck, ShieldCheck,
-  Trash2, ChevronLeft, ChevronRight, Loader2, AlertCircle,
+  Trash2, ChevronLeft, ChevronRight, Loader2, AlertCircle, X, Mail,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { apiClient } from '@/lib/api-client';
@@ -110,6 +110,15 @@ function useDeactivateUser() {
   });
 }
 
+function useInviteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { email: string; name: string; role: string }) =>
+      apiClient.post<OrgUser>('/auth/invite', dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function AvatarInitial({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
@@ -185,6 +194,107 @@ function SkeletonRows() {
   );
 }
 
+function InviteUserModal({
+  assignableRoles, onClose, onSuccess,
+}: {
+  assignableRoles: readonly string[];
+  onClose: () => void;
+  onSuccess: (email: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState(assignableRoles.includes('AUDITOR') ? 'AUDITOR' : (assignableRoles[0] ?? ''));
+  const invite = useInviteUser();
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await invite.mutateAsync({ name: name.trim(), email: email.trim(), role });
+      onSuccess(email.trim());
+    } catch {
+      // el mensaje de error ya queda expuesto vía invite.error más abajo
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-base font-bold text-gray-900">Invitar usuario</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          Le enviamos un correo de invitación — la persona define su propia contraseña, nadie más la ve.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre completo</label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Saúl Nerio"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Correo electrónico</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="nombre@empresa.com"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Rol</label>
+            <select
+              value={role}
+              onChange={e => setRole(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A]"
+            >
+              {assignableRoles.map(r => (
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              ))}
+            </select>
+          </div>
+
+          {invite.isError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {(invite.error as Error).message || 'Error al enviar la invitación.'}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={invite.isPending || !name.trim() || !email.trim() || !role}
+              className="flex items-center gap-1.5 bg-[#0F2D4A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1a3f5f] disabled:opacity-50 transition-colors"
+            >
+              {invite.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+              {invite.isPending ? 'Enviando…' : 'Enviar invitación'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Inner page (uses useSearchParams — must be inside Suspense) ───────────────
 
 function UsersPageInner() {
@@ -197,6 +307,7 @@ function UsersPageInner() {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [page, setPage] = useState(1);
   const [toastMsg, setToastMsg] = useState('');
+  const [showInvite, setShowInvite] = useState(false);
 
   // Simple debounce via timeout ref
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -289,7 +400,7 @@ function UsersPageInner() {
             </div>
             {/* Invite button */}
             <button
-              onClick={() => showToast('Funcionalidad próximamente')}
+              onClick={() => setShowInvite(true)}
               className="flex items-center gap-2 bg-[#0F2D4A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1a3f5f] transition-colors"
             >
               <UserPlus className="h-4 w-4" />
@@ -545,6 +656,18 @@ function UsersPageInner() {
           )}
         </div>
       </div>
+
+      {/* Invite modal */}
+      {showInvite && (
+        <InviteUserModal
+          assignableRoles={ASSIGNABLE_ROLES.filter(r => canAssignRole(r))}
+          onClose={() => setShowInvite(false)}
+          onSuccess={(email) => {
+            setShowInvite(false);
+            showToast(`Invitación enviada a ${email} — recibirá un correo para crear su contraseña.`);
+          }}
+        />
+      )}
 
       {/* Toast */}
       {toastMsg && (

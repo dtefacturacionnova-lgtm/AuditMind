@@ -22,7 +22,7 @@ import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './Tria
 import { MaterialidadPanel } from './MaterialidadPanel';
 import { SamplingExecutionPanel } from './SamplingExecutionPanel';
 import { RatioTrendChart, ConcentrationChart, VariationChart, AjeImpactChart, MaterialityBridgeChart } from './AnalyticsCharts';
-import { CosoScorePanel } from './CosoScorePanel';
+import { CosoScorePanel, CosoPrincipleMiniChart, COSO_COMPONENTS } from './CosoScorePanel';
 import { MethodologyInfo } from './MethodologyInfo';
 
 // ─── PT-FIN-B07 S1 — botón "Propagar desde Balance" (B-00 S2 → Horizontal) ────
@@ -913,6 +913,10 @@ export function SmartPaperSections({
               <SectionErrorBoundary key={section.sectionKey} label={section.label}>
                 <div>
                   {!readonly && paperId && <SeedCosoQuestionsBar paperId={paperId} sectionKey={section.sectionKey} />}
+                  {(() => {
+                    const componentMeta = COSO_COMPONENTS.find(c => c.sectionKey === section.sectionKey);
+                    return componentMeta ? <CosoPrincipleMiniChart section={section} componentMeta={componentMeta} /> : null;
+                  })()}
                   <SectionField
                     section={section}
                     allSections={sorted}

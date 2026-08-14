@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   Plus, Trash2, X, Sparkles, Loader2, Check, ArrowUp, ArrowDown, ArrowUpDown,
   Paperclip, FileText, CircleSlash, AlertTriangle, AlertOctagon,
@@ -234,6 +234,38 @@ function shortColumnLabel(col: string): string {
   return idx > 0 ? col.slice(0, idx).trim() : col;
 }
 
+/**
+ * A column named like "Respuesta (Sí/No/N-A)" or "Clasificación (Significativa/Material)"
+ * carries a closed set of choices in its trailing parenthetical — render it as a dropdown
+ * instead of free text. By convention the first option is the "positive"/best answer
+ * (used by the group-tally badge below). Guards against matching prose parentheticals
+ * (long descriptions) by requiring short, comma-free slash-separated tokens.
+ */
+function parseColumnOptions(col: string): string[] | null {
+  const m = col.match(/\(([^)]+)\)\s*$/);
+  if (!m) return null;
+  const parts = m[1].split('/').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2 || parts.length > 6) return null;
+  if (!parts.every(p => p.length > 0 && p.length <= 14 && !/[.,;:]/.test(p))) return null;
+  return parts;
+}
+
+function optionPillClasses(opt: string): string {
+  const n = opt.toLowerCase();
+  if (/^s(í|i)/.test(n)) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (/^no/.test(n)) return 'bg-red-50 text-red-700 border-red-200';
+  if (/^n\/?a/.test(n)) return 'bg-gray-50 text-gray-500 border-gray-200';
+  return 'bg-blue-50 text-blue-700 border-blue-200';
+}
+
+function tallyBadgeClasses(pct: number | null): string {
+  if (pct === null) return 'bg-gray-50 text-gray-400 border-gray-200';
+  if (pct >= 75) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (pct >= 50) return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (pct >= 25) return 'bg-orange-50 text-orange-700 border-orange-200';
+  return 'bg-red-50 text-red-700 border-red-200';
+}
+
 /** Disambiguate repeated short labels (e.g. across GRUPO sections) by appending " (2)", " (3)", ... */
 function dedupeLabels(labels: string[]): string[] {
   const seen = new Map<string, number>();
@@ -337,7 +369,9 @@ export function MatrixGridPanel({
 }: Props) {
   // aiHint-derived suggestion: short header labels + full phrase per label (for the tooltip)
   const suggestedFull  = parseColumnsFromAiHint(aiHint);
-  const suggestedShort = dedupeLabels(suggestedFull.map(shortColumnLabel));
+  // Columns whose parenthetical is a closed option list (e.g. "Respuesta (Sí/No/N-A)")
+  // keep their full text as the header/key — it doubles as the dropdown's option source.
+  const suggestedShort = dedupeLabels(suggestedFull.map(f => (parseColumnOptions(f) ? f : shortColumnLabel(f))));
   const suggestedTitleByLabel = Object.fromEntries(suggestedShort.map((s, i) => [s, suggestedFull[i]]));
 
   const initialRows = enableRowExtras ? withRowIds(parseValue(value)) : parseValue(value);
@@ -672,7 +706,37 @@ export function MatrixGridPanel({
             </button>
           )}
         </div>
-      ) : (
+      ) : (() => {
+        // Group-tally banner: when the first column repeats across consecutive rows
+        // (e.g. several preguntas under the same Principio) and some other column
+        // carries a short Sí/No/N-A-style option list, show a compact "X/Y Sí" banner
+        // above each group — reusable wherever a MATRIX nests sub-items under a parent
+        // label. Disabled while a custom sort is active (grouping only holds in the
+        // natural/stored row order).
+        const groupCol = columns.length > 1 ? columns[0] : null;
+        const tallyCol = groupCol
+          ? columns.find(c => c !== groupCol && (parseColumnOptions(c)?.length ?? 0) >= 2 && (parseColumnOptions(c)?.length ?? 0) <= 3)
+          : undefined;
+        const positiveOption = tallyCol ? parseColumnOptions(tallyCol)?.[0] : undefined;
+        const hasRepeatedGroups = groupCol ? rows.some((r, idx) => idx > 0 && r[groupCol] === rows[idx - 1][groupCol] && r[groupCol]) : false;
+        const showGroups = !sortColumn && !!groupCol && !!tallyCol && !!positiveOption && hasRepeatedGroups;
+
+        const groupStats = new Map<string, { positive: number; total: number }>();
+        if (showGroups && groupCol && tallyCol && positiveOption) {
+          for (const r of rows) {
+            const key = r[groupCol] ?? '';
+            const stat = groupStats.get(key) ?? { positive: 0, total: 0 };
+            const answer = (r[tallyCol] ?? '').trim();
+            if (answer) {
+              stat.total += 1;
+              if (answer.toLowerCase() === positiveOption.toLowerCase()) stat.positive += 1;
+            }
+            groupStats.set(key, stat);
+          }
+        }
+        const totalColsForSpan = columns.length + (enableRowExtras ? 3 : 0) + (!readOnly ? 1 : 0);
+
+        return (
         <div className="border border-gray-100 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
@@ -766,7 +830,22 @@ export function MatrixGridPanel({
                   const rowId = row['_id'] ?? '';
                   const rowError = rowErrors[rowId];
                   const isSelectedRow = selectedCell?.row === i;
+                  const isGroupStart = showGroups && groupCol && (i === 0 || rows[i - 1][groupCol] !== row[groupCol]);
+                  const stat = showGroups && groupCol ? groupStats.get(row[groupCol] ?? '') : undefined;
                   return (
+                  <Fragment key={i}>
+                  {isGroupStart && groupCol && (
+                    <tr key={`grp-${i}`} className="bg-gray-50/80">
+                      <td colSpan={totalColsForSpan} className="px-3 py-1.5 text-[11px] font-semibold text-gray-500 border-b border-gray-100">
+                        <span className="mr-2">{row[groupCol] || '—'}</span>
+                        {stat && stat.total > 0 && (
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${tallyBadgeClasses((stat.positive / stat.total) * 100)}`}>
+                            {stat.positive}/{stat.total} {positiveOption}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  )}
                   <tr
                     key={i}
                     className={`group border-b border-gray-100 last:border-0 hover:bg-blue-50/20 transition-colors ${
@@ -777,6 +856,7 @@ export function MatrixGridPanel({
                       const isSelectedCol = selectedCell?.col === col;
                       const isSelectedCell = isSelectedRow && isSelectedCol;
                       const alertKind = matchAlertKind(row[col] ?? '');
+                      const cellOptions = parseColumnOptions(col);
                       return (
                       <td
                         key={col}
@@ -787,6 +867,26 @@ export function MatrixGridPanel({
                             : isSelectedCol ? 'bg-blue-50/50' : ''
                         }`}
                       >
+                        {cellOptions ? (
+                          readOnly ? (
+                            row[col] ? (
+                              <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${optionPillClasses(row[col])}`}>
+                                {row[col]}
+                              </span>
+                            ) : <span className="text-gray-300 text-xs">—</span>
+                          ) : (
+                            <select
+                              value={row[col] ?? ''}
+                              onChange={e => updateCell(i, col, e.target.value)}
+                              onFocus={() => setSelectedCell({ row: i, col })}
+                              className="w-full text-xs text-gray-800 bg-transparent border-b border-transparent
+                                hover:border-gray-200 focus:border-blue-400 focus:outline-none py-0.5"
+                            >
+                              <option value="">—</option>
+                              {cellOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            </select>
+                          )
+                        ) : (
                         <div className={alertKind ? 'flex items-start gap-1.5' : undefined}>
                           {alertKind && (
                             <span title={alertKind.label} className="shrink-0 mt-0.5">
@@ -800,6 +900,7 @@ export function MatrixGridPanel({
                             onFocus={() => setSelectedCell({ row: i, col })}
                           />
                         </div>
+                        )}
                       </td>
                       );
                     })}
@@ -882,6 +983,7 @@ export function MatrixGridPanel({
                       </td>
                     )}
                   </tr>
+                  </Fragment>
                   );
                 })}
               </tbody>
@@ -898,7 +1000,8 @@ export function MatrixGridPanel({
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

@@ -1450,10 +1450,13 @@ INSTRUCCIONES DE SALIDA:
   /**
    * Carga en la sección indicada de PT-COSO (S1-S5, una por componente) las
    * preguntas de evaluación sugeridas de la Biblioteca de Contenido
-   * (content_library_items, kind=COSO_QUESTION) — una fila por principio.
-   * Igual que seedSubstantiveProcedures, es ADITIVO: solo agrega principios que aún no
-   * estén en la tabla (comparando por el texto de "Principio"), nunca pisa
-   * Evidencia/Observaciones ni Calificación que el auditor ya haya llenado.
+   * (content_library_items, kind=COSO_QUESTION) — una fila POR PREGUNTA (point of
+   * focus), no por principio: así cada una se responde Sí/No/N-A individualmente
+   * y el puntaje del componente se deriva de esas respuestas en vez de que el
+   * auditor tenga que sintetizar todo el principio en un solo número (ver
+   * CosoScorePanel). Igual que seedSubstantiveProcedures, es ADITIVO: solo agrega
+   * preguntas que aún no estén en la tabla (comparando por Principio+Pregunta),
+   * nunca pisa Respuesta ni Evidencia que el auditor ya haya llenado.
    */
   async seedCosoQuestions(paperId: string, sectionKey: string, user: AuthUser) {
     const wp = await this.assertPaperAccess(paperId, user);
@@ -1477,28 +1480,32 @@ INSTRUCCIONES DE SALIDA:
     const asRows = (value: unknown): Record<string, string>[] =>
       Array.isArray(value) ? (value as Record<string, string>[]) : [];
 
-    const COLUMNS = ['Principio', 'Preguntas Clave de Evaluación', 'Evidencia y Observaciones', 'Calificación'];
+    const RESPUESTA_COL = 'Respuesta (Sí/No/N-A)';
+    const COLUMNS = ['Principio', 'Pregunta', RESPUESTA_COL, 'Evidencia y Observaciones'];
 
     const section = await this.prisma.paperSection.findUnique({
       where: { paperId_sectionKey: { paperId, sectionKey } },
     });
     const existing = asRows(section?.value);
-    const existingPrincipios = new Set(existing.map(r => norm(r['Principio'])));
+    const existingKeys = new Set(existing.map(r => `${norm(r['Principio'])}::${norm(r['Pregunta'])}`));
     const columns = existing.length > 0 ? Object.keys(existing[0]) : COLUMNS;
 
-    const toAdd = library.filter(p => !existingPrincipios.has(norm(p.itemLabel)));
-    if (toAdd.length === 0) {
-      return { added: 0, message: 'Todos los principios de la biblioteca ya están en la tabla — nada que agregar.' };
-    }
-
-    const newRows = toAdd.map(p => {
-      const row: Record<string, string> = {};
-      for (const c of columns) row[c] = '';
-      row['Principio'] = p.itemLabel;
+    const newRows: Record<string, string>[] = [];
+    for (const p of library) {
       const preguntas = Array.isArray(p.itemDetails) ? (p.itemDetails as unknown as string[]) : [];
-      row['Preguntas Clave de Evaluación'] = preguntas.map(q => `• ${q}`).join('\n');
-      return row;
-    });
+      for (const q of preguntas) {
+        const key = `${norm(p.itemLabel)}::${norm(q)}`;
+        if (existingKeys.has(key)) continue;
+        const row: Record<string, string> = {};
+        for (const c of columns) row[c] = '';
+        row['Principio'] = p.itemLabel;
+        row['Pregunta'] = q;
+        newRows.push(row);
+      }
+    }
+    if (newRows.length === 0) {
+      return { added: 0, message: 'Todas las preguntas de la biblioteca ya están en la tabla — nada que agregar.' };
+    }
 
     const merged = [...existing, ...newRows];
 
@@ -1511,7 +1518,7 @@ INSTRUCCIONES DE SALIDA:
 
     return {
       added: newRows.length,
-      message: `${newRows.length} principio(s) agregados desde la biblioteca de evaluación COSO. Complete Evidencia y Observaciones y Calificación para cada uno.`,
+      message: `${newRows.length} pregunta(s) agregadas desde la biblioteca de evaluación COSO. Responda Sí/No/N-A y documente Evidencia y Observaciones para cada una.`,
     };
   }
 

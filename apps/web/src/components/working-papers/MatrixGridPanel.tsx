@@ -297,12 +297,13 @@ const NARROW_COL_HINTS = [
   'n°', 'no.', 'núm', 'numero', 'código', 'code', 'fecha', 'monto', 'saldo', 'valor',
   '%', 'pct', 'sí/no', 'si/no', 'sí / no', 'estado', 'severidad', 'nivel', 'prioridad',
   'aplica', 'cumple', 'acuse de recibo', 'año', 'moneda', 'cantidad', 'tipo', 'id',
+  'afirmaci', 'riesgo asociado', 'elaborado por', 'revisado por',
 ];
 const WIDE_COL_HINTS = [
   'descripci', 'observ', 'situaci', 'detalle', 'justificaci', 'narrativa', 'comentario',
   'salvaguarda', 'criterio', 'causa', 'efecto', 'condici', 'recomendaci', 'resultado',
   'evidencia', 'conclusi', 'nota', 'respuesta', 'acción', 'hallazgo', 'fundamento',
-  'riesgo potencial', 'plan de acción',
+  'riesgo potencial', 'plan de acción', 'procedimiento vinculado',
 ];
 
 function columnWidth(col: string): ColWidth {

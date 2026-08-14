@@ -385,7 +385,8 @@ export interface SectionFieldProps {
 // Papers/sections where the MATRIX grid gets per-row severity + auditor note + evidence.
 // Opt-in list — keeps the other ~45 MATRIX papers exactly as they were.
 const ROW_EXTRAS_SECTIONS: Record<string, Set<string>> = {
-  'PT-FIN-B07': new Set(['S1', 'S2', 'S3', 'S4']),
+  'PT-FIN-B07':     new Set(['S1', 'S2', 'S3', 'S4']),
+  'PT-FIN-C-SUST':  new Set(['S4']),
 };
 
 function rowExtrasEnabled(paperCode: string | null | undefined, sectionKey: string): boolean {

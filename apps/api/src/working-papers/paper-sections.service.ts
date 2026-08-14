@@ -9,8 +9,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { PaperGraphService } from './paper-graph.service';
 import { PAPER_TEMPLATES } from './paper-templates';
 import { AiService } from '../ai/ai.service';
-import { SUBSTANTIVE_PROCEDURE_LIBRARY } from './substantive-procedure-library';
-import { COSO_QUESTION_LIBRARY } from './coso-question-library';
+import { ContentLibraryService } from '../content-library/content-library.service';
 
 @Injectable()
 export class PaperSectionsService {
@@ -20,10 +19,11 @@ export class PaperSectionsService {
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   constructor(
-    private readonly prisma:       PrismaService,
-    private readonly graphService: PaperGraphService,
-    private readonly config:       ConfigService,
-    private readonly aiService:    AiService,
+    private readonly prisma:         PrismaService,
+    private readonly graphService:   PaperGraphService,
+    private readonly config:         ConfigService,
+    private readonly aiService:      AiService,
+    private readonly contentLibrary: ContentLibraryService,
   ) {}
 
   // ─── Access guard ────────────────────────────────────────────────────────
@@ -1371,13 +1371,14 @@ INSTRUCCIONES DE SALIDA:
   // ─── Auditoría Financiera: biblioteca de procedimientos sustantivos ─────────
 
   /**
-   * Carga en PT-FIN-C-SUST S3 los procedimientos sugeridos de la biblioteca
-   * estática (substantive-procedure-library.ts) para el área del papel
-   * (wp.code, ej. "C-01"). A diferencia de los demás propagateXxx de esta
-   * clase, esto NO sobrescribe — solo AGREGA los procedimientos que aún no
-   * estén en la tabla (comparando por texto), porque S3 tiene datos propios
-   * del auditor por fila (Población, Muestra, Criterio, Período) que nunca
-   * deben perderse al volver a presionar el botón.
+   * Carga en PT-FIN-C-SUST S3 los procedimientos sugeridos de la Biblioteca de
+   * Contenido (content_library_items, kind=SUBSTANTIVE_PROCEDURE) para el área
+   * del papel (wp.code, ej. "C-01") — editable desde
+   * /dashboard/admin/content-library. A diferencia de los demás propagateXxx
+   * de esta clase, esto NO sobrescribe — solo AGREGA los procedimientos que
+   * aún no estén en la tabla (comparando por texto), porque S3 tiene datos
+   * propios del auditor por fila (Población, Muestra, Criterio, Período) que
+   * nunca deben perderse al volver a presionar el botón.
    */
   async seedSubstantiveProcedures(paperId: string, user: AuthUser) {
     const wp = await this.assertPaperAccess(paperId, user);
@@ -1388,11 +1389,15 @@ INSTRUCCIONES DE SALIDA:
       );
     }
 
-    const library = SUBSTANTIVE_PROCEDURE_LIBRARY[wp.code] ?? [];
+    await this.contentLibrary.ensureSystemLibrary(user.organizationId, user.id);
+    const library = await this.prisma.contentLibraryItem.findMany({
+      where: { organizationId: user.organizationId, kind: 'SUBSTANTIVE_PROCEDURE', groupKey: wp.code },
+      orderBy: { sortOrder: 'asc' },
+    });
     if (library.length === 0) {
       return {
         added: 0,
-        message: `Aún no hay procedimientos en la biblioteca para el área ${wp.code} — puede agregar filas manualmente mientras tanto.`,
+        message: `Aún no hay procedimientos en la biblioteca para el área ${wp.code} — puede agregar filas manualmente mientras tanto, o agregarlos en Administración → Biblioteca de Contenido.`,
       };
     }
 
@@ -1409,7 +1414,7 @@ INSTRUCCIONES DE SALIDA:
     const existingDesc = new Set(existing.map(r => norm(r['Procedimiento']).toLowerCase()));
     const columns = existing.length > 0 ? Object.keys(existing[0]) : DEFAULT_COLUMNS;
 
-    const toAdd = library.filter(p => !existingDesc.has(p.procedimiento.toLowerCase()));
+    const toAdd = library.filter(p => !existingDesc.has(p.itemLabel.toLowerCase()));
     if (toAdd.length === 0) {
       return { added: 0, message: 'Todos los procedimientos de la biblioteca ya están en la tabla — nada que agregar.' };
     }
@@ -1420,8 +1425,8 @@ INSTRUCCIONES DE SALIDA:
       const row: Record<string, string> = {};
       for (const c of columns) row[c] = '';
       row['N°'] = String(seq);
-      row['Procedimiento'] = p.procedimiento;
-      row['Técnica'] = p.tecnica;
+      row['Procedimiento'] = p.itemLabel;
+      row['Técnica'] = p.itemSubtitle ?? '';
       return row;
     });
 
@@ -1444,9 +1449,9 @@ INSTRUCCIONES DE SALIDA:
 
   /**
    * Carga en la sección indicada de PT-COSO (S1-S5, una por componente) las
-   * preguntas de evaluación sugeridas de la biblioteca estática
-   * (coso-question-library.ts) — una fila por principio. Igual que
-   * seedSubstantiveProcedures, es ADITIVO: solo agrega principios que aún no
+   * preguntas de evaluación sugeridas de la Biblioteca de Contenido
+   * (content_library_items, kind=COSO_QUESTION) — una fila por principio.
+   * Igual que seedSubstantiveProcedures, es ADITIVO: solo agrega principios que aún no
    * estén en la tabla (comparando por el texto de "Principio"), nunca pisa
    * Evidencia/Observaciones ni Calificación que el auditor ya haya llenado.
    */
@@ -1459,7 +1464,11 @@ INSTRUCCIONES DE SALIDA:
       );
     }
 
-    const library = COSO_QUESTION_LIBRARY[sectionKey] ?? [];
+    await this.contentLibrary.ensureSystemLibrary(user.organizationId, user.id);
+    const library = await this.prisma.contentLibraryItem.findMany({
+      where: { organizationId: user.organizationId, kind: 'COSO_QUESTION', groupKey: sectionKey },
+      orderBy: { sortOrder: 'asc' },
+    });
     if (library.length === 0) {
       throw new BadRequestException(`No hay biblioteca de preguntas para la sección ${sectionKey}`);
     }
@@ -1477,7 +1486,7 @@ INSTRUCCIONES DE SALIDA:
     const existingPrincipios = new Set(existing.map(r => norm(r['Principio'])));
     const columns = existing.length > 0 ? Object.keys(existing[0]) : COLUMNS;
 
-    const toAdd = library.filter(p => !existingPrincipios.has(norm(p.principio)));
+    const toAdd = library.filter(p => !existingPrincipios.has(norm(p.itemLabel)));
     if (toAdd.length === 0) {
       return { added: 0, message: 'Todos los principios de la biblioteca ya están en la tabla — nada que agregar.' };
     }
@@ -1485,8 +1494,9 @@ INSTRUCCIONES DE SALIDA:
     const newRows = toAdd.map(p => {
       const row: Record<string, string> = {};
       for (const c of columns) row[c] = '';
-      row['Principio'] = p.principio;
-      row['Preguntas Clave de Evaluación'] = p.preguntas.map(q => `• ${q}`).join('\n');
+      row['Principio'] = p.itemLabel;
+      const preguntas = Array.isArray(p.itemDetails) ? (p.itemDetails as unknown as string[]) : [];
+      row['Preguntas Clave de Evaluación'] = preguntas.map(q => `• ${q}`).join('\n');
       return row;
     });
 

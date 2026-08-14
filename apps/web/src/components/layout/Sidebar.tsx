@@ -7,7 +7,7 @@ import {
   FileText, LineChart, Bot, Leaf, BadgeCheck, Users2,
   ServerCrash, Settings, ChevronDown, ChevronRight,
   Building2, LogOut, Bell, Plug, BookOpen,
-  Briefcase, TrendingUp, FolderOpen, ListTree, Target,
+  Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -98,6 +98,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Catálogos Generales', href: '/dashboard/admin/catalogs', icon: ListTree },
       { label: 'Plantillas de Índice', href: '/dashboard/admin/index-templates', icon: FolderOpen },
       { label: 'Plantillas de Auditoría', href: '/dashboard/admin/audit-templates', icon: ClipboardList },
+      { label: 'Biblioteca de Contenido', href: '/dashboard/admin/content-library', icon: Library },
       { label: 'Conectores de Datos', href: '/dashboard/admin/data-sources', icon: Plug },
       { label: 'Base de Conocimiento', href: '/dashboard/admin/knowledge', icon: BookOpen },
       { label: 'Configuración', href: '/dashboard/admin/settings', icon: Settings },

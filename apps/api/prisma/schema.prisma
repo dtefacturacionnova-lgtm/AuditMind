@@ -401,6 +401,7 @@ model Organization {
   dataSources            DataSource[]
   indexTemplates         IndexTemplate[]
   auditTemplates         AuditTemplate[]
+  contentLibraryItems    ContentLibraryItem[]
   entityTypeConfigs      EntityTypeConfig[]
   processCategoryConfigs ProcessCategoryConfig[]
   strategicObjectives    StrategicObjective[]
@@ -438,6 +439,7 @@ model User {
   signedOffPhases       AuditPhase[]          @relation("PhaseSignOff")
   createdIndexTemplates IndexTemplate[]       @relation("IndexTemplateCreator")
   createdAuditTemplates AuditTemplate[]      @relation("AuditTemplateCreator")
+  createdContentLibraryItems ContentLibraryItem[] @relation("ContentLibraryItemCreator")
   ownedEntities     AuditEntity[]         @relation("EntityOwner")
   findings          Finding[]             @relation("FindingResponsible")
   aiInteractions    AIInteraction[]
@@ -1111,6 +1113,43 @@ model AuditTemplate {
 
   @@index([organizationId])
   @@map("audit_templates")
+}
+
+// ─── Biblioteca de Contenido Reutilizable ────────────────────────────────────
+// Unifica dos bibliotecas que antes vivían como archivos TS estáticos:
+// procedimientos sustantivos por área (PT-FIN-C-SUST, groupKey = código de
+// papel "C-01") y preguntas de evaluación COSO por principio (PT-COSO,
+// groupKey = sectionKey "S1"-"S5"). itemSubtitle guarda un dato de una sola
+// línea (la Técnica, solo procedimientos); itemDetails guarda un array de
+// sub-textos (las preguntas del principio, solo COSO) — cada `kind` usa uno
+// de los dos y deja el otro vacío. Mismo patrón organizationId+isSystem que
+// AuditTemplate: cada org tiene su propia copia sembrada de la biblioteca de
+// sistema, editable; isSystem solo bloquea el borrado, no la edición.
+enum ContentLibraryKind {
+  SUBSTANTIVE_PROCEDURE
+  COSO_QUESTION
+}
+
+model ContentLibraryItem {
+  id             String             @id @default(cuid())
+  organizationId String
+  kind           ContentLibraryKind
+  groupKey       String             // "C-01" (área) | "S1"-"S5" (componente COSO)
+  groupLabel     String?            // etiqueta legible del grupo para la UI de administración
+  itemLabel      String             // procedimiento (texto completo) | nombre del principio
+  itemSubtitle   String?            // Técnica (Inspección/Confirmación/...) — solo procedimientos
+  itemDetails    Json?              // string[] — preguntas del principio — solo COSO
+  sortOrder      Int                @default(0)
+  isSystem       Boolean            @default(false)
+  createdById    String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      User         @relation("ContentLibraryItemCreator", fields: [createdById], references: [id])
+
+  @@index([organizationId, kind, groupKey])
+  @@map("content_library_items")
 }
 
 model AuditTeam {

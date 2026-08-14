@@ -10,9 +10,10 @@ import { CrossAuditLearningService } from './cross-audit-learning.service';
 import { PaperReferencesService } from './paper-references.service';
 import { PaperVersionsService } from './paper-versions.service';
 import { AiModule } from '../ai/ai.module';
+import { ContentLibraryModule } from '../content-library/content-library.module';
 
 @Module({
-  imports: [AiModule],
+  imports: [AiModule, ContentLibraryModule],
   controllers: [WorkingPapersController],
   providers: [
     WorkingPapersService,

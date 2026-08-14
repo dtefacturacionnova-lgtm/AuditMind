@@ -14,6 +14,7 @@ import {
   usePropagateDiferencias,
   usePropagateControlDeficiencias,
   useSeedSubstantiveProcedures,
+  useSeedCosoQuestions,
 } from '@/hooks/useWorkingPaperGraph';
 import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
@@ -21,6 +22,7 @@ import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './Tria
 import { MaterialidadPanel } from './MaterialidadPanel';
 import { SamplingExecutionPanel } from './SamplingExecutionPanel';
 import { RatioTrendChart, ConcentrationChart, VariationChart, AjeImpactChart, MaterialityBridgeChart } from './AnalyticsCharts';
+import { CosoScorePanel } from './CosoScorePanel';
 import { MethodologyInfo } from './MethodologyInfo';
 
 // ─── PT-FIN-B07 S1 — botón "Propagar desde Balance" (B-00 S2 → Horizontal) ────
@@ -156,6 +158,55 @@ function SeedProceduresBar({ paperId }: { paperId: string }) {
         >
           <Sparkles className={`w-3.5 h-3.5 ${seed.isPending ? 'animate-pulse' : ''}`} />
           {seed.isPending ? 'Cargando…' : 'Cargar Procedimientos Sugeridos'}
+        </button>
+      </div>
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 mt-2 text-xs ${
+          isError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-violet-50 border border-violet-200 text-violet-700'
+        }`}>
+          {isError ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PT-COSO S1-S5 — botón "Cargar Preguntas Sugeridas" (biblioteca COSO) ─────
+
+function SeedCosoQuestionsBar({ paperId, sectionKey }: { paperId: string; sectionKey: string }) {
+  const seed = useSeedCosoQuestions();
+  const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  async function handleClick() {
+    setMsg('');
+    setIsError(false);
+    try {
+      const res = await seed.mutateAsync({ paperId, sectionKey });
+      setMsg(res.message);
+      setIsError(false);
+    } catch (err) {
+      setMsg((err as Error).message || 'Error al cargar las preguntas');
+      setIsError(true);
+    }
+  }
+
+  return (
+    <div className="pt-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-[11px] text-gray-400">
+          Trae las preguntas de evaluación de la biblioteca COSO para este componente — nunca borra ni pisa filas ya llenadas.
+        </p>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={seed.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white text-xs font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors shrink-0"
+          title="Cargar preguntas sugeridas de la biblioteca de evaluación COSO"
+        >
+          <Sparkles className={`w-3.5 h-3.5 ${seed.isPending ? 'animate-pulse' : ''}`} />
+          {seed.isPending ? 'Cargando…' : 'Cargar Preguntas Sugeridas'}
         </button>
       </div>
       {msg && (
@@ -804,6 +855,64 @@ export function SmartPaperSections({
               <SectionErrorBoundary key="S3" label={section.label}>
                 <div>
                   {!readonly && paperId && <SeedProceduresBar paperId={paperId} />}
+                  <SectionField
+                    section={section}
+                    allSections={sorted}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    paperId={paperId}
+                    paperCode={paperCode}
+                    mentionItems={mentionItems}
+                    aiDraftConfig={aiDraftConfig}
+                    onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                      void createReference.mutateAsync({
+                        paperId,
+                        sourceSectionKey: sectionKey,
+                        targetPaperId,
+                        targetSectionKey,
+                      });
+                    }}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            );
+          }
+
+          // PT-COSO S6: Puntaje Ponderado del SCI (radar + medidor + barra de 17 principios), antes de la conclusión global.
+          if (paperCode === 'PT-COSO' && section.sectionKey === 'S6') {
+            return (
+              <SectionErrorBoundary key="S6" label={section.label}>
+                <div>
+                  <CosoScorePanel sections={sorted} />
+                  <SectionField
+                    section={section}
+                    allSections={sorted}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    paperId={paperId}
+                    paperCode={paperCode}
+                    mentionItems={mentionItems}
+                    aiDraftConfig={aiDraftConfig}
+                    onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                      void createReference.mutateAsync({
+                        paperId,
+                        sourceSectionKey: sectionKey,
+                        targetPaperId,
+                        targetSectionKey,
+                      });
+                    }}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            );
+          }
+
+          // PT-COSO S1-S5: botón "Cargar Preguntas Sugeridas" (biblioteca de evaluación COSO por componente).
+          if (paperCode === 'PT-COSO' && ['S1', 'S2', 'S3', 'S4', 'S5'].includes(section.sectionKey)) {
+            return (
+              <SectionErrorBoundary key={section.sectionKey} label={section.label}>
+                <div>
+                  {!readonly && paperId && <SeedCosoQuestionsBar paperId={paperId} sectionKey={section.sectionKey} />}
                   <SectionField
                     section={section}
                     allSections={sorted}

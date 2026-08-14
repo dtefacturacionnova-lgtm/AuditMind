@@ -265,6 +265,20 @@ export function useSeedSubstantiveProcedures() {
   });
 }
 
+export function useSeedCosoQuestions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, sectionKey }: { paperId: string; sectionKey: string }) =>
+      apiClient.post<{ added: number; message: string }>(
+        `/working-papers/${paperId}/seed-coso-questions/${sectionKey}`,
+        {},
+      ),
+    onSuccess: (_res, { paperId }) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
 export function useInitFromTemplate() {
   const qc = useQueryClient();
   return useMutation({

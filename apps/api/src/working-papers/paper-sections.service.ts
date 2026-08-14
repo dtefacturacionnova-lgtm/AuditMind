@@ -10,6 +10,7 @@ import { PaperGraphService } from './paper-graph.service';
 import { PAPER_TEMPLATES } from './paper-templates';
 import { AiService } from '../ai/ai.service';
 import { SUBSTANTIVE_PROCEDURE_LIBRARY } from './substantive-procedure-library';
+import { COSO_QUESTION_LIBRARY } from './coso-question-library';
 
 @Injectable()
 export class PaperSectionsService {
@@ -1436,6 +1437,71 @@ INSTRUCCIONES DE SALIDA:
     return {
       added: newRows.length,
       message: `${newRows.length} procedimiento(s) agregados desde la biblioteca de ${wp.code}. Complete Población, Muestra, Criterio y Período para cada uno.`,
+    };
+  }
+
+  // ─── PT-COSO: biblioteca de preguntas de evaluación por principio ───────────
+
+  /**
+   * Carga en la sección indicada de PT-COSO (S1-S5, una por componente) las
+   * preguntas de evaluación sugeridas de la biblioteca estática
+   * (coso-question-library.ts) — una fila por principio. Igual que
+   * seedSubstantiveProcedures, es ADITIVO: solo agrega principios que aún no
+   * estén en la tabla (comparando por el texto de "Principio"), nunca pisa
+   * Evidencia/Observaciones ni Calificación que el auditor ya haya llenado.
+   */
+  async seedCosoQuestions(paperId: string, sectionKey: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-COSO') {
+      throw new BadRequestException(
+        'Solo el papel PT-COSO puede cargar preguntas de la biblioteca de evaluación COSO',
+      );
+    }
+
+    const library = COSO_QUESTION_LIBRARY[sectionKey] ?? [];
+    if (library.length === 0) {
+      throw new BadRequestException(`No hay biblioteca de preguntas para la sección ${sectionKey}`);
+    }
+
+    const norm = (v: unknown): string => (v == null ? '' : String(v)).trim().toLowerCase();
+    const asRows = (value: unknown): Record<string, string>[] =>
+      Array.isArray(value) ? (value as Record<string, string>[]) : [];
+
+    const COLUMNS = ['Principio', 'Preguntas Clave de Evaluación', 'Evidencia y Observaciones', 'Calificación'];
+
+    const section = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey } },
+    });
+    const existing = asRows(section?.value);
+    const existingPrincipios = new Set(existing.map(r => norm(r['Principio'])));
+    const columns = existing.length > 0 ? Object.keys(existing[0]) : COLUMNS;
+
+    const toAdd = library.filter(p => !existingPrincipios.has(norm(p.principio)));
+    if (toAdd.length === 0) {
+      return { added: 0, message: 'Todos los principios de la biblioteca ya están en la tabla — nada que agregar.' };
+    }
+
+    const newRows = toAdd.map(p => {
+      const row: Record<string, string> = {};
+      for (const c of columns) row[c] = '';
+      row['Principio'] = p.principio;
+      row['Preguntas Clave de Evaluación'] = p.preguntas.map(q => `• ${q}`).join('\n');
+      return row;
+    });
+
+    const merged = [...existing, ...newRows];
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: merged as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, sectionKey, merged);
+
+    return {
+      added: newRows.length,
+      message: `${newRows.length} principio(s) agregados desde la biblioteca de evaluación COSO. Complete Evidencia y Observaciones y Calificación para cada uno.`,
     };
   }
 

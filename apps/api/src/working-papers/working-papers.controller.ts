@@ -334,6 +334,17 @@ export class WorkingPapersController {
     return this.sectionsService.seedSubstantiveProcedures(id, user);
   }
 
+  @Post(':id/seed-coso-questions/:sectionKey')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Cargar preguntas sugeridas de la biblioteca COSO en la sección indicada de PT-COSO (S1-S5), sin pisar filas existentes' })
+  seedCosoQuestions(
+    @Param('id') id: string,
+    @Param('sectionKey') sectionKey: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.sectionsService.seedCosoQuestions(id, sectionKey, user);
+  }
+
   @Post(':id/sections/init/:templateKey')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Inicializar secciones de un papel desde una plantilla (PT-A1, PT-A2, PT-A4, PT-MEMO, PT-PROG)' })

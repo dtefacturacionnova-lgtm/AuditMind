@@ -341,6 +341,13 @@ export class WorkingPapersController {
     return this.sectionsService.recalculateCosoComponentAnalysis(id, user);
   }
 
+  @Post(':id/propagate-hallazgos-to-findings')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Sincronizar los hallazgos de PT-HALL S1 con la tabla Finding que alimenta el contador del dashboard' })
+  propagateHallazgosToFindings(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateHallazgosToFindings(id, user);
+  }
+
   @Post(':id/seed-substantive-procedures')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Cargar procedimientos sugeridos de la biblioteca sustantiva en PT-FIN-C-SUST S3, sin pisar filas existentes' })

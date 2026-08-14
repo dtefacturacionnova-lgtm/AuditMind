@@ -53,11 +53,12 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
 
 type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff' | 'trial-balance' | 'graph';
 
-function StatCard({ icon: Icon, label, value, color }: {
+function StatCard({ icon: Icon, label, value, color, sub }: {
   icon: React.ElementType;
   label: string;
   value: number | string;
   color: string;
+  sub?: string;
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
@@ -67,6 +68,7 @@ function StatCard({ icon: Icon, label, value, color }: {
       <div>
         <p className="text-xs text-gray-500">{label}</p>
         <p className="text-xl font-bold text-gray-800">{value}</p>
+        {sub && <p className="text-[10px] text-gray-400">{sub}</p>}
       </div>
     </div>
   );
@@ -239,7 +241,13 @@ export default function AuditDetailPage() {
           {/* KPI cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard icon={FileText} label="Papeles de Trabajo" value={audit._count?.workingPapers ?? 0} color="bg-blue-50 text-blue-600" />
-            <StatCard icon={AlertTriangle} label="Hallazgos" value={audit._count?.findings ?? 0} color="bg-orange-50 text-orange-600" />
+            <StatCard
+              icon={AlertTriangle}
+              label="Hallazgos"
+              value={audit._count?.findings ?? 0}
+              color="bg-orange-50 text-orange-600"
+              sub={(audit.recurringFindingsCount ?? 0) > 0 ? `+ ${audit.recurringFindingsCount} de seguimiento` : undefined}
+            />
             <StatCard icon={Upload} label="PBC Pendientes" value={audit._count?.pbcRequests ?? 0} color="bg-violet-50 text-violet-600" />
             <StatCard icon={BadgeCheck} label="Confirmaciones" value={audit._count?.externalConfirmations ?? 0} color="bg-emerald-50 text-emerald-600" />
           </div>

@@ -168,7 +168,9 @@ export class AuditsService {
           _count: {
             select: {
               workingPapers: true,
-              findings: true,
+              // Excluye hallazgos de seguimiento de informes anteriores (isRecurring)
+              // para no inflar el conteo "propio" del encargo — ver AuditsService.findOne.
+              findings: { where: { isRecurring: false } },
               pbcRequests: true,
             },
           },
@@ -200,7 +202,12 @@ export class AuditsService {
         _count: {
           select: {
             workingPapers: true,
-            findings: true,
+            // "Hallazgos" del dashboard = solo los propios del encargo. Los de
+            // seguimiento de informes anteriores (isRecurring, ej. un PT-HALL
+            // "Reabierto") se cuentan aparte en recurringFindingsCount, para no
+            // inflar el total con hallazgos que ya deberían existir en el Finding
+            // del encargo ANTERIOR donde se identificaron originalmente.
+            findings: { where: { isRecurring: false } },
             pbcRequests: true,
             externalConfirmations: true,
           },
@@ -208,6 +215,10 @@ export class AuditsService {
       },
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
+
+    const recurringFindingsCount = await this.prisma.finding.count({
+      where: { auditId: id, isRecurring: true },
+    });
 
     // Investigation mode: restrict to team members + CAE+
     if (audit.isInvestigationMode) {
@@ -219,7 +230,7 @@ export class AuditsService {
       }
     }
 
-    return audit;
+    return { ...audit, recurringFindingsCount };
   }
 
   async update(id: string, dto: UpdateAuditDto, user: AuthUser) {

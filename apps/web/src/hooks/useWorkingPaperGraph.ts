@@ -251,6 +251,22 @@ export function usePropagateControlDeficiencias() {
   });
 }
 
+export function usePropagateHallazgosToFindings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ created: number; updated: number; message: string }>(
+        `/working-papers/${paperId}/propagate-hallazgos-to-findings`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+      qc.invalidateQueries({ queryKey: ['audits'] });
+      qc.invalidateQueries({ queryKey: ['findings'] });
+    },
+  });
+}
+
 export function useRecalculateCosoComponentAnalysis() {
   const qc = useQueryClient();
   return useMutation({

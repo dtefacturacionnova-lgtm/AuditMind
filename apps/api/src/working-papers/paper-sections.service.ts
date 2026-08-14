@@ -3,7 +3,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
+import { Prisma, FindingSeverity, FindingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PaperGraphService } from './paper-graph.service';
@@ -1439,6 +1439,103 @@ INSTRUCCIONES DE SALIDA:
       message: totalDeficiencias > 0
         ? `Conteo recalculado desde ${totalDeficiencias} deficiencia(s) de S1, distribuidas en ${componentesConDeficiencias} de 5 componentes COSO. La Evaluación del componente e Impacto en estrategia se conservaron tal cual estaban.`
         : 'S1 no tiene deficiencias registradas todavía — los 5 componentes quedan en 0.',
+    };
+  }
+
+  /**
+   * Sincroniza los hallazgos documentados en PT-HALL (S1 Identificación, una
+   * fila por hallazgo) con la tabla `Finding` — la misma tabla que alimenta el
+   * contador "Hallazgos" del dashboard del encargo (antes, PT-HALL vivía
+   * completamente desconectado de ese contador).
+   *
+   * Solo PT-HALL propaga — PT-HALL-COM (comunicación) y PT-HALL-RESP
+   * (seguimiento consolidado de períodos anteriores) NO crean Findings
+   * nuevos, para no inflar el conteo con hallazgos que ya deberían existir
+   * como Finding del encargo ANTERIOR en el que se identificaron.
+   *
+   * isRecurring se marca automáticamente solo si S8 = "Reabierto..." — un
+   * hallazgo que se reabre sí es, por definición, un hallazgo que ya existía.
+   * El dashboard filtra isRecurring=false en su conteo principal (ver
+   * AuditsService) para no mezclar hallazgos propios del encargo con
+   * seguimiento de períodos anteriores.
+   */
+  async propagateHallazgosToFindings(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-HALL') {
+      throw new BadRequestException('Solo el papel PT-HALL puede sincronizar hallazgos al dashboard');
+    }
+
+    const norm = (v: unknown): string => (v == null ? '' : String(v)).trim();
+    const asRows = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value : []);
+    const findKey = (row: Record<string, unknown>, patterns: string[]): string | undefined => {
+      const keys = Object.keys(row);
+      const norm2 = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      for (const p of patterns) {
+        const found = keys.find(k => norm2(k).includes(p));
+        if (found) return found;
+      }
+      return undefined;
+    };
+
+    const sections = await this.prisma.paperSection.findMany({ where: { paperId } });
+    const byKey = new Map(sections.map(s => [s.sectionKey, s]));
+
+    const s1Rows = asRows(byKey.get('S1')?.value);
+    if (s1Rows.length === 0) {
+      return { created: 0, updated: 0, message: 'S1 (Identificación del Hallazgo) no tiene filas — nada que sincronizar.' };
+    }
+
+    const condition      = norm(byKey.get('S2')?.value) || '(pendiente de documentar — ver S2 Condición)';
+    const criteria       = norm(byKey.get('S3')?.value) || '(pendiente de documentar — ver S3 Criterio)';
+    const cause          = norm(byKey.get('S4')?.value) || '(pendiente de documentar — ver S4 Causa)';
+    const recommendation = norm(byKey.get('S6')?.value) || '(pendiente de documentar — ver S6 Recomendación)';
+    const effectRows     = asRows(byKey.get('S5')?.value);
+    const effectKey      = effectRows.length > 0 ? findKey(effectRows[0], ['descripcion']) : undefined;
+    const effect = effectRows.length > 0
+      ? effectRows.map(r => norm(effectKey ? r[effectKey] : '')).filter(Boolean).join(' | ') || '(pendiente de documentar — ver S5 Efecto e Impacto)'
+      : '(pendiente de documentar — ver S5 Efecto e Impacto)';
+
+    const estadoRaw = norm(byKey.get('S8')?.value).toLowerCase();
+    let status: FindingStatus = FindingStatus.DRAFT;
+    let isRecurring = false;
+    if (estadoRaw.startsWith('cerrado'))   status = FindingStatus.CLOSED;
+    else if (estadoRaw.startsWith('vigente'))  status = FindingStatus.IN_PROGRESS;
+    else if (estadoRaw.startsWith('vencido'))  status = FindingStatus.OVERDUE;
+    else if (estadoRaw.startsWith('reabierto')) { status = FindingStatus.IN_PROGRESS; isRecurring = true; }
+    else if (estadoRaw.startsWith('diferido')) status = FindingStatus.ACCEPTED_RISK;
+
+    const SEVERITY_MAP: Record<string, FindingSeverity> = { alto: FindingSeverity.HIGH, medio: FindingSeverity.MEDIUM, bajo: FindingSeverity.LOW };
+
+    let created = 0, updated = 0;
+    for (const row of s1Rows) {
+      const idKey = findKey(row, ['id hallazgo', 'id']);
+      const areaKey = findKey(row, ['area']);
+      const riesgoKey = findKey(row, ['clasificacion de riesgo', 'riesgo']);
+      const idHallazgo = idKey ? norm(row[idKey]) : '';
+      const area = areaKey ? norm(row[areaKey]) : '';
+      const title = [idHallazgo, area].filter(Boolean).join(' — ') || wp.title;
+      const severityRaw = (riesgoKey ? norm(row[riesgoKey]) : '').toLowerCase();
+      const severity = SEVERITY_MAP[severityRaw] ?? FindingSeverity.MEDIUM;
+
+      const existing = await this.prisma.finding.findFirst({ where: { workingPaperId: paperId, title } });
+      const data = {
+        title, condition, criteria, cause, effect, risk: effect, recommendation,
+        severity, status, isRecurring,
+        workingPaperId: paperId, auditId: wp.auditId, organizationId: user.organizationId,
+      };
+      if (existing) {
+        await this.prisma.finding.update({ where: { id: existing.id }, data });
+        updated++;
+      } else {
+        await this.prisma.finding.create({ data: { ...data, qualityScore: 0, aiDraftUsed: false } });
+        created++;
+      }
+    }
+
+    return {
+      created, updated,
+      message: `${created} hallazgo(s) nuevos y ${updated} actualizados sincronizados al contador del dashboard.${isRecurring ? ' Marcado(s) como seguimiento de período anterior (Reabierto) — no cuentan en el total principal.' : ''}`,
     };
   }
 

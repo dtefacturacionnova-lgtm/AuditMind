@@ -40,6 +40,9 @@ export interface Audit {
     pbcRequests: number;
     externalConfirmations?: number;
   };
+  // Solo en useAudit(id) (findOne) — hallazgos de seguimiento de informes
+  // anteriores (isRecurring), excluidos de _count.findings para no inflarlo.
+  recurringFindingsCount?: number;
 }
 
 export interface AuditsResponse {

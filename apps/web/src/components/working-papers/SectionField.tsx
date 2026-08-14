@@ -387,12 +387,24 @@ export interface SectionFieldProps {
 const ROW_EXTRAS_SECTIONS: Record<string, Set<string>> = {
   'PT-FIN-B07':     new Set(['S1', 'S2', 'S3', 'S4']),
   'PT-FIN-C-SUST':  new Set(['S4']),
+  'PT-NIA265':      new Set(['S5']),
 };
 
 function rowExtrasEnabled(paperCode: string | null | undefined, sectionKey: string): boolean {
   if (!paperCode) return false;
   return ROW_EXTRAS_SECTIONS[paperCode]?.has(sectionKey) ?? false;
 }
+
+// Columns (by exact header) that get the "seleccionar cuentas de B-00" picker
+// instead of free text, keyed by paperCode::sectionKey. Opt-in, same spirit as
+// ROW_EXTRAS_SECTIONS above.
+const ACCOUNT_PICKER_COLUMNS: Record<string, string[]> = {
+  'PT-NIA265::S1': ['Cuentas EEFF afectadas'],
+};
+// Columns that get the lightweight "+ Referenciar papel" button.
+const REFERENCE_PICKER_COLUMNS: Record<string, string[]> = {
+  'PT-NIA265::S1': ['Ref. PT origen'],
+};
 
 // ─── Section attachments (support documents) ───────────────────────────────────
 
@@ -843,6 +855,9 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
                   }
                   readOnly={readonly}
                   enableRowExtras={rowExtrasEnabled(paperCode, section.sectionKey)}
+                  accountPickerColumns={ACCOUNT_PICKER_COLUMNS[`${paperCode}::${section.sectionKey}`]}
+                  referenceColumns={REFERENCE_PICKER_COLUMNS[`${paperCode}::${section.sectionKey}`]}
+                  mentionItems={mentionItems}
                 />
               ) : (
                 <MatrixDisplay value={effectiveValue} />

@@ -251,6 +251,20 @@ export function usePropagateControlDeficiencias() {
   });
 }
 
+export function useRecalculateCosoComponentAnalysis() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ recalculated: boolean; totalDeficiencias: number; componentesConDeficiencias: number; message: string }>(
+        `/working-papers/${paperId}/recalculate-coso-component-analysis`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
 export function useSeedSubstantiveProcedures() {
   const qc = useQueryClient();
   return useMutation({

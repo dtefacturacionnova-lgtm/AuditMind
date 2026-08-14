@@ -1368,6 +1368,80 @@ INSTRUCCIONES DE SALIDA:
     };
   }
 
+  /**
+   * Recalcula PT-NIA265 S2 ("Análisis por Componente COSO — Mapa de Debilidades")
+   * contando por severidad las deficiencias de S1 para cada uno de los 5
+   * componentes COSO. A diferencia de S1 (que se REEMPLAZA por completo al
+   * consolidar), aquí se preserva el juicio del auditor: "Evaluación del
+   * componente" e "Impacto en estrategia de auditoría" de cada componente se
+   * mantienen tal cual estaban si ya existía una fila para ese componente —
+   * solo los 3 conteos se recalculan, siempre a partir de S1.
+   */
+  async recalculateCosoComponentAnalysis(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-NIA265') {
+      throw new BadRequestException(
+        'Solo el papel PT-NIA265 puede recalcular el Análisis por Componente COSO',
+      );
+    }
+
+    const norm = (v: unknown): string => (v == null ? '' : String(v)).trim();
+    const asRows = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value : []);
+
+    const s1 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+    });
+    const deficiencias = asRows(s1?.value);
+
+    const s2 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S2' } },
+    });
+    const existingByComponent = new Map<string, Record<string, unknown>>();
+    for (const r of asRows(s2?.value)) {
+      const comp = norm(r['Componente COSO']);
+      if (comp) existingByComponent.set(comp, r);
+    }
+
+    const COMPONENTES = ['ENTORNO_CONTROL', 'EVALUACION_RIESGOS', 'ACTIVIDADES_CONTROL', 'INFORMACION_COMUNICACION', 'MONITOREO'];
+    const recalculated = COMPONENTES.map(comp => {
+      const propias = deficiencias.filter(d => norm(d['Componente COSO']) === comp);
+      const menores       = propias.filter(d => norm(d['Severidad']) === 'DEFICIENCIA_MENOR').length;
+      const significativas = propias.filter(d => norm(d['Severidad']) === 'DEFICIENCIA_SIGNIFICATIVA').length;
+      const materiales     = propias.filter(d => norm(d['Severidad']) === 'DEFICIENCIA_MATERIAL').length;
+      const existing = existingByComponent.get(comp);
+      return {
+        'Componente COSO':                     comp,
+        '# Deficiencias Menores':               String(menores),
+        '# Deficiencias Significativas':        String(significativas),
+        '# Deficiencias Materiales':             String(materiales),
+        'Evaluación del componente':            norm(existing?.['Evaluación del componente']),
+        'Impacto en estrategia de auditoría':   norm(existing?.['Impacto en estrategia de auditoría']),
+      };
+    });
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S2' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: recalculated as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S2', recalculated);
+
+    const totalDeficiencias = deficiencias.length;
+    const componentesConDeficiencias = recalculated.filter(
+      r => Number(r['# Deficiencias Menores']) + Number(r['# Deficiencias Significativas']) + Number(r['# Deficiencias Materiales']) > 0,
+    ).length;
+
+    return {
+      recalculated: true,
+      totalDeficiencias,
+      componentesConDeficiencias,
+      message: totalDeficiencias > 0
+        ? `Conteo recalculado desde ${totalDeficiencias} deficiencia(s) de S1, distribuidas en ${componentesConDeficiencias} de 5 componentes COSO. La Evaluación del componente e Impacto en estrategia se conservaron tal cual estaban.`
+        : 'S1 no tiene deficiencias registradas todavía — los 5 componentes quedan en 0.',
+    };
+  }
+
   // ─── Auditoría Financiera: biblioteca de procedimientos sustantivos ─────────
 
   /**

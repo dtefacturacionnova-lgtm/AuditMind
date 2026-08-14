@@ -3,9 +3,12 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   Plus, Trash2, X, Sparkles, Loader2, Check, ArrowUp, ArrowDown, ArrowUpDown,
-  Paperclip, FileText, CircleSlash, AlertTriangle, AlertOctagon,
+  Paperclip, FileText, CircleSlash, AlertTriangle, AlertOctagon, Search, Link2, ListChecks,
 } from 'lucide-react';
-import { useAssistSection, useAttachToAccountSchedule, useRemoveAccountScheduleAttachment } from '@/hooks/useWorkingPaperGraph';
+import {
+  useAssistSection, useAttachToAccountSchedule, useRemoveAccountScheduleAttachment,
+  useTbAccounts, type MentionItem,
+} from '@/hooks/useWorkingPaperGraph';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +34,14 @@ interface Props {
   // are never treated as data columns — kept off by default so the other ~45
   // papers reusing this grid are unaffected.
   enableRowExtras?: boolean;
+  // Columns (by exact header) that get a "select accounts from B-00" picker
+  // instead of free text — the cell stores "codigo - descripción" comma-joined.
+  accountPickerColumns?: string[];
+  // Columns (by exact header) that get a "+ Referenciar papel" picker instead
+  // of free text — inserts "CODE::sectionKey" text, no schema change (lightweight
+  // cousin of the @mention system, which is section-scoped, not row-scoped).
+  referenceColumns?: string[];
+  mentionItems?: MentionItem[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -356,6 +367,198 @@ function AutoGrowCell({
   );
 }
 
+// ─── Selector de cuentas del balance (B-00) para una celda ────────────────────
+// Reutiliza la misma fuente que "Cargar de B-00" (useTbAccounts) pero en vez de
+// crear filas nuevas, escribe la selección como texto "código - descripción" en
+// UNA celda — para columnas tipo "Cuentas EEFF afectadas" que necesitan 1+
+// cuentas reales del balance importado, no texto libre.
+
+function parseSelectedCodes(cellValue: string): Set<string> {
+  const codes = new Set<string>();
+  for (const part of cellValue.split(',')) {
+    const code = part.trim().split(' - ')[0]?.trim();
+    if (code) codes.add(code);
+  }
+  return codes;
+}
+
+function AccountPickerCell({ value, onChange, paperId, readOnly }: {
+  value: string; onChange: (v: string) => void; paperId?: string; readOnly?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const { data, isLoading } = useTbAccounts(open ? paperId : undefined);
+  const selected = parseSelectedCodes(value);
+
+  const accounts = (data?.accounts ?? []).filter(a => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return a.cuenta.toLowerCase().includes(q) || a.descripcion.toLowerCase().includes(q);
+  });
+
+  function toggle(code: string, desc: string) {
+    const next = parseSelectedCodes(value);
+    const key = `${code} - ${desc}`;
+    if (next.has(code)) {
+      onChange(value.split(',').map(s => s.trim()).filter(s => s.split(' - ')[0]?.trim() !== code).join(', '));
+    } else {
+      const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+      parts.push(key);
+      onChange(parts.join(', '));
+    }
+  }
+
+  if (readOnly) {
+    return <span className="text-gray-700 whitespace-pre-wrap break-words">{value || '—'}</span>;
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full text-left text-xs text-gray-700 border-b border-dashed border-gray-300 hover:border-blue-400 py-0.5 flex items-start gap-1"
+      >
+        <ListChecks className="w-3 h-3 mt-0.5 text-gray-400 shrink-0" />
+        <span className="whitespace-pre-wrap break-words">{value || <span className="text-gray-300">Seleccionar cuentas…</span>}</span>
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-2" onMouseLeave={() => {}}>
+          <div className="flex items-center gap-1.5 mb-2 border border-gray-200 rounded-md px-2 py-1">
+            <Search className="w-3 h-3 text-gray-400 shrink-0" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar cuenta…"
+              className="w-full text-xs outline-none"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto space-y-0.5">
+            {isLoading && <p className="text-[11px] text-gray-400 px-1 py-2">Cargando cuentas…</p>}
+            {!isLoading && accounts.length === 0 && (
+              <p className="text-[11px] text-gray-400 px-1 py-2">{data?.message || 'Sin cuentas — importe el balance en B-00.'}</p>
+            )}
+            {accounts.map(a => (
+              <label key={a.cuenta} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-gray-50 cursor-pointer text-[11px]">
+                <input
+                  type="checkbox"
+                  checked={selected.has(a.cuenta)}
+                  onChange={() => toggle(a.cuenta, a.descripcion)}
+                  className="shrink-0"
+                />
+                <span className="font-mono text-gray-500 shrink-0">{a.cuenta}</span>
+                <span className="text-gray-700 truncate">{a.descripcion}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end pt-1.5 mt-1.5 border-t border-gray-100">
+            <button type="button" onClick={() => setOpen(false)} className="text-[11px] px-2 py-1 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100">
+              Listo
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Referencia liviana a otro papel/sección ───────────────────────────────────
+// No crea un vínculo real en el grafo (eso es section-scoped, no por fila) —
+// solo inserta texto "CODE::sectionKey" en la celda, tomando la lista de papeles
+// ya cargada para el @mención (mentionItems), sin pedir datos nuevos.
+
+function ReferencePickerCell({ value, onChange, mentionItems, readOnly }: {
+  value: string; onChange: (v: string) => void; mentionItems?: MentionItem[]; readOnly?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [expandedPaper, setExpandedPaper] = useState<string | null>(null);
+
+  const items = (mentionItems ?? []).filter(m => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return m.code.toLowerCase().includes(q) || m.title.toLowerCase().includes(q);
+  });
+
+  function insert(ref: string) {
+    const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+    if (!parts.includes(ref)) parts.push(ref);
+    onChange(parts.join(', '));
+    setOpen(false);
+  }
+
+  if (readOnly) {
+    return <span className="text-gray-700 whitespace-pre-wrap break-words">{value || '—'}</span>;
+  }
+
+  return (
+    <div className="relative">
+      <div className="flex items-start gap-1">
+        <AutoGrowCell value={value} onChange={onChange} placeholder="Ref. manual o use el botón →" />
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          title="Referenciar un papel inteligente o maestro"
+          className="shrink-0 mt-0.5 p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+        >
+          <Link2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {open && (
+        <div className="absolute z-20 right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-2">
+          <div className="flex items-center gap-1.5 mb-2 border border-gray-200 rounded-md px-2 py-1">
+            <Search className="w-3 h-3 text-gray-400 shrink-0" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar papel…"
+              className="w-full text-xs outline-none"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto space-y-0.5">
+            {items.length === 0 && <p className="text-[11px] text-gray-400 px-1 py-2">Sin papeles que coincidan.</p>}
+            {items.map(m => (
+              <div key={m.paperId}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedPaper(p => (p === m.paperId ? null : m.paperId))}
+                  className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-gray-50 text-left"
+                >
+                  <span className="text-[11px] font-mono text-blue-700 shrink-0">{m.code}</span>
+                  <span className="text-[11px] text-gray-600 truncate">{m.title}</span>
+                </button>
+                {expandedPaper === m.paperId && (
+                  <div className="pl-4 pb-1 space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => insert(m.code)}
+                      className="block w-full text-left text-[10px] text-gray-500 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50"
+                    >
+                      Todo el papel — {m.code}
+                    </button>
+                    {m.sections.map(s => (
+                      <button
+                        key={s.sectionKey}
+                        type="button"
+                        onClick={() => insert(`${m.code}::${s.sectionKey}`)}
+                        className="block w-full text-left text-[10px] text-gray-500 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50"
+                      >
+                        {s.sectionKey} — {s.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Panel principal ──────────────────────────────────────────────────────────
 
 /**
@@ -366,7 +569,7 @@ function AutoGrowCell({
  */
 export function MatrixGridPanel({
   value, onChange, paperId, sectionKey, aiHint, linkedFrom, sourceValue, readOnly = false,
-  enableRowExtras = false,
+  enableRowExtras = false, accountPickerColumns, referenceColumns, mentionItems,
 }: Props) {
   // aiHint-derived suggestion: short header labels + full phrase per label (for the tooltip)
   const suggestedFull  = parseColumnsFromAiHint(aiHint);
@@ -887,6 +1090,20 @@ export function MatrixGridPanel({
                               {cellOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                             </select>
                           )
+                        ) : accountPickerColumns?.includes(col) ? (
+                          <AccountPickerCell
+                            value={row[col] ?? ''}
+                            onChange={v => updateCell(i, col, v)}
+                            paperId={paperId}
+                            readOnly={readOnly}
+                          />
+                        ) : referenceColumns?.includes(col) ? (
+                          <ReferencePickerCell
+                            value={row[col] ?? ''}
+                            onChange={v => updateCell(i, col, v)}
+                            mentionItems={mentionItems}
+                            readOnly={readOnly}
+                          />
                         ) : (
                         <div className={alertKind ? 'flex items-start gap-1.5' : undefined}>
                           {alertKind && (

@@ -13,6 +13,7 @@ import {
   usePropagateFinancialAnalysis,
   usePropagateDiferencias,
   usePropagateControlDeficiencias,
+  useRecalculateCosoComponentAnalysis,
   useSeedSubstantiveProcedures,
   useSeedCosoQuestions,
 } from '@/hooks/useWorkingPaperGraph';
@@ -256,6 +257,55 @@ function DeficienciasCIPropagateBar({ paperId }: { paperId: string }) {
         >
           <RefreshCw className={`w-3.5 h-3.5 ${propagate.isPending ? 'animate-spin' : ''}`} />
           {propagate.isPending ? 'Consolidando…' : 'Consolidar Deficiencias'}
+        </button>
+      </div>
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 mt-2 text-xs ${
+          isError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-indigo-50 border border-indigo-200 text-indigo-700'
+        }`}>
+          {isError ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PT-NIA265 S2 — botón "Recalcular Análisis COSO" a partir de S1 ───────────
+
+function CosoComponentAnalysisBar({ paperId }: { paperId: string }) {
+  const recalculate = useRecalculateCosoComponentAnalysis();
+  const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  async function handleClick() {
+    setMsg('');
+    setIsError(false);
+    try {
+      const res = await recalculate.mutateAsync(paperId);
+      setMsg(res.message);
+      setIsError(false);
+    } catch (err) {
+      setMsg((err as Error).message || 'Error al recalcular el análisis por componente');
+      setIsError(true);
+    }
+  }
+
+  return (
+    <div className="pt-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-[11px] text-gray-400">
+          Cuenta las deficiencias de S1 por componente COSO y severidad — la Evaluación e Impacto que ya hayas escrito no se pierden.
+        </p>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={recalculate.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0"
+          title="Recalcular conteos por componente COSO desde S1"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${recalculate.isPending ? 'animate-spin' : ''}`} />
+          {recalculate.isPending ? 'Recalculando…' : 'Recalcular Análisis COSO'}
         </button>
       </div>
       {msg && (
@@ -946,6 +996,35 @@ export function SmartPaperSections({
               <SectionErrorBoundary key="S1" label={section.label}>
                 <div>
                   {!readonly && paperId && <DeficienciasCIPropagateBar paperId={paperId} />}
+                  <SectionField
+                    section={section}
+                    allSections={sorted}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    paperId={paperId}
+                    paperCode={paperCode}
+                    mentionItems={mentionItems}
+                    aiDraftConfig={aiDraftConfig}
+                    onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                      void createReference.mutateAsync({
+                        paperId,
+                        sourceSectionKey: sectionKey,
+                        targetPaperId,
+                        targetSectionKey,
+                      });
+                    }}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            );
+          }
+
+          // PT-NIA265 S2: botón "Recalcular Análisis COSO" (cuenta S1 por componente).
+          if (paperCode === 'PT-NIA265' && section.sectionKey === 'S2') {
+            return (
+              <SectionErrorBoundary key="S2" label={section.label}>
+                <div>
+                  {!readonly && paperId && <CosoComponentAnalysisBar paperId={paperId} />}
                   <SectionField
                     section={section}
                     allSections={sorted}

@@ -12,6 +12,12 @@ class LinkPbcDto {
   @IsString() pbcId!: string;
 }
 
+class LinkPbcRowDto {
+  @IsString() pbcId!: string;
+  @IsString() sectionKey!: string;
+  @IsString() rowId!: string;
+}
+
 class AssistSectionDto {
   @IsOptional() @IsString() userPrompt?: string;
 }
@@ -861,5 +867,30 @@ export class WorkingPapersController {
   @ApiOperation({ summary: 'F6.3 — Desvincular solicitud PBC de papel de trabajo' })
   unlinkPbc(@Param('linkId') linkId: string, @CurrentUser() user: AuthUser) {
     return this.service.unlinkPbc(linkId, user);
+  }
+
+  // ─── PBC vinculado a una fila específica de una sección MATRIX ─────────────
+
+  @Get(':id/pbc-links/:sectionKey/:rowId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Listar solicitudes PBC vinculadas y disponibles para UNA FILA de una sección MATRIX' })
+  getPbcLinksForRow(
+    @Param('id')         id:         string,
+    @Param('sectionKey') sectionKey: string,
+    @Param('rowId')      rowId:      string,
+    @CurrentUser()        user:      AuthUser,
+  ) {
+    return this.service.getPbcLinksForRow(id, sectionKey, rowId, user);
+  }
+
+  @Post(':id/pbc-links-row')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Vincular una solicitud PBC a una fila específica (no todo el papel)' })
+  linkPbcToRow(
+    @Param('id')   id:   string,
+    @Body()        dto:  LinkPbcRowDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.linkPbcToRow(id, dto.sectionKey, dto.rowId, dto.pbcId, user);
   }
 }

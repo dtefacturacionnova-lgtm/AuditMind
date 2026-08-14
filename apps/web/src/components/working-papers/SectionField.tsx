@@ -388,6 +388,7 @@ const ROW_EXTRAS_SECTIONS: Record<string, Set<string>> = {
   'PT-FIN-B07':     new Set(['S1', 'S2', 'S3', 'S4']),
   'PT-FIN-C-SUST':  new Set(['S4']),
   'PT-NIA265':      new Set(['S5']),
+  'PT-HALL-COM':    new Set(['S5']),
 };
 
 function rowExtrasEnabled(paperCode: string | null | undefined, sectionKey: string): boolean {
@@ -404,6 +405,11 @@ const ACCOUNT_PICKER_COLUMNS: Record<string, string[]> = {
 // Columns that get the lightweight "+ Referenciar papel" button.
 const REFERENCE_PICKER_COLUMNS: Record<string, string[]> = {
   'PT-NIA265::S1': ['Ref. PT origen'],
+};
+// Column that gets the "PBC vinculado a esta fila" picker (real relación,
+// PbcPaperLink escopado a la fila — no solo texto).
+const PBC_LINK_COLUMN: Record<string, string> = {
+  'PT-HALL-COM::S5': 'PBC Vinculado',
 };
 
 // ─── Section attachments (support documents) ───────────────────────────────────
@@ -858,6 +864,7 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
                   accountPickerColumns={ACCOUNT_PICKER_COLUMNS[`${paperCode}::${section.sectionKey}`]}
                   referenceColumns={REFERENCE_PICKER_COLUMNS[`${paperCode}::${section.sectionKey}`]}
                   mentionItems={mentionItems}
+                  pbcLinkColumn={PBC_LINK_COLUMN[`${paperCode}::${section.sectionKey}`]}
                 />
               ) : (
                 <MatrixDisplay value={effectiveValue} />

@@ -1511,14 +1511,22 @@ model PbcPaperLink {
   id          String   @id @default(cuid())
   pbcId       String
   paperId     String
+  // "" (default) = vínculo a nivel de todo el papel, sin cambio de comportamiento.
+  // Un valor no vacío escopa el vínculo a una fila MATRIX específica (su "_id"),
+  // para poder decir "esta solicitud PBC es la que cierra ESTE hallazgo puntual",
+  // no solo el papel completo. Strings vacíos (no null) para que el índice único
+  // siga siendo idempotente vía upsert — Postgres trata NULL como siempre distinto.
+  sectionKey  String   @default("")
+  rowId       String   @default("")
   createdById String
   createdAt   DateTime @default(now())
 
   pbc         PbcRequest   @relation(fields: [pbcId],   references: [id], onDelete: Cascade)
   paper       WorkingPaper @relation(fields: [paperId],  references: [id], onDelete: Cascade)
 
-  @@unique([pbcId, paperId])
+  @@unique([pbcId, paperId, sectionKey, rowId])
   @@index([paperId])
+  @@index([paperId, sectionKey, rowId])
   @@map("pbc_paper_links")
 }
 

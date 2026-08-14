@@ -9,6 +9,7 @@ import {
   useAssistSection, useAttachToAccountSchedule, useRemoveAccountScheduleAttachment,
   useTbAccounts, type MentionItem,
 } from '@/hooks/useWorkingPaperGraph';
+import { usePbcLinksForRow, useLinkPbcToRow, useUnlinkPbc } from '@/hooks/useWorkingPaperSignOff';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,9 @@ interface Props {
   // cousin of the @mention system, which is section-scoped, not row-scoped).
   referenceColumns?: string[];
   mentionItems?: MentionItem[];
+  // Column (single, by exact header) that gets the "PBC vinculado a esta fila"
+  // picker instead of free text — requires enableRowExtras (needs row["_id"]).
+  pbcLinkColumn?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -559,6 +563,94 @@ function ReferencePickerCell({ value, onChange, mentionItems, readOnly }: {
   );
 }
 
+// ─── PBC vinculado a esta fila (no solo al papel) ─────────────────────────────
+// Distinto de accountPickerColumns/referenceColumns: aquí el valor de la celda
+// no es texto libre que el auditor escribe — es un vínculo relacional real
+// (PbcPaperLink con sectionKey+rowId) contra las solicitudes PBC del expediente,
+// así "esta fila" queda ligada a la solicitud formal de evidencia al cliente.
+
+const PBC_STATUS_STYLE: Record<string, { label: string; cls: string }> = {
+  PENDING:   { label: 'Pendiente', cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+  SUBMITTED: { label: 'Enviado',   cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  ACCEPTED:  { label: 'Aceptado',  cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  REJECTED:  { label: 'Rechazado', cls: 'bg-red-50 text-red-700 border-red-200' },
+  OVERDUE:   { label: 'Vencido',   cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+};
+
+function PbcRowPicker({ paperId, sectionKey, rowId, readOnly }: {
+  paperId?: string; sectionKey: string; rowId: string; readOnly?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data, isLoading } = usePbcLinksForRow(paperId, sectionKey, rowId, true);
+  const linkMutation = useLinkPbcToRow(paperId);
+  const unlinkMutation = useUnlinkPbc(paperId ?? '');
+
+  if (!rowId) {
+    return <span className="text-gray-300 text-xs" title="Guarde la fila primero">—</span>;
+  }
+
+  const linked = data?.linkedItems ?? [];
+  const available = data?.availableItems ?? [];
+
+  return (
+    <div className="relative">
+      <div className="flex flex-wrap items-center gap-1">
+        {linked.map(l => {
+          const style = PBC_STATUS_STYLE[l.pbc.status] ?? PBC_STATUS_STYLE.PENDING;
+          return (
+            <span
+              key={l.id}
+              title={l.pbc.description || l.pbc.title}
+              className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${style.cls}`}
+            >
+              {l.pbc.title.slice(0, 24)}{l.pbc.title.length > 24 ? '…' : ''} · {style.label}
+              {!readOnly && (
+                <button type="button" onClick={() => unlinkMutation.mutate(l.id)} className="hover:text-red-600">
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </span>
+          );
+        })}
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setOpen(o => !o)}
+            className="inline-flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600 border border-dashed border-gray-300 hover:border-blue-300 rounded-full px-1.5 py-0.5"
+          >
+            <Link2 className="w-2.5 h-2.5" /> {linked.length === 0 ? 'Vincular PBC' : '+'}
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="absolute z-20 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-2">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5 px-1">Solicitudes PBC del expediente</p>
+          <div className="max-h-56 overflow-y-auto space-y-0.5">
+            {isLoading && <p className="text-[11px] text-gray-400 px-1 py-2">Cargando…</p>}
+            {!isLoading && available.length === 0 && (
+              <p className="text-[11px] text-gray-400 px-1 py-2">No hay más solicitudes PBC disponibles en este expediente.</p>
+            )}
+            {available.map(p => {
+              const style = PBC_STATUS_STYLE[p.status] ?? PBC_STATUS_STYLE.PENDING;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => { linkMutation.mutate({ sectionKey, rowId, pbcId: p.id }); setOpen(false); }}
+                  className="w-full flex items-center justify-between gap-2 px-1.5 py-1 rounded hover:bg-gray-50 text-left"
+                >
+                  <span className="text-[11px] text-gray-700 truncate">{p.title}</span>
+                  <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full border shrink-0 ${style.cls}`}>{style.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Panel principal ──────────────────────────────────────────────────────────
 
 /**
@@ -569,7 +661,7 @@ function ReferencePickerCell({ value, onChange, mentionItems, readOnly }: {
  */
 export function MatrixGridPanel({
   value, onChange, paperId, sectionKey, aiHint, linkedFrom, sourceValue, readOnly = false,
-  enableRowExtras = false, accountPickerColumns, referenceColumns, mentionItems,
+  enableRowExtras = false, accountPickerColumns, referenceColumns, mentionItems, pbcLinkColumn,
 }: Props) {
   // aiHint-derived suggestion: short header labels + full phrase per label (for the tooltip)
   const suggestedFull  = parseColumnsFromAiHint(aiHint);
@@ -1102,6 +1194,13 @@ export function MatrixGridPanel({
                             value={row[col] ?? ''}
                             onChange={v => updateCell(i, col, v)}
                             mentionItems={mentionItems}
+                            readOnly={readOnly}
+                          />
+                        ) : col === pbcLinkColumn ? (
+                          <PbcRowPicker
+                            paperId={paperId}
+                            sectionKey={sectionKey}
+                            rowId={row['_id'] ?? ''}
                             readOnly={readOnly}
                           />
                         ) : (

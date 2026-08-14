@@ -1028,7 +1028,7 @@ export class WorkingPapersService {
     if (!pbc) throw new NotFoundException('Solicitud PBC no encontrada');
 
     return this.prisma.pbcPaperLink.upsert({
-      where:  { pbcId_paperId: { pbcId, paperId } },
+      where:  { pbcId_paperId_sectionKey_rowId: { pbcId, paperId, sectionKey: '', rowId: '' } },
       create: { pbcId, paperId, createdById: user.id },
       update: {},
     });
@@ -1044,6 +1044,50 @@ export class WorkingPapersService {
 
     await this.prisma.pbcPaperLink.delete({ where: { id: linkId } });
     return { deleted: true };
+  }
+
+  // ─── PBC vinculado a una FILA específica (no todo el papel) ─────────────────
+  // Mismo modelo (PbcPaperLink), solo que sectionKey/rowId dejan de ser "" —
+  // así se puede decir "esta solicitud PBC es la que cierra ESTE hallazgo
+  // puntual" en vez de solo "este papel tiene evidencia PBC en algún lado".
+
+  async getPbcLinksForRow(paperId: string, sectionKey: string, rowId: string, user: AuthUser) {
+    const wp = await this.findOne(paperId, user);
+    const [linked, allPbc] = await Promise.all([
+      this.prisma.pbcPaperLink.findMany({
+        where:   { paperId, sectionKey, rowId },
+        include: {
+          pbc: {
+            select: { id: true, title: true, description: true, status: true, submittedAt: true },
+          },
+        },
+      }),
+      this.prisma.pbcRequest.findMany({
+        where:  { auditId: wp.auditId },
+        select: { id: true, title: true, description: true, status: true, submittedAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+    const linkedIds = new Set(linked.map(l => l.pbcId));
+    return {
+      linkedItems: linked,
+      availableItems: allPbc.filter(p => !linkedIds.has(p.id)),
+    };
+  }
+
+  async linkPbcToRow(paperId: string, sectionKey: string, rowId: string, pbcId: string, user: AuthUser) {
+    await this.findOne(paperId, user);
+    const pbc = await this.prisma.pbcRequest.findFirst({
+      where: { id: pbcId, audit: { organizationId: user.organizationId } },
+    });
+    if (!pbc) throw new NotFoundException('Solicitud PBC no encontrada');
+    if (!sectionKey || !rowId) throw new BadRequestException('sectionKey y rowId son requeridos para vincular por fila');
+
+    return this.prisma.pbcPaperLink.upsert({
+      where:  { pbcId_paperId_sectionKey_rowId: { pbcId, paperId, sectionKey, rowId } },
+      create: { pbcId, paperId, sectionKey, rowId, createdById: user.id },
+      update: {},
+    });
   }
 
   // ─── Master paper consolidation ───────────────────────────────────────────

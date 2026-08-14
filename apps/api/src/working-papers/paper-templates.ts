@@ -1887,6 +1887,57 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
+  // PT-MRCI: Matriz de Riesgo, Control e Impacto (MASTER)
+  // Complementa PT-A5: donde PT-A5 consolida el RMM por ÁREA/ASERCIÓN, aquí se
+  // baja al nivel de CADA RIESGO INDIVIDUAL y se le empareja con su control
+  // mitigante específico (PT-A3/PT-ITGC), midiendo el riesgo RESIDUAL después
+  // del control y su impacto potencial en el tipo de opinión (dictamen).
+  // Bridge conceptual entre la capa de riesgo/control y PT-FIN-DICT.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-MRCI': [
+    {
+      sectionKey:   'S1',
+      label:        'Matriz de Riesgo — Control — Impacto',
+      description:  'Una fila por cada riesgo significativo o de RMM Alto/Muy Alto (de PT-A5 S1/S3), emparejado con su control mitigante específico y el riesgo residual resultante.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    1,
+      aiHint:       'Columnas: # | Riesgo | Ref. Riesgo (PT-A2/PT-A5) | Control Mitigante | Ref. Control (PT-A3/PT-ITGC) | Diseño Efectivo (Sí/No) | Operando Efectivamente (Sí/No) | Riesgo Residual (Bajo/Moderado/Alto/Muy Alto) | Impacto Potencial en el Dictamen (Ninguno/Párrafo de Énfasis/Salvedad/Abstención/Opinión Adversa) | Ref. PT Ejecución. Una fila por cada riesgo significativo de PT-A5 S3 y cada combinación con RMM=ALTO o MUY_ALTO de PT-A5 S1. Riesgo Residual: nivel de riesgo que queda DESPUÉS de considerar el control mitigante — si el control es débil o inexistente, el residual se acerca al RMM original; si el control es fuerte y probado, el residual baja uno o dos niveles. Impacto Potencial en el Dictamen: solo marcar algo distinto de "Ninguno" cuando el riesgo residual es Alto o Muy Alto Y no hay procedimiento sustantivo alternativo que lo cubra — ese es el insumo que se sintetiza en S4.',
+    },
+    {
+      sectionKey:   'S2',
+      label:        'Riesgos sin Control Mitigante Identificado',
+      description:  'Riesgos de S1 para los que la entidad no tiene ningún control diseñado — requieren respuesta 100% sustantiva.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    2,
+      aiHint:       'Columnas: Riesgo | Por qué no existe control (juicio de la administración / limitación de recursos / brecha no detectada) | Riesgo Residual (igual al RI original, sin mitigación) | Respuesta de Auditoría Requerida. Filtre de S1 las filas donde Control Mitigante esté vacío o donde Diseño Efectivo = No. Estos riesgos, por definición, no pueden reducirse vía pruebas de controles (NIA 330 §8) — la respuesta debe ser 100% sustantiva y, si el riesgo residual es Alto/Muy Alto, considerar si amerita tratarse como riesgo significativo aunque no estuviera en PT-A5 S3.',
+    },
+    {
+      sectionKey:   'S3',
+      label:        'Mapa de Calor — Riesgo Residual por Área',
+      description:  'Distribución del riesgo residual consolidado de S1, agrupado por área, para identificar dónde se concentra la exposición real de la auditoría después de controles.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    3,
+      aiHint:       'Columnas: Área/Ciclo | # Riesgos Bajo | # Riesgos Moderado | # Riesgos Alto | # Riesgos Muy Alto | Concentración (Baja/Media/Alta). Cuente por área los riesgos residuales de S1. Concentración Alta: 2+ riesgos residuales Alto/Muy Alto en la misma área — indica que, pese a los controles existentes, el área sigue siendo de alta exposición y debe recibir la mayor atención en la extensión de pruebas sustantivas (PT-PROG).',
+    },
+    {
+      sectionKey:   'S4',
+      label:        'Conclusión — Impacto Consolidado en el Dictamen',
+      description:  'Síntesis de si los riesgos residuales identificados en S1/S2 deben influir en el tipo de opinión a emitir. El Socio/CAE revisa antes de la conclusión final en PT-FIN-DICT.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'Estructura: (1) Resumen cuantitativo: de N riesgos evaluados en S1, cuántos quedaron con riesgo residual Alto/Muy Alto y cuántos con impacto potencial distinto de "Ninguno". (2) Para cada riesgo con impacto potencial marcado, indicar si al final el trabajo de campo (procedimientos sustantivos adicionales) logró reducirlo a un nivel aceptable, o si persiste. (3) Si algún riesgo persiste con evidencia de auditoría insuficiente o incorrección no corregida material: documentar aquí la base para considerar una opinión modificada — esto se traslada a PT-FIN-DICT. (4) Si ningún riesgo residual afecta la opinión: declarar expresamente "Los riesgos residuales identificados en esta matriz fueron adecuadamente cubiertos por los procedimientos de auditoría ejecutados; no se identifica impacto en el tipo de opinión." (5) Fecha y aprobación del Socio/CAE.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
   // PT-STRAT: Estrategia Global de Auditoría (NIA 300 §7-9)
   // Papel independiente: se completa DESPUÉS del RMM (PT-A5) y ANTES del Memo (PT-MEMO).
   // Big 4: EY "Global Audit Strategy" / Deloitte "OAS" / PwC "Engagement Strategy"
@@ -5296,7 +5347,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:   false,
       isAutoFilled: false,
       sortOrder:    5,
-      aiHint:       'Columnas: ID Hallazgo | Respuesta recibida (Sí / No / Parcial) | Fecha de respuesta | Posición del área (Acepta / Rechaza / Acepta con condiciones) | Plan de acción presentado (Sí / No) | Adecuación del plan (Adecuado / Inadecuado / Pendiente de evaluación) | Acción del auditor (Aceptar / Solicitar ampliación / Mantener hallazgo / Escalar a gobierno corporativo). Complete esta sección cuando lleguen las respuestas. Si la respuesta llega después del cierre del trabajo, deje nota con fecha de recepción.',
+      aiHint:       'Columnas: ID Hallazgo | Respuesta recibida (Sí / No / Parcial) | Fecha de respuesta | Posición del área (Acepta / Rechaza / Acepta con condiciones) | Plan de acción presentado (Sí / No) | Adecuación del plan (Adecuado / Inadecuado / Pendiente de evaluación) | Fecha de Implementación | PBC Vinculado | Acción del auditor (Aceptar / Solicitar ampliación / Mantener hallazgo / Escalar a gobierno corporativo). Complete esta sección cuando lleguen las respuestas. Si la respuesta llega después del cierre del trabajo, deje nota con fecha de recepción. Fecha de Implementación: fecha comprometida (o real, si ya ocurrió) en que la entidad implementará la acción correctiva — es la fecha a la que da seguimiento el auditor en la próxima visita. PBC Vinculado: la solicitud formal de evidencia hecha al cliente para este hallazgo específico (distinto del clip de "Evidencia" al final de la fila, que es para archivos que el auditor sube directamente).',
     },
     {
       sectionKey:   'S6',

@@ -103,3 +103,24 @@ export function useUnlinkPbc(paperId: string) {
     },
   });
 }
+
+// ─── PBC vinculado a una fila específica (no todo el papel) ──────────────────
+
+export function usePbcLinksForRow(paperId: string | undefined, sectionKey: string, rowId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['pbc-links', paperId, sectionKey, rowId],
+    queryFn:  () => apiClient.get<PbcLinksResult>(`/working-papers/${paperId}/pbc-links/${sectionKey}/${rowId}`),
+    enabled:  enabled && !!paperId && !!rowId,
+  });
+}
+
+export function useLinkPbcToRow(paperId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sectionKey, rowId, pbcId }: { sectionKey: string; rowId: string; pbcId: string }) =>
+      apiClient.post(`/working-papers/${paperId}/pbc-links-row`, { sectionKey, rowId, pbcId }),
+    onSuccess: (_res, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['pbc-links', paperId, vars.sectionKey, vars.rowId] });
+    },
+  });
+}

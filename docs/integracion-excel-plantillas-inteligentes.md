@@ -111,15 +111,71 @@ El usuario preguntó específicamente por TeamMate+ asumiendo que tiene más ava
 
 ---
 
-## 6. Orden de implementación recomendado
+## 6. Plan de trabajo — Nivel 1 (actividades concretas)
 
-1. **Motor genérico** (`ExcelTemplateDef` + endpoint de generación/lectura) — una sola vez.
-2. **Composición de Cuenta** — la más simple y reutilizable de inmediato en cualquier área.
-3. **Conciliación Bancaria** — segunda más simple, cierre rápido hacia B-08.
-4. **Revisión Analítica** (nueva de esta ronda) — reutiliza cálculos que YA existen en `AnalyticsCharts.tsx`, solo falta la ida/vuelta a Excel para la explicación de variación NIA 520.
-5. **Circularización de CxC** — la más valiosa, pero depende de que PT-NIA530 S5 ya tenga la muestra cargada.
-6. **Arqueo de Caja** — variante menor de la #3, casi gratis una vez hecha.
-7. *(Evaluar aparte, no en este orden)* Importador de mayor/detalle transaccional — habilitador de varias plantillas futuras y de CAATs más ricos.
+> Convertido a actividades el 2026-08-15 a partir del orden ya acordado arriba. Cada actividad indica el modelo de Claude recomendado para ejecutarla, según la regla estándar del usuario (Fable 5/Opus = arquitectura nueva o seguridad multi-tenant; Sonnet = implementación sobre patrón ya establecido; Haiku = documentación/ajustes mecánicos). **Nada de esto está implementado — es la lista para revisar antes de empezar.**
+
+**Decisión técnica pendiente de confirmar en EXC-01**: hoy `apps/api` (NestJS) no tiene ninguna librería de Excel — el único uso de `xlsx` (SheetJS) es client-side en `apps/web` para el import de Balance de Comprobación. Para escribir/leer rangos con nombre + protección de rango en el servidor se necesita algo más capaz que SheetJS community edition (que no escribe protección de hoja de forma confiable); la opción estándar en Node es **`exceljs`** (soporta `definedNames`, `protect()`, rangos protegidos). Se confirma como parte de EXC-01, no se asume todavía.
+
+### Fase 0 — Motor genérico (una sola vez, todo lo demás depende de esto)
+
+| ID | Actividad | Depende de | Modelo recomendado |
+|---|---|---|---|
+| EXC-01 | **Diseño del motor**: elegir librería Excel server-side (`exceljs` u alternativa), fijar el contrato final de `ExcelTemplateDef`, decidir cómo se nombran/versionan los rangos con nombre, y — punto crítico de seguridad — diseñar la validación del archivo subido (límite de tamaño, solo leer *valores* de los rangos declarados nunca fórmulas, rechazar hojas con macros, evitar que un rango de una organización pueda escribir en un `PaperSection` de otra). | — | **Fable 5 / Opus** — arquitectura nueva + superficie de ataque real (archivo arbitrario subido y parseado en el servidor) + aislamiento multi-tenant |
+| EXC-02 | Implementar el motor: función `generarExcelDesdeTemplate(def, ctx)` y función `leerExcelSegunTemplate(def, buffer)`, siguiendo el diseño ya fijado en EXC-01. | EXC-01 | Sonnet |
+| EXC-03 | Endpoints REST genéricos: `GET /working-papers/:id/excel-template/:key` (descarga) y `POST /working-papers/:id/excel-template/:key/import` (sube + enruta a las `PaperSection` destino), con `@Roles(AUDITOR)` igual que el resto del módulo. | EXC-02 | Sonnet |
+| EXC-04 | Componente UI genérico reutilizable ("Descargar plantilla" / "Subir plantilla completada" con estado de progreso y errores), en el mismo estilo que las barras ya existentes (`DiferenciasPropagateBar`, etc.), listo para insertarse en cualquier papel. | EXC-03 | Sonnet |
+| EXC-05 | Prueba end-to-end del motor con una plantilla trivial de un solo campo (sin lógica de negocio real todavía) + deploy a VPS, para validar el round-trip completo antes de invertir en las plantillas reales. | EXC-04 | Sonnet |
+
+### Fase 1 — Composición de Cuenta (primera plantilla real, la más simple)
+
+| ID | Actividad | Depende de | Modelo |
+|---|---|---|---|
+| EXC-06 | Definir el `ExcelTemplateDef` de Composición de Cuenta (origen: saldo TB actual + período anterior; destino: subtotales por categoría + partidas inusuales marcadas). | EXC-05 | Sonnet |
+| EXC-07 | Insertar el botón de descarga/subida (EXC-04) en la vista de cualquier papel `PT-FIN-C-SUST` (C-01..C-12). | EXC-06 | Sonnet |
+| EXC-08 | Probar con datos del encargo demo + deploy. | EXC-07 | Sonnet |
+
+### Fase 2 — Conciliación Bancaria (cierre rápido hacia B-08)
+
+| ID | Actividad | Depende de | Modelo |
+|---|---|---|---|
+| EXC-09 | Definir `ExcelTemplateDef` (origen: saldo s/libros, saldo s/banco si ya hay confirmación, partidas conciliatorias del período anterior; destino: S1 de C-01). | EXC-05 | Sonnet |
+| EXC-10 | Wire en C-01 + confirmar que las diferencias resultantes fluyen a **B-08** vía `propagateDiferencias` (ya construido esta sesión, no requiere cambios). | EXC-09 | Sonnet |
+| EXC-11 | Probar + deploy. | EXC-10 | Sonnet |
+
+### Fase 3 — Revisión Analítica (NIA 520 — hoy sin ningún lugar donde documentarse)
+
+| ID | Actividad | Depende de | Modelo |
+|---|---|---|---|
+| EXC-12 | Agregar a `PT-FIN-B07` el campo/columna "Explicación de la variación" (patrón idéntico al usado toda esta sesión para extender `paper-templates.ts`, sin `FieldType` nuevo si un tipo tabla ya sirve). | EXC-05 | Sonnet |
+| EXC-13 | Definir `ExcelTemplateDef` (origen: % de variación ya calculado por cuenta/grupo, tomado de los mismos datos que alimentan `RatioTrendChart`/`VariationChart`; destino: la columna nueva de EXC-12). | EXC-12 | Sonnet |
+| EXC-14 | Wire en PT-FIN-B07 + probar + deploy. | EXC-13 | Sonnet |
+
+### Fase 4 — Circularización / Conciliación de CxC (la más valiosa — cierra el ciclo con el muestreo MUS)
+
+| ID | Actividad | Depende de | Modelo |
+|---|---|---|---|
+| EXC-15 | Definir `ExcelTemplateDef` (origen: filas de **PT-NIA530 S5** filtradas por área CxC — `itemRef`, `descripcion`, `bookValue`; destino: `auditedValue` de vuelta a esas mismas filas, emparejado por `itemRef`, mismo criterio de matching que el bridge PT-A4→S5 ya construido). | EXC-05 | Sonnet |
+| EXC-16 | Wire en C-02, condicionado a que exista una muestra ya cargada en PT-NIA530 (si no hay muestra, el botón debe explicar por qué está deshabilitado, no fallar en silencio). | EXC-15 | Sonnet |
+| EXC-17 | Tras importar las respuestas, invocar (u ofrecer con un botón) el `recalculateSamplingEvaluation` ya existente, para que el UEL se actualice sin pasos manuales adicionales. | EXC-16 | Sonnet |
+| EXC-18 | Probar + deploy. | EXC-17 | Sonnet |
+
+### Fase 5 — Arqueo de Caja (variante menor de la Fase 2, casi gratis)
+
+| ID | Actividad | Depende de | Modelo |
+|---|---|---|---|
+| EXC-19 | Definir `ExcelTemplateDef` (origen: saldo s/libros al momento del arqueo; destino: S1 de C-01, mismo destino que Conciliación Bancaria). | EXC-11 | Sonnet |
+| EXC-20 | Wire + probar + deploy. | EXC-19 | Sonnet |
+
+### Transversal — documentación
+
+| ID | Actividad | Cuándo | Modelo |
+|---|---|---|---|
+| EXC-DOC | Actualizar la bitácora (sección 7) al cerrar cada fase — qué se implementó, estado real, cualquier desviación del diseño original. | Al final de cada fase | Haiku |
+
+*(Fuera de este plan, evaluar aparte)* Importador de mayor/detalle transaccional — habilitador de plantillas futuras (Antigüedad de Saldos, Conciliación a Tres Vías) y de los 4 motores CAAT ya escritos. Ver [`motor-caats-estado-y-plan.md`](./motor-caats-estado-y-plan.md).
+
+**Nota de secuencia**: EXC-06 a EXC-20 (fases 1-5) no dependen entre sí una vez que EXC-05 está listo — se pueden reordenar o hacer en paralelo en distintas sesiones si conviene. El único bloqueador real y compartido es completar la Fase 0.
 
 ---
 
@@ -129,3 +185,4 @@ El usuario preguntó específicamente por TeamMate+ asumiendo que tiene más ava
 |---|---|---|
 | 2026-08-15 | Investigación inicial (CaseWare, Workiva, Vena, TeamMate+, Power Query/Office.js) + propuesta de 3 niveles + primeras 4 plantillas | Documentado, nada implementado |
 | 2026-08-15 | Ampliación: catálogo completo de los ~20 tipos de CaseWare, revisión específica de TeamMate+, plantilla "Revisión Analítica" agregada, brecha de "General Ledger" documentada | Documentado, nada implementado |
+| 2026-08-15 | Sección 6 convertida de "orden recomendado" a plan de trabajo con actividades concretas (EXC-01..EXC-20 + EXC-DOC), cada una con modelo de Claude recomendado; confirmado que `apps/api` no tiene librería Excel server-side hoy (decisión pendiente en EXC-01) | Documentado, nada implementado — pendiente que el usuario confirme por dónde empezar |

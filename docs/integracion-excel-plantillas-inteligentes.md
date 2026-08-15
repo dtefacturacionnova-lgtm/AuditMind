@@ -3,7 +3,7 @@
 > Investigación realizada: 2026-08-15
 > Fuente: documentación pública de CaseWare Working Papers/CaseView, Workiva Wdesk, Vena Solutions, TeamMate+/Wolters Kluwer, CCH Axcess Engagement (Thomson Reuters), Confirmation.com/Circit/AuditConfirm, documentación de Microsoft (Office.js, Power Query, protección de hojas)
 > Contexto: propuesta de cómo AuditMind puede emular el patrón de "plantilla Excel con zonas amarradas a la base de datos del encargo + zonas libres para el auditor" que usan las firmas grandes — SIN necesitar un Add-in de Office instalado.
-> **Estado: PROPUESTA — nada de esto está implementado todavía.** Este documento existe para no perder el diseño entre sesiones; actualizar la sección 7 (bitácora) cada vez que se retome.
+> **Estado: PROPUESTA.** Lo único que existe en código es lo cerrado en EXC-01 (ver §3.1): el contrato de tipos del motor y la dependencia de Excel instalada en `apps/api`. **El motor en sí (generación/lectura) y las 6 plantillas del catálogo siguen sin implementarse.** Este documento existe para no perder el diseño entre sesiones; actualizar la sección 7 (bitácora) cada vez que se retome.
 > Ver también: [`motor-caats-estado-y-plan.md`](./motor-caats-estado-y-plan.md) — diagnóstico real del motor de CAATs (Benford/GL/AP/Payroll/Anomaly) y por qué comparte la misma brecha raíz que este documento (falta de importador de detalle transaccional/mayor).
 
 ---
@@ -71,6 +71,78 @@ Un registro de `ExcelTemplateDef[]` reemplaza tener que programar cada plantilla
 
 ---
 
+## 3.1 Decisiones técnicas (EXC-01, cerrado el 2026-08-15)
+
+Esta subsección fija lo que quedó decidido y ya no se re-discute en EXC-02 y siguientes. **Lo único implementado es el contrato de tipos y la dependencia**: `apps/api/src/working-papers/excel-templates/excel-template.types.ts` y `exceljs@4.4.0` en `apps/api/package.json`.
+
+### 3.1.1 Librería Excel del lado del servidor: `exceljs@4.4.0`
+
+`apps/api` no tenía ninguna librería de Excel. La única del monorepo era `xlsx` (SheetJS) en `apps/web`, usada client-side para importar el Balance de Comprobación (`TrialBalancePanel.tsx`, con `import('xlsx')` diferido). Los requisitos del motor son tres a la vez: **escribir y leer rangos con nombre**, **proteger la hoja dejando zonas desbloqueadas**, y **sobrevivir el round-trip** (generar → el auditor edita en Excel → volver a leer).
+
+| Candidato | Rangos con nombre | Protección + celdas desbloqueadas | Lee y escribe | Veredicto |
+|---|---|---|---|---|
+| **`exceljs` 4.4.0** (MIT) | Sí — `workbook.definedNames.add()` / `.getRanges()` y `cell.name` | Sí — `worksheet.protect(pwd, opts)` + `cell.protection = { locked: false }` | Sí, ambos | ✅ **Elegida.** Es la única que cubre las tres necesidades en un solo paquete. |
+| `xlsx` (SheetJS CE en npm, la que ya usa `apps/web`) | Parcial | Muy limitada | Sí | ❌ **Descartada por seguridad.** La versión publicada en npm está abandonada (el mantenedor migró a distribución propia) y `0.18.5` arrastra dos avisos **HIGH sin arreglo disponible en npm**: prototype pollution al parsear (CVE-2023-30533) y ReDoS (CVE-2024-22363). Parsear archivos subidos por el usuario es exactamente el escenario del primero. |
+| `xlsx-populate` | Sí | Sí | Sí | ❌ Sin releases desde 2020. |
+| `excel4node` | Sí | Sí | Sólo escribe | ❌ No sirve para el round-trip. |
+| `write-excel-file` / `node-xlsx` | No | No | Parcial | ❌ Demasiado limitadas. |
+
+**Contras asumidos de `exceljs` y cómo se mitigan:**
+
+| Contra | Mitigación adoptada |
+|---|---|
+| Cadencia de releases baja (4.4.0 es de 2023). | Versión **fijada exacta** (`"exceljs": "4.4.0"`, sin `^`) y uso deliberado de la superficie de API más básica y estable. |
+| [#1497](https://github.com/exceljs/exceljs/issues/1497) — nombres repetidos en hojas distintas pierden rangos. | El contrato exige que `rangoNombre` sea **único en todo el libro** y lleve prefijo `AM_`. Nunca se usan nombres con alcance por hoja. |
+| [#1174](https://github.com/exceljs/exceljs/issues/1174) — rangos de fila/columna completa (`Hoja!$1:$10`) se pierden al leer. | El contrato exige **rectángulos de celdas con referencia absoluta** (`'Hoja'!$B$6:$E$45`). Nunca filas ni columnas completas. |
+| Avisos de `npm audit` en la rama de dependencias. | El único aviso que `exceljs` aporta es *moderate* vía `uuid@8` (falta de bounds check **sólo cuando se pasa `buf`**, cosa que exceljs no hace); `uuid` ya estaba en el árbol por `@nestjs/schedule` y `bull`. El aviso *high* de `tmp` **no aplica**: exceljs trae `tmp@0.2.7` (ya parcheado) y sólo lo usa el lector en streaming (`lib/stream/xlsx/workbook-reader.js`), que este motor no usa — lee con `workbook.xlsx.load(buffer)`. |
+
+**Nota sobre "Allow Edit Ranges":** ExcelJS **no** escribe el elemento `<protectedRanges>` de OOXML (el diálogo *Review → Allow Edit Ranges*, que sirve para contraseñas por rango y permisos por usuario de dominio). No hace falta: la separación zona controlada / zona libre se logra con el mecanismo base de Excel, que sí está soportado — `worksheet.protect()` + `cell.protection = { locked: false }` en las celdas libres. El resultado visible para el auditor es idéntico. En cualquier caso, la protección de Excel es una barrera de **usabilidad, no de seguridad**: se puede quitar. El motor nunca confía en que la zona controlada regresó intacta — simplemente no la lee.
+
+### 3.1.2 Contrato de tipos
+
+Archivo: **`apps/api/src/working-papers/excel-templates/excel-template.types.ts`** (compila limpio con `npx tsc --noEmit -p apps/api/tsconfig.json`).
+
+El boceto de la sección 3 se mantuvo en espíritu y en nomenclatura, con cuatro cambios de fondo que salieron de leer el backend real:
+
+| Cambio respecto al boceto | Por qué |
+|---|---|
+| `origen[]` pasa de "de dónde sale el dato" a **declarar el layout completo del libro**: cada entrada es `{ rango: ExcelRangoDef, fuente? }`. Todo rango con nombre —incluidos los vacíos que sólo sirven de zona libre— se declara ahí; `fuente` es opcional. | Sin layout declarado, el motor no puede generar nada. Y al obligar a que `destino.rangoNombre` exista en `origen[]`, la regla de seguridad "sólo se lee lo que nosotros escribimos" queda **impuesta por el tipo**, no por disciplina del programador. |
+| `ExcelZona` (`CONTROLADA` \| `LIBRE`) se puede definir **por columna**, no sólo por rango. | Es el caso normal, no la excepción: en circularización de CxC la misma tabla lleva columnas bloqueadas (cliente, ref., valor en libros) y libres (respuesta, valor auditado). Es exactamente el look de Workiva. |
+| Se agregó `modo: 'REEMPLAZA' \| 'FUSIONA_POR_CLAVE'` + `claveFusion` en `destino`. | `PT-NIA530 S5` guarda por ítem más campos de los que viaja la plantilla. Con `REEMPLAZA` a secas, subir el Excel **borraría trabajo hecho en pantalla**. El motor además nunca borra por omisión: filas que están en la BD y no en el Excel se conservan. |
+| Se agregó `version: number` por plantilla, sellada en el manifiesto (§3.1.3). | Si el layout cambia (una tabla se mueve de sitio), un archivo generado con la versión anterior debe rechazarse, no leerse en las coordenadas equivocadas. |
+
+`TemplateContext` (ahora `ExcelTemplateContext`) se diseñó a partir de lo que las plantillas del §4 realmente necesitan y de cómo el backend ya lee esos datos hoy: identidad validada (`user`, `organizationId`, `auditId`, `paperId`, `paperCode`, `areaKey?`), cabecera del encargo, y accesores **pre-scopeados al encargo** — `seccion()`/`filas()` (mismo papel, precargado, síncrono), `seccionDePapel()`/`filasDePapel()` (otro papel del mismo encargo, por `paperCode`), `saldosTB()` (PT-FIN-B00 S2, con la forma literal que ya usa `propagateTrialBalance`) y `materialidad()` (PT-A4 S3/S4/S5, la misma que `getMaterialidadByAudit`). **Ningún accesor recibe un `auditId` ni un `paperId` por parámetro**, para que una plantilla mal escrita no pueda alcanzar otro encargo.
+
+### 3.1.3 Seguridad
+
+Un `.xlsx` arbitrario subido por un usuario autenticado es superficie de ataque real. El diseño se apoya en un invariante y siete controles.
+
+**Invariante:** *sólo se lee lo que el propio motor escribió.* No existe "abrir el libro y ver qué encaja". Se recorre `destino[]`, y para cada entrada se busca **ese** rango con nombre. Hojas extra, rangos con nombre añadidos por el usuario, fórmulas y cualquier otro contenido se ignoran por completo.
+
+| # | Control | Decisión y razonamiento |
+|---|---|---|
+| 1 | **Tamaño** | **10 MB**, más bajo que los 25 MB que usan el resto de adjuntos de papeles (`working-papers.controller.ts`). El archivo aceptado es uno que *nosotros* generamos y cuyo tamaño ya está acotado por `filasMaximas`; un umbral bajo reduce el material disponible para una bomba de descompresión, porque el `.xlsx` es un ZIP y `workbook.xlsx.load()` lo descomprime **entero en memoria**. |
+| 2 | **Sólo `.xlsx`, nunca `.xlsm`** | Se valida extensión **y** MIME (`…spreadsheetml.sheet`) **y** la firma ZIP `PK\x03\x04` sobre el buffer, porque ni la extensión ni el MIME que manda el navegador son confiables. Se rechaza cualquier libro con macros. El motor tampoco ejecuta ni evalúa nada del archivo: ExcelJS no tiene motor de cálculo. |
+| 3 | **Fórmulas nunca se confían** | Si una celda destino trae fórmula, se toma **sólo el resultado cacheado**, nunca la expresión. El lector reduce además rich-text a texto plano, hipervínculos a su texto (la URL se descarta — no se guarda una URL controlada por el usuario en la BD que la UI pudiera renderizar) y celdas de error (`#REF!`, `#DIV/0!`) a `null` con advertencia. Nada de tipo `ExcelValorCelda` sale sin sanear. |
+| 4 | **Aislamiento multi-tenant** | El motor **nunca escribe directo a Prisma**. Toda escritura pasa por `PaperSectionsService.updateSection(paperId, sectionKey, value, user)`, que ejecuta `assertPaperAccess` → carga el papel con su `audit.organizationId` y lanza `ForbiddenException` si no coincide con `user.organizationId` **en cada llamada**. Esto es correcto y suficiente como frontera de tenencia, pero **no es suficiente por sí solo** — ver los controles 5, 6 y 7, que cubren huecos que `updateSection` no cubre. |
+| 5 | **Coherencia plantilla ↔ papel** | Antes de leer nada se verifica que el `paperCode` real del `paperId` de la URL esté en `paperCodeAplicable` de la plantilla. Sin esto se podría subir una plantilla de conciliación bancaria a un papel de otro tipo. |
+| 6 | **Manifiesto sellado (HMAC)** | El archivo generado lleva, en una hoja oculta `_AuditMind`, un manifiesto con `templateKey`, `templateVersion`, `paperId`, `auditId`, `organizationId`, `generadoEn`, `generadoPor` y una **firma HMAC-SHA256** con secreto de servidor. Al subir se revalida contra el contexto de la petición. **Falla cerrado**: si falta la hoja, el JSON no parsea, la firma no valida o cualquier campo no coincide, se rechaza el archivo entero y no se escribe nada. No es la frontera de seguridad (esa la da el control 4, que revalida contra el JWT) — es el control de **integridad** que evita en la práctica subir el archivo al papel equivocado, de otro encargo, de una versión de layout retirada, o un libro fabricado a mano con rangos inventados. |
+| 7 | **`sectionKey` debe existir** | ⚠️ `updateSection` hace `upsert`: si el `sectionKey` no existe, **lo crea** con `fieldType: 'TEXTAREA'` y `sortOrder: 999` en vez de fallar. Un `sectionKey` mal escrito en un `ExcelTemplateDef` ensuciaría el papel en silencio. El motor valida contra `PAPER_TEMPLATES[paperCode]` que cada `destino.escribeEn.sectionKey` exista **antes** de escribir. |
+
+**Otros riesgos identificados y su tratamiento** (todos codificados en `EXCEL_LIMITES_POR_DEFECTO`):
+
+- **Amplificación / zip bomb**: además del tope de tamaño, topes duros de `maxHojas` (12), `maxFilasPorTabla` (5 000), `maxColumnasPorTabla` (60), `maxCeldasLeidas` (100 000) y `maxLargoTextoCelda` (4 000). Un archivo pequeño puede declarar una malla enorme; el tope de celdas corta esa vía.
+- **Timeout de parseo**: el parseo de ExcelJS **no es cancelable**, así que la lectura corre con `parseTimeoutMs` (15 s) y se aborta la petición si lo excede. En EXC-02 hay que decidir si además se aísla en un worker thread — es la única forma de recuperar de verdad el hilo si el parseo se cuelga.
+- **Rol**: los endpoints de generación y subida llevan `@Roles(UserRole.AUDITOR)`. El `RolesGuard` es jerárquico (`>=`), así que eso deja fuera a `AUDITEE` (20) y `READ_ONLY` (10) y deja dentro a `SENIOR_AUDITOR` para arriba.
+- **Estado del papel**: ⚠️ `assertPaperAccess` **no** mira `status` ni `checkedOutById`. Un papel `SIGNED_OFF`/`CLOSED` es hoy escribible por esta vía. El motor debe rechazar la subida en esos estados **por su cuenta** (`updateSection` no lo hará por él).
+- **Límites al generar**: los mismos topes aplican en la escritura, para que el propio motor no produzca un libro que después rebote contra sus propios límites al volver.
+
+### 3.1.4 Qué NO quedó decidido en EXC-01
+
+La implementación de `generarExcelDesdeTemplate` / `leerExcelSegunTemplate` (EXC-02), los endpoints REST (EXC-03), el componente de UI (EXC-04) y las 6 plantillas del catálogo (§4). En EXC-02 hay que resolver además dos puntos abiertos: si el parseo se aísla en worker thread, y cómo se comporta un rango con nombre que el auditor dejó en `#REF!` por haber borrado filas (hoy el diseño dice: advertencia + saltar ese rango, sin abortar los demás).
+
+---
+
 ## 4. Catálogo de plantillas
 
 ### 4.1 Ya propuestas (sesión anterior, mantener)
@@ -111,71 +183,15 @@ El usuario preguntó específicamente por TeamMate+ asumiendo que tiene más ava
 
 ---
 
-## 6. Plan de trabajo — Nivel 1 (actividades concretas)
+## 6. Orden de implementación recomendado
 
-> Convertido a actividades el 2026-08-15 a partir del orden ya acordado arriba. Cada actividad indica el modelo de Claude recomendado para ejecutarla, según la regla estándar del usuario (Fable 5/Opus = arquitectura nueva o seguridad multi-tenant; Sonnet = implementación sobre patrón ya establecido; Haiku = documentación/ajustes mecánicos). **Nada de esto está implementado — es la lista para revisar antes de empezar.**
-
-**Decisión técnica pendiente de confirmar en EXC-01**: hoy `apps/api` (NestJS) no tiene ninguna librería de Excel — el único uso de `xlsx` (SheetJS) es client-side en `apps/web` para el import de Balance de Comprobación. Para escribir/leer rangos con nombre + protección de rango en el servidor se necesita algo más capaz que SheetJS community edition (que no escribe protección de hoja de forma confiable); la opción estándar en Node es **`exceljs`** (soporta `definedNames`, `protect()`, rangos protegidos). Se confirma como parte de EXC-01, no se asume todavía.
-
-### Fase 0 — Motor genérico (una sola vez, todo lo demás depende de esto)
-
-| ID | Actividad | Depende de | Modelo recomendado |
-|---|---|---|---|
-| EXC-01 | **Diseño del motor**: elegir librería Excel server-side (`exceljs` u alternativa), fijar el contrato final de `ExcelTemplateDef`, decidir cómo se nombran/versionan los rangos con nombre, y — punto crítico de seguridad — diseñar la validación del archivo subido (límite de tamaño, solo leer *valores* de los rangos declarados nunca fórmulas, rechazar hojas con macros, evitar que un rango de una organización pueda escribir en un `PaperSection` de otra). | — | **Fable 5 / Opus** — arquitectura nueva + superficie de ataque real (archivo arbitrario subido y parseado en el servidor) + aislamiento multi-tenant |
-| EXC-02 | Implementar el motor: función `generarExcelDesdeTemplate(def, ctx)` y función `leerExcelSegunTemplate(def, buffer)`, siguiendo el diseño ya fijado en EXC-01. | EXC-01 | Sonnet |
-| EXC-03 | Endpoints REST genéricos: `GET /working-papers/:id/excel-template/:key` (descarga) y `POST /working-papers/:id/excel-template/:key/import` (sube + enruta a las `PaperSection` destino), con `@Roles(AUDITOR)` igual que el resto del módulo. | EXC-02 | Sonnet |
-| EXC-04 | Componente UI genérico reutilizable ("Descargar plantilla" / "Subir plantilla completada" con estado de progreso y errores), en el mismo estilo que las barras ya existentes (`DiferenciasPropagateBar`, etc.), listo para insertarse en cualquier papel. | EXC-03 | Sonnet |
-| EXC-05 | Prueba end-to-end del motor con una plantilla trivial de un solo campo (sin lógica de negocio real todavía) + deploy a VPS, para validar el round-trip completo antes de invertir en las plantillas reales. | EXC-04 | Sonnet |
-
-### Fase 1 — Composición de Cuenta (primera plantilla real, la más simple)
-
-| ID | Actividad | Depende de | Modelo |
-|---|---|---|---|
-| EXC-06 | Definir el `ExcelTemplateDef` de Composición de Cuenta (origen: saldo TB actual + período anterior; destino: subtotales por categoría + partidas inusuales marcadas). | EXC-05 | Sonnet |
-| EXC-07 | Insertar el botón de descarga/subida (EXC-04) en la vista de cualquier papel `PT-FIN-C-SUST` (C-01..C-12). | EXC-06 | Sonnet |
-| EXC-08 | Probar con datos del encargo demo + deploy. | EXC-07 | Sonnet |
-
-### Fase 2 — Conciliación Bancaria (cierre rápido hacia B-08)
-
-| ID | Actividad | Depende de | Modelo |
-|---|---|---|---|
-| EXC-09 | Definir `ExcelTemplateDef` (origen: saldo s/libros, saldo s/banco si ya hay confirmación, partidas conciliatorias del período anterior; destino: S1 de C-01). | EXC-05 | Sonnet |
-| EXC-10 | Wire en C-01 + confirmar que las diferencias resultantes fluyen a **B-08** vía `propagateDiferencias` (ya construido esta sesión, no requiere cambios). | EXC-09 | Sonnet |
-| EXC-11 | Probar + deploy. | EXC-10 | Sonnet |
-
-### Fase 3 — Revisión Analítica (NIA 520 — hoy sin ningún lugar donde documentarse)
-
-| ID | Actividad | Depende de | Modelo |
-|---|---|---|---|
-| EXC-12 | Agregar a `PT-FIN-B07` el campo/columna "Explicación de la variación" (patrón idéntico al usado toda esta sesión para extender `paper-templates.ts`, sin `FieldType` nuevo si un tipo tabla ya sirve). | EXC-05 | Sonnet |
-| EXC-13 | Definir `ExcelTemplateDef` (origen: % de variación ya calculado por cuenta/grupo, tomado de los mismos datos que alimentan `RatioTrendChart`/`VariationChart`; destino: la columna nueva de EXC-12). | EXC-12 | Sonnet |
-| EXC-14 | Wire en PT-FIN-B07 + probar + deploy. | EXC-13 | Sonnet |
-
-### Fase 4 — Circularización / Conciliación de CxC (la más valiosa — cierra el ciclo con el muestreo MUS)
-
-| ID | Actividad | Depende de | Modelo |
-|---|---|---|---|
-| EXC-15 | Definir `ExcelTemplateDef` (origen: filas de **PT-NIA530 S5** filtradas por área CxC — `itemRef`, `descripcion`, `bookValue`; destino: `auditedValue` de vuelta a esas mismas filas, emparejado por `itemRef`, mismo criterio de matching que el bridge PT-A4→S5 ya construido). | EXC-05 | Sonnet |
-| EXC-16 | Wire en C-02, condicionado a que exista una muestra ya cargada en PT-NIA530 (si no hay muestra, el botón debe explicar por qué está deshabilitado, no fallar en silencio). | EXC-15 | Sonnet |
-| EXC-17 | Tras importar las respuestas, invocar (u ofrecer con un botón) el `recalculateSamplingEvaluation` ya existente, para que el UEL se actualice sin pasos manuales adicionales. | EXC-16 | Sonnet |
-| EXC-18 | Probar + deploy. | EXC-17 | Sonnet |
-
-### Fase 5 — Arqueo de Caja (variante menor de la Fase 2, casi gratis)
-
-| ID | Actividad | Depende de | Modelo |
-|---|---|---|---|
-| EXC-19 | Definir `ExcelTemplateDef` (origen: saldo s/libros al momento del arqueo; destino: S1 de C-01, mismo destino que Conciliación Bancaria). | EXC-11 | Sonnet |
-| EXC-20 | Wire + probar + deploy. | EXC-19 | Sonnet |
-
-### Transversal — documentación
-
-| ID | Actividad | Cuándo | Modelo |
-|---|---|---|---|
-| EXC-DOC | Actualizar la bitácora (sección 7) al cerrar cada fase — qué se implementó, estado real, cualquier desviación del diseño original. | Al final de cada fase | Haiku |
-
-*(Fuera de este plan, evaluar aparte)* Importador de mayor/detalle transaccional — habilitador de plantillas futuras (Antigüedad de Saldos, Conciliación a Tres Vías) y de los 4 motores CAAT ya escritos. Ver [`motor-caats-estado-y-plan.md`](./motor-caats-estado-y-plan.md).
-
-**Nota de secuencia**: EXC-06 a EXC-20 (fases 1-5) no dependen entre sí una vez que EXC-05 está listo — se pueden reordenar o hacer en paralelo en distintas sesiones si conviene. El único bloqueador real y compartido es completar la Fase 0.
+1. **Motor genérico** (`ExcelTemplateDef` + endpoint de generación/lectura) — una sola vez.
+2. **Composición de Cuenta** — la más simple y reutilizable de inmediato en cualquier área.
+3. **Conciliación Bancaria** — segunda más simple, cierre rápido hacia B-08.
+4. **Revisión Analítica** (nueva de esta ronda) — reutiliza cálculos que YA existen en `AnalyticsCharts.tsx`, solo falta la ida/vuelta a Excel para la explicación de variación NIA 520.
+5. **Circularización de CxC** — la más valiosa, pero depende de que PT-NIA530 S5 ya tenga la muestra cargada.
+6. **Arqueo de Caja** — variante menor de la #3, casi gratis una vez hecha.
+7. *(Evaluar aparte, no en este orden)* Importador de mayor/detalle transaccional — habilitador de varias plantillas futuras y de CAATs más ricos.
 
 ---
 
@@ -185,4 +201,4 @@ El usuario preguntó específicamente por TeamMate+ asumiendo que tiene más ava
 |---|---|---|
 | 2026-08-15 | Investigación inicial (CaseWare, Workiva, Vena, TeamMate+, Power Query/Office.js) + propuesta de 3 niveles + primeras 4 plantillas | Documentado, nada implementado |
 | 2026-08-15 | Ampliación: catálogo completo de los ~20 tipos de CaseWare, revisión específica de TeamMate+, plantilla "Revisión Analítica" agregada, brecha de "General Ledger" documentada | Documentado, nada implementado |
-| 2026-08-15 | Sección 6 convertida de "orden recomendado" a plan de trabajo con actividades concretas (EXC-01..EXC-20 + EXC-DOC), cada una con modelo de Claude recomendado; confirmado que `apps/api` no tiene librería Excel server-side hoy (decisión pendiente en EXC-01) | Documentado, nada implementado — pendiente que el usuario confirme por dónde empezar |
+| 2026-08-15 | **EXC-01** — decisiones técnicas del motor (§3.1): librería elegida (`exceljs@4.4.0`), contrato de tipos final y diseño de seguridad (7 controles + límites duros) | **Implementado:** `apps/api/src/working-papers/excel-templates/excel-template.types.ts` + dependencia `exceljs@4.4.0` en `apps/api`. Type-check limpio. El motor y las plantillas siguen sin implementarse. |

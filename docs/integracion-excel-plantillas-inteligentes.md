@@ -3,7 +3,7 @@
 > Investigación realizada: 2026-08-15
 > Fuente: documentación pública de CaseWare Working Papers/CaseView, Workiva Wdesk, Vena Solutions, TeamMate+/Wolters Kluwer, CCH Axcess Engagement (Thomson Reuters), Confirmation.com/Circit/AuditConfirm, documentación de Microsoft (Office.js, Power Query, protección de hojas)
 > Contexto: propuesta de cómo AuditMind puede emular el patrón de "plantilla Excel con zonas amarradas a la base de datos del encargo + zonas libres para el auditor" que usan las firmas grandes — SIN necesitar un Add-in de Office instalado.
-> **Estado: EN CONSTRUCCIÓN.** Fase 0 (motor genérico) completa: EXC-01 (diseño + `exceljs`) y EXC-02 (`ExcelTemplateEngineService` — generar/leer, verificado con una prueba de humo de 17 casos contra la base real). Faltan EXC-03 (endpoints REST), EXC-04 (UI) y EXC-05 (prueba end-to-end vía la app + deploy) para cerrar la Fase 0, y luego las 6 plantillas del catálogo (fases 1-5). Este documento existe para no perder el diseño entre sesiones; actualizar la sección 7 (bitácora) cada vez que se retome.
+> **Estado: FASE 0 COMPLETA Y DESPLEGADA.** Motor genérico (EXC-01/02), endpoints REST (EXC-03) y componente de UI (EXC-04) construidos y verificados en dos niveles — prueba de humo a nivel de servicio (17/17) y prueba de extremo a extremo vía HTTP real con login demo (9/9), EXC-05 — y en producción en `vps-muestreo`. **El registro de plantillas sigue vacío**: hoy no hay ninguna de las 6 plantillas del catálogo (fases 1-5) publicada — agregar una es lo único que falta para que un auditor la use de verdad. Este documento existe para no perder el diseño entre sesiones; actualizar la sección 7 (bitácora) cada vez que se retome.
 > Ver también: [`motor-caats-estado-y-plan.md`](./motor-caats-estado-y-plan.md) — diagnóstico real del motor de CAATs (Benford/GL/AP/Payroll/Anomaly) y por qué comparte la misma brecha raíz que este documento (falta de importador de detalle transaccional/mayor).
 
 ---
@@ -182,6 +182,20 @@ Tres archivos nuevos en `apps/api/src/working-papers/excel-templates/`, más el 
 - `apps/web/src/components/working-papers/ExcelTemplateBar.tsx` — `<ExcelTemplateBar paperId templateKey label description? />`. Dos botones ("Descargar plantilla" / "Subir completada") + input de archivo oculto + resumen del resultado (secciones actualizadas, advertencias por rango). Reutiliza `apiClient.downloadFile`/`apiClient.postForm`, que ya existían (usados hoy por PDF y por Anexo 12 fiscal) — no hizo falta agregar plumbing nuevo de red.
 - `useImportExcelTemplate()` en `useWorkingPaperGraph.ts` — mutación con `postForm`, invalida `['wp', paperId]` al terminar, mismo patrón que `usePropagateDiferencias` y el resto de los botones "Bar".
 - **A propósito, todavía NO se inserta en ningún papel real** — según el orden del plan (§6), conectarlo a una plantilla concreta es tarea de cada fase (p. ej. EXC-07 para Composición de Cuenta), no de EXC-04. Con el registro de plantillas vacío (§3.3), no hay ningún `templateKey` real contra el cual probarlo en la UI todavía.
+
+---
+
+## 3.5 Prueba de extremo a extremo (EXC-05, cerrado el 2026-08-15)
+
+A diferencia de la prueba de humo de EXC-02 (que llamaba a `ExcelTemplateEngineService` directo), esta prueba levanta la app NestJS **completa** (`NestFactory.create` + los mismos pipes/prefijo de `main.ts`) en un puerto local efímero y ejercita los endpoints con `fetch` real — cubre exactamente lo que EXC-02 no podía: el guard de roles, `FileInterceptor`/multipart real, y los códigos de estado HTTP.
+
+- Login real contra Supabase con el usuario demo `cae@demo.cl` (rol CAE, jerárquicamente por encima de AUDITOR — el mismo mecanismo de `RolesGuard` ya usado por el resto de la API).
+- Plantilla trivial registrada solo en memoria del proceso de prueba (un rango ESCALAR de moneda) + un `WorkingPaper` temporal, igual que en EXC-02.
+- **9/9 verificaciones pasaron**: sin token → 401 · clave inexistente → 404 · descarga → 200 con `Content-Disposition` · extensión inválida (`.txt`) → 400 · subida válida → 201 (default de NestJS para `@Post`, no es un error) · la sección se actualizó correctamente en la base tras el ciclo HTTP completo.
+- Papel temporal y sesión se limpiaron al final; no quedó ningún dato de prueba.
+- **Deploy**: cambios de EXC-01 a EXC-05 desplegados a `vps-muestreo` (build de `@auditmind/api` + `@auditmind/web`, `pm2 restart`). El registro de plantillas sigue vacío en producción — los endpoints existen y responden, pero no hay ninguna plantilla real publicada todavía (eso es fase 1+).
+
+**Fase 0 completa.** El motor genérico, los endpoints y el componente de UI están construidos, verificados en dos niveles (servicio y HTTP real) y desplegados. Lo único que falta para que un auditor pueda usar esto de verdad es construir la primera plantilla real (§6, fase 1: Composición de Cuenta).
 
 ---
 

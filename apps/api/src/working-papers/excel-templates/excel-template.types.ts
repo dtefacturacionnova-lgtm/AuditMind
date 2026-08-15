@@ -142,7 +142,12 @@ export interface ExcelRangoDef {
   ancla: string;
   zona: ExcelZona;
   forma: ExcelRangoForma;
-  /** Rótulo impreso a la izquierda (ESCALAR) o encima (TABLA) del rango. */
+  /**
+   * Rótulo impreso en la fila inmediatamente encima de `ancla` (para ESCALAR
+   * y para TABLA por igual — precisión de EXC-02 sobre el boceto original,
+   * que sugería "a la izquierda" para ESCALAR). Esa fila debe quedar libre
+   * en el layout del autor de la plantilla.
+   */
   etiqueta?: string;
   /** Nota explicativa que se imprime bajo el rótulo. */
   nota?: string;

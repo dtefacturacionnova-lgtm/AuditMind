@@ -3,7 +3,7 @@
 > Investigación realizada: 2026-08-15
 > Fuente: documentación pública de CaseWare Working Papers/CaseView, Workiva Wdesk, Vena Solutions, TeamMate+/Wolters Kluwer, CCH Axcess Engagement (Thomson Reuters), Confirmation.com/Circit/AuditConfirm, documentación de Microsoft (Office.js, Power Query, protección de hojas)
 > Contexto: propuesta de cómo AuditMind puede emular el patrón de "plantilla Excel con zonas amarradas a la base de datos del encargo + zonas libres para el auditor" que usan las firmas grandes — SIN necesitar un Add-in de Office instalado.
-> **Estado: PROPUESTA.** Lo único que existe en código es lo cerrado en EXC-01 (ver §3.1): el contrato de tipos del motor y la dependencia de Excel instalada en `apps/api`. **El motor en sí (generación/lectura) y las 6 plantillas del catálogo siguen sin implementarse.** Este documento existe para no perder el diseño entre sesiones; actualizar la sección 7 (bitácora) cada vez que se retome.
+> **Estado: EN CONSTRUCCIÓN.** Fase 0 (motor genérico) completa: EXC-01 (diseño + `exceljs`) y EXC-02 (`ExcelTemplateEngineService` — generar/leer, verificado con una prueba de humo de 17 casos contra la base real). Faltan EXC-03 (endpoints REST), EXC-04 (UI) y EXC-05 (prueba end-to-end vía la app + deploy) para cerrar la Fase 0, y luego las 6 plantillas del catálogo (fases 1-5). Este documento existe para no perder el diseño entre sesiones; actualizar la sección 7 (bitácora) cada vez que se retome.
 > Ver también: [`motor-caats-estado-y-plan.md`](./motor-caats-estado-y-plan.md) — diagnóstico real del motor de CAATs (Benford/GL/AP/Payroll/Anomaly) y por qué comparte la misma brecha raíz que este documento (falta de importador de detalle transaccional/mayor).
 
 ---
@@ -143,6 +143,31 @@ La implementación de `generarExcelDesdeTemplate` / `leerExcelSegunTemplate` (EX
 
 ---
 
+## 3.2 Implementación del motor (EXC-02, cerrado el 2026-08-15)
+
+Tres archivos nuevos en `apps/api/src/working-papers/excel-templates/`, más el registro del servicio en `working-papers.module.ts`:
+
+| Archivo | Responsabilidad |
+|---|---|
+| `excel-manifest.ts` | Firma y verificación HMAC del manifiesto (control #6 de §3.1.3). Aislado a propósito — es la pieza de integridad más sensible; nunca lanza, siempre devuelve `{ok:false, razon}` ante cualquier duda. |
+| `excel-cell-utils.ts` | Direcciones A1 puras (parseo/armado de rangos con nombre) + `sanearValorCelda` (control #3: fórmulas → resultado cacheado, rich text → texto, hipervínculos → solo el texto visible, errores → `null`) + coerción por `ExcelFormatoCelda`. |
+| `excel-template-engine.service.ts` | `ExcelTemplateEngineService.generar()` / `.leer()` — el motor completo: construye el `ExcelTemplateContext` (identidad ya validada + accesores pre-scopeados), escribe/lee rangos con nombre, aplica protección de hoja, arma y verifica el manifiesto, aplica los 7 controles de seguridad de §3.1.3. |
+
+**Dos precisiones sobre el boceto de EXC-01** (ambas documentadas también en los comentarios del código):
+1. La convención de layout se fijó explícitamente: en la primera hoja, las filas 1-4 quedan reservadas para la cabecera del encargo que el motor imprime (título, cliente, fecha) — cualquier `ancla` de esa hoja debe empezar en la fila 6 o después.
+2. El rótulo (`etiqueta`) de un rango se imprime siempre en la fila inmediatamente encima de su `ancla` — tanto para ESCALAR como para TABLA. El boceto original sugería "a la izquierda" para ESCALAR; se unificó a "encima" para no depender de que exista una columna libre a la izquierda (más robusto ante layouts que empiezan en la columna A).
+
+**Comportamiento no trivial, documentado para quien construya las plantillas de fase 1+:**
+- `FUSIONA_POR_CLAVE` hace merge campo a campo por fila (`Object.assign`) contra la fila existente que comparte `claveFusion` — preserva cualquier campo que la app haya agregado y que no viaja en la plantilla Excel; filas del Excel sin correspondencia se agregan, filas de la BD sin correspondencia se conservan.
+- El timeout de parseo (`parseTimeoutMs`) evita que la petición HTTP quede colgada, pero **no** cancela el trabajo de CPU en curso — ExcelJS no es cancelable. Aislarlo en un worker thread queda abierto (no resuelto en EXC-02, ver también §3.1.4).
+- Rechazo por manifiesto inválido: si se altera cualquier campo del manifiesto (incluida una prueba deliberada con `organizationId`), la verificación de firma HMAC lo atrapa primero — es la capa más fuerte y dispara antes que las comparaciones de campo individuales (paperId/auditId/organizationId), que solo importan cuando la firma sí es válida (p. ej. un archivo correctamente firmado para OTRO papel de trabajo).
+
+**Verificación**: prueba de humo (script de un solo uso, no persistido en el repo, siguiendo el patrón ya usado toda la sesión) contra la base de datos real — crea un `WorkingPaper` temporal + una entrada temporal en `PAPER_TEMPLATES` (solo en memoria del proceso), corre `generar()` → simula al auditor editando la zona libre con ExcelJS → `leer()`, y cubre: round-trip de valores ESCALAR y TABLA, `FUSIONA_POR_CLAVE` (incluida la preservación de campos app-only y la no-duplicación al re-subir el mismo archivo), rechazo de manifiesto manipulado, rechazo de archivo válido subido al papel equivocado, y omisión silenciosa (sin escritura) de un `sectionKey` inexistente en `PAPER_TEMPLATES`. **17/17 verificaciones pasaron.** El papel temporal y sus secciones se eliminaron al final; no quedó ningún dato de prueba en la base.
+
+**Pendiente explícito para EXC-03+**: `EXCEL_MANIFEST_SECRET` no está definido en `apps/api/.env` — el motor usa `JWT_SECRET` como respaldo (con una advertencia en el log al arrancar). Definir un secreto dedicado antes de exponer los endpoints en producción.
+
+---
+
 ## 4. Catálogo de plantillas
 
 ### 4.1 Ya propuestas (sesión anterior, mantener)
@@ -202,3 +227,4 @@ El usuario preguntó específicamente por TeamMate+ asumiendo que tiene más ava
 | 2026-08-15 | Investigación inicial (CaseWare, Workiva, Vena, TeamMate+, Power Query/Office.js) + propuesta de 3 niveles + primeras 4 plantillas | Documentado, nada implementado |
 | 2026-08-15 | Ampliación: catálogo completo de los ~20 tipos de CaseWare, revisión específica de TeamMate+, plantilla "Revisión Analítica" agregada, brecha de "General Ledger" documentada | Documentado, nada implementado |
 | 2026-08-15 | **EXC-01** — decisiones técnicas del motor (§3.1): librería elegida (`exceljs@4.4.0`), contrato de tipos final y diseño de seguridad (7 controles + límites duros) | **Implementado:** `apps/api/src/working-papers/excel-templates/excel-template.types.ts` + dependencia `exceljs@4.4.0` en `apps/api`. Type-check limpio. El motor y las plantillas siguen sin implementarse. |
+| 2026-08-15 | **EXC-02** — implementación del motor (§3.2): `ExcelTemplateEngineService.generar()`/`.leer()`, `excel-manifest.ts`, `excel-cell-utils.ts`, registrado en `WorkingPapersModule` | **Implementado y verificado:** prueba de humo de 17 casos contra la base real (round-trip ESCALAR/TABLA, `FUSIONA_POR_CLAVE`, rechazo de manifiesto manipulado, rechazo de archivo de otro papel, `sectionKey` inexistente) — 17/17 OK. Falta EXC-03 (endpoints), EXC-04 (UI) y EXC-05 (prueba end-to-end vía la app + deploy) para cerrar la Fase 0. Pendiente: definir `EXCEL_MANIFEST_SECRET` en `.env` antes de exponer endpoints. |

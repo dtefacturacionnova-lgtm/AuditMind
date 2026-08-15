@@ -239,6 +239,47 @@ export function usePropagateDiferencias() {
   });
 }
 
+// ─── EXC-04: Plantillas Excel semiautomáticas ──────────────────────────────
+
+export interface ExcelSeccionEscrita {
+  paperId: string;
+  paperCode: string;
+  sectionKey: string;
+  rangoNombre: string;
+  filas?: number;
+}
+
+export interface ExcelAdvertencia {
+  rangoNombre?: string;
+  celda?: string;
+  mensaje: string;
+}
+
+export interface ExcelLecturaResultado {
+  templateKey: string;
+  paperId: string;
+  rangosLeidos: number;
+  seccionesActualizadas: ExcelSeccionEscrita[];
+  advertencias: ExcelAdvertencia[];
+}
+
+export function useImportExcelTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, templateKey, file }: { paperId: string; templateKey: string; file: File }) => {
+      const form = new FormData();
+      form.append('file', file);
+      return apiClient.postForm<ExcelLecturaResultado>(
+        `/working-papers/${paperId}/excel-template/${templateKey}/import`,
+        form,
+      );
+    },
+    onSuccess: (_res, { paperId }) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
 export function usePropagateControlDeficiencias() {
   const qc = useQueryClient();
   return useMutation({

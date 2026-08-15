@@ -177,6 +177,14 @@ Tres archivos nuevos en `apps/api/src/working-papers/excel-templates/`, más el 
 
 ---
 
+## 3.4 Componente de UI genérico (EXC-04, cerrado el 2026-08-15)
+
+- `apps/web/src/components/working-papers/ExcelTemplateBar.tsx` — `<ExcelTemplateBar paperId templateKey label description? />`. Dos botones ("Descargar plantilla" / "Subir completada") + input de archivo oculto + resumen del resultado (secciones actualizadas, advertencias por rango). Reutiliza `apiClient.downloadFile`/`apiClient.postForm`, que ya existían (usados hoy por PDF y por Anexo 12 fiscal) — no hizo falta agregar plumbing nuevo de red.
+- `useImportExcelTemplate()` en `useWorkingPaperGraph.ts` — mutación con `postForm`, invalida `['wp', paperId]` al terminar, mismo patrón que `usePropagateDiferencias` y el resto de los botones "Bar".
+- **A propósito, todavía NO se inserta en ningún papel real** — según el orden del plan (§6), conectarlo a una plantilla concreta es tarea de cada fase (p. ej. EXC-07 para Composición de Cuenta), no de EXC-04. Con el registro de plantillas vacío (§3.3), no hay ningún `templateKey` real contra el cual probarlo en la UI todavía.
+
+---
+
 ## 4. Catálogo de plantillas
 
 ### 4.1 Ya propuestas (sesión anterior, mantener)
@@ -238,3 +246,4 @@ El usuario preguntó específicamente por TeamMate+ asumiendo que tiene más ava
 | 2026-08-15 | **EXC-01** — decisiones técnicas del motor (§3.1): librería elegida (`exceljs@4.4.0`), contrato de tipos final y diseño de seguridad (7 controles + límites duros) | **Implementado:** `apps/api/src/working-papers/excel-templates/excel-template.types.ts` + dependencia `exceljs@4.4.0` en `apps/api`. Type-check limpio. El motor y las plantillas siguen sin implementarse. |
 | 2026-08-15 | **EXC-02** — implementación del motor (§3.2): `ExcelTemplateEngineService.generar()`/`.leer()`, `excel-manifest.ts`, `excel-cell-utils.ts`, registrado en `WorkingPapersModule` | **Implementado y verificado:** prueba de humo de 17 casos contra la base real (round-trip ESCALAR/TABLA, `FUSIONA_POR_CLAVE`, rechazo de manifiesto manipulado, rechazo de archivo de otro papel, `sectionKey` inexistente) — 17/17 OK. Falta EXC-03 (endpoints), EXC-04 (UI) y EXC-05 (prueba end-to-end vía la app + deploy) para cerrar la Fase 0. Pendiente: definir `EXCEL_MANIFEST_SECRET` en `.env` antes de exponer endpoints. |
 | 2026-08-15 | **EXC-03** — endpoints REST + registro de plantillas (§3.3): `excel-templates.registry.ts` (vacío a propósito) + `GET/POST :id/excel-template/:key[/import]` en `working-papers.controller.ts` | **Implementado**, type-check limpio. El registro vacío significa que hoy ambos endpoints devuelven 404 para cualquier `key` — correcto hasta que fases 1-5 agreguen plantillas reales. Falta EXC-04 (UI) y EXC-05 (prueba end-to-end + deploy). |
+| 2026-08-15 | **EXC-04** — componente UI genérico (§3.4): `ExcelTemplateBar.tsx` + `useImportExcelTemplate()` | **Implementado**, type-check limpio. Deliberadamente sin insertar en ningún papel real todavía (esa conexión es tarea de cada fase concreta). Falta EXC-05 (prueba end-to-end + deploy) para cerrar la Fase 0. |

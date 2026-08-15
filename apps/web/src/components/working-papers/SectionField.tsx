@@ -23,6 +23,7 @@ import { SampleItemRegisterPanel } from './SampleItemRegisterPanel';
 import type { SampleItemRow } from './SampleItemRegisterPanel';
 import { SamplingEvaluationPanel } from './SamplingEvaluationPanel';
 import type { SamplingEvaluationValue } from './SamplingEvaluationPanel';
+import { ExcelTemplateBar } from './ExcelTemplateBar';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -754,6 +755,16 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
             onClick={isReadOnlyField || isAutoAndLocked ? undefined : startEdit}
             className={!isReadOnlyField && !isAutoAndLocked ? 'cursor-text hover:bg-gray-50 rounded-lg p-1.5 -mx-1.5 transition-colors' : ''}
           >
+            {/* Composición de Cuenta (EXC-06/07) — solo en la Analítica de Cuentas de PT-FIN-C-SUST */}
+            {section.fieldType === 'ACCOUNT_SCHEDULE' && paperId && paperCode === 'PT-FIN-C-SUST' && !readonly && (
+              <ExcelTemplateBar
+                paperId={paperId}
+                templateKey="COMPOSICION_CUENTA"
+                label="Composición de Cuenta"
+                description='Descargue esta cédula en Excel, trabaje ajustes/reclasificaciones/marcas fuera de línea y súbala de vuelta — se fusiona con lo que ya hay aquí sin borrar adjuntos.'
+              />
+            )}
+
             {/* Account Schedule — analítica multi-nivel */}
             {section.fieldType === 'ACCOUNT_SCHEDULE' && paperId && (
               <AccountScheduleSection

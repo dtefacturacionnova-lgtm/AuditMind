@@ -111,12 +111,14 @@ export class ExcelTemplateEngineService {
     for (const hoja of def.hojas) {
       if (hoja.proteger === false) continue;
       const ws = hojasExcel.get(hoja.nombre)!;
+      // Las opciones de exceljs son banderas de PERMISO (true = se permite la
+      // acción con la hoja protegida). Solo se permite seleccionar celdas.
       await ws.protect('', {
         selectLockedCells: true, selectUnlockedCells: true,
         formatCells: false, formatColumns: false, formatRows: false,
         insertColumns: false, insertRows: false, insertHyperlinks: false,
         deleteColumns: false, deleteRows: false, sort: false,
-        autoFilter: false, pivotTables: false, objects: true, scenarios: true,
+        autoFilter: false, pivotTables: false, objects: false, scenarios: false,
       });
     }
 
@@ -124,6 +126,7 @@ export class ExcelTemplateEngineService {
       templateKey: def.key, templateVersion: def.version,
       paperId: ctx.paperId, auditId: ctx.auditId, organizationId: ctx.organizationId,
       generadoEn: ctx.generadoEn.toISOString(), generadoPor: user.id,
+      areaKey: ctx.areaKey,
     });
     const hojaManifest = workbook.addWorksheet(EXCEL_MANIFEST_HOJA, { state: 'veryHidden' });
     hojaManifest.getCell(1, 1).value = JSON.stringify(manifest);
@@ -175,6 +178,14 @@ export class ExcelTemplateEngineService {
       throw new BadRequestException(`No se pudo validar el archivo: ${verif.razon}`);
     }
 
+    // El área para la que se generó el archivo viaja SELLADA en el manifiesto
+    // (la firma la cubre) — se restaura aquí para que `transformacion`/`validacion`
+    // sepan a qué área (C-01, C-02…) pertenece lo que regresa.
+    const ctxImport: ExcelTemplateContext = verif.manifest.areaKey
+      ? { ...ctx, areaKey: verif.manifest.areaKey }
+      : ctx;
+
+    const origenPorNombre = new Map(def.origen.map(o => [o.rango.rangoNombre, o.rango]));
     const advertencias: ExcelAdvertencia[] = [];
     let celdasLeidas = 0;
     const valoresPorRango = new Map<string, ExcelValorLeido>();
@@ -200,7 +211,7 @@ export class ExcelTemplateEngineService {
         continue;
       }
       if (destino.validacion) {
-        const error = destino.validacion(valorLeido, ctx);
+        const error = destino.validacion(valorLeido, ctxImport);
         if (error) {
           advertencias.push({ rangoNombre: destino.rangoNombre, mensaje: error });
           continue;
@@ -234,18 +245,35 @@ export class ExcelTemplateEngineService {
 
       let valorAEscribir: Prisma.InputJsonValue;
       if (destino.transformacion) {
-        valorAEscribir = await destino.transformacion(valorLeido, ctx);
+        valorAEscribir = await destino.transformacion(valorLeido, ctxImport);
       } else {
         valorAEscribir = (valorLeido.tipo === 'TABLA' ? valorLeido.filas : valorLeido.valor) as Prisma.InputJsonValue;
       }
 
       if (destino.modo === 'FUSIONA_POR_CLAVE' && destino.claveFusion) {
+        // Zona CONTROLADA en filas ya existentes: la BD es la fuente de verdad.
+        // La protección de Excel es solo de usabilidad — si alguien la quitó y
+        // alteró una columna controlada, ese valor NO debe sobreescribir la BD.
+        const rangoDef = origenPorNombre.get(destino.rangoNombre);
+        const clavesControladas = new Set<string>();
+        if (rangoDef?.forma.tipo === 'TABLA') {
+          for (const c of rangoDef.forma.columnas) {
+            if ((c.zona ?? rangoDef.zona) === 'CONTROLADA') clavesControladas.add(c.clave);
+          }
+        }
         const actual = await this.prisma.paperSection.findUnique({
           where: { paperId_sectionKey: { paperId: destPaper.id, sectionKey: destino.escribeEn.sectionKey } },
         });
         const existentes = Array.isArray(actual?.value) ? actual!.value as Record<string, unknown>[] : [];
         const entrantes = Array.isArray(valorAEscribir) ? valorAEscribir as Record<string, unknown>[] : [];
-        valorAEscribir = this.fusionarPorClave(existentes, entrantes, destino.claveFusion) as unknown as Prisma.InputJsonValue;
+        const fusion = this.fusionarPorClave(existentes, entrantes, destino.claveFusion, clavesControladas);
+        if (fusion.omitidasSinClave > 0) {
+          advertencias.push({
+            rangoNombre: destino.rangoNombre,
+            mensaje: `${fusion.omitidasSinClave} fila(s) sin valor en la columna llave '${destino.claveFusion}' se omitieron — sin llave no se pueden emparejar ni agregar (evita duplicados al re-subir)`,
+          });
+        }
+        valorAEscribir = fusion.filas as unknown as Prisma.InputJsonValue;
       }
 
       await this.paperSections.updateSection(destPaper.id, destino.escribeEn.sectionKey, valorAEscribir, user);
@@ -267,26 +295,83 @@ export class ExcelTemplateEngineService {
   // Validación estructural y límites
   // ═══════════════════════════════════════════════════════════════════════
 
+  /**
+   * Valida la ESTRUCTURA de la plantilla al arrancar cualquier operación.
+   * Todo lo que valida aquí son errores del AUTOR de la plantilla (fases 1-5),
+   * no del usuario — por eso lanza `Error` (→ 500), no `BadRequestException`:
+   * una plantilla mal declarada nunca debe llegar a producción en silencio.
+   */
   private validarDef(def: ExcelTemplateDef) {
-    const nombres = new Set<string>();
-    for (const o of def.origen) {
-      if (nombres.has(o.rango.rangoNombre)) {
-        throw new Error(`Plantilla '${def.key}': rango '${o.rango.rangoNombre}' duplicado`);
+    const err = (msg: string) => new Error(`Plantilla '${def.key}': ${msg}`);
+
+    if (!def.hojas.length) throw err('debe declarar al menos una hoja');
+    const HOJA_CHARS_INVALIDOS = /[[\]*?:/\\']/;
+    const nombresHoja = new Set<string>();
+    for (const h of def.hojas) {
+      if (!h.nombre || h.nombre.length > 31 || HOJA_CHARS_INVALIDOS.test(h.nombre)) {
+        throw err(`nombre de hoja inválido '${h.nombre}' (máx. 31 caracteres, sin []*?:/\\ ni comillas simples)`);
       }
-      if (!/^AM_/.test(o.rango.rangoNombre)) {
-        throw new Error(`Plantilla '${def.key}': rango '${o.rango.rangoNombre}' no usa el prefijo AM_`);
-      }
-      if (!def.hojas.some(h => h.nombre === o.rango.hoja)) {
-        throw new Error(`Plantilla '${def.key}': el rango '${o.rango.rangoNombre}' referencia la hoja inexistente '${o.rango.hoja}'`);
-      }
-      nombres.add(o.rango.rangoNombre);
+      if (h.nombre === EXCEL_MANIFEST_HOJA) throw err(`el nombre de hoja '${EXCEL_MANIFEST_HOJA}' está reservado para el manifiesto`);
+      if (nombresHoja.has(h.nombre)) throw err(`hoja '${h.nombre}' duplicada`);
+      nombresHoja.add(h.nombre);
     }
-    for (const d of def.destino) {
-      if (!nombres.has(d.rangoNombre)) {
-        throw new Error(`Plantilla '${def.key}': destino '${d.rangoNombre}' no está declarado en origen[]`);
+
+    const rangoPorNombre = new Map<string, ExcelRangoDef>();
+    for (const o of def.origen) {
+      const r = o.rango;
+      if (rangoPorNombre.has(r.rangoNombre)) throw err(`rango '${r.rangoNombre}' duplicado`);
+      if (!/^AM_/.test(r.rangoNombre)) throw err(`rango '${r.rangoNombre}' no usa el prefijo AM_`);
+      if (!nombresHoja.has(r.hoja)) throw err(`el rango '${r.rangoNombre}' referencia la hoja inexistente '${r.hoja}'`);
+
+      let ancla: { col: number; row: number };
+      try {
+        ancla = parseCelda(r.ancla);
+      } catch {
+        throw err(`rango '${r.rangoNombre}': ancla inválida '${r.ancla}' (se espera notación A1, p. ej. 'B6')`);
       }
-      if (d.modo === 'FUSIONA_POR_CLAVE' && !d.claveFusion) {
-        throw new Error(`Plantilla '${def.key}': destino '${d.rangoNombre}' usa FUSIONA_POR_CLAVE sin claveFusion`);
+      // Convención de layout documentada en la cabecera de esta clase.
+      if (r.hoja === def.hojas[0].nombre && ancla.row < 6) {
+        throw err(`rango '${r.rangoNombre}': en la primera hoja las filas 1-5 están reservadas para la cabecera del encargo — el ancla debe estar en la fila 6 o después`);
+      }
+      if (r.etiqueta && ancla.row < 2) {
+        throw err(`rango '${r.rangoNombre}': con etiqueta, el ancla debe estar en la fila 2 o después (la etiqueta se imprime en la fila anterior)`);
+      }
+
+      if (r.forma.tipo === 'TABLA') {
+        const f = r.forma;
+        if (!f.columnas.length) throw err(`rango '${r.rangoNombre}': una TABLA debe declarar columnas`);
+        if (f.filasMinimas < 0 || f.filasMaximas < 1 || f.filasMaximas < f.filasMinimas) {
+          throw err(`rango '${r.rangoNombre}': filasMinimas/filasMaximas inconsistentes`);
+        }
+        const claves = new Set<string>();
+        for (const c of f.columnas) {
+          if (!c.clave) throw err(`rango '${r.rangoNombre}': columna con clave vacía`);
+          if (claves.has(c.clave)) throw err(`rango '${r.rangoNombre}': columna '${c.clave}' duplicada`);
+          claves.add(c.clave);
+          if (c.opciones?.length) {
+            // Límite de la validación de datos "lista" de Excel: la fórmula inline
+            // va separada por comas y no puede exceder ~255 caracteres.
+            if (c.opciones.some(op => op.includes(','))) {
+              throw err(`rango '${r.rangoNombre}', columna '${c.clave}': las opciones no pueden contener comas (separador de la lista de Excel)`);
+            }
+            if (c.opciones.join(',').length > 250) {
+              throw err(`rango '${r.rangoNombre}', columna '${c.clave}': la lista de opciones excede los 250 caracteres que admite Excel`);
+            }
+          }
+        }
+      }
+      rangoPorNombre.set(r.rangoNombre, r);
+    }
+
+    for (const d of def.destino) {
+      const r = rangoPorNombre.get(d.rangoNombre);
+      if (!r) throw err(`destino '${d.rangoNombre}' no está declarado en origen[]`);
+      if (d.modo === 'FUSIONA_POR_CLAVE') {
+        if (!d.claveFusion) throw err(`destino '${d.rangoNombre}' usa FUSIONA_POR_CLAVE sin claveFusion`);
+        if (r.forma.tipo !== 'TABLA') throw err(`destino '${d.rangoNombre}': FUSIONA_POR_CLAVE solo aplica a rangos TABLA`);
+        if (!r.forma.columnas.some(c => c.clave === d.claveFusion)) {
+          throw err(`destino '${d.rangoNombre}': claveFusion '${d.claveFusion}' no es una columna del rango`);
+        }
       }
     }
   }
@@ -595,20 +680,45 @@ export class ExcelTemplateEngineService {
     return { valor: { tipo: 'TABLA', filas }, celdas };
   }
 
+  /**
+   * Merge fila a fila por `claveFusion`:
+   * - Fila emparejada: se copian SOLO las columnas de zona LIBRE (las
+   *   CONTROLADAS no se tocan — la BD es la fuente de verdad; ver el llamador).
+   *   Los campos que solo existen en la app se preservan siempre.
+   * - Fila nueva (clave sin correspondencia): se agrega completa — es obra del
+   *   auditor. Se registra en `porClave` para que una clave repetida dentro del
+   *   mismo archivo no genere duplicados.
+   * - Fila sin clave: se omite y se cuenta — agregarla haría que cada re-subida
+   *   del mismo archivo duplicara filas imposibles de emparejar.
+   */
   private fusionarPorClave(
-    existentes: Record<string, unknown>[], entrantes: Record<string, unknown>[], claveFusion: string,
-  ): Record<string, unknown>[] {
-    const porClave = new Map(existentes.map(r => [String(r[claveFusion] ?? ''), r]));
+    existentes: Record<string, unknown>[],
+    entrantes: Record<string, unknown>[],
+    claveFusion: string,
+    clavesControladas: Set<string>,
+  ): { filas: Record<string, unknown>[]; omitidasSinClave: number } {
+    const porClave = new Map(existentes.map(r => [String(r[claveFusion] ?? '').trim(), r]));
     const resultado = [...existentes];
+    let omitidasSinClave = 0;
+
     for (const fila of entrantes) {
-      const clave = String(fila[claveFusion] ?? '');
-      const existente = clave ? porClave.get(clave) : undefined;
+      const clave = String(fila[claveFusion] ?? '').trim();
+      if (!clave) {
+        omitidasSinClave++;
+        continue;
+      }
+      const existente = porClave.get(clave);
       if (existente) {
-        Object.assign(existente, fila);
+        for (const [k, v] of Object.entries(fila)) {
+          if (clavesControladas.has(k)) continue;
+          existente[k] = v;
+        }
       } else {
-        resultado.push({ ...fila });
+        const nueva = { ...fila };
+        resultado.push(nueva);
+        porClave.set(clave, nueva);
       }
     }
-    return resultado;
+    return { filas: resultado, omitidasSinClave };
   }
 }

@@ -100,8 +100,11 @@ export function sanearValorCelda(
       // por el archivo subido (ver §3.1.3, control #3).
       return raw.text ?? null;
     }
-    if ('formula' in raw) {
-      const result = raw.result;
+    // 'formula' (fórmula propia) y 'sharedFormula' (fórmula arrastrada/auto-rellenada,
+    // que en ExcelJS NO trae la clave 'formula') se tratan igual: solo el resultado
+    // cacheado — la expresión nunca se lee ni se ejecuta.
+    if ('formula' in raw || 'sharedFormula' in raw) {
+      const result = (raw as { result?: CellValue }).result;
       if (result && typeof result === 'object' && 'error' in result) {
         advertencias.push({
           rangoNombre, celda,
@@ -109,7 +112,6 @@ export function sanearValorCelda(
         });
         return null;
       }
-      // Solo el resultado cacheado — la expresión de la fórmula nunca se lee ni se ejecuta.
       return sanearValorCelda(result ?? null, rangoNombre, celda, advertencias);
     }
   }
@@ -126,7 +128,11 @@ export function coaccionarPorFormato(
   if (valor === null || !formato) return valor;
 
   switch (formato) {
-    case 'ENTERO':
+    case 'ENTERO': {
+      if (typeof valor === 'number') return Math.round(valor);
+      const n = parseFloat(String(valor).replace(/[^\d.-]/g, ''));
+      return Number.isFinite(n) ? Math.round(n) : null;
+    }
     case 'NUMERO':
     case 'MONEDA':
     case 'PORCENTAJE': {
@@ -136,7 +142,17 @@ export function coaccionarPorFormato(
     }
     case 'FECHA': {
       if (valor instanceof Date) return valor;
-      const d = new Date(String(valor));
+      const s = String(valor).trim();
+      // dd/mm/yyyy (y variantes con - o .) primero: es como escriben fechas los
+      // usuarios de LATAM, y `new Date('15/08/2026')` es inválido en V8 (parseo US).
+      const dmy = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/.exec(s);
+      if (dmy) {
+        const dia = +dmy[1], mes = +dmy[2], anio = +dmy[3];
+        if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+        const d = new Date(Date.UTC(anio, mes - 1, dia));
+        return Number.isNaN(d.getTime()) ? null : d;
+      }
+      const d = new Date(s);
       return Number.isNaN(d.getTime()) ? null : d;
     }
     case 'BOOLEANO': {

@@ -166,6 +166,25 @@ Tres archivos nuevos en `apps/api/src/working-papers/excel-templates/`, más el 
 
 **Pendiente explícito para EXC-03+**: `EXCEL_MANIFEST_SECRET` no está definido en `apps/api/.env` — el motor usa `JWT_SECRET` como respaldo (con una advertencia en el log al arrancar). Definir un secreto dedicado antes de exponer los endpoints en producción.
 
+### 3.2.1 Refuerzos de la revisión de calidad (Fable, 2026-08-15)
+
+Revisión línea por línea de EXC-01..EXC-04 con 8 hallazgos, todos corregidos y cubiertos por pruebas nuevas:
+
+| # | Hallazgo | Corrección |
+|---|---|---|
+| 1 | **`FUSIONA_POR_CLAVE` sobreescribía columnas CONTROLADAS** en filas emparejadas — quien quitara la protección de Excel y alterara p. ej. `bookValue` lo metía a la BD, contradiciendo el invariante de §3.1.3. | El merge ahora copia **sólo columnas de zona LIBRE** en filas emparejadas; las CONTROLADAS nunca tocan la BD (la clave de fusión se usa sólo para emparejar). Filas NUEVAS (obra del auditor) sí entran completas. |
+| 2 | **Filas sin valor en la clave de fusión se agregaban siempre** — cada re-subida del mismo archivo duplicaba esas filas sin posibilidad de emparejarlas. | Se omiten con advertencia visible al auditor. Además una clave repetida dentro del mismo archivo ya no genera duplicados (se registra al agregar). |
+| 3 | **`areaKey` se perdía en el round-trip** — crítico porque C-01..C-12 comparten `paperCode` (`PT-FIN-C-SUST`): al importar, `transformacion`/`validacion` no sabían de qué área venía el archivo. | `areaKey` viaja **dentro de la firma HMAC del manifiesto** y el motor lo restaura en el contexto al importar. El endpoint de descarga acepta `?areaKey=` y `ExcelTemplateBar` lo expone como prop. |
+| 4 | **`sanearValorCelda` no reconocía `sharedFormula`** (fórmulas arrastradas/auto-rellenadas, que en ExcelJS no traen la clave `formula`) — se perdían como "tipo no reconocido". | Se tratan igual que `formula`: sólo el resultado cacheado. |
+| 5 | **Fechas `dd/mm/yyyy` tecleadas como texto fallaban** (`new Date('15/08/2026')` es inválido en V8, que parsea estilo US) — exactamente como escriben fechas los usuarios de LATAM. | Parser explícito `dd/mm/yyyy` (y variantes con `-`/`.`) con validación de rango, antes del fallback ISO. |
+| 6 | `ENTERO` no redondeaba (aceptaba 3.7 como entero). | `Math.round` en la coerción. |
+| 7 | **`validarDef` no validaba el layout** — un `ExcelTemplateDef` mal escrito (ancla pisando la cabecera, hoja con nombre ilegal o reservado, opciones de lista con comas o >250 caracteres, `claveFusion` que no es columna, FUSIONA sobre un ESCALAR) fallaba tarde o en silencio. | Validación estructural completa al arrancar cualquier operación, con mensajes que nombran la plantilla y el rango exactos. |
+| 8 | `worksheet.protect()` pasaba `objects: true, scenarios: true` — en la semántica de exceljs son banderas de **permiso**, es decir permitía manipular objetos/escenarios en la hoja protegida. | Ambas en `false`; sólo se permite seleccionar celdas. |
+
+Durante la verificación, la propia suite atrapó un error introducido por el refuerzo #3 (la verificación del manifiesto reconstruía el payload sin `areaKey` → toda firma con área fallaba) — corregido antes de commitear. **Suites finales: 25/25 (nivel servicio, incluye casos nuevos de manipulación de columna controlada, fila sin llave, fecha dd/mm/yyyy, areaKey restaurado y rechazo de layout inválido) + 10/10 (HTTP real, incluye descarga con `?areaKey=`).**
+
+Notas para autores de plantillas (fases 1-5), también en los comentarios del contrato: en modo `REEMPLAZA` las columnas controladas sí regresan del archivo (usar tablas de zona LIBRE completa o datos re-derivables); el override de `maxUploadBytes` por plantilla sólo puede bajar el límite efectivo (el `FileInterceptor` corta en 10 MB).
+
 ---
 
 ## 3.3 Endpoints y registro de plantillas (EXC-03, cerrado el 2026-08-15)
@@ -262,3 +281,4 @@ El usuario preguntó específicamente por TeamMate+ asumiendo que tiene más ava
 | 2026-08-15 | **EXC-03** — endpoints REST + registro de plantillas (§3.3): `excel-templates.registry.ts` (vacío a propósito) + `GET/POST :id/excel-template/:key[/import]` en `working-papers.controller.ts` | **Implementado**, type-check limpio. El registro vacío significa que hoy ambos endpoints devuelven 404 para cualquier `key` — correcto hasta que fases 1-5 agreguen plantillas reales. Falta EXC-04 (UI) y EXC-05 (prueba end-to-end + deploy). |
 | 2026-08-15 | **EXC-04** — componente UI genérico (§3.4): `ExcelTemplateBar.tsx` + `useImportExcelTemplate()` | **Implementado**, type-check limpio. Deliberadamente sin insertar en ningún papel real todavía (esa conexión es tarea de cada fase concreta). Falta EXC-05 (prueba end-to-end + deploy) para cerrar la Fase 0. |
 | 2026-08-15 | **EXC-05** — prueba de extremo a extremo vía HTTP real (§3.5): app Nest completa + login demo real + fetch contra los 2 endpoints — 9/9 OK. `git push` a `main` completado. | **Verificado en código; deploy PENDIENTE.** `ssh vps-muestreo` dio timeout de conexión al puerto 22 — el VPS no fue alcanzable desde esta sesión. Nada tocado en el servidor. **Primer pendiente de la próxima sesión: reintentar el deploy** (`git pull && turbo build --filter=@auditmind/api --filter=@auditmind/web && pm2 restart auditmind-api auditmind-web`), y solo después verificar en `https://auditoria.ianovatechsystems.com`. |
+| 2026-08-15 | **Revisión de calidad (Fable)** — validación línea por línea de EXC-01..EXC-04 (§3.2.1): 8 hallazgos corregidos, los de fondo: FUSIONA respeta zonas (CONTROLADA nunca sobreescribe la BD), filas sin llave se omiten (fin de duplicados en re-subidas), `areaKey` sellado en la firma del manifiesto y restaurado al importar (habilita C-01..C-12), fechas dd/mm/yyyy, `sharedFormula`, validación estructural de plantillas, protección de hoja sin permisos extra. | **Implementado y verificado**: suites ampliadas 25/25 (servicio) + 10/10 (HTTP). La propia suite atrapó y forzó a corregir un bug del refuerzo de firma antes de commitear. Deploy sigue pendiente (VPS inalcanzable). |

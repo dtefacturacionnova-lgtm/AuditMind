@@ -294,13 +294,23 @@ export const EXCEL_MISMO_PAPEL = '@SELF' as const;
  * Cómo se combina el valor leído con lo que la `PaperSection` ya tiene guardado.
  *
  * - `REEMPLAZA`: el valor leído sustituye por completo al guardado. Correcto para
- *   escalares y para tablas que el auditor sólo mantiene en Excel.
+ *   escalares y para tablas que el auditor sólo mantiene en Excel. OJO para
+ *   autores de plantillas: en este modo las columnas CONTROLADAS también regresan
+ *   del archivo (la protección de Excel es de usabilidad, no de seguridad) — una
+ *   tabla REEMPLAZA idealmente debe ser de zona LIBRE completa, o su dato
+ *   controlado debe ser re-derivable de la fuente original (TB, etc.).
  * - `FUSIONA_POR_CLAVE`: se hace merge fila a fila usando `claveFusion`. Es el
  *   modo obligatorio cuando la sección destino tiene columnas que sólo existen en
  *   la app (p. ej. `PT-NIA530 S5` guarda más campos por ítem de los que viaja la
  *   plantilla de circularización): sin esto, subir el Excel borraría trabajo hecho
- *   en pantalla. Filas del Excel sin correspondencia se AGREGAN; filas de la BD sin
- *   correspondencia en el Excel se CONSERVAN (el motor nunca borra por omisión).
+ *   en pantalla. Reglas del merge (refuerzo QA 2026-08-15):
+ *     · Fila emparejada: sólo se copian columnas de zona LIBRE — las CONTROLADAS
+ *       nunca sobreescriben la BD, aunque el archivo venga alterado.
+ *     · Fila nueva (clave sin correspondencia): se agrega completa.
+ *     · Fila sin valor en `claveFusion`: se OMITE con advertencia — agregarla
+ *       duplicaría filas imposibles de emparejar en cada re-subida.
+ *     · Filas de la BD sin correspondencia en el Excel se CONSERVAN (el motor
+ *       nunca borra por omisión).
  */
 export type ExcelModoEscritura = 'REEMPLAZA' | 'FUSIONA_POR_CLAVE';
 
@@ -378,7 +388,10 @@ export interface ExcelTemplateDef {
  *   papeles de trabajo porque el archivo aceptado es uno que NOSOTROS generamos,
  *   cuyo tamaño está acotado por `filasMaximas`. Un umbral bajo reduce el
  *   material disponible para una bomba de descompresión: el .xlsx es un ZIP y
- *   `ExcelJS.xlsx.load()` lo descomprime completo en memoria.
+ *   `ExcelJS.xlsx.load()` lo descomprime completo en memoria. NOTA: el
+ *   `FileInterceptor` del endpoint de subida también corta en 10 MB — un
+ *   override de `limites.maxUploadBytes` por plantilla sólo puede BAJAR el
+ *   límite efectivo, no subirlo (subir ambos requiere tocar el controlador).
  * - `maxCeldasLeidas`: corta la lectura aunque el archivo pese poco pero declare
  *   una malla enorme (el otro vector de amplificación típico de OOXML).
  * - `parseTimeoutMs`: el parseo de ExcelJS no es cancelable; la lectura se hace
@@ -451,6 +464,14 @@ export interface ExcelTemplateManifest {
   generadoEn: string;
   /** `AuthUser.id` de quien generó el archivo. */
   generadoPor: string;
+  /**
+   * Área contable para la que se generó el archivo (C-01, C-02…), cuando la
+   * plantilla se instancia por área. Viaja sellado dentro de la firma y el
+   * motor lo RESTAURA en el contexto al importar — sin esto, una plantilla de
+   * un papel compartido por área (PT-FIN-C-SUST cubre C-01..C-12) no sabría a
+   * qué área pertenece el archivo que regresa.
+   */
+  areaKey?: string;
   /** HMAC-SHA256 en hexadecimal. */
   firma: string;
 }

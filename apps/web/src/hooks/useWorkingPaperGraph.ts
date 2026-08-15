@@ -274,8 +274,13 @@ export function useImportExcelTemplate() {
         form,
       );
     },
-    onSuccess: (_res, { paperId }) => {
+    onSuccess: (res, { paperId }) => {
+      // Una plantilla puede escribir en OTROS papeles del encargo (destino
+      // cross-paper) — invalidar cada papel realmente actualizado, no solo el origen.
       qc.invalidateQueries({ queryKey: ['wp', paperId] });
+      for (const s of res.seccionesActualizadas) {
+        if (s.paperId !== paperId) qc.invalidateQueries({ queryKey: ['wp', s.paperId] });
+      }
     },
   });
 }

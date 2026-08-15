@@ -815,11 +815,14 @@ export class WorkingPapersController {
     @Param('key') key: string,
     @CurrentUser() user: AuthUser,
     @Res() res: Response,
+    @Query('areaKey') areaKey?: string,
   ) {
     const def = getExcelTemplate(key);
     if (!def) throw new NotFoundException(`Plantilla Excel '${key}' no existe`);
 
-    const { buffer, resultado } = await this.excelEngine.generar(def, id, user);
+    // areaKey viaja sellado en el manifiesto del archivo y el motor lo restaura
+    // al importar — necesario para papeles compartidos por área (C-01..C-12).
+    const { buffer, resultado } = await this.excelEngine.generar(def, id, user, areaKey || undefined);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${resultado.nombreArchivo}"`);
     res.setHeader('Content-Length', buffer.length);

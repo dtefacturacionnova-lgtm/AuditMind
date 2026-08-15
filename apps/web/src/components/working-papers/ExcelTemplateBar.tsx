@@ -17,12 +17,15 @@ import { useImportExcelTemplate, type ExcelLecturaResultado } from '@/hooks/useW
  * corresponda pasando su propio `templateKey`.
  */
 export function ExcelTemplateBar({
-  paperId, templateKey, label, description,
+  paperId, templateKey, label, description, areaKey,
 }: {
   paperId: string;
   templateKey: string;
   label: string;
   description?: string;
+  /** Área contable (C-01, C-02…) cuando el papel es compartido por área —
+   *  viaja sellado en el manifiesto del archivo y regresa solo al importar. */
+  areaKey?: string;
 }) {
   const importar = useImportExcelTemplate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -34,9 +37,10 @@ export function ExcelTemplateBar({
     setDescargando(true);
     setError('');
     try {
+      const query = areaKey ? `?areaKey=${encodeURIComponent(areaKey)}` : '';
       await apiClient.downloadFile(
-        `/working-papers/${paperId}/excel-template/${templateKey}`,
-        `AuditMind_${templateKey}_${paperId.slice(0, 8)}.xlsx`,
+        `/working-papers/${paperId}/excel-template/${templateKey}${query}`,
+        `AuditMind_${templateKey}_${areaKey ? `${areaKey}_` : ''}${paperId.slice(0, 8)}.xlsx`,
       );
     } catch (err) {
       setError((err as Error).message || 'Error al descargar la plantilla');

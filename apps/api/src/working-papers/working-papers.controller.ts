@@ -75,12 +75,14 @@ import { PdfService } from '../pdf/pdf.service';
 import { renderWorkingPaperBody } from '../pdf/pdf-templates';
 import { PAPER_TEMPLATES } from './paper-templates';
 import type { Response } from 'express';
-import { Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Res, UploadedFile, UseInterceptors, NotFoundException, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
 import { UserRole, WorkingPaperStatus } from '@prisma/client';
+import { ExcelTemplateEngineService } from './excel-templates/excel-template-engine.service';
+import { getExcelTemplate } from './excel-templates/excel-templates.registry';
 
 @ApiTags('Papeles de Trabajo')
 @ApiBearerAuth()
@@ -97,6 +99,7 @@ export class WorkingPapersController {
     private readonly versionsService:  PaperVersionsService,
     private readonly aiService:        AiService,
     private readonly pdfService:       PdfService,
+    private readonly excelEngine:      ExcelTemplateEngineService,
   ) {}
 
   // ─── Listados ─────────────────────────────────────────────────────────────────
@@ -798,6 +801,48 @@ export class WorkingPapersController {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdf.length);
     res.send(pdf);
+  }
+
+  // ─── EXC-03: Plantillas Excel semiautomáticas (zonas libres + controladas) ─
+  // Ver docs/integracion-excel-plantillas-inteligentes.md §3. El motor nunca
+  // escribe directo a la BD — enruta todo por PaperSectionsService.updateSection,
+  // que ya valida organización/rol en cada llamada (ver §3.1.3, control #4).
+  @Get(':id/excel-template/:key')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Descargar una plantilla Excel del papel con datos del encargo ya pre-llenados' })
+  async downloadExcelTemplate(
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @CurrentUser() user: AuthUser,
+    @Res() res: Response,
+  ) {
+    const def = getExcelTemplate(key);
+    if (!def) throw new NotFoundException(`Plantilla Excel '${key}' no existe`);
+
+    const { buffer, resultado } = await this.excelEngine.generar(def, id, user);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${resultado.nombreArchivo}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  }
+
+  @Post(':id/excel-template/:key/import')
+  @Roles(UserRole.AUDITOR)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Subir una plantilla Excel completada y enrutar los datos a las secciones correspondientes' })
+  async importExcelTemplate(
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    const def = getExcelTemplate(key);
+    if (!def) throw new NotFoundException(`Plantilla Excel '${key}' no existe`);
+    if (!file) throw new BadRequestException('No se recibió archivo');
+    if (!/\.xlsx$/i.test(file.originalname)) {
+      throw new BadRequestException('Solo se aceptan archivos .xlsx');
+    }
+    return this.excelEngine.leer(def, id, user, file.buffer);
   }
 
   // ─── Gap 3: @mention references ───────────────────────────────────────────

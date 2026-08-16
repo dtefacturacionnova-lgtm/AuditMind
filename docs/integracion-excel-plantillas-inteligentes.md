@@ -350,6 +350,39 @@ El usuario preguntó específicamente por TeamMate+ asumiendo que tiene más ava
 
 ---
 
+## 5.5 Propuesta nueva (2026-08-16) — Plantilla Excel Genérica: "marcar cualquier papel para trabajarlo fuera de línea"
+
+Surgió de una idea del usuario al descartar el modo offline completo (captura móvil sin conexión, ver `docs/inteligencia-de-evidencia-de-campo.md` §3) por ser desproporcionadamente caro frente al valor real: en vez de eso, **dejar que el auditor marque cualquier papel inteligente para descargarlo, trabajarlo fuera del sistema, y volver a subirlo** — el mismo mecanismo que las 5 plantillas de este catálogo ya prueban que funciona, pero sin tener que escribir un `ExcelTemplateDef` a mano por cada papel.
+
+**Por qué es viable con poco esfuerzo nuevo**: conté el `fieldType` de las 526 secciones declaradas hoy en `paper-templates.ts`. El resultado:
+
+| fieldType | Secciones | % del total |
+|---|---|---|
+| MATRIX | 224 | 42.6% |
+| TEXTAREA | 188 | 35.7% |
+| ENUM_SELECT | 42 | 8.0% |
+| TEXT | 19 | 3.6% |
+| CURRENCY | 8 | 1.5% |
+| BOOLEAN | 8 | 1.5% |
+| DATE, PERCENTAGE | 2 | 0.4% |
+| *(resto: ACCOUNT_SCHEDULE, CHECKLIST, FLOWCHART, SAMPLE_ITEM_REGISTER, etc. — cada uno con su propio panel dedicado)* | ~32 | ~6.7% |
+
+**MATRIX + TEXTAREA + los 6 tipos escalares simples suman ~93% de todas las secciones del sistema.** El motor genérico ya sabe generar rangos TABLA (para MATRIX, reutilizando exactamente `MatrixGridPanel.deriveColumns()` para inferir las columnas desde `aiHint`/filas existentes — no hay que inventar esa introspección, ya existe) y rangos ESCALAR con formato TEXTO/CURRENCY/BOOLEAN/DATE/PERCENTAGE (ya soportados por `coaccionarPorFormato`). Lo único que falta es una función que, dado un `paperCode`, **genere el `ExcelTemplateDef` automáticamente** a partir de lo que `PAPER_TEMPLATES[paperCode]` ya declara (label, fieldType, aiHint) — en vez de exigir que alguien escriba uno a mano por papel, como se hizo para las 5 plantillas de este catálogo.
+
+El ~7% restante (ACCOUNT_SCHEDULE, CHECKLIST, FLOWCHART, SAMPLE_ITEM_REGISTER, etc.) ya tiene su propio panel rico e interactivo en pantalla — offline tiene menos sentido ahí de todas formas (son flujos de trabajo, no tablas planas) y quedan fuera de esta plantilla genérica sin perder nada real.
+
+**Flujo propuesto para el auditor**:
+1. En cualquier papel inteligente, un botón "Marcar para trabajar fuera de línea" junto a las secciones elegibles (las de fieldType simple).
+2. Descarga UN Excel con todas esas secciones del papel, generado automáticamente — mismas 7-8 capas de seguridad ya construidas (manifiesto firmado, zonas CONTROLADA/LIBRE, límites duros, `updateSection` como única vía de escritura).
+3. El auditor trabaja sin conexión, en Excel normal — sin necesitar app móvil ni almacenamiento local nuevo.
+4. Al volver a conectividad, sube el archivo — el sistema rellena las secciones correspondientes, con el mismo control de "solo lo que declaró `origen[]`/`destino[]` se lee de vuelta" que ya protege las 5 plantillas actuales.
+
+**Diferencia clave con las 5 plantillas ya construidas**: esas tienen lógica de negocio propia (calculan una diferencia de conciliación, filtran variaciones significativas, etc.) — esta plantilla genérica NO calcula nada, solo hace ida/vuelta fiel del dato tal cual está, para cualquier papel que el auditor elija. Son complementarias, no compiten: la genérica cubre "cualquier papel, sin instalación previa"; las 5 específicas cubren los flujos donde vale la pena el cálculo automático.
+
+**Fase recomendada**: Sonnet — es una extensión directa del motor ya diseñado y probado (EXC-01/02), no arquitectura nueva. El único punto que merece una revisión más cuidadosa (Fable 5, breve) es la función de auto-generación del `ExcelTemplateDef`: hay que decidir bien qué pasa con un `aiHint` mal formado o ausente (algunos papeles viejos pueden no tener columnas bien declaradas) para que no genere una plantilla rota en silencio.
+
+---
+
 ## 6. Orden de implementación recomendado
 
 1. **Motor genérico** (`ExcelTemplateDef` + endpoint de generación/lectura) — una sola vez.

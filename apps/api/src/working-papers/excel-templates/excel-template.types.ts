@@ -247,6 +247,17 @@ export interface ExcelTemplateContext {
   saldosTB(): Promise<ExcelSaldoTB[]>;
   /** Materialidad del encargo (PT-A4). */
   materialidad(): Promise<ExcelMaterialidad>;
+
+  /**
+   * Valor YA PARSEADO de OTRO rango de la MISMA subida (§3.2, refuerzo
+   * 2026-08-15) — permite que `transformacion`/`validacion` de un rango
+   * combinen datos de varios rangos hermanos (p. ej., tres celdas ESCALAR de
+   * encabezado + una TABLA de detalle) en un solo cálculo. Solo tiene valor
+   * real durante `leer()`; en `generar()` siempre devuelve `null` (nada se ha
+   * leído todavía). No hace falta declarar el rango como `destino` para poder
+   * leerlo aquí — basta con que esté en `origen[]`.
+   */
+  rangoLeido(rangoNombre: string): ExcelValorLeido | null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

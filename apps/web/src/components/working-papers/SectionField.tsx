@@ -909,6 +909,16 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Conciliación Bancaria (EXC-10/11) — solo en Diferencias Identificadas (S1) de PT-FIN-C-SUST */}
+            {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-C-SUST' && section.sectionKey === 'S1' && !readonly && (
+              <ExcelTemplateBar
+                paperId={paperId}
+                templateKey="CONCILIACION_BANCARIA"
+                label="Conciliación Bancaria"
+                description="Solo si esta área es Caja y Bancos: concilie el saldo según banco vs. según libros fuera de línea — si queda una diferencia real, se agrega aquí automáticamente."
+              />
+            )}
+
             {/* Matrix — grid editable genérico (columnas dinámicas por sección) */}
             {section.fieldType === 'MATRIX' && (
               paperId ? (

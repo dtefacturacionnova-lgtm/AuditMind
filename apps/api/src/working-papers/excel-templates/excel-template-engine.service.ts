@@ -178,17 +178,24 @@ export class ExcelTemplateEngineService {
       throw new BadRequestException(`No se pudo validar el archivo: ${verif.razon}`);
     }
 
+    // Declarado ANTES del contexto para que el cierre de `rangoLeido` capture
+    // este mismo Map por referencia — se llena en el bucle de abajo, pero para
+    // cuando `transformacion`/`validacion` lo consultan (bucle de destino) ya
+    // está completo.
+    const valoresPorRango = new Map<string, ExcelValorLeido>();
+
     // El área para la que se generó el archivo viaja SELLADA en el manifiesto
     // (la firma la cubre) — se restaura aquí para que `transformacion`/`validacion`
     // sepan a qué área (C-01, C-02…) pertenece lo que regresa.
-    const ctxImport: ExcelTemplateContext = verif.manifest.areaKey
-      ? { ...ctx, areaKey: verif.manifest.areaKey }
-      : ctx;
+    const ctxImport: ExcelTemplateContext = {
+      ...ctx,
+      ...(verif.manifest.areaKey ? { areaKey: verif.manifest.areaKey } : {}),
+      rangoLeido: (rangoNombre) => valoresPorRango.get(rangoNombre) ?? null,
+    };
 
     const origenPorNombre = new Map(def.origen.map(o => [o.rango.rangoNombre, o.rango]));
     const advertencias: ExcelAdvertencia[] = [];
     let celdasLeidas = 0;
-    const valoresPorRango = new Map<string, ExcelValorLeido>();
 
     for (const binding of def.origen) {
       const disponibles = limites.maxCeldasLeidas - celdasLeidas;
@@ -450,6 +457,9 @@ export class ExcelTemplateEngineService {
         const { mg, me, uae } = await this.paperSections.getMaterialidadByAudit(wp.auditId, user);
         return { mg, me, uae };
       },
+      // Sobrescrito con un accesor real en leer() — durante generar() no hay
+      // nada leído todavía.
+      rangoLeido: () => null,
     };
 
     return { ctx, wp };

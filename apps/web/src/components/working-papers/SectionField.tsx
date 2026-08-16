@@ -929,6 +929,16 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Arqueo de Caja (EXC-21/22) — solo en Diferencias Identificadas (S1) de PT-FIN-C-SUST */}
+            {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-C-SUST' && section.sectionKey === 'S1' && !readonly && (
+              <ExcelTemplateBar
+                paperId={paperId}
+                templateKey="ARQUEO_CAJA"
+                label="Arqueo de Caja"
+                description="Solo si esta área es Caja y Bancos: registre el conteo físico de denominaciones y vales pendientes fuera de línea — si queda una diferencia real, se agrega aquí automáticamente."
+              />
+            )}
+
             {/* Revisión Analítica NIA 520 (EXC-14/15) — solo en S1c de PT-FIN-B07 */}
             {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-B07' && section.sectionKey === 'S1c' && !readonly && (
               <ExcelTemplateBar

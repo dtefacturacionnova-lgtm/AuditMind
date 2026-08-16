@@ -507,6 +507,43 @@ function renderSamplingResult(val: Record<string, unknown>): string {
     </div>`;
 }
 
+const FLOW_KIND_LABEL: Record<string, string> = {
+  inicio_fin: 'Inicio/Fin', proceso: 'Proceso', decision: 'Decisión', documento: 'Documento',
+};
+
+/**
+ * Representación textual del flujograma (FieldType.FLOWCHART) — lista de nodos
+ * con su vínculo a papel (si tiene) + lista de conexiones. El PDF no reproduce
+ * el layout visual del editor (queda pendiente, ver docs de diseño); esta tabla
+ * es legible y suficiente para que el flujo quede documentado en el expediente.
+ */
+function renderFlowchartBlock(val: Record<string, unknown>): string {
+  const nodes = Array.isArray(val.nodes) ? val.nodes as Array<Record<string, unknown>> : [];
+  if (nodes.length === 0) return '<span class="text-muted text-small">— Sin flujograma documentado —</span>';
+  const edges = Array.isArray(val.edges) ? val.edges as Array<Record<string, unknown>> : [];
+  const labelById = new Map(nodes.map(n => [String(n.id), String(n.label ?? '')]));
+
+  const nodesHtml = nodes.map(n => {
+    const kind = FLOW_KIND_LABEL[String(n.kind)] ?? String(n.kind ?? '');
+    const linked = n.linkedPaper as Record<string, unknown> | undefined;
+    const linkHtml = linked
+      ? ` <span class="text-muted">→ ${esc(String(linked.code ?? ''))}${linked.sectionLabel ? ` · ${esc(String(linked.sectionLabel))}` : ''}</span>`
+      : '';
+    return `<li><strong>${esc(String(n.label ?? ''))}</strong> <span class="text-muted">(${esc(kind)})</span>${linkHtml}</li>`;
+  }).join('');
+
+  const edgesHtml = edges.length > 0
+    ? `<p class="text-small text-muted" style="margin: 2mm 0 0.5mm 0;">Conexiones:</p>
+       <ul style="margin: 0; padding-left: 5mm;">
+         ${edges.map(e => `<li class="text-small">${esc(labelById.get(String(e.source)) ?? '?')} → ${esc(labelById.get(String(e.target)) ?? '?')}</li>`).join('')}
+       </ul>`
+    : '';
+
+  return `
+    <ul class="text-small" style="margin: 0; padding-left: 5mm;">${nodesHtml}</ul>
+    ${edgesHtml}`;
+}
+
 type ReportSection = NonNullable<WorkingPaperReportData['paper']['sections']>[number];
 
 /** Renders a single section's value+attachments block — shared by the flat and tab-grouped layouts. */
@@ -528,6 +565,8 @@ function renderSectionBlock(s: ReportSection, isCoso: boolean): string {
   } else if (typeof val === 'object' && s.fieldType === 'SAMPLING_EVALUATION') {
     // PT-NIA530 S4: MLE/Precisión Básica/UEL calculados + semáforo por área.
     valStr = renderSamplingEvaluationBlock(val);
+  } else if (typeof val === 'object' && s.fieldType === 'FLOWCHART') {
+    valStr = renderFlowchartBlock(val as Record<string, unknown>);
   } else if (typeof val === 'object' && s.sectionKey === 'S_EJE') {
     valStr = renderSamplingResult(val as Record<string, unknown>);
   } else if (typeof val === 'object') {

@@ -149,6 +149,7 @@ enum FieldType {
   PROCEDURE_GRID   // Grid jerárquico 2 niveles: Procedimiento → Actividad (NIA 230/330)
   SAMPLE_ITEM_REGISTER // Grid de ítems de muestra con valor en libros/auditado, diferencia y tainting % por fila
   SAMPLING_EVALUATION  // Panel computado: extrapolación de errores MUS (MLE/Precisión Básica/UEL) + semáforo, derivado de SAMPLE_ITEM_REGISTER
+  FLOWCHART            // Editor de flujograma de proceso (nodos/aristas), con nodos vinculables a otro papel/sección
 }
 
 // Tipo de mapeo entre papeles en el grafo

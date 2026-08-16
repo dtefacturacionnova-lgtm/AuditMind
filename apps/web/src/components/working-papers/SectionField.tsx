@@ -24,6 +24,8 @@ import type { SampleItemRow } from './SampleItemRegisterPanel';
 import { SamplingEvaluationPanel } from './SamplingEvaluationPanel';
 import type { SamplingEvaluationValue } from './SamplingEvaluationPanel';
 import { ExcelTemplateBar } from './ExcelTemplateBar';
+import { FlowchartPanel } from './FlowchartPanel';
+import type { FlowchartValue } from './FlowchartPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -581,7 +583,8 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
     section.fieldType === 'PROCEDURE_GRID' ||
     section.fieldType === 'ACCOUNT_SCHEDULE' ||
     section.fieldType === 'SAMPLE_ITEM_REGISTER' ||
-    section.fieldType === 'SAMPLING_EVALUATION';
+    section.fieldType === 'SAMPLING_EVALUATION' ||
+    section.fieldType === 'FLOWCHART';
 
   const isAutoAndLocked = section.isAutoFilled && !overriding && !editing;
 
@@ -919,6 +922,22 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Flujograma de proceso (FLW-01/02) — nodos vinculables a otro papel/sección */}
+            {section.fieldType === 'FLOWCHART' && paperId && (
+              <FlowchartPanel
+                paperId={paperId}
+                auditId={auditId}
+                sectionKey={section.sectionKey}
+                value={
+                  effectiveValue && typeof effectiveValue === 'object' && !Array.isArray(effectiveValue)
+                    ? (effectiveValue as FlowchartValue)
+                    : null
+                }
+                onChange={value => onSave(section.sectionKey, value)}
+                readOnly={readonly}
+              />
+            )}
+
             {/* Conciliación Bancaria (EXC-10/11) — solo en Diferencias Identificadas (S1) de PT-FIN-C-SUST */}
             {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-C-SUST' && section.sectionKey === 'S1' && !readonly && (
               <ExcelTemplateBar
@@ -998,7 +1017,7 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
             )}
 
             {/* All text-like */}
-            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG', 'PROCEDURE_GRID', 'SAMPLE_ITEM_REGISTER', 'SAMPLING_EVALUATION'].includes(section.fieldType) && (
+            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG', 'PROCEDURE_GRID', 'SAMPLE_ITEM_REGISTER', 'SAMPLING_EVALUATION', 'FLOWCHART'].includes(section.fieldType) && (
               <p className={`text-sm leading-relaxed whitespace-pre-wrap ${
                 effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== ''
                   ? 'text-gray-700'

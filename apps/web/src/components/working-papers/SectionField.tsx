@@ -919,6 +919,16 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Revisión Analítica NIA 520 (EXC-14/15) — solo en S1c de PT-FIN-B07 */}
+            {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-B07' && section.sectionKey === 'S1c' && !readonly && (
+              <ExcelTemplateBar
+                paperId={paperId}
+                templateKey="REVISION_ANALITICA"
+                label="Revisión Analítica"
+                description="Trae las variaciones significativas de S1 — documente la explicación obtenida y si es razonable (NIA 520.7), fuera de línea."
+              />
+            )}
+
             {/* Matrix — grid editable genérico (columnas dinámicas por sección) */}
             {section.fieldType === 'MATRIX' && (
               paperId ? (

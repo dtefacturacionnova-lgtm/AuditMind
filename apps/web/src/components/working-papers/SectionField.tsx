@@ -877,6 +877,16 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Circularización de CxC (EXC-18/19) — solo en S5 (Registro de Selección) de PT-NIA530 */}
+            {section.fieldType === 'SAMPLE_ITEM_REGISTER' && paperId && paperCode === 'PT-NIA530' && !readonly && (
+              <ExcelTemplateBar
+                paperId={paperId}
+                templateKey="CIRCULARIZACION_CXC"
+                label="Circularización de Confirmaciones"
+                description="Registre fuera de línea la respuesta de cada cliente confirmado — o el procedimiento alternativo aplicado cuando no hubo respuesta (NIA 505)."
+              />
+            )}
+
             {/* Sample Item Register — registro de ítems de muestra con tainting % por fila (NIA 530) */}
             {section.fieldType === 'SAMPLE_ITEM_REGISTER' && paperId && (
               <SampleItemRegisterPanel

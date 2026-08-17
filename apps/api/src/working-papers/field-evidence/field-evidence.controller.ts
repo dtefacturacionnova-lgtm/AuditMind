@@ -11,6 +11,12 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthUser } from '../../auth/jwt.strategy';
 
+class AceptarHallazgoBody {
+  @IsOptional()
+  @IsString()
+  targetSectionKey?: string;
+}
+
 class CrearEvidenciaBody {
   @IsEnum(FieldEvidenceKind)
   kind: FieldEvidenceKind;
@@ -90,5 +96,39 @@ export class FieldEvidenceController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.svc.eliminar(paperId, evidenceId, user);
+  }
+
+  @Post('findings/:findingId/accept')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Aceptar un hallazgo sugerido — materializa la fila en la sección destino' })
+  aceptarHallazgo(
+    @Param('paperId') paperId: string,
+    @Param('findingId') findingId: string,
+    @Body() body: AceptarHallazgoBody,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.aceptar(paperId, findingId, body.targetSectionKey, user);
+  }
+
+  @Post('findings/:findingId/discard')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Descartar un hallazgo sugerido' })
+  descartarHallazgo(
+    @Param('paperId') paperId: string,
+    @Param('findingId') findingId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.descartar(paperId, findingId, user);
+  }
+
+  @Post('findings/:findingId/promote')
+  @Roles(UserRole.SENIOR_AUDITOR)
+  @ApiOperation({ summary: 'Promover un hallazgo ya aceptado a un Hallazgo formal (PT-HALL)' })
+  promoverHallazgo(
+    @Param('paperId') paperId: string,
+    @Param('findingId') findingId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.promover(paperId, findingId, user);
   }
 }

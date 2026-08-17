@@ -21,6 +21,7 @@ import {
 import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
 import { WorkOfflinePanel } from './WorkOfflinePanel';
+import { FieldEvidencePanel } from './FieldEvidencePanel';
 import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './TrialBalancePanel';
 import { MaterialidadPanel } from './MaterialidadPanel';
 import { SamplingExecutionPanel } from './SamplingExecutionPanel';
@@ -780,6 +781,10 @@ export function SmartPaperSections({
 
       {/* Trabajar fuera de línea (EXC-24..27) — plantilla Excel genérica */}
       <WorkOfflinePanel paperId={paperId} sections={sorted} readonly={readonly} />
+
+      {/* Evidencia de Campo (EVD-09) — capacidad general, no un FieldType nuevo;
+          disponible en cualquier papel inteligente, colapsada por defecto. */}
+      <FieldEvidencePanel paperId={paperId} sectionKey={sorted[0]?.sectionKey ?? 'S1'} sections={sorted} readOnly={readonly} />
 
       {/* Saving indicator */}
       {savingKey && (

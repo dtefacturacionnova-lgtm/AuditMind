@@ -3,10 +3,11 @@ import {
 } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
-import { FieldEvidenceKind, Prisma } from '@prisma/client';
+import { FieldEvidenceKind, Prisma, RefType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthUser } from '../../auth/jwt.strategy';
 import { AiService } from '../../ai/ai.service';
+import { PaperReferencesService } from '../paper-references.service';
 
 // Fase 1 (EVD-03..11): solo texto y nota de voz. El resto del enum ya existe en el
 // schema (evita migración cuando lleguen las fases siguientes) pero el pipeline
@@ -39,6 +40,7 @@ export class FieldEvidenceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiService: AiService,
+    private readonly paperReferencesService: PaperReferencesService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -436,5 +438,191 @@ export class FieldEvidenceService {
     }
     await this.prisma.fieldEvidence.delete({ where: { id: evidenceId } });
     return { deleted: true };
+  }
+
+  // ─── Revisión humana (EVD-09, §6.10) — "la IA sugiere, el auditor aprueba" ──
+
+  private async obtenerFindingDelPapel(paperId: string, findingId: string, user: AuthUser) {
+    await this.assertPaperAccess(paperId, user);
+    const finding = await this.prisma.fieldEvidenceFinding.findUnique({
+      where: { id: findingId },
+      include: { evidence: true },
+    });
+    if (!finding || finding.evidence.paperId !== paperId) {
+      throw new NotFoundException('Hallazgo no encontrado');
+    }
+    return finding;
+  }
+
+  async aceptar(paperId: string, findingId: string, targetSectionKeyOverride: string | undefined, user: AuthUser) {
+    const finding = await this.obtenerFindingDelPapel(paperId, findingId, user);
+    if (finding.disposition !== 'PENDING') {
+      throw new BadRequestException('Este hallazgo ya fue revisado.');
+    }
+    if (!finding.validadaCita) {
+      throw new BadRequestException('No se puede aceptar un hallazgo cuya cita no se pudo verificar contra la fuente.');
+    }
+
+    const targetSectionKey = targetSectionKeyOverride ?? finding.evidence.sectionKey;
+    const targetSection = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: targetSectionKey } },
+    });
+    if (!targetSection) throw new NotFoundException(`Sección destino "${targetSectionKey}" no encontrada`);
+
+    let materializedSectionKey: string | null = null;
+    if (targetSection.fieldType === 'MATRIX') {
+      const rows = Array.isArray(targetSection.value) ? [...(targetSection.value as unknown[])] : [];
+      rows.push(this.construirFilaDesdeHallazgo(finding, targetSection.aiHint, rows.length));
+      await this.prisma.paperSection.update({
+        where: { id: targetSection.id },
+        data: { value: rows as unknown as Prisma.InputJsonValue },
+      });
+      materializedSectionKey = targetSectionKey;
+    }
+    // Sección no-MATRIX (ej. TEXTAREA): se marca ACCEPTED sin materializar fila —
+    // el auditor redacta a mano usando la cita (§6.10).
+
+    const referencias = (finding.referenciasExpediente as { code: string; section_key?: string; motivo: string }[] | null) ?? [];
+    for (const ref of referencias) {
+      const targetPaper = await this.prisma.workingPaper.findFirst({
+        where: { auditId: finding.evidence.auditId, code: ref.code },
+        select: { id: true },
+      });
+      if (!targetPaper) continue; // code sugerido por el LLM que no existe en el encargo — se ignora
+      await this.paperReferencesService.createReference(paperId, {
+        sourceSectionKey: finding.evidence.sectionKey,
+        targetPaperId:    targetPaper.id,
+        targetSectionKey: ref.section_key,
+        refType:          ref.section_key ? RefType.FIELD : RefType.INDEX,
+      }, user);
+    }
+
+    return this.prisma.fieldEvidenceFinding.update({
+      where: { id: findingId },
+      data: {
+        disposition:      'ACCEPTED',
+        reviewedById:      user.id,
+        reviewedAt:        new Date(),
+        targetSectionKey:  materializedSectionKey,
+      },
+    });
+  }
+
+  async descartar(paperId: string, findingId: string, user: AuthUser) {
+    const finding = await this.obtenerFindingDelPapel(paperId, findingId, user);
+    if (finding.disposition !== 'PENDING') {
+      throw new BadRequestException('Este hallazgo ya fue revisado.');
+    }
+    return this.prisma.fieldEvidenceFinding.update({
+      where: { id: findingId },
+      data:  { disposition: 'DISCARDED', reviewedById: user.id, reviewedAt: new Date() },
+    });
+  }
+
+  // PT-HALL siempre está pre-sembrado por las plantillas de encargo (code fijo,
+  // ver audit-templates.service.ts) — no hace falta find-or-create ni tocar
+  // generateWpCode (que tiene un bug de colisión conocido, ver EVD-08).
+  async promover(paperId: string, findingId: string, user: AuthUser) {
+    const finding = await this.obtenerFindingDelPapel(paperId, findingId, user);
+    if (finding.disposition !== 'ACCEPTED') {
+      throw new BadRequestException('Solo se puede promover un hallazgo ya aceptado.');
+    }
+
+    const hallPaper = await this.prisma.workingPaper.findFirst({
+      where:  { auditId: finding.evidence.auditId, paperCode: 'PT-HALL' },
+      select: { id: true },
+    });
+    if (!hallPaper) {
+      throw new NotFoundException('El encargo no tiene un papel de Hallazgo (PT-HALL) — no se puede promover.');
+    }
+
+    const s1 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId: hallPaper.id, sectionKey: 'S1' } },
+    });
+    const rows = Array.isArray(s1?.value) ? [...(s1!.value as unknown[])] : [];
+    const nuevaFila = this.construirFilaDeHallazgoPTHall(finding, rows.length, user);
+    rows.push(nuevaFila);
+
+    await this.prisma.paperSection.upsert({
+      where: { paperId_sectionKey: { paperId: hallPaper.id, sectionKey: 'S1' } },
+      create: {
+        paperId: hallPaper.id, sectionKey: 'S1', label: 'Registro de Hallazgos',
+        fieldType: 'MATRIX', value: rows as unknown as Prisma.InputJsonValue,
+        isRequired: true, isAutoFilled: false, sortOrder: 1,
+      },
+      update: { value: rows as unknown as Prisma.InputJsonValue },
+    });
+
+    return this.prisma.fieldEvidenceFinding.update({
+      where: { id: findingId },
+      data:  { disposition: 'PROMOTED', promotedToPaperId: hallPaper.id },
+    });
+  }
+
+  // ─── Mapeo genérico hallazgo → fila MATRIX (§6.10) ───────────────────────
+
+  private parseColumnas(aiHint: string | null): string[] {
+    if (!aiHint) return [];
+    const m = aiHint.match(/^Columnas:\s*([^.]+)\./);
+    if (!m) return [];
+    return m[1].split('|').map(c => c.trim()).filter(Boolean);
+  }
+
+  private construirFilaDesdeHallazgo(
+    finding: { tipo: string; descripcion: string; nivelRiesgo: string; fuenteRef: string | null; justificacion: string | null; citaTextual: string; id: string; evidenceId: string },
+    aiHint: string | null,
+    rowIndex: number,
+  ): Record<string, unknown> {
+    const row: Record<string, unknown> = {};
+    for (const col of this.parseColumnas(aiHint)) {
+      const norm = col.toLowerCase();
+      if (/^#|^n[°º]|numero/.test(norm))                                    row[col] = rowIndex + 1;
+      else if (norm.includes('tipo'))                                       row[col] = finding.tipo;
+      else if (norm.includes('descripcion') || norm.includes('descripción')) row[col] = finding.descripcion;
+      else if (norm.includes('riesgo'))                                     row[col] = finding.nivelRiesgo;
+      else if (norm.includes('fuente'))                                     row[col] = finding.fuenteRef ?? '';
+      else if (norm.includes('justificaci'))                                row[col] = finding.justificacion ?? '';
+      else                                                                   row[col] = '';
+    }
+    row['_id']          = `fe_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    row['_origen']       = 'evidencia';
+    row['_evidenciaId']  = finding.evidenceId;
+    row['_findingId']    = finding.id;
+    row['_cita']         = finding.citaTextual;
+    return row;
+  }
+
+  private construirFilaDeHallazgoPTHall(
+    finding: {
+      id: string; evidenceId: string; tipo: string; descripcion: string; nivelRiesgo: string;
+      citaTextual: string; evidence: { lugar: string | null; sectionKey: string; capturedAt: Date };
+    },
+    rowIndex: number,
+    user: AuthUser,
+  ): Record<string, unknown> {
+    const nivelMap: Record<string, string> = { bajo: 'Bajo', medio: 'Medio', alto: 'Alto' };
+    const tipoMap: Record<string, string> = {
+      contradiccion:                  'Deficiencia de CI',
+      evasiva:                        'Deficiencia de CI',
+      riesgo_mencionado:               'Deficiencia de CI',
+      incumplimiento_mencionado:       'Incumplimiento',
+      inconsistencia_con_expediente:   'Error',
+      anomalia_visual:                 'Deficiencia de CI',
+    };
+    return {
+      'ID Hallazgo (H-001, H-002…)': `H-${String(rowIndex + 1).padStart(3, '0')}`,
+      'Área / Ciclo':                 finding.evidence.lugar ?? finding.evidence.sectionKey,
+      'Proceso específico':           finding.descripcion.slice(0, 200),
+      'Período auditado':             '',
+      'Fecha de identificación':      finding.evidence.capturedAt.toISOString().slice(0, 10),
+      'Auditor responsable':          user.email,
+      'Clasificación de riesgo (Alto / Medio / Bajo)': nivelMap[finding.nivelRiesgo] ?? finding.nivelRiesgo,
+      'Tipología (Incumplimiento / Deficiencia de CI / Error / Fraude / Ineficiencia / Cumplimiento normativo)': tipoMap[finding.tipo] ?? 'Deficiencia de CI',
+      '_id':          `h_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      '_origen':       'evidencia',
+      '_evidenciaId':  finding.evidenceId,
+      '_findingId':    finding.id,
+      '_cita':         finding.citaTextual,
+    };
   }
 }

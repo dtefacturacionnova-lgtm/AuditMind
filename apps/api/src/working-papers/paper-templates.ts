@@ -5546,4 +5546,55 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       aiHint:       'Ingrese una fila por cada cuenta del Mayor que compone el saldo del área (de S0). Saldo al Cierre: del Balance de Comprobación (B-00). Ajustes: de PT-ADJ-RECLASIF para las cuentas del área. Saldo Ajustado = Cierre + Ajustes + Reclasificaciones. El total debe cuadrar con la cédula sumaria referenciada en S1. Use Notas por fila para tick-marks (✓ verificado, ^ recalculado, D documentado).',
     },
   ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-ENTREV: Guía y Papel de Entrevista (EVD-08) — primer consumidor de la
+  // capacidad general de Evidencia de Campo (docs/inteligencia-de-evidencia-
+  // de-campo.md §6.11). El panel de captura/revisión NO es un FieldType
+  // nuevo — se monta una vez por papel en SmartPaperSections, disponible en
+  // cualquier papel inteligente; este es solo el primero con secciones
+  // pensadas específicamente para entrevistas.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-ENTREV': [
+    {
+      sectionKey:   'S1',
+      label:        'Planificación de la Entrevista',
+      description:  'Temas y preguntas a cubrir, definidos antes de la sesión, ligados al objetivo de auditoría que cada uno busca soportar.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    1,
+      aiHint:       'Columnas: # | Tema/Pregunta | Objetivo de auditoría | Respuesta esperada. Una fila por cada tema o pregunta planificada. El objetivo de auditoría explica por qué se pregunta (ej. "confirmar segregación de funciones en aprobación de pagos"), no solo qué se pregunta. La respuesta esperada es la hipótesis del auditor antes de la entrevista — sirve para detectar contradicciones durante la sesión.',
+    },
+    {
+      sectionKey:   'S2',
+      label:        'Registro de Sesiones',
+      description:  'Una fila por cada sesión de entrevista realizada — quién, cuándo, cómo y con qué consentimiento.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    2,
+      aiHint:       'Columnas: Fecha | Entrevistado | Cargo | Modalidad (Presencial/Virtual/Telefónica) | Consentimiento (Sí/No) | Duración. El consentimiento es obligatorio para grabar audio de una entrevista formal (NIA 500/610) — si es "No", la sesión debe documentarse solo por notas escritas del auditor, nunca grabarse.',
+    },
+    {
+      sectionKey:   'S3',
+      label:        'Hallazgos de la Evidencia',
+      description:  'Destino por defecto al aceptar un hallazgo sugerido por el panel de Evidencia de Campo — contradicciones, evasivas, riesgos e incumplimientos mencionados durante las sesiones, con su cita textual de respaldo.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    3,
+      aiHint:       'Columnas: # | Tipo | Descripción | Riesgo | Fuente. Esta sección normalmente se llena aceptando hallazgos sugeridos por IA desde el panel de Evidencia de Campo (grabación/nota de voz o texto de la sesión) — no se redacta a mano salvo excepción. Tipo: contradicción, evasiva, riesgo mencionado, inconsistencia con el expediente o incumplimiento mencionado. Fuente: timestamp de audio o referencia a la sesión de S2.',
+    },
+    {
+      sectionKey:   'S4',
+      label:        'Conclusión del Auditor',
+      description:  'Síntesis del auditor sobre lo obtenido en las entrevistas — no un resumen mecánico de S3, sino su lectura profesional del conjunto.',
+      fieldType:    FieldType.TEXTAREA,
+      isRequired:   true,
+      isAutoFilled: false,
+      sortOrder:    4,
+      aiHint:       'Con base en las sesiones realizadas (S2) y los hallazgos identificados (S3), concluya si la evidencia obtenida por entrevista es consistente con el resto del expediente o si amerita ampliar procedimientos (ej. inspección documental adicional, ampliar muestra). Indique explícitamente si algún hallazgo de S3 debe promoverse a un hallazgo formal (D-07).',
+    },
+  ],
 };

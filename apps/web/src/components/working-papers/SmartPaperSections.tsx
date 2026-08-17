@@ -460,7 +460,7 @@ const _EXT_FIN_KEYS = new Set([
   'PT-FIN-ENCARGO',
   'PT-FIN-A3-KC','PT-FIN-B00','PT-FIN-B01','PT-FIN-B02','PT-FIN-B03',
   'PT-FIN-B04','PT-FIN-B05','PT-FIN-B06','PT-FIN-B07','PT-FIN-B08','PT-FIN-B09',
-  'PT-ADJ-RECLASIF','PT-DIFS','PT-CIRC','PT-FIN-C-SUST','PT-NIA550','PT-NIA570','PT-FIN-C-ESTIM','PT-FIN-C-GEN',
+  'PT-ADJ-RECLASIF','PT-DIFS','PT-CIRC','PT-FIN-C-SUST','PT-NIA550','PT-NIA570','PT-FIN-C-ESTIM','PT-FIN-C-GEN','PT-ENTREV',
   'PT-REP580','PT-NIA560','PT-NIA265','PT-NIA260','PT-FIN-DICT',
   'PT-COMP-CHK','PT-EQR','PT-CARRYFWD',
   ..._HALL_KEYS,
@@ -522,6 +522,7 @@ const AVAILABLE_TEMPLATES = [
   { key: 'PT-FIN-C-SUST', label: 'Fin.Ext · Prueba Sustantiva de Ejecución — C-01..C-12, C-14 (PT-FIN-C-SUST)' },
   { key: 'PT-NIA570',     label: 'Fin.Ext · Continuidad Operativa — Negocio en Marcha NIA 570 — C-15 (PT-NIA570)' },
   { key: 'PT-NIA550',     label: 'Fin.Ext · Partes Relacionadas NIA 550 — C-13 (PT-NIA550)'                    },
+  { key: 'PT-ENTREV',     label: 'Fin.Ext · Guía y Papel de Entrevista — B-04 (PT-ENTREV)'                     },
   // ── Cierre e Informe ────────────────────────────────────────────────────────────────────────
   { key: 'PT-FIN-DICT',   label: 'Fin.Ext · Dictamen del Auditor Independiente NIA 700-720 (PT-FIN-DICT)'      },
   // ── Planificación / Aceptación del Encargo ────────────────────────────────

@@ -20,6 +20,7 @@ import {
 } from '@/hooks/useWorkingPaperGraph';
 import { SectionField } from './SectionField';
 import type { AiDraftConfig } from './SectionField';
+import { WorkOfflinePanel } from './WorkOfflinePanel';
 import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './TrialBalancePanel';
 import { MaterialidadPanel } from './MaterialidadPanel';
 import { SamplingExecutionPanel } from './SamplingExecutionPanel';
@@ -775,6 +776,9 @@ export function SmartPaperSections({
         </p>
         <SectionProgressBar filled={filled.length} total={required.length} />
       </div>
+
+      {/* Trabajar fuera de línea (EXC-24..27) — plantilla Excel genérica */}
+      <WorkOfflinePanel paperId={paperId} sections={sorted} readonly={readonly} />
 
       {/* Saving indicator */}
       {savingKey && (

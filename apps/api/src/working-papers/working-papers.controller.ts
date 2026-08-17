@@ -848,6 +848,50 @@ export class WorkingPapersController {
     return this.excelEngine.leer(def, id, user, file.buffer);
   }
 
+  // ─── EXC-24/25/26: Plantilla Excel genérica ("trabajar fuera de línea") ────
+  // A diferencia de las 6 plantillas de negocio de arriba (una clave fija por
+  // plantilla, resuelta contra el registro estático), esta construye el layout
+  // en tiempo de ejecución a partir de las secciones que el auditor elija —
+  // ver excel-generic-template.service.ts y §5.5 del documento de diseño.
+  @Get(':id/excel-generic')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Descargar una plantilla Excel genérica con las secciones elegidas del papel, para trabajar fuera de línea' })
+  async downloadExcelGenerico(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Res() res: Response,
+    @Query('sections') sections?: string,
+  ) {
+    const sectionKeys = (sections ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    if (sectionKeys.length === 0) {
+      throw new BadRequestException('Debe indicar al menos una sección en ?sections=S1,S2,...');
+    }
+    const { buffer, resultado, omitidas } = await this.excelEngine.generarGenerica(id, sectionKeys, user);
+    if (omitidas.length > 0) {
+      res.setHeader('X-AuditMind-Omitidas', encodeURIComponent(JSON.stringify(omitidas)));
+    }
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${resultado.nombreArchivo}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  }
+
+  @Post(':id/excel-generic/import')
+  @Roles(UserRole.AUDITOR)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Subir una plantilla Excel genérica completada y enrutar los datos a las secciones correspondientes' })
+  async importExcelGenerico(
+    @Param('id') id: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) throw new BadRequestException('No se recibió archivo');
+    if (!/\.xlsx$/i.test(file.originalname)) {
+      throw new BadRequestException('Solo se aceptan archivos .xlsx');
+    }
+    return this.excelEngine.leerGenerica(id, user, file.buffer);
+  }
+
   // ─── Gap 3: @mention references ───────────────────────────────────────────
 
   @Get('mention-index/:auditId')

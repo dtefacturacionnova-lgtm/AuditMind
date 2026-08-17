@@ -18,6 +18,9 @@ import {
   parseCelda, rangoA1, parseRangoDefinido,
   sanearValorCelda, coaccionarPorFormato, numFmtPorFormato,
 } from './excel-cell-utils';
+import {
+  construirDefGenerica, construirDefDesdeLayout, GenericLayoutDescriptor,
+} from './excel-generic-template.service';
 
 /**
  * Motor genérico de plantillas Excel (EXC-02 — implementación de EXC-01).
@@ -126,7 +129,7 @@ export class ExcelTemplateEngineService {
       templateKey: def.key, templateVersion: def.version,
       paperId: ctx.paperId, auditId: ctx.auditId, organizationId: ctx.organizationId,
       generadoEn: ctx.generadoEn.toISOString(), generadoPor: user.id,
-      areaKey: ctx.areaKey,
+      areaKey: ctx.areaKey, genericLayout: def.genericLayout,
     });
     const hojaManifest = workbook.addWorksheet(EXCEL_MANIFEST_HOJA, { state: 'veryHidden' });
     hojaManifest.getCell(1, 1).value = JSON.stringify(manifest);
@@ -296,6 +299,115 @@ export class ExcelTemplateEngineService {
       templateKey: def.key, paperId, rangosLeidos: valoresPorRango.size,
       seccionesActualizadas, advertencias,
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Plantilla genérica (EXC-24/25, §5.5) — layout construido en tiempo de
+  // ejecución en vez de un `.template.ts` escrito a mano por papel.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Verifica acceso mínimo a un papel y devuelve lo que hace falta para
+   * construir/verificar el `def` genérico ANTES de tener uno — el flujo
+   * normal (`construirContexto`) exige un `def` completo desde el arranque,
+   * pero acá el `def` depende de qué se pidió (`generarGenerica`) o de lo
+   * que quedó sellado en el manifiesto (`leerGenerica`).
+   */
+  private async accesoMinimoPapel(paperId: string, user: AuthUser) {
+    const wp = await this.prisma.workingPaper.findUnique({
+      where: { id: paperId },
+      select: { paperCode: true, auditId: true, audit: { select: { organizationId: true } } },
+    });
+    if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
+    if (wp.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    if (!wp.paperCode) throw new BadRequestException('Este papel no tiene un paperCode asignado — no se puede generar una plantilla');
+    return { paperCode: wp.paperCode, auditId: wp.auditId, organizationId: wp.audit.organizationId };
+  }
+
+  async generarGenerica(
+    paperId: string, sectionKeys: string[], user: AuthUser,
+  ): Promise<{ buffer: Buffer; resultado: ExcelGeneracionResultado; omitidas: Array<{ sectionKey: string; motivo: string }> }> {
+    const { paperCode } = await this.accesoMinimoPapel(paperId, user);
+
+    const tplSections = PAPER_TEMPLATES[paperCode];
+    if (!tplSections?.length) {
+      throw new BadRequestException(`El papel '${paperCode}' no tiene secciones declaradas`);
+    }
+    const porClave = new Map(tplSections.map(t => [t.sectionKey, t]));
+
+    const clavesValidas: string[] = [];
+    const omitidasPorClaveInexistente: Array<{ sectionKey: string; motivo: string }> = [];
+    for (const key of sectionKeys) {
+      if (porClave.has(key)) clavesValidas.push(key);
+      else omitidasPorClaveInexistente.push({ sectionKey: key, motivo: 'No existe una sección con esa clave en este papel' });
+    }
+    if (clavesValidas.length === 0) {
+      throw new BadRequestException('Ninguna de las secciones solicitadas existe en este papel');
+    }
+
+    const filas = await this.prisma.paperSection.findMany({
+      where: { paperId, sectionKey: { in: clavesValidas } },
+      select: { sectionKey: true, value: true },
+    });
+    const valorPorClave = new Map(filas.map(f => [f.sectionKey, f.value]));
+
+    const entradas = clavesValidas.map(key => {
+      const tpl = porClave.get(key)!;
+      const valor = valorPorClave.get(key);
+      const rows = tpl.fieldType === 'MATRIX'
+        ? (Array.isArray(valor) ? valor as Record<string, unknown>[] : [])
+        : [{ __valor: valor ?? null }];
+      return { tpl, rows };
+    });
+
+    const { def, omitidas } = construirDefGenerica(paperCode, entradas);
+    if (def.origen.length === 0) {
+      throw new BadRequestException(
+        `No se pudo generar la plantilla — ${[...omitidasPorClaveInexistente, ...omitidas].map(o => `${o.sectionKey}: ${o.motivo}`).join('; ')}`,
+      );
+    }
+
+    const { buffer, resultado } = await this.generar(def, paperId, user);
+    return { buffer, resultado, omitidas: [...omitidasPorClaveInexistente, ...omitidas] };
+  }
+
+  async leerGenerica(paperId: string, user: AuthUser, buffer: Buffer): Promise<ExcelLecturaResultado> {
+    const { auditId, organizationId } = await this.accesoMinimoPapel(paperId, user);
+    const limites = EXCEL_LIMITES_POR_DEFECTO;
+
+    if (!buffer?.length) throw new BadRequestException('El archivo está vacío');
+    if (buffer.length > limites.maxUploadBytes) {
+      throw new BadRequestException(
+        `El archivo excede el tamaño máximo permitido (${Math.round(limites.maxUploadBytes / 1024 / 1024)} MB)`,
+      );
+    }
+    if (!EXCEL_MAGIC_ZIP.every((b, i) => buffer[i] === b)) {
+      throw new BadRequestException('El archivo no es un .xlsx válido');
+    }
+
+    const workbook = new Workbook();
+    await this.cargarConTimeout(workbook, buffer, limites.parseTimeoutMs);
+
+    const manifestCrudo = this.leerManifiestoCrudo(workbook);
+    const verif = verificarManifest(this.manifestSecret, manifestCrudo, {
+      templateKey: 'GENERICA', templateVersion: 1, paperId, auditId, organizationId,
+    });
+    if (!verif.ok) {
+      throw new BadRequestException(`No se pudo validar el archivo: ${verif.razon}`);
+    }
+    if (!verif.manifest.genericLayout) {
+      throw new BadRequestException('El archivo no tiene el layout de la plantilla genérica sellado — no se puede procesar');
+    }
+
+    let layout: GenericLayoutDescriptor;
+    try {
+      layout = JSON.parse(verif.manifest.genericLayout);
+    } catch {
+      throw new BadRequestException('El layout sellado en el archivo no se pudo interpretar');
+    }
+
+    const def = construirDefDesdeLayout(layout);
+    return this.leer(def, paperId, user, buffer);
   }
 
   // ═══════════════════════════════════════════════════════════════════════

@@ -79,4 +79,26 @@ export const apiClient = {
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   },
+  /** Igual que `downloadFile`, pero devuelve los headers de la respuesta —
+   *  usado por la plantilla genérica (EXC-27) para leer `X-AuditMind-Omitidas`. */
+  downloadFileWithHeaders: async (path: string, filename: string): Promise<Headers> => {
+    const token = await getAuthToken();
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => 'Download failed');
+      throw new Error(`Download error ${res.status}: ${err.slice(0, 120)}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return res.headers;
+  },
 };

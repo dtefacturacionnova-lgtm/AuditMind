@@ -50,7 +50,8 @@ export type ExcelTemplateKey =
   | 'ARQUEO_CAJA'             // Arqueo de Caja                      — C-01
   | 'REVISION_ANALITICA'      // Revisión Analítica (NIA 520)        — PT-FIN-B07
   | 'CIRCULARIZACION_CXC'     // Circularización / Conciliación CxC  — C-02 / PT-NIA530
-  | 'CONCILIACION_FISCAL';    // Tax reconciliation                  — PT-FISC-*
+  | 'CONCILIACION_FISCAL'     // Tax reconciliation                  — PT-FISC-*
+  | 'GENERICA';               // Plantilla genérica (EXC-24) — cualquier papel/sección elegible
 
 /** Registro global de plantillas. Espeja la convención de `PAPER_TEMPLATES`. */
 export type ExcelTemplateRegistry = Record<ExcelTemplateKey, ExcelTemplateDef>;
@@ -385,6 +386,16 @@ export interface ExcelTemplateDef {
   destino: ExcelDestinoBinding[];
   /** Overrides de los límites por defecto, para plantillas atípicamente grandes. */
   limites?: Partial<ExcelTemplateLimits>;
+  /**
+   * Solo para `key: 'GENERICA'` (EXC-24) — descriptor JSON compacto de qué
+   * secciones/columnas se usaron para construir ESTE `def` en particular (a
+   * diferencia de las otras 6 plantillas, cuyo layout es fijo, el de la
+   * genérica varía en cada descarga según qué secciones eligió el auditor).
+   * Se sella dentro del manifiesto firmado (ver `ExcelTemplateManifest.genericLayout`)
+   * para que `leer()` pueda reconstruir el MISMO `def` exacto sin volver a
+   * inferir columnas de datos que pudieron haber cambiado mientras tanto.
+   */
+  genericLayout?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -483,6 +494,13 @@ export interface ExcelTemplateManifest {
    * qué área pertenece el archivo que regresa.
    */
   areaKey?: string;
+  /**
+   * Solo para `templateKey: 'GENERICA'` — descriptor JSON compacto (ver
+   * `ExcelTemplateDef.genericLayout`) de qué secciones/columnas se usaron
+   * para construir ESTE archivo. Sellado en la firma igual que `areaKey`,
+   * y restaurado al `def` reconstruido en `leerGenerica()`.
+   */
+  genericLayout?: string;
   /** HMAC-SHA256 en hexadecimal. */
   firma: string;
 }

@@ -20,7 +20,7 @@ function payload(m: ManifestSinFirma): string {
   return [
     m.v, m.templateKey, m.templateVersion, m.paperId,
     m.auditId, m.organizationId, m.generadoEn, m.generadoPor,
-    m.areaKey ?? '',
+    m.areaKey ?? '', m.genericLayout ?? '',
   ].join('|');
 }
 
@@ -73,7 +73,7 @@ export function verificarManifest(
     v: completo.v, templateKey: completo.templateKey, templateVersion: completo.templateVersion,
     paperId: completo.paperId, auditId: completo.auditId, organizationId: completo.organizationId,
     generadoEn: completo.generadoEn, generadoPor: completo.generadoPor,
-    areaKey: completo.areaKey,
+    areaKey: completo.areaKey, genericLayout: completo.genericLayout,
   });
 
   const a = Buffer.from(firmaEsperada, 'hex');

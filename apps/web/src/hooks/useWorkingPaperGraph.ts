@@ -286,6 +286,27 @@ export function useImportExcelTemplate() {
   });
 }
 
+/** Plantilla Excel genérica (EXC-24/25/26) — "trabajar fuera de línea" cualquier sección elegible. */
+export function useImportExcelGenerico() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paperId, file }: { paperId: string; file: File }) => {
+      const form = new FormData();
+      form.append('file', file);
+      return apiClient.postForm<ExcelLecturaResultado>(
+        `/working-papers/${paperId}/excel-generic/import`,
+        form,
+      );
+    },
+    onSuccess: (res, { paperId }) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+      for (const s of res.seccionesActualizadas) {
+        if (s.paperId !== paperId) qc.invalidateQueries({ queryKey: ['wp', s.paperId] });
+      }
+    },
+  });
+}
+
 export function usePropagateControlDeficiencias() {
   const qc = useQueryClient();
   return useMutation({

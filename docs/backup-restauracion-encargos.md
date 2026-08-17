@@ -74,14 +74,25 @@ Un backup completo de un encargo es, por definición, **todos los datos financie
 
 ---
 
-## 5. Plan de fases
+## 5. Actividades, en orden de implementación
 
-| Fase | Qué construye | Modelo recomendado | Por qué |
+| # | Actividad | Modelo | Por qué |
 |---|---|---|---|
-| **0 — Diseño del formato de export/import y del remapeo de IDs** | Definir el `manifest.json`, el orden exacto de recorrido del árbol de FK (importa: hay que crear los `Audit`/`WorkingPaper` antes que las filas que los referencian), la estrategia de remapeo | **Fable 5 / Opus** | Es la parte que si se diseña mal, corrompe datos reales de un cliente — mismo criterio que el motor de Excel (EXC-01) o el pipeline de evidencia de campo (Fase 0 de esa propuesta). |
-| **1 — Exportar (solo lectura, sin restaurar todavía)** | Recorrido del árbol de FK, empaquetado, firma del manifest — entregable: un botón que descarga el ZIP | **Sonnet** | Implementación sobre el diseño ya fijado en Fase 0; no hay ambigüedad de diseño pendiente. |
-| **2 — Restaurar como encargo nuevo** | El remapeo de IDs, reutilizando el patrón ya probado de Roll-forward | **Sonnet** | Mismo motivo — el patrón estructural ya existe en el código, es extenderlo con más tablas y con los valores reales (no vacíos). |
-| **3 — Restaurar destructivo + controles de seguridad de §4** | Confirmaciones, logging, restricción de rol | **Sonnet**, con revisión de **Fable 5** antes de habilitarlo en producción | Es la parte de mayor blast-radius de todo el feature — vale la pena una segunda mirada antes de que alguien pueda sobrescribir un encargo real por accidente. |
+| BKP-01 | Diseñar `manifest.json` (versión de schema, fecha, hash, `areaKey`/org de origen) + el orden exacto de recorrido del árbol de FK — importa: hay que crear `Audit`→`WorkingPaper`→el resto en ese orden, tanto al exportar como al restaurar | **Fable 5 / Opus** | Si el orden o el formato quedan mal diseñados, corrompe datos reales de un cliente — mismo criterio que EXC-01 o el pipeline de evidencia de campo. |
+| BKP-02 | Diseñar la estrategia de remapeo de IDs para "restaurar como nuevo" (tabla de correspondencia ID-viejo→ID-nuevo, y cómo se resuelven las FK que apuntan a `User` fuera del árbol del encargo) | **Fable 5 / Opus** | Mismo motivo que BKP-01 — es la parte de mayor riesgo de diseño de todo el feature. |
+| BKP-03 | Backend: función de recorrido del árbol de tablas (§2) — volcar cada modelo con `auditId` (directo o transitivo) a `data.json` | Sonnet | Implementación directa sobre el diseño ya fijado en BKP-01. |
+| BKP-04 | Backend: enumerar los `WorkingPaper.id` del encargo, listar y descargar los archivos bajo `sections/{paperId}/` del bucket `audit-files` | Sonnet | Extensión mecánica del recorrido — el patrón de ruta ya está confirmado en el código. |
+| BKP-05 | Empaquetado del ZIP (`manifest.json` + `data.json` + `files/`) + firma HMAC del manifest, reutilizando `excel-manifest.ts` como referencia de patrón | Sonnet | Mismo mecanismo de firma ya construido y probado para el motor de Excel — no hay que inventar uno nuevo. |
+| BKP-06 | Endpoint `POST :auditId/backup` + botón de descarga, restringido a rol CAE/Admin (§4) | Sonnet | Implementación sobre diseño ya fijado; el control de rol es acotado. |
+| BKP-07 | Backend: restaurar como encargo nuevo — aplicar el remapeo de IDs de BKP-02 al recorrer `data.json` | Sonnet | El patrón estructural (crear `Audit` nuevo → recorrer papeles → crear copias) ya existe en `rollForward()`; se trata de extenderlo con datos reales en vez de shells vacíos. |
+| BKP-08 | Backend: subir archivos de vuelta a Storage con las rutas remapeadas a los `paperId` nuevos | Sonnet | Continuación directa de BKP-07. |
+| BKP-09 | Frontend: subir el ZIP + confirmar "restaurar como nuevo encargo" | Sonnet | UI estándar de subida + confirmación, mismo patrón de otros flujos de este sistema. |
+| BKP-10 | Probar end-to-end con un encargo demo real: exportar → restaurar como nuevo → verificar que todas las tablas y archivos llegaron completos | Sonnet | Verificación, no diseño — pero es el paso que confirma que BKP-01/02 se ejecutaron bien. |
+| BKP-11 | Type-check, commit, push, deploy (solo exportar + restaurar como nuevo — sin el modo destructivo todavía) | Sonnet | Cierra el entregable seguro (no destructivo) del feature. |
+| BKP-12 | Restaurar destructivo: sobrescribir el encargo original — doble confirmación, mostrar qué se perdería, logging de quién/cuándo/desde qué backup | Sonnet, con revisión de **Fable 5** antes de habilitarlo en producción | Es la parte de mayor blast-radius de todo el feature — justifica una segunda mirada antes de que alguien pueda sobrescribir un encargo real por accidente. |
+| BKP-13 | Type-check, commit, push, deploy del modo destructivo | Sonnet | Cierre del feature completo. |
+
+*(BKP-12/13 se pueden posponer indefinidamente si la respuesta a la pregunta del §6 es "solo portabilidad" — ver ahí.)*
 
 ---
 

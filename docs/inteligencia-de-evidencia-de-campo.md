@@ -127,22 +127,33 @@ Construir ESO — una app móvil o PWA con almacenamiento local real, cola de si
 
 ---
 
-## 4. Plan de fases (con modelo de Claude recomendado por tarea, según tu regla global)
+## 4. Actividades, en orden de implementación
 
-| Fase | Qué construye | Modelo recomendado | Por qué |
+**Fase 5 (captura offline-first campo↔oficina, §3) queda pospuesta por decisión explícita del usuario (2026-08-16)** — la alternativa más barata (EXC-24..30, plantilla Excel genérica) cubre la necesidad real por ahora. No se listan actividades de esa fase aquí; el diseño ya documentado en §3 queda como referencia para cuando se retome.
+
+| # | Actividad | Modelo | Por qué |
 |---|---|---|---|
-| **0 — Diseño del esquema y arquitectura del pipeline** | Definir el esquema JSON final (§2.2), el contrato del pipeline (§2), decidir dónde vive cada pieza en `ai-service` vs. `api` | **Fable 5 / Opus** | Arquitectura nueva genuina — el mismo motivo que EXC-01 (el motor de Excel) se diseñó con el modelo fuerte esta sesión. Diagnóstico correcto aquí evita rehacer las 4 fases siguientes. |
-| **1 — Captura más liviana: nota de voz/texto → hallazgos** | Whisper autoalojado en el VPS, UI de captura rápida (grabar o escribir), pipeline completo §2 aplicado solo a esta modalidad, papel B-04 finalmente con `paperCode` real y secciones en `PAPER_TEMPLATES` | **Sonnet** (implementación sobre patrón ya diseñado en Fase 0) | Es la modalidad de menor esfuerzo de captura — valida el pipeline completo (transcripción → extracción → cruce → revisión) con el menor riesgo. |
-| **2 — Entrevista formal (audio + diarización)** | `pyannote-audio`, ingesta con hash de custodia, consentimiento obligatorio, timestamps trazables — extiende el pipeline de Fase 1 | **Sonnet** | Mismo pipeline, agrega diarización y los requisitos de cadena de custodia del documento 2 (§3 de ese documento). |
-| **3 — Foto anotada** | Capa de canvas de marcado sobre adjuntos existentes, zona marcada como contexto para el LLM | **Sonnet** | UX ya madura en otras industrias (§2.1) — bajo riesgo de diseño. |
-| **4 — Video corto** | Muestreo de frames + LLM con visión, mismo esquema de salida | **Sonnet**, con una revisión de **Fable 5** antes de cerrar si el muestreo de frames resulta insuficiente para el caso de uso real (ej. conteos de inventario rápidos) | Sin precedente directo en auditoría — mayor probabilidad de necesitar iterar el enfoque tras la primera prueba real. |
-| **5 — Captura offline-first campo↔oficina** *(evaluar si se necesita antes de construir — ver §3)* | Almacenamiento local + cola de sincronización, la pieza de arquitectura nueva más cara de todo el plan | **Fable 5 / Opus** para el diseño, luego Sonnet para la implementación | Arquitectura nueva real (local-first storage, resolución de conflictos) — no es una extensión de un patrón ya existente en el repo. |
+| EVD-01 | Resolver las preguntas abiertas de §5 (Whisper autoalojado vs. API, destino de los hallazgos — ¿`PT-HALL` o fila sugerida) — decisión del usuario, no una tarea de código | — (decisión, no implementación) | El resto de las actividades de Fase 1 dependen de esta respuesta. |
+| EVD-02 | Diseñar el esquema JSON único de extracción (§2.2) y el contrato completo del pipeline (§2) — dónde vive cada paso en `ai-service` vs. `api` | **Fable 5 / Opus** | Arquitectura nueva genuina — mismo criterio que EXC-01. Un mal diseño aquí obliga a rehacer las fases siguientes. |
+| EVD-03 | Agregar `faster-whisper` a `apps/ai-service/requirements.txt` + endpoint de transcripción | Sonnet | Implementación sobre el diseño ya fijado en EVD-02. |
+| EVD-04 | Backend: ingesta con hash SHA-256 de custodia + metadatos obligatorios (fecha, autor, consentimiento) | Sonnet | Requisito de cadena de custodia del documento 2 (§3), aplicable desde la primera modalidad. |
+| EVD-05 | Backend: pipeline de extracción estructurada vía el LLM Router ya existente (`llm_router.py`), aplicando el esquema de EVD-02 | Sonnet | Reutiliza infraestructura ya construida — no hay LLM nuevo que integrar. |
+| EVD-06 | Backend: validación anti-alucinación — la cita/evidencia debe existir literal en la transcripción antes de mostrarla | Sonnet | Control de calidad explícito del documento 2 — no es opcional. |
+| EVD-07 | Backend: cruce con el expediente reutilizando `mention-index`/`PaperReference` ya existente (§2.3) | Sonnet | Cero integración nueva — mismo mecanismo que ya usa el grafo de conocimiento y `FlowchartPanel`. |
+| EVD-08 | Dar por fin contenido real al papel B-04: `paperCode` + secciones en `PAPER_TEMPLATES` (hoy es un slot vacío — ver §0) | Sonnet | Es el primer consumidor real de la capacidad — sin esto no hay dónde mostrar los hallazgos. |
+| EVD-09 | Frontend: UI de captura rápida (grabar audio corto o escribir texto libre) + panel de revisión humana de hallazgos sugeridos (mismo patrón "IA sugiere, auditor aprueba" ya usado en `seedSubstantiveProcedures`/`ComunicacionAIPanel`) | Sonnet | Modalidad de menor esfuerzo de captura — valida el pipeline completo con el menor riesgo. |
+| EVD-10 | Probar con datos demo reales: capturar 2-3 notas de ejemplo, confirmar que los hallazgos extraídos y la trazabilidad de cita funcionan end-to-end | Sonnet | Verificación antes de desplegar. |
+| EVD-11 | Type-check, commit, push, deploy — cierra Fase 1 (nota de voz/texto) | Sonnet | — |
+| EVD-12 | Fase 2 — entrevista formal: agregar `pyannote-audio` (diarización) + consentimiento obligatorio en el flujo de ingesta | Sonnet | Extiende el pipeline de Fase 1, no lo reemplaza. |
+| EVD-13 | Fase 2 — probar con una entrevista de ejemplo real, verificar timestamps trazables al audio | Sonnet | — |
+| EVD-14 | Fase 3 — foto anotada: capa de canvas de marcado sobre adjuntos existentes + zona marcada como contexto para el LLM | Sonnet | UX ya madura en otras industrias (§2.1) — bajo riesgo de diseño. |
+| EVD-15 | Fase 4 — video corto: muestreo de frames + LLM con visión (Gemini/Claude), mismo esquema de salida de EVD-02 | Sonnet, con revisión de **Fable 5** si el muestreo de frames resulta insuficiente en la primera prueba real | Sin precedente directo en auditoría (verificado) — mayor probabilidad de necesitar iterar el enfoque. |
 
 ---
 
 ## 5. Preguntas abiertas para decidir antes de empezar
 
 1. ¿Empezamos por la Fase 1 (nota de voz/texto, la más barata) para validar el pipeline completo antes de invertir en entrevista formal con diarización?
-2. Connectividad real en campo de tus clientes — ¿justifica la Fase 5 (offline-first) o el caso real es solo "conexión lenta", cubierto con subida web tolerante a reintentos?
+2. ~~Connectividad real en campo — ¿justifica offline-first?~~ **Resuelto (2026-08-16): pospuesto — la plantilla Excel genérica (EXC-24..30 en `docs/integracion-excel-plantillas-inteligentes.md`) cubre la necesidad por ahora.**
 3. ¿El audio de entrevistas de PLAFT/RRHH debe procesarse 100% dentro de tu infraestructura (Whisper autoalojado, como recomienda el documento 2) o hay tolerancia a usar una API externa gestionada para ir más rápido al mercado, revisando después las cláusulas de retención del proveedor?
 4. ¿Los hallazgos extraídos deben poder promoverse directamente a `PT-HALL` (Hallazgo Individual), o quedarse solo como filas sugeridas dentro de la sección donde se adjuntó la evidencia?

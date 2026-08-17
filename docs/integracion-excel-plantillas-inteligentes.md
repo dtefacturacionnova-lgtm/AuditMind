@@ -381,6 +381,18 @@ El ~7% restante (ACCOUNT_SCHEDULE, CHECKLIST, FLOWCHART, SAMPLE_ITEM_REGISTER, e
 
 **Fase recomendada**: Sonnet — es una extensión directa del motor ya diseñado y probado (EXC-01/02), no arquitectura nueva. El único punto que merece una revisión más cuidadosa (Fable 5, breve) es la función de auto-generación del `ExcelTemplateDef`: hay que decidir bien qué pasa con un `aiHint` mal formado o ausente (algunos papeles viejos pueden no tener columnas bien declaradas) para que no genere una plantilla rota en silencio.
 
+### 5.5.1 Actividades, en orden de implementación
+
+| # | Actividad | Modelo |
+|---|---|---|
+| EXC-24 | Diseñar la función de auto-generación de `ExcelTemplateDef` desde `PAPER_TEMPLATES[paperCode]`: mapeo fieldType→ESCALAR/TABLA, y qué hacer con `aiHint` ausente o mal formado (fallback explícito, nunca una plantilla rota en silencio) | **Fable 5** |
+| EXC-25 | Implementar la función de auto-generación como un modo nuevo del motor (sin archivo `.template.ts` por papel) | Sonnet |
+| EXC-26 | Endpoint: adaptar `GET/POST :id/excel-template/:key` (o uno nuevo) para aceptar un `paperCode` genérico en vez de solo claves del catálogo cerrado | Sonnet |
+| EXC-27 | UI: botón "Marcar para trabajar fuera de línea" en cualquier sección con fieldType elegible, con selector de qué secciones incluir en la descarga | Sonnet |
+| EXC-28 | Manejo de errores: papel con columnas no inferibles — mensaje claro al auditor, nunca una descarga silenciosamente incompleta | Sonnet |
+| EXC-29 | Probar con datos demo reales contra 3-4 papeles de distinto fieldType (MATRIX puro, TEXTAREA puro, mixto) | Sonnet |
+| EXC-30 | Type-check, commit, push, deploy | Sonnet |
+
 ---
 
 ## 6. Orden de implementación recomendado

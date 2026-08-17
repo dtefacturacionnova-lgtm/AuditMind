@@ -129,6 +129,52 @@ export function useRestoreBackup() {
   });
 }
 
+// ─── Restauración DESTRUCTIVA (BKP-12) — sobrescribe un encargo existente ────
+
+export interface RestoreDestructivePreview {
+  auditTituloActual: string;
+  backup: {
+    auditTitulo: string;
+    generadoEn: string;
+    generadoPor: string;
+    conteoPorModelo: Record<string, number>;
+  };
+  conteoActual: Record<string, number>;
+}
+
+export interface RestoreDestructivoResultado {
+  audit: { id: string; title: string };
+  totalFilasCreadas: number;
+  totalArchivosSubidos: number;
+  advertencias: { modelo: string; filaId?: string; mensaje: string }[];
+}
+
+export function usePreviewRestoreDestructivo(auditId: string) {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return apiClient.postForm<RestoreDestructivePreview>(`/audits/${auditId}/backup/restore-preview`, form);
+    },
+  });
+}
+
+export function useRestoreDestructivo(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, confirmarTitulo }: { file: File; confirmarTitulo: string }) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('confirmarTitulo', confirmarTitulo);
+      return apiClient.postForm<RestoreDestructivoResultado>(`/audits/${auditId}/backup/restore-destructive`, form);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['audits'] });
+      qc.invalidateQueries({ queryKey: ['audits', auditId] });
+    },
+  });
+}
+
 // ─── Papeles disponibles desde plantilla ─────────────────────────────────────
 
 export interface AvailableTemplatePaper {

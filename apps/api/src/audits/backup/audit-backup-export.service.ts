@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthUser } from '../../auth/jwt.strategy';
 import {
   AUDIT_SCOPED_MODELS, AuditScopedModel, AuditBackupAdvertencia,
+  construirWhereParaModelo, nuevasFamiliasDeIds,
 } from './audit-backup.types';
 
 /**
@@ -42,10 +43,7 @@ export class AuditBackupExportService {
     // IDs acumulados por "familia" a medida que se recorre el árbol — cada
     // nivel usa los IDs que dejaron los niveles anteriores (mismo orden de
     // AUDIT_SCOPED_MODELS, que es justamente el orden de dependencia).
-    const idsPorFamilia: Record<string, string[]> = {
-      workingPaper: [], finding: [], pbcRequest: [], trialBalance: [],
-      dataAnalysisJob: [], paperSection: [], auditProcedure: [], auditStep: [],
-    };
+    const idsPorFamilia = nuevasFamiliasDeIds();
 
     for (const modelo of AUDIT_SCOPED_MODELS) {
       const filas = await this.consultarModelo(modelo, auditId, idsPorFamilia, advertencias);
@@ -106,39 +104,10 @@ export class AuditBackupExportService {
       return [];
     }
 
-    const where = this.construirWhere(modelo, auditId, ids);
+    const where = construirWhereParaModelo(modelo, auditId, ids);
     if (where === null) return []; // familia de IDs vacía — nada que consultar, no es un error
 
     return delegate.findMany({ where });
-  }
-
-  private construirWhere(
-    modelo: AuditScopedModel, auditId: string, ids: Record<string, string[]>,
-  ): Record<string, unknown> | null {
-    switch (modelo.filtro.tipo) {
-      case 'auditId_directo':
-        return { auditId };
-      case 'via_paperId': {
-        if (ids.workingPaper.length === 0) return null;
-        // paperLink/paperReference tienen DOS campos de paperId (source/target)
-        // — se filtra solo por el de origen (ver exportarEncargo(), nota de alcance).
-        return { [modelo.filtro.paperIdField]: { in: ids.workingPaper } };
-      }
-      case 'via_findingId':
-        return ids.finding.length === 0 ? null : { findingId: { in: ids.finding } };
-      case 'via_pbcId':
-        return ids.pbcRequest.length === 0 ? null : { pbcId: { in: ids.pbcRequest } };
-      case 'via_trialBalanceId':
-        return ids.trialBalance.length === 0 ? null : { trialBalanceId: { in: ids.trialBalance } };
-      case 'via_jobId':
-        return ids.dataAnalysisJob.length === 0 ? null : { jobId: { in: ids.dataAnalysisJob } };
-      case 'via_sectionId':
-        return ids.paperSection.length === 0 ? null : { sectionId: { in: ids.paperSection } };
-      case 'via_procedureId':
-        return ids.auditProcedure.length === 0 ? null : { procedureId: { in: ids.auditProcedure } };
-      case 'via_stepId':
-        return ids.auditStep.length === 0 ? null : { stepId: { in: ids.auditStep } };
-    }
   }
 
   /**

@@ -65,4 +65,41 @@ export class AuditBackupController {
     }
     return this.restoreSvc.restaurarComoNuevo(file.buffer, user, titulo);
   }
+
+  // BKP-12 — restauración DESTRUCTIVA: sobrescribe el encargo `:id`. Rol
+  // ADMIN o superior (un nivel arriba de CAE, que basta para exportar/
+  // restaurar como nuevo) — es la acción de mayor blast-radius del feature,
+  // per el diseño en docs/backup-restauracion-encargos.md §4/§5 (BKP-12).
+  @Post(':id/backup/restore-preview')
+  @Roles(UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Previsualizar una restauración destructiva — no modifica nada, solo compara backup vs. estado actual' })
+  async previsualizarRestauracionDestructiva(
+    @Param('id') id: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) throw new BadRequestException('No se recibió archivo');
+    if (!/\.zip$/i.test(file.originalname)) {
+      throw new BadRequestException('Solo se aceptan archivos .zip generados por AuditMind');
+    }
+    return this.restoreSvc.previsualizarRestauracionDestructiva(id, file.buffer, user);
+  }
+
+  @Post(':id/backup/restore-destructive')
+  @Roles(UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Restaurar un backup SOBRE este encargo — sobrescribe todo lo posterior al backup, requiere confirmación escrita del título' })
+  async restaurarDestructivo(
+    @Param('id') id: string,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    @Body('confirmarTitulo') confirmarTitulo: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) throw new BadRequestException('No se recibió archivo');
+    if (!/\.zip$/i.test(file.originalname)) {
+      throw new BadRequestException('Solo se aceptan archivos .zip generados por AuditMind');
+    }
+    return this.restoreSvc.restaurarDestructivo(id, file.buffer, user, confirmarTitulo);
+  }
 }

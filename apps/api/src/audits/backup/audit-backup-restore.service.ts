@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -6,7 +6,10 @@ import { AuthUser } from '../../auth/jwt.strategy';
 import { AuditBackupPackageService } from './audit-backup-package.service';
 import { AuditBackupFilesService } from './audit-backup-files.service';
 import { verificarBackupManifest } from './audit-backup-manifest';
-import { AUDIT_SCOPED_MODELS, AuditBackupAdvertencia } from './audit-backup.types';
+import {
+  AUDIT_SCOPED_MODELS, AuditBackupAdvertencia,
+  construirWhereParaModelo, nuevasFamiliasDeIds, MODELOS_QUE_ALIMENTAN_FAMILIA,
+} from './audit-backup.types';
 import { obtenerFksDeModelo } from './audit-backup-schema';
 
 /**
@@ -81,7 +84,47 @@ export class AuditBackupRestoreService {
     idMap.set(auditOriginal.id as string, nuevoAudit.id);
 
     // ── 2. Resto del árbol, en el orden de dependencia ya establecido ───
-    let totalFilasCreadas = 1; // el Audit ya cuenta
+    const totalFilasCreadas = 1 + await this.crearFilasDesdeBackup(data, idMap, conjuntosPorModelo, user, advertencias);
+
+    // ── 3. Archivos: recalcular ruta con el paperId NUEVO, subir, parchear URLs ──
+    const mapaRutas = new Map<string, string>();
+    for (const rutaVieja of archivos.keys()) {
+      mapaRutas.set(rutaVieja, this.recalcularRuta(rutaVieja, idMap, nuevoAudit.id));
+    }
+    let totalArchivosSubidos = 0;
+    for (const [rutaVieja, contenido] of archivos) {
+      const rutaNueva = mapaRutas.get(rutaVieja)!;
+      try {
+        await this.filesSvc.subirArchivo(rutaNueva, contenido, 'application/octet-stream');
+        totalArchivosSubidos++;
+      } catch (e) {
+        advertencias.push({ modelo: 'archivo', filaId: rutaVieja, mensaje: (e as Error).message });
+      }
+    }
+    if (mapaRutas.size > 0) {
+      await this.parchearReferenciasDeArchivo(idMap, mapaRutas, advertencias);
+    }
+
+    this.logger.log(`Restauración de backup como nuevo encargo '${nuevoAudit.id}': ${totalFilasCreadas} filas, ${totalArchivosSubidos}/${archivos.size} archivos, ${advertencias.length} advertencia(s)`);
+
+    return { audit: nuevoAudit, totalFilasCreadas, totalArchivosSubidos, advertencias };
+  }
+
+  /**
+   * Crea el resto del árbol (nivel 1 → 5), reutilizado tanto por "restaurar
+   * como nuevo" como por el modo destructivo (BKP-12) — la única diferencia
+   * entre ambos modos es CÓMO llega sembrado `idMap` (con un `Audit` recién
+   * creado, o con el `auditId` existente ya mapeado a sí mismo) y qué se hizo
+   * ANTES de llamar a esto (nada, o borrar los datos existentes).
+   */
+  private async crearFilasDesdeBackup(
+    data: Record<string, Record<string, unknown>[]>,
+    idMap: Map<string, string>,
+    conjuntosPorModelo: Record<string, Set<string>>,
+    user: AuthUser,
+    advertencias: AuditBackupAdvertencia[],
+  ): Promise<number> {
+    let totalFilasCreadas = 0;
     for (const modelo of AUDIT_SCOPED_MODELS) {
       let filas = data[modelo.model] ?? [];
       // AuditFolder se autorreferencia (parentId → otra fila del MISMO modelo)
@@ -107,29 +150,7 @@ export class AuditBackupRestoreService {
         }
       }
     }
-
-    // ── 3. Archivos: recalcular ruta con el paperId NUEVO, subir, parchear URLs ──
-    const mapaRutas = new Map<string, string>();
-    for (const rutaVieja of archivos.keys()) {
-      mapaRutas.set(rutaVieja, this.recalcularRuta(rutaVieja, idMap, nuevoAudit.id));
-    }
-    let totalArchivosSubidos = 0;
-    for (const [rutaVieja, contenido] of archivos) {
-      const rutaNueva = mapaRutas.get(rutaVieja)!;
-      try {
-        await this.filesSvc.subirArchivo(rutaNueva, contenido, 'application/octet-stream');
-        totalArchivosSubidos++;
-      } catch (e) {
-        advertencias.push({ modelo: 'archivo', filaId: rutaVieja, mensaje: (e as Error).message });
-      }
-    }
-    if (mapaRutas.size > 0) {
-      await this.parchearReferenciasDeArchivo(idMap, mapaRutas, advertencias);
-    }
-
-    this.logger.log(`Restauración de backup como nuevo encargo '${nuevoAudit.id}': ${totalFilasCreadas} filas, ${totalArchivosSubidos}/${archivos.size} archivos, ${advertencias.length} advertencia(s)`);
-
-    return { audit: nuevoAudit, totalFilasCreadas, totalArchivosSubidos, advertencias };
+    return totalFilasCreadas;
   }
 
   /**
@@ -278,5 +299,197 @@ export class AuditBackupRestoreService {
       if (resultado.includes(vieja)) resultado = resultado.split(vieja).join(nueva);
     }
     return resultado;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // BKP-12 — Restaurar SOBRE un encargo existente (destructivo).
+  //
+  // A diferencia de "restaurar como nuevo", esto BORRA el contenido actual
+  // del encargo y lo reemplaza por el del backup — pensado para recuperar de
+  // un borrado/daño accidental, no para portabilidad. Por eso el manifest SÍ
+  // se valida contra el `auditId` destino (a diferencia del modo no
+  // destructivo — ver la nota en `audit-backup-manifest.ts`): solo se puede
+  // restaurar destructivamente el backup DEL MISMO encargo, nunca el de otro.
+  //
+  // No corre dentro de una transacción de Prisma: con ~100+ filas a crear
+  // secuencialmente, una transacción interactiva larga es una mala idea
+  // contra el connection pooling en modo transacción de Supabase (riesgo real
+  // de timeout/comportamiento errático, no solo teórico). El trade-off
+  // aceptado: si algo falla A MITAD del borrado o la recreación, el encargo
+  // puede quedar en un estado incompleto — se documenta en `advertencias` en
+  // vez de fallar en silencio, mismo criterio de tolerancia a fallos por fila
+  // ya establecido en el resto de este archivo.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /** Valida el backup contra el encargo destino y devuelve un resumen para que el usuario confirme viendo qué cambiaría — no toca la base de datos. */
+  async previsualizarRestauracionDestructiva(auditId: string, buffer: Buffer, user: AuthUser) {
+    const auditActual = await this.prisma.audit.findUnique({
+      where: { id: auditId }, select: { id: true, title: true, organizationId: true },
+    });
+    if (!auditActual) throw new NotFoundException('Auditoría no encontrada');
+    if (auditActual.organizationId !== user.organizationId) throw new ForbiddenException();
+
+    const { manifestCrudo, dataJson } = await this.packageSvc.desempaquetar(buffer);
+    const hashReal = crypto.createHash('sha256').update(dataJson).digest('hex');
+    const verif = verificarBackupManifest(this.manifestSecret, manifestCrudo, { auditId, organizationId: user.organizationId }, hashReal);
+    if (!verif.ok) throw new BadRequestException(`No se pudo validar el backup: ${verif.razon}`);
+    if (verif.manifest.auditId !== auditId) {
+      throw new BadRequestException('Este backup pertenece a otro encargo — el modo destructivo solo restaura un backup SOBRE EL MISMO encargo del que se generó');
+    }
+
+    const idsPorModelo = await this.recolectarIdsExistentes(auditId);
+    const conteoActual: Record<string, number> = { audit: 1 };
+    for (const [modelo, ids] of Object.entries(idsPorModelo)) conteoActual[modelo] = ids.length;
+
+    return {
+      auditTituloActual: auditActual.title,
+      backup: {
+        auditTitulo: verif.manifest.auditTitulo,
+        generadoEn: verif.manifest.generadoEn,
+        generadoPor: verif.manifest.generadoPor,
+        conteoPorModelo: verif.manifest.conteoPorModelo,
+      },
+      conteoActual,
+    };
+  }
+
+  /** Ejecuta la restauración destructiva. `confirmarTitulo` debe calzar EXACTO con el título actual del encargo — confirmación escrita, no solo un clic. */
+  async restaurarDestructivo(auditId: string, buffer: Buffer, user: AuthUser, confirmarTitulo: string) {
+    const auditActual = await this.prisma.audit.findUnique({ where: { id: auditId } });
+    if (!auditActual) throw new NotFoundException('Auditoría no encontrada');
+    if (auditActual.organizationId !== user.organizationId) throw new ForbiddenException();
+    if (confirmarTitulo?.trim() !== auditActual.title) {
+      throw new BadRequestException('El título escrito no coincide exactamente con el título del encargo — no se restauró nada');
+    }
+
+    const { manifestCrudo, dataJson, archivos } = await this.packageSvc.desempaquetar(buffer);
+    const hashReal = crypto.createHash('sha256').update(dataJson).digest('hex');
+    const verif = verificarBackupManifest(this.manifestSecret, manifestCrudo, { auditId, organizationId: user.organizationId }, hashReal);
+    if (!verif.ok) throw new BadRequestException(`No se pudo validar el backup: ${verif.razon}`);
+    if (verif.manifest.auditId !== auditId) {
+      throw new BadRequestException('Este backup pertenece a otro encargo — el modo destructivo solo restaura un backup SOBRE EL MISMO encargo del que se generó');
+    }
+
+    let data: Record<string, Record<string, unknown>[]>;
+    try {
+      data = JSON.parse(dataJson);
+    } catch {
+      throw new BadRequestException('El contenido del backup no se pudo interpretar');
+    }
+    const auditOriginal = data.audit?.[0];
+    if (!auditOriginal) throw new BadRequestException('El backup no contiene el registro del encargo');
+
+    const advertencias: AuditBackupAdvertencia[] = [];
+    const idMap = new Map<string, string>();
+    idMap.set(auditOriginal.id as string, auditId); // el Audit se conserva — mismo id, no uno nuevo
+
+    const [usuarios, entidades, plantillas] = await Promise.all([
+      this.prisma.user.findMany({ where: { organizationId: user.organizationId }, select: { id: true } }),
+      this.prisma.auditEntity.findMany({ where: { organizationId: user.organizationId }, select: { id: true } }),
+      this.prisma.auditTemplate.findMany({ where: { organizationId: user.organizationId }, select: { id: true } }),
+    ]);
+    const conjuntosPorModelo: Record<string, Set<string>> = {
+      User: new Set(usuarios.map(u => u.id)),
+      AuditEntity: new Set(entidades.map(e => e.id)),
+      AuditTemplate: new Set(plantillas.map(t => t.id)),
+    };
+
+    // ── 1. Borrar TODO lo existente del encargo (el Audit mismo se conserva, solo se actualiza) ──
+    await this.eliminarDatosExistentes(auditId, advertencias);
+
+    // ── 2. Actualizar los campos propios del Audit desde el backup ──
+    const auditUpdateData = this.remapearFila('audit', auditOriginal, idMap, conjuntosPorModelo, user, advertencias);
+    if (!auditUpdateData) throw new BadRequestException('No se pudo reconstruir el registro del encargo desde el backup — la restauración se detuvo después de borrar los datos existentes; revisa advertencias e intenta de nuevo');
+    delete auditUpdateData.planId;     // fuera de alcance — no se toca el plan anual ya vinculado
+    delete auditUpdateData.createdAt;  // preservar la fecha de creación real del encargo
+    delete auditUpdateData.updatedAt;  // que Prisma la recalcule (@updatedAt), no la del backup
+    await this.prisma.audit.update({ where: { id: auditId }, data: auditUpdateData as never });
+
+    // ── 3. Resto del árbol, mismo orden de dependencia que "restaurar como nuevo" ──
+    const totalFilasCreadas = 1 + await this.crearFilasDesdeBackup(data, idMap, conjuntosPorModelo, user, advertencias);
+
+    // ── 4. Archivos: recalcular ruta, subir, parchear URLs — mismo patrón ──
+    const mapaRutas = new Map<string, string>();
+    for (const rutaVieja of archivos.keys()) {
+      mapaRutas.set(rutaVieja, this.recalcularRuta(rutaVieja, idMap, auditId));
+    }
+    let totalArchivosSubidos = 0;
+    for (const [rutaVieja, contenido] of archivos) {
+      const rutaNueva = mapaRutas.get(rutaVieja)!;
+      try {
+        await this.filesSvc.subirArchivo(rutaNueva, contenido, 'application/octet-stream');
+        totalArchivosSubidos++;
+      } catch (e) {
+        advertencias.push({ modelo: 'archivo', filaId: rutaVieja, mensaje: (e as Error).message });
+      }
+    }
+    if (mapaRutas.size > 0) {
+      await this.parchearReferenciasDeArchivo(idMap, mapaRutas, advertencias);
+    }
+
+    // ── 5. Bitácora — requisito de §4 del diseño: quién, cuándo, desde qué backup ──
+    await this.prisma.auditRestoreLog.create({
+      data: {
+        auditId,
+        restoredById: user.id,
+        backupGeneradoEn: new Date(verif.manifest.generadoEn),
+        backupGeneradoPor: verif.manifest.generadoPor,
+        backupAuditTitulo: verif.manifest.auditTitulo,
+        totalFilasCreadas,
+        totalArchivosSubidos,
+        advertencias: advertencias as never,
+      },
+    });
+
+    const auditFinal = await this.prisma.audit.findUniqueOrThrow({ where: { id: auditId } });
+    this.logger.log(`Restauración DESTRUCTIVA del encargo '${auditId}': ${totalFilasCreadas} filas, ${totalArchivosSubidos}/${archivos.size} archivos, ${advertencias.length} advertencia(s)`);
+
+    return { audit: auditFinal, totalFilasCreadas, totalArchivosSubidos, advertencias };
+  }
+
+  /** IDs actuales de cada modelo con alcance de encargo — recorre `AUDIT_SCOPED_MODELS` en orden hacia adelante (igual que la exportación) para poder construir las familias de las que dependen los niveles siguientes. */
+  private async recolectarIdsExistentes(auditId: string): Promise<Record<string, string[]>> {
+    const idsPorModelo: Record<string, string[]> = {};
+    const idsPorFamilia = nuevasFamiliasDeIds();
+    const familias = new Set<string>(MODELOS_QUE_ALIMENTAN_FAMILIA);
+
+    for (const modelo of AUDIT_SCOPED_MODELS) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const delegate = (this.prisma as any)[modelo.model];
+      if (!delegate?.findMany) { idsPorModelo[modelo.model] = []; continue; }
+
+      const where = construirWhereParaModelo(modelo, auditId, idsPorFamilia);
+      const filas: { id: string }[] = where === null ? [] : await delegate.findMany({ where, select: { id: true } });
+      const ids = filas.map(f => f.id);
+      idsPorModelo[modelo.model] = ids;
+      if (familias.has(modelo.model)) idsPorFamilia[modelo.model] = ids;
+    }
+    return idsPorModelo;
+  }
+
+  /**
+   * Borra TODAS las filas con alcance de este encargo (todo `AUDIT_SCOPED_MODELS`,
+   * el `Audit` mismo NO se toca aquí). Orden INVERSO al de creación — hijos
+   * antes que padres — para no depender de que cada FK tenga `onDelete:
+   * Cascade` configurado (aunque casi todas lo tienen, por diseño explícito
+   * no se asume). Un fallo aquí es FATAL a propósito: seguir adelante y crear
+   * filas nuevas sobre datos viejos no borrados dejaría al encargo con
+   * datos duplicados/mezclados de forma silenciosa — preferible abortar
+   * ruidosamente y que el usuario reintente o pida ayuda.
+   */
+  private async eliminarDatosExistentes(auditId: string, advertencias: AuditBackupAdvertencia[]): Promise<void> {
+    const idsPorModelo = await this.recolectarIdsExistentes(auditId);
+    for (const modelo of [...AUDIT_SCOPED_MODELS].reverse()) {
+      const ids = idsPorModelo[modelo.model] ?? [];
+      if (ids.length === 0) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const delegate = (this.prisma as any)[modelo.model];
+      try {
+        await delegate.deleteMany({ where: { id: { in: ids } } });
+      } catch (e) {
+        advertencias.push({ modelo: modelo.model, mensaje: `No se pudieron borrar los datos existentes antes de restaurar: ${(e as Error).message}` });
+        throw new BadRequestException(`La restauración se detuvo al borrar los datos existentes de '${modelo.model}' — el encargo puede haber quedado con datos incompletos. Revisa el encargo antes de reintentar.`);
+      }
+    }
   }
 }

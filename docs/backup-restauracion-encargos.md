@@ -128,6 +128,31 @@ Verificado también en navegador real: botón "Backup" en la pantalla del encarg
 
 ### 7.4 Pendiente
 
-- **BKP-09** (frontend de restauración — subir ZIP + confirmar) aún no construido; hoy la restauración solo se puede invocar contra el endpoint `POST /audits/restore-backup` directamente.
-- **BKP-12/13** (modo destructivo) no construido — decisión pendiente del usuario según §6.
+- Deploy al VPS no autorizado todavía para este feature.
+
+---
+
+## 8. Modo destructivo (BKP-12/13, 2026-08-17)
+
+**Estado: implementado y verificado localmente.** El usuario decidió construirlo (en vez de posponerlo indefinidamente según §6) — el caso de uso real es "recuperar un encargo de un borrado/daño accidental", no solo portabilidad.
+
+### 8.1 Diferencias de diseño frente al modo seguro (§7)
+
+- **El manifest SÍ se valida contra el `auditId` destino** — a diferencia de "restaurar como nuevo" (que nunca compara `auditId`, ver `audit-backup-manifest.ts`), el modo destructivo exige que el backup sea **del mismo encargo** que se está restaurando. Restaurar destructivamente el backup de un encargo distinto queda rechazado explícitamente — evita la forma más peligrosa de error humano (subir el ZIP equivocado y borrar el encargo correcto).
+- **Confirmación escrita, no un clic**: el endpoint exige un campo `confirmarTitulo` que debe calzar EXACTO con el título actual del encargo — mismo patrón que GitHub/Vercel usan para "escribe el nombre del repo para confirmar".
+- **Rol elevado**: `ADMIN` o superior (un nivel arriba de `CAE`, que basta para exportar/restaurar como nuevo) — es la acción de mayor blast-radius de todo el feature.
+- **El `Audit` se conserva** (mismo `id`, mismo `createdAt`) — solo se actualizan sus campos escalares desde el backup; todo lo demás (working papers, secciones, hallazgos, etc.) se borra y se recrea con IDs nuevos, igual que en "restaurar como nuevo". `planId` explícitamente no se toca (fuera de alcance, igual que en el modo seguro).
+- **Previsualización sin efectos secundarios**: un endpoint separado (`POST :id/backup/restore-preview`) desempaqueta y valida el backup, y devuelve el conteo de filas del backup vs. el conteo ACTUAL del encargo — el frontend muestra solo los modelos donde el conteo difiere, para responder directamente "qué se va a perder" (requisito de §4) antes de pedir la confirmación escrita.
+- **Borrado explícito, no solo `Audit.delete()` + cascada**: se consideró borrar y recrear el `Audit` completo (más simple, apoyándose en `onDelete: Cascade`), pero se descartó — perdería el `createdAt` original y depende de que TODAS las relaciones tengan cascade configurado (la mayoría lo tiene, pero no se quiso asumirlo). En su lugar, se recolectan los IDs actuales de cada modelo (reutilizando el mismo `construirWhereParaModelo` de la exportación) y se borran explícitamente en orden INVERSO de dependencia (hijos antes que padres) — un fallo aquí es FATAL a propósito, para no arriesgar datos duplicados/mezclados en silencio.
+- **Sin transacción de base de datos**: con 100+ filas a crear secuencialmente, una transacción interactiva larga es un riesgo real contra el connection pooling en modo transacción de Supabase, no solo teórico — se aceptó el mismo trade-off de tolerancia a fallos por fila que ya rige el resto del feature (advertencias en vez de aborto silencioso) en vez de una atomicidad que podría fallar de una forma peor.
+- **Bitácora nueva** (`AuditRestoreLog`, tabla propia — no forma parte de `AUDIT_SCOPED_MODELS` porque es metadata DEL SISTEMA sobre el encargo, no del encargo en sí): un registro por restauración destructiva con quién, cuándo, y desde qué backup (fecha de generación, quién lo generó, título en el momento del backup) — requisito explícito de §4.
+
+### 8.2 Verificación
+
+Prueba end-to-end (nunca contra el encargo demo real directamente — primero se clona vía "restaurar como nuevo" ya probado en §7, y TODO lo destructivo ocurre sobre ese clon desechable): previsualización (conteos correctos), rechazo de un backup de OTRO encargo, rechazo de un `confirmarTitulo` incorrecto, verificación de que ambos rechazos no tocan ningún dato, restauración real (mismo `id` del encargo conservado, mismo conteo de filas antes/después, un solo `AuditRestoreLog` creado con los datos correctos, todas las FK internas apuntando al encargo correcto), y confirmación de que el encargo ORIGINAL nunca se tocó. **17/17 checks OK, dos corridas consecutivas estables.**
+
+Verificado también en navegador real: la "Zona de riesgo" (colapsada por defecto) se expande correctamente en la pantalla del encargo, el modal muestra el título real del encargo en la advertencia, y — hallazgo útil de la propia prueba — el endpoint rechazó correctamente el intento de un usuario con rol `CAE` (el rol que sí alcanza para exportar/restaurar como nuevo) con `403 Acceso denegado. Se requiere rol: ADMIN`, confirmando que la elevación de rol de §8.1 funciona de punta a punta, no solo en el guard aislado.
+
+### 8.3 Pendiente
+
 - Deploy al VPS no autorizado todavía para este feature.

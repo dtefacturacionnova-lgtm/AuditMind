@@ -82,6 +82,7 @@ export const AUDIT_SCOPED_MODELS: AuditScopedModel[] = [
   { model: 'complianceAssessment',  filtro: { tipo: 'auditId_directo' }, nivel: 1 },
   { model: 'bcpAudit',              filtro: { tipo: 'auditId_directo' }, nivel: 1 },
   { model: 'connectorImport',       filtro: { tipo: 'auditId_directo' }, nivel: 1 },
+  { model: 'auditRestoreLog',       filtro: { tipo: 'auditId_directo' }, nivel: 1 }, // bitácora de restauraciones (BKP-12) — metadata, no daña llevarla en el backup
 
   // ─── Nivel 2 — dependen de un modelo de nivel 1 ────────────────────────
   { model: 'paperSection',          filtro: { tipo: 'via_paperId', paperIdField: 'paperId' },       nivel: 2 },
@@ -106,6 +107,56 @@ export const AUDIT_SCOPED_MODELS: AuditScopedModel[] = [
   // ─── Nivel 5 ────────────────────────────────────────────────────────────
   { model: 'stepEvidence',          filtro: { tipo: 'via_stepId' }, nivel: 5 },
 ];
+
+/**
+ * Construye el `where` de Prisma para consultar las filas de un modelo que
+ * pertenecen a un encargo — compartido entre la exportación (BKP-03) y el
+ * borrado previo a una restauración destructiva (BKP-12), que necesitan
+ * exactamente el mismo criterio de "qué filas son de este encargo". `ids`
+ * trae las familias de IDs ya recolectadas de los niveles anteriores (mismo
+ * orden que `AUDIT_SCOPED_MODELS`). Devuelve `null` cuando la familia de IDs
+ * de la que depende está vacía — no es un error, simplemente no hay nada que
+ * consultar todavía (ej. un encargo sin `WorkingPaper` no puede tener
+ * `PaperSection`).
+ */
+export function construirWhereParaModelo(
+  modelo: AuditScopedModel, auditId: string, ids: Record<string, string[]>,
+): Record<string, unknown> | null {
+  switch (modelo.filtro.tipo) {
+    case 'auditId_directo':
+      return { auditId };
+    case 'via_paperId':
+      return ids.workingPaper.length === 0 ? null : { [modelo.filtro.paperIdField]: { in: ids.workingPaper } };
+    case 'via_findingId':
+      return ids.finding.length === 0 ? null : { findingId: { in: ids.finding } };
+    case 'via_pbcId':
+      return ids.pbcRequest.length === 0 ? null : { pbcId: { in: ids.pbcRequest } };
+    case 'via_trialBalanceId':
+      return ids.trialBalance.length === 0 ? null : { trialBalanceId: { in: ids.trialBalance } };
+    case 'via_jobId':
+      return ids.dataAnalysisJob.length === 0 ? null : { jobId: { in: ids.dataAnalysisJob } };
+    case 'via_sectionId':
+      return ids.paperSection.length === 0 ? null : { sectionId: { in: ids.paperSection } };
+    case 'via_procedureId':
+      return ids.auditProcedure.length === 0 ? null : { procedureId: { in: ids.auditProcedure } };
+    case 'via_stepId':
+      return ids.auditStep.length === 0 ? null : { stepId: { in: ids.auditStep } };
+  }
+}
+
+/** Familias de IDs vacías, listas para llenarse nivel a nivel — mismo shape en export y en borrado previo a restauración destructiva. */
+export function nuevasFamiliasDeIds(): Record<string, string[]> {
+  return {
+    workingPaper: [], finding: [], pbcRequest: [], trialBalance: [],
+    dataAnalysisJob: [], paperSection: [], auditProcedure: [], auditStep: [],
+  };
+}
+
+/** Nombres de las familias cuyo ID hay que recolectar al recorrer `AUDIT_SCOPED_MODELS` (mismo orden). */
+export const MODELOS_QUE_ALIMENTAN_FAMILIA = [
+  'workingPaper', 'finding', 'pbcRequest', 'trialBalance',
+  'dataAnalysisJob', 'paperSection', 'auditProcedure', 'auditStep',
+] as const;
 
 /**
  * Nota de alcance conocida — referencias cross-audit: `PaperLink.targetId` y

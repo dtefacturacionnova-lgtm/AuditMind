@@ -4,10 +4,10 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Lock, Calendar, Clock, Users, FileText,
-  AlertTriangle, Upload, BadgeCheck, Edit2, ChevronRight,
+  AlertTriangle, Upload, BadgeCheck, Edit2, ChevronRight, ChevronDown,
   TrendingUp, Target, Shield, Sparkles, Wand2, Loader2, X,
   ClipboardCopy, Check, ListChecks, Plus, Trash2, BarChart3,
-  CheckCircle2, Circle, RotateCcw, Printer, Download,
+  CheckCircle2, Circle, RotateCcw, Printer, Download, ShieldAlert,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAudit, useUpdateAuditStatus } from '@/hooks/useAudits';
@@ -23,6 +23,7 @@ import { TrialBalanceTab }            from '@/components/audits/TrialBalanceTab'
 import { PapersGraphView }            from '@/components/working-papers/PapersGraphView';
 import { AiTestsOrchestratorModal }   from '@/components/audits/AiTestsOrchestratorModal';
 import { WorkingPaperIndexReport }    from '@/components/audits/WorkingPaperIndexReport';
+import { DestructiveRestoreModal }    from '@/components/audits/DestructiveRestoreModal';
 
 const STATUS_STYLES: Record<string, string> = {
   PLANNING: 'bg-blue-100 text-blue-700 border border-blue-200',
@@ -89,6 +90,8 @@ export default function AuditDetailPage() {
   const [showRollForward,    setShowRollForward]    = useState(false);
   const [showIndexReport,    setShowIndexReport]    = useState(false);
   const [showAiTests,        setShowAiTests]        = useState(false);
+  const [showDangerZone,     setShowDangerZone]     = useState(false);
+  const [showDestructiveRestore, setShowDestructiveRestore] = useState(false);
   const [descargandoBackup,  setDescargandoBackup]  = useState(false);
 
   const { data: audit, isLoading } = useAudit(id);
@@ -360,6 +363,35 @@ export default function AuditDetailPage() {
               )}
             </div>
           </div>
+
+          {/* BKP-12 — Zona de riesgo: restaurar backup SOBRE este encargo (destructivo, rol ADMIN+) */}
+          <div className="rounded-xl border border-red-100 bg-red-50/40 overflow-hidden">
+            <button
+              onClick={() => setShowDangerZone(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-red-700 hover:bg-red-50 transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5" />
+                Zona de riesgo
+              </span>
+              {showDangerZone ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            </button>
+            {showDangerZone && (
+              <div className="px-4 pb-4 pt-1">
+                <p className="text-xs text-red-600/80 mb-3">
+                  Restaurar un backup SOBRE este encargo sobrescribe todo su contenido actual — para
+                  recuperarlo de un borrado o daño accidental, no para mover datos entre encargos.
+                </p>
+                <button
+                  onClick={() => setShowDestructiveRestore(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-300 bg-white text-red-700 text-sm font-medium hover:bg-red-50 transition-colors"
+                >
+                  <ShieldAlert className="h-3.5 w-3.5" />
+                  Restaurar backup sobre este encargo
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -412,6 +444,15 @@ export default function AuditDetailPage() {
           sourceStartDate={audit.startDate}
           sourceEndDate={audit.endDate}
           onClose={() => setShowRollForward(false)}
+        />
+      )}
+
+      {/* BKP-12 — Restauración destructiva */}
+      {showDestructiveRestore && (
+        <DestructiveRestoreModal
+          auditId={id}
+          auditTitle={audit.title}
+          onClose={() => setShowDestructiveRestore(false)}
         />
       )}
 

@@ -448,6 +448,7 @@ model User {
   aiInteractions    AIInteraction[]
   notifications     Notification[]
   dataSources       DataSource[]
+  auditRestoreLogs  AuditRestoreLog[]
 
   @@index([organizationId])
   @@index([email])
@@ -1010,10 +1011,38 @@ model Audit {
   templateId              String?
   template                AuditTemplate? @relation(fields: [templateId], references: [id])
 
+  restoreLogs             AuditRestoreLog[]
+
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([leadAuditorId])
   @@map("audits")
+}
+
+// ─── BKP-12: bitácora de restauraciones destructivas ──────────────────────────
+// Un registro por cada vez que se restaura un backup SOBRE un encargo
+// existente (sobrescribiendo su contenido) — requisito explícito de
+// `docs/backup-restauracion-encargos.md` §4: esta acción de alto riesgo debe
+// "quedar registrada en el historial de auditoría del sistema". No cuelga de
+// AUDIT_SCOPED_MODELS (no forma parte de lo que se respalda/restaura de un
+// encargo — es metadata DEL SISTEMA sobre el encargo, no del encargo).
+model AuditRestoreLog {
+  id                    String   @id @default(cuid())
+  auditId               String
+  restoredById          String
+  restoredAt            DateTime @default(now())
+  backupGeneradoEn      DateTime
+  backupGeneradoPor     String   // AuthUser.id de quien generó el backup (puede no existir ya)
+  backupAuditTitulo     String   // título del encargo al momento del backup — informativo
+  totalFilasCreadas     Int
+  totalArchivosSubidos  Int
+  advertencias          Json?
+
+  audit      Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  restoredBy User  @relation(fields: [restoredById], references: [id])
+
+  @@index([auditId])
+  @@map("audit_restore_logs")
 }
 
 // ─── EXPEDIENTE: Fase del proyecto de auditoría ───────────────────────────────

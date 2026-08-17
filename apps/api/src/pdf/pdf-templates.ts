@@ -512,36 +512,103 @@ const FLOW_KIND_LABEL: Record<string, string> = {
 };
 
 /**
- * Representación textual del flujograma (FieldType.FLOWCHART) — lista de nodos
- * con su vínculo a papel (si tiene) + lista de conexiones. El PDF no reproduce
- * el layout visual del editor (queda pendiente, ver docs de diseño); esta tabla
- * es legible y suficiente para que el flujo quede documentado en el expediente.
+ * Apariencia por tipo de nodo — espejo EXACTO de KIND_SHAPE_CLASS en
+ * FlowchartPanel.tsx (apps/web), para que el PDF se vea igual que el editor
+ * en pantalla, no una aproximación. `inicio_fin` es un óvalo/píldora (rx =
+ * mitad de la altura del nodo); el resto son rectángulos redondeados —
+ * `decision` NO es un rombo en el editor real, solo cambia de color.
  */
-function renderFlowchartBlock(val: Record<string, unknown>): string {
+const FLOW_NODE_STYLE: Record<string, { fill: string; stroke: string; dashed?: boolean; pill?: boolean }> = {
+  inicio_fin: { fill: '#ecfdf5', stroke: '#34d399', pill: true },
+  proceso:    { fill: '#eff6ff', stroke: '#60a5fa' },
+  decision:   { fill: '#fffbeb', stroke: '#fbbf24' },
+  documento:  { fill: '#f5f3ff', stroke: '#a78bfa', dashed: true },
+};
+
+const FLOW_NODE_W = 170;
+const FLOW_NODE_H = 60;
+
+/**
+ * Diagrama SVG real del flujograma (FieldType.FLOWCHART) — mismas posiciones,
+ * formas y colores que el editor `FlowchartPanel.tsx` en pantalla. Igual que
+ * el radar de PT-COSO (`coso-pdf.ts`): SVG puro embebido en el HTML, sin
+ * librería de gráficos — Chromium lo rasteriza nativo dentro de Puppeteer.
+ * Las etiquetas usan `<foreignObject>` (un `<div>` normal con wrap de texto)
+ * en vez de calcular saltos de línea a mano en `<tspan>` — mucho más
+ * confiable para labels de largo variable.
+ */
+export function renderFlowchartDiagramSvg(val: Record<string, unknown>): string {
   const nodes = Array.isArray(val.nodes) ? val.nodes as Array<Record<string, unknown>> : [];
   if (nodes.length === 0) return '<span class="text-muted text-small">— Sin flujograma documentado —</span>';
   const edges = Array.isArray(val.edges) ? val.edges as Array<Record<string, unknown>> : [];
-  const labelById = new Map(nodes.map(n => [String(n.id), String(n.label ?? '')]));
+  const byId = new Map(nodes.map(n => [String(n.id), n]));
 
-  const nodesHtml = nodes.map(n => {
-    const kind = FLOW_KIND_LABEL[String(n.kind)] ?? String(n.kind ?? '');
-    const linked = n.linkedPaper as Record<string, unknown> | undefined;
-    const linkHtml = linked
-      ? ` <span class="text-muted">→ ${esc(String(linked.code ?? ''))}${linked.sectionLabel ? ` · ${esc(String(linked.sectionLabel))}` : ''}</span>`
-      : '';
-    return `<li><strong>${esc(String(n.label ?? ''))}</strong> <span class="text-muted">(${esc(kind)})</span>${linkHtml}</li>`;
+  const xs = nodes.map(n => Number(n.x) || 0);
+  const ys = nodes.map(n => Number(n.y) || 0);
+  const minX = Math.min(...xs) - 20, minY = Math.min(...ys) - 20;
+  const maxX = Math.max(...xs) + FLOW_NODE_W + 20, maxY = Math.max(...ys) + FLOW_NODE_H + 20;
+  const w = maxX - minX, h = maxY - minY;
+
+  // Ancla el borde en el par de puntos correcto según la posición RELATIVA real
+  // entre cada par de nodos — no se puede asumir flujo siempre de arriba hacia
+  // abajo: el layout típico (`newNode()` en FlowchartPanel.tsx) coloca los
+  // nodos en filas — dentro de una fila el flujo es horizontal (der/izq), y
+  // solo al cambiar de fila es vertical. Se elige el eje dominante (dx vs dy)
+  // entre los CENTROS de ambos nodos y se ancla en el borde correspondiente.
+  const edgesSvg = edges.map(e => {
+    const source = byId.get(String(e.source)), target = byId.get(String(e.target));
+    if (!source || !target) return '';
+    const sX = Number(source.x) || 0, sY = Number(source.y) || 0;
+    const tX = Number(target.x) || 0, tY = Number(target.y) || 0;
+    const scx = sX + FLOW_NODE_W / 2, scy = sY + FLOW_NODE_H / 2;
+    const tcx = tX + FLOW_NODE_W / 2, tcy = tY + FLOW_NODE_H / 2;
+    const dx = tcx - scx, dy = tcy - scy;
+    let sx: number, sy: number, tx: number, ty: number, bend: number;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // Eje horizontal dominante — ancla en el lado derecho/izquierdo.
+      sx = dx > 0 ? sX + FLOW_NODE_W : sX; sy = scy;
+      tx = dx > 0 ? tX : tX + FLOW_NODE_W; ty = tcy;
+      bend = Math.max(24, Math.abs(tx - sx) / 2);
+      return `<path d="M ${sx},${sy} C ${sx + (dx > 0 ? bend : -bend)},${sy} ${tx + (dx > 0 ? -bend : bend)},${ty} ${tx},${ty}" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#flow-arrow)" />`;
+    }
+    // Eje vertical dominante — ancla en el borde inferior/superior.
+    sx = scx; sy = dy > 0 ? sY + FLOW_NODE_H : sY;
+    tx = tcx; ty = dy > 0 ? tY : tY + FLOW_NODE_H;
+    bend = Math.max(24, Math.abs(ty - sy) / 2);
+    return `<path d="M ${sx},${sy} C ${sx},${sy + (dy > 0 ? bend : -bend)} ${tx},${ty + (dy > 0 ? -bend : bend)} ${tx},${ty}" fill="none" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#flow-arrow)" />`;
   }).join('');
 
-  const edgesHtml = edges.length > 0
-    ? `<p class="text-small text-muted" style="margin: 2mm 0 0.5mm 0;">Conexiones:</p>
-       <ul style="margin: 0; padding-left: 5mm;">
-         ${edges.map(e => `<li class="text-small">${esc(labelById.get(String(e.source)) ?? '?')} → ${esc(labelById.get(String(e.target)) ?? '?')}</li>`).join('')}
-       </ul>`
-    : '';
+  const nodesSvg = nodes.map(n => {
+    const style = FLOW_NODE_STYLE[String(n.kind)] ?? FLOW_NODE_STYLE.proceso;
+    const x = Number(n.x) || 0, y = Number(n.y) || 0;
+    const rx = style.pill ? FLOW_NODE_H / 2 : 8;
+    const dash = style.dashed ? ' stroke-dasharray="4 3"' : '';
+    const linked = n.linkedPaper as Record<string, unknown> | undefined;
+    const linkLine = linked
+      ? `<div style="color:#2563eb;font-size:7.5px;margin-top:2px;">→ ${esc(String(linked.code ?? ''))}${linked.sectionLabel ? ` · ${esc(String(linked.sectionLabel))}` : ''}</div>`
+      : '';
+    return `
+      <rect x="${x}" y="${y}" width="${FLOW_NODE_W}" height="${FLOW_NODE_H}" rx="${rx}" ry="${rx}"
+            fill="${style.fill}" stroke="${style.stroke}" stroke-width="1.6"${dash} />
+      <foreignObject x="${x + 6}" y="${y + 4}" width="${FLOW_NODE_W - 12}" height="${FLOW_NODE_H - 8}">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:inherit;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;">
+          <div style="font-size:9px;font-weight:600;color:#1e293b;line-height:1.15;">${esc(String(n.label ?? ''))}</div>
+          <div style="font-size:7px;color:#64748b;margin-top:1px;">${esc(FLOW_KIND_LABEL[String(n.kind)] ?? String(n.kind ?? ''))}</div>
+          ${linkLine}
+        </div>
+      </foreignObject>`;
+  }).join('');
 
   return `
-    <ul class="text-small" style="margin: 0; padding-left: 5mm;">${nodesHtml}</ul>
-    ${edgesHtml}`;
+    <svg viewBox="${minX} ${minY} ${w} ${h}" width="170mm" height="${Math.min(230, Math.round((h / w) * 170))}mm" style="max-width:100%;">
+      <defs>
+        <marker id="flow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+        </marker>
+      </defs>
+      ${edgesSvg}
+      ${nodesSvg}
+    </svg>`;
 }
 
 type ReportSection = NonNullable<WorkingPaperReportData['paper']['sections']>[number];
@@ -566,7 +633,7 @@ function renderSectionBlock(s: ReportSection, isCoso: boolean): string {
     // PT-NIA530 S4: MLE/Precisión Básica/UEL calculados + semáforo por área.
     valStr = renderSamplingEvaluationBlock(val);
   } else if (typeof val === 'object' && s.fieldType === 'FLOWCHART') {
-    valStr = renderFlowchartBlock(val as Record<string, unknown>);
+    valStr = renderFlowchartDiagramSvg(val as Record<string, unknown>);
   } else if (typeof val === 'object' && s.sectionKey === 'S_EJE') {
     valStr = renderSamplingResult(val as Record<string, unknown>);
   } else if (typeof val === 'object') {

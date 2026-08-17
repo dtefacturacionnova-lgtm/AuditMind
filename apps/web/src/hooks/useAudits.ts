@@ -107,6 +107,28 @@ export function useUpdateAuditStatus() {
   });
 }
 
+// ─── Backup / restauración (BKP-09) ──────────────────────────────────────────
+
+export interface RestoreBackupResultado {
+  audit: { id: string; title: string };
+  totalFilasCreadas: number;
+  totalArchivosSubidos: number;
+  advertencias: { modelo: string; filaId?: string; mensaje: string }[];
+}
+
+export function useRestoreBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, titulo }: { file: File; titulo?: string }) => {
+      const form = new FormData();
+      form.append('file', file);
+      if (titulo?.trim()) form.append('titulo', titulo.trim());
+      return apiClient.postForm<RestoreBackupResultado>('/audits/restore-backup', form);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['audits'] }),
+  });
+}
+
 // ─── Papeles disponibles desde plantilla ─────────────────────────────────────
 
 export interface AvailableTemplatePaper {

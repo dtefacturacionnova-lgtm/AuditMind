@@ -6,6 +6,7 @@ import {
   ChevronDown, Sparkles, FileText,
   AlertTriangle, Calendar, ArrowRight,
   TrendingUp, CheckCircle2, Clock, XCircle,
+  FileArchive,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAudits } from '@/hooks/useAudits';
@@ -16,6 +17,7 @@ import {
   TYPE_BADGE,
 } from '@/lib/audit-types';
 import { AtlasAnalysisModal } from '@/components/audits/AtlasAnalysisModal';
+import { RestoreBackupModal } from '@/components/audits/RestoreBackupModal';
 
 // ─── Status config ─────────────────────────────────────────────────────────────
 
@@ -79,6 +81,7 @@ export default function AuditsPage() {
   const [subtype,   setSubtype]   = useState('');
   const [page,      setPage]      = useState(1);
   const [showAtlas, setShowAtlas] = useState(false);
+  const [showRestore, setShowRestore] = useState(false);
 
   function handleTypeChange(v: string) {
     setType(v);
@@ -125,6 +128,15 @@ export default function AuditsPage() {
             >
               <Sparkles className="h-4 w-4" />
               Análisis Multi-Año
+            </button>
+            {/* BKP-09 — restaurar un backup (siempre como encargo nuevo) */}
+            <button
+              onClick={() => setShowRestore(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 shadow-sm transition-colors"
+              title="Restaurar un backup como encargo nuevo"
+            >
+              <FileArchive className="h-4 w-4" />
+              Restaurar Backup
             </button>
             <Link
               href="/dashboard/audits/new"
@@ -418,6 +430,10 @@ export default function AuditsPage() {
           }))}
           onClose={() => setShowAtlas(false)}
         />
+      )}
+
+      {showRestore && (
+        <RestoreBackupModal onClose={() => setShowRestore(false)} />
       )}
     </div>
   );

@@ -219,12 +219,14 @@ export class FieldEvidenceService {
 
     try {
       const inicio = Date.now();
+      const contextoExpediente = await this.construirContextoExpediente(evidencia);
       const resultado = await this.aiService.extractFieldEvidence({
         fuente_tipo: evidencia.kind === FieldEvidenceKind.TEXT_NOTE ? 'texto' : 'transcripcion_audio',
         contenido: fuenteTexto,
         segmentos: evidencia.kind === FieldEvidenceKind.AUDIO_NOTE
           ? (transcript?.segmentos as { inicio: number; fin: number; texto: string }[] | undefined)
           : undefined,
+        contexto_expediente: contextoExpediente,
         instrucciones_extra: [evidencia.descripcion, evidencia.lugar ? `Lugar: ${evidencia.lugar}` : null]
           .filter(Boolean).join('\n') || undefined,
       });
@@ -283,6 +285,88 @@ export class FieldEvidenceService {
 
   private normalizarParaComparar(texto: string): string {
     return texto.toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  // ─── Cruce con el expediente (EVD-07, §6.6/§2.3) ─────────────────────────
+  // Reutiliza el mismo dato que ya alimenta el grafo de conocimiento
+  // (mention-index) — no hace falta un mecanismo nuevo de acceso a datos.
+  // "papeles" es el índice completo (barato); "extractos" es deliberadamente
+  // liviano — las secciones del propio papel de la evidencia + PT-A2
+  // (riesgos) si existe, tope de 5 secciones combinadas — el objetivo es que
+  // el LLM pueda citar codes reales en referencias_expediente, no un RAG
+  // completo (eso sería scope creep, ver §6.6).
+
+  private async construirContextoExpediente(evidencia: { auditId: string; paperId: string }) {
+    const MAX_EXTRACTOS = 5;
+    const MAX_CHARS_POR_EXTRACTO = 8000;
+
+    const audit = await this.prisma.audit.findUnique({
+      where:  { id: evidencia.auditId },
+      select: { title: true, type: true },
+    });
+
+    const papersIndex = await this.prisma.workingPaper.findMany({
+      where:   { auditId: evidencia.auditId },
+      orderBy: [{ indexSection: 'asc' }, { code: 'asc' }],
+      select: {
+        code: true, title: true,
+        sections: { select: { sectionKey: true, label: true }, orderBy: { sortOrder: 'asc' } },
+      },
+    });
+    const papeles = papersIndex.map(p => ({
+      code:  p.code,
+      title: p.title,
+      sections: p.sections.map(s => ({ key: s.sectionKey, label: s.label })),
+    }));
+
+    const papersParaExtracto = await this.prisma.workingPaper.findMany({
+      where: { auditId: evidencia.auditId, OR: [{ id: evidencia.paperId }, { paperCode: 'PT-A2' }] },
+      select: {
+        id: true, code: true,
+        sections: { select: { sectionKey: true, value: true }, orderBy: { sortOrder: 'asc' } },
+      },
+    });
+    const propio = papersParaExtracto.find(p => p.id === evidencia.paperId);
+    const riesgos = papersParaExtracto.find(p => p.id !== evidencia.paperId);
+
+    const extractos: { code: string; section_key: string; resumen: string }[] = [];
+    for (const paper of [propio, riesgos].filter((p): p is NonNullable<typeof p> => !!p)) {
+      for (const s of paper.sections) {
+        if (extractos.length >= MAX_EXTRACTOS) break;
+        const resumen = this.valorAResumen(s.value).trim();
+        if (!resumen) continue;
+        extractos.push({ code: paper.code, section_key: s.sectionKey, resumen: resumen.slice(0, MAX_CHARS_POR_EXTRACTO) });
+      }
+      if (extractos.length >= MAX_EXTRACTOS) break;
+    }
+
+    return { audit_title: audit?.title, audit_type: audit?.type, papeles, extractos };
+  }
+
+  private valorAResumen(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string')  return value;
+    if (typeof value === 'number')  return String(value);
+    if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+    if (Array.isArray(value)) {
+      // MATRIX y similares: filas como objetos {campo: valor, ...} — formatea
+      // "campo: valor" por fila en vez de un blob JSON ilegible. Ignora
+      // claves internas del grid (prefijo "_", ej. _id/_origen — convención
+      // de MatrixGridPanel, nunca son columnas de datos reales).
+      if (value.length > 0 && value.every(v => v && typeof v === 'object' && !Array.isArray(v))) {
+        return value
+          .map(row =>
+            Object.entries(row as Record<string, unknown>)
+              .filter(([k]) => !k.startsWith('_'))
+              .map(([k, v]) => `${k}: ${this.valorAResumen(v)}`)
+              .join(' | '),
+          )
+          .join('\n');
+      }
+      return value.map(v => this.valorAResumen(v)).join(', ');
+    }
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
   }
 
   // ─── Reaper perezoso (§6.3.2) ────────────────────────────────────────────

@@ -108,6 +108,42 @@ const KIND_SHAPE_CLASS: Record<FlowNodeKind, string> = {
 function FlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
   const meta = KIND_META[data.kind];
   const Icon = meta.icon;
+
+  // Buffer local para la etiqueta — el nodo es controlado por `stored.nodes`,
+  // que solo se actualiza cuando vuelve el round-trip completo de guardar
+  // (PATCH → invalidar caché → refetch). Escribir letra por letra directo
+  // contra `data.label` deja cada tecla esperando ese round-trip antes de
+  // pintarse: se siente "en cámara lenta" y, si el usuario teclea más rápido
+  // de lo que tarda el guardado anterior en volver, cada onChange arma su
+  // commit desde un `stored` todavía viejo — letras intermedias se pierden y
+  // solo "gana" la última en aterrizar (bug real reportado en producción,
+  // 2026-08-17). El buffer pinta cada tecla al instante y solo se envía al
+  // backend cuando el usuario hace una pausa (debounce) o sale del campo —
+  // un solo commit con el texto final, no una carrera de commits parciales.
+  const [label, setLabel] = useState(data.label);
+  const isEditingRef = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!isEditingRef.current) setLabel(data.label);
+  }, [data.label]);
+
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+
+  const handleLabelInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    isEditingRef.current = true;
+    setLabel(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => data.onLabelChange(data.id, value), 500);
+  };
+
+  const flushLabel = () => {
+    isEditingRef.current = false;
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    if (label !== data.label) data.onLabelChange(data.id, label);
+  };
+
   return (
     <div className={`border-2 shadow-sm ${KIND_SHAPE_CLASS[data.kind]} px-3 py-2 w-[180px] group relative`}>
       <Handle type="target" position={Position.Top}    className="!bg-gray-400 !w-2 !h-2 !border-0" />
@@ -129,8 +165,10 @@ function FlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
           <span className="text-xs font-semibold text-gray-800 truncate">{data.label}</span>
         ) : (
           <input
-            value={data.label}
-            onChange={e => data.onLabelChange(data.id, e.target.value)}
+            value={label}
+            onChange={handleLabelInput}
+            onBlur={flushLabel}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
             onMouseDown={e => e.stopPropagation()}
             className="text-xs font-semibold text-gray-800 bg-transparent outline-none min-w-0 flex-1 nodrag"
           />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -11,6 +11,7 @@ import {
   addEdge,
   applyNodeChanges,
   applyEdgeChanges,
+  useReactFlow,
   type Node,
   type Edge,
   type NodeProps,
@@ -286,6 +287,30 @@ function FlowchartPanelInner({ paperId, auditId, sectionKey, value, onChange, re
     style: { stroke: '#9ca3af', strokeWidth: 1.8 },
     markerEnd: { type: MarkerType.ArrowClosed, color: '#9ca3af' },
   })), [stored.edges]);
+
+  // `fitView` (prop de <ReactFlow>) solo ajusta el zoom/pan al MONTAR — un nodo
+  // agregado después (botones "+ Inicio/Fin" etc.) puede quedar fuera del área
+  // visible sin ningún aviso, dando la sensación de que "no pasó nada" aunque
+  // sí se guardó (bug real detectado 2026-08-17: los clics del auditor SÍ
+  // persistían el nodo nuevo, solo que no se veía). Se reajusta la vista cada
+  // vez que cambia la CANTIDAD de nodos (agregar o borrar), no en cada drag.
+  const { fitView } = useReactFlow();
+  const prevNodeCount = useRef(stored.nodes.length);
+  useEffect(() => {
+    if (stored.nodes.length === prevNodeCount.current) return;
+    prevNodeCount.current = stored.nodes.length;
+    // Un solo requestAnimationFrame NO basta: React Flow mide cada nodo nuevo
+    // vía ResizeObserver (el mismo mecanismo de fixes_and_lessons.md #20) y esa
+    // medición corre en un ciclo posterior al primer paint — fitView() llamado
+    // demasiado pronto calcula el encuadre con el nodo nuevo todavía en tamaño
+    // 0, dejándolo fuera del área visible por un margen pequeño (verificado:
+    // ~11px, exactamente el borde inferior del canvas). Un timeout corto le da
+    // tiempo real al ResizeObserver de correr antes de reencuadrar.
+    const t = setTimeout(() => {
+      fitView({ padding: 0.3, duration: 300 });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [stored.nodes.length, fitView]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     const next = applyNodeChanges(changes, rfNodes);

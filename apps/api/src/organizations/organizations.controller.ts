@@ -29,14 +29,14 @@ export class OrganizationsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.CAE)
   @ApiOperation({ summary: 'Obtener organización por ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.findOne(id, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.CAE)
   @ApiOperation({ summary: 'Actualizar organización' })
   update(
     @Param('id') id: string,

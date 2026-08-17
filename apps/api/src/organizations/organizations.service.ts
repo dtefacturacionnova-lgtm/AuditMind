@@ -67,16 +67,19 @@ export class OrganizationsService {
 
   async getStats(id: string, user: AuthUser) {
     await this.findOne(id, user);
-    const [userCount, auditCount, openFindings] = await Promise.all([
-      this.prisma.user.count({ where: { organizationId: id, active: true } }),
-      this.prisma.audit.count({ where: { organizationId: id } }),
-      this.prisma.finding.count({
-        where: {
-          organizationId: id,
-          status: { notIn: ['CLOSED'] },
-        },
-      }),
-    ]);
-    return { userCount, auditCount, openFindings };
+    const [totalAudits, activeAudits, totalFindings, openFindings, totalUsers, totalWorkingPapers] =
+      await Promise.all([
+        this.prisma.audit.count({ where: { organizationId: id } }),
+        this.prisma.audit.count({
+          where: { organizationId: id, status: { in: ['PLANNING', 'IN_PROGRESS', 'REVIEW'] } },
+        }),
+        this.prisma.finding.count({ where: { organizationId: id } }),
+        this.prisma.finding.count({
+          where: { organizationId: id, status: { notIn: ['CLOSED'] } },
+        }),
+        this.prisma.user.count({ where: { organizationId: id, active: true } }),
+        this.prisma.workingPaper.count({ where: { audit: { organizationId: id } } }),
+      ]);
+    return { totalAudits, activeAudits, totalFindings, openFindings, totalUsers, totalWorkingPapers };
   }
 }

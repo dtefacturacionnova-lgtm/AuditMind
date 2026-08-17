@@ -312,10 +312,27 @@ function FlowchartPanelInner({ paperId, auditId, sectionKey, value, onChange, re
     return () => clearTimeout(t);
   }, [stored.nodes.length, fitView]);
 
+  // `FlowchartPanel` es un componente 100% controlado (sin buffer/estado local:
+  // `stored` es siempre el `value` que viene del papel) y sin actualización
+  // optimista — el nodo nuevo solo aparece cuando termina el ciclo completo
+  // guardar→refrescar. React Flow dispara `onNodesChange` con MÁS que cambios
+  // del usuario: al montar un nodo nuevo lo mide vía ResizeObserver (mismo
+  // mecanismo del fitView de arriba) y emite un `NodeChange` de tipo
+  // 'dimensions' automáticamente, sin ninguna acción del usuario; un clic para
+  // seleccionar emite 'select'. Sin filtrar, CUALQUIERA de esos dispara un
+  // commit() con el `stored` de ese instante — si ese instante cae antes de
+  // que el guardado real del usuario haya vuelto del servidor, este segundo
+  // commit "eco" pisa esa escritura con una foto vieja: el nodo aparece unos
+  // segundos y luego desaparece (bug real reportado en producción, 2026-08-17).
+  // Solo 'remove' y el POSITION change de fin de arrastre (dragging:false)
+  // representan una edición real que hay que persistir.
   const onNodesChange = useCallback((changes: NodeChange[]) => {
+    const relevantes = changes.filter(c => c.type === 'remove' || (c.type === 'position' && c.dragging === false));
+    if (relevantes.length === 0) return;
+
     const next = applyNodeChanges(changes, rfNodes);
     const posById = new Map(next.map(n => [n.id, n.position]));
-    const removed = new Set(changes.filter(c => c.type === 'remove').map(c => c.id));
+    const removed = new Set(relevantes.filter(c => c.type === 'remove').map(c => c.id));
     if (removed.size > 0) {
       commit({ nodes: stored.nodes.filter(n => !removed.has(n.id)), edges: stored.edges.filter(e => !removed.has(e.source) && !removed.has(e.target)) });
       return;
@@ -324,6 +341,9 @@ function FlowchartPanelInner({ paperId, auditId, sectionKey, value, onChange, re
   }, [rfNodes, stored, commit]);
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    // Mismo motivo que onNodesChange — 'select' (clic para seleccionar una
+    // arista) no debe disparar un guardado, solo 'remove' es una edición real.
+    if (!changes.some(c => c.type === 'remove')) return;
     const next = applyEdgeChanges(changes, rfEdges);
     commit({ nodes: stored.nodes, edges: next.map(e => ({ id: e.id, source: e.source, target: e.target })) });
   }, [rfEdges, stored, commit]);

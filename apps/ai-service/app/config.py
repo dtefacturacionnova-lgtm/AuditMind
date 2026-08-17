@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # Se mantiene para compatibilidad futura con verificación directa de tokens Supabase.
     SUPABASE_JWT_SECRET: str = ""
 
+    # Evidencia de campo — transcripción con faster-whisper autoalojado (EVD-03)
+    # "base"/"int8"/"cpu" por el límite PM2 de 800MB con 2 workers (ver docs §6.7).
+    WHISPER_MODEL_SIZE: str = "base"
+    WHISPER_COMPUTE_TYPE: str = "int8"
+    WHISPER_DEVICE: str = "cpu"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

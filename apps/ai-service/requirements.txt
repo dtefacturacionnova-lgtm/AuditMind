@@ -33,3 +33,7 @@ scikit-learn>=1.5.0
 # ─── Document Processing ───────────────────────────────────────────────────────
 pdfplumber>=0.11.0
 Pillow>=10.4.0
+
+# ─── Evidencia de Campo — transcripción de audio autoalojada (EVD-03) ──────────
+# Trae ctranslate2 + av (PyAV empaqueta ffmpeg) — no requiere ffmpeg de sistema.
+faster-whisper>=1.0.0

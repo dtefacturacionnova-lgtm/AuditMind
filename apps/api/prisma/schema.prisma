@@ -449,6 +449,7 @@ model User {
   notifications     Notification[]
   dataSources       DataSource[]
   auditRestoreLogs  AuditRestoreLog[]
+  fieldEvidences    FieldEvidence[]
 
   @@index([organizationId])
   @@index([email])
@@ -1012,6 +1013,7 @@ model Audit {
   template                AuditTemplate? @relation(fields: [templateId], references: [id])
 
   restoreLogs             AuditRestoreLog[]
+  fieldEvidences          FieldEvidence[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -1043,6 +1045,106 @@ model AuditRestoreLog {
 
   @@index([auditId])
   @@map("audit_restore_logs")
+}
+
+// ─── EVD-04: Evidencia de campo (docs/inteligencia-de-evidencia-de-campo.md §6.2) ─
+// Fase 1 (EVD-03..11): TEXT_NOTE y AUDIO_NOTE. El resto de FieldEvidenceKind ya
+// vive en el schema para no requerir migración cuando lleguen las fases
+// siguientes, pero el pipeline (FieldEvidenceService) solo procesa Fase 1 hoy.
+enum FieldEvidenceKind {
+  TEXT_NOTE        // texto libre / lluvia de ideas — Fase 1
+  AUDIO_NOTE       // nota de voz corta del auditor — Fase 1
+  INTERVIEW_AUDIO  // entrevista formal (diarización) — Fase 2
+  ANNOTATED_PHOTO  // foto anotada — Fase 3
+  SHORT_VIDEO      // video corto — Fase 4
+}
+
+enum FieldEvidenceStatus {
+  UPLOADED      // ingesta completa (custodia sellada), pipeline no arrancado
+  TRANSCRIBING  // en el ai-service (solo kinds con audio/video)
+  EXTRACTING    // transcripción lista, extracción LLM en curso (EVD-05)
+  READY         // hallazgos sugeridos disponibles para revisión
+  FAILED        // errorMsg poblado; reintentable
+}
+
+enum EvidenceFindingDisposition {
+  PENDING    // sugerido por la IA, sin revisar
+  ACCEPTED   // el auditor lo aceptó (fila materializada en la sección destino)
+  DISCARDED  // el auditor lo descartó
+  PROMOTED   // aceptado Y promovido a PT-HALL
+}
+
+model FieldEvidence {
+  id             String              @id @default(cuid())
+  auditId        String              // denormalizado — consultas y alcance de backup
+  paperId        String
+  sectionKey     String              // granularidad: (papel, sección) — capacidad general, no solo entrevistas
+  kind           FieldEvidenceKind
+  status         FieldEvidenceStatus @default(UPLOADED)
+
+  // ── Custodia (molde: StepEvidence, extendido) ──
+  storageKey     String?   // ruta bare en bucket audit-files; null para TEXT_NOTE
+  filename       String?
+  mimeType       String?
+  size           Int       @default(0)
+  sha256         String    // SHA-256 de los bytes originales (TEXT_NOTE: del texto UTF-8)
+  textoOriginal  String?   // solo TEXT_NOTE — el texto ES la evidencia
+  capturedById   String
+  capturedByName String    // snapshot — sobrevive si la cuenta se elimina
+  capturedAt     DateTime  // cuándo se capturó en campo (puede ≠ uploadedAt)
+  uploadedAt     DateTime  @default(now())
+  consentimiento Boolean   @default(false) // obligatorio true para INTERVIEW_AUDIO
+  lugar          String?   // "Bodega central, Soyapango"
+  descripcion    String?   // contexto del auditor: "arqueo de caja chica, turno noche"
+
+  // ── Resultado del pipeline ──
+  transcript            Json?    // {texto, segmentos, idioma, duracion_seg} — ver EVD-03/whisper_service
+  extraccionRaw         Json?    // salida cruda del LLM (trazabilidad) — hallazgos viven en su propia tabla
+  procesamientoIniciado DateTime? // para el reaper perezoso — timeout a los 30 min
+  errorMsg              String?
+  processingMs          Int?
+  modeloTranscripcion   String?  // "faster-whisper/base/int8"
+  modeloLlm             String?  // del retorno del LLM Router (EVD-05)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  audit      Audit                  @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  paper      WorkingPaper           @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  capturedBy User                   @relation(fields: [capturedById], references: [id])
+  findings   FieldEvidenceFinding[]
+
+  @@index([auditId])
+  @@index([paperId])
+  @@index([status])
+  @@map("field_evidences")
+}
+
+model FieldEvidenceFinding {
+  id           String  @id @default(cuid())
+  evidenceId   String
+  tipo         String  // contradiccion | evasiva | anomalia_visual | riesgo_mencionado | inconsistencia_con_expediente | incumplimiento_mencionado
+  descripcion  String
+  citaTextual  String  // debe existir literal en la fuente (validado en EVD-06)
+  fuenteRef    String? // "mm:ss" (audio/video) | "zona #N" (foto) | null (texto)
+  nivelRiesgo  String  // bajo | medio | alto
+  justificacion String?
+  validadaCita Boolean // resultado del check anti-alucinación (EVD-06)
+  referenciasExpediente Json? // [{code, sectionKey?, motivo}] — propuestas por el LLM (EVD-07)
+
+  // ── Disposición humana (molde: DataFlag) ──
+  disposition       EvidenceFindingDisposition @default(PENDING)
+  reviewedById      String?
+  reviewedAt        DateTime?
+  targetSectionKey  String?  // dónde se materializó la fila al aceptar
+  promotedToPaperId String?  // WorkingPaper PT-HALL creado al promover
+
+  createdAt DateTime @default(now())
+
+  evidence FieldEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@index([evidenceId])
+  @@map("field_evidence_findings")
 }
 
 // ─── EXPEDIENTE: Fase del proyecto de auditoría ───────────────────────────────
@@ -1313,6 +1415,8 @@ model WorkingPaper {
   refsToHere    PaperReference[]  @relation("RefTarget")   // Este papel es mencionado por...
   // ─── F6.3 PBC links ───────────────────────────────────────────────────────
   pbcLinks      PbcPaperLink[]
+  // ─── EVD-04 Evidencia de campo ─────────────────────────────────────────────
+  fieldEvidences FieldEvidence[]
 
   @@index([auditId])
   @@index([auditId, status])

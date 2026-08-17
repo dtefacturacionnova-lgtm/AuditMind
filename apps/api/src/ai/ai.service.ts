@@ -322,6 +322,39 @@ export class AiService {
     return res.json();
   }
 
+  // ─── Evidencia de campo — transcripción de audio (EVD-03/04) ────────────────
+  async transcribeAudio(
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string,
+    language?: string,
+  ): Promise<{
+    texto: string;
+    segmentos: { inicio: number; fin: number; texto: string }[];
+    idioma: string;
+    duracion_seg: number;
+    modelo: string;
+    processing_ms: number;
+  }> {
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimeType || 'application/octet-stream' });
+    formData.append('file', blob, filename);
+    if (language) formData.append('language', language);
+
+    // 45 min de audio en CPU puede tardar varios minutos — no debe colgar para siempre.
+    const res = await fetch(`${this.aiServiceUrl}/evidence/transcribe`, {
+      method: 'POST',
+      headers: { 'x-internal-key': this.internalKey },
+      body: formData,
+      signal: AbortSignal.timeout(600_000),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`Transcripción error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
   // ─── RAG — Bases disponibles ─────────────────────────────────────────────────
   async listRagBases(): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/rag/bases`);

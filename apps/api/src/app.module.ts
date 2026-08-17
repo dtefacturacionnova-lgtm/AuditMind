@@ -34,6 +34,7 @@ import { PdfModule } from './pdf/pdf.module';
 import { FiscalModule } from './fiscal/fiscal.module';
 import { AuditProceduresModule } from './audit-procedures/audit-procedures.module';
 import { AuditBackupModule } from './audits/backup/audit-backup.module';
+import { FieldEvidenceModule } from './working-papers/field-evidence/field-evidence.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { AuditBackupModule } from './audits/backup/audit-backup.module';
     AuditsModule,
     AuditBackupModule,
     WorkingPapersModule,
+    FieldEvidenceModule,
     FindingsModule,
     PbcModule,
     ConfirmationsModule,

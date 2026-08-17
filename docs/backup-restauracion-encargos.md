@@ -99,3 +99,35 @@ Un backup completo de un encargo es, por definición, **todos los datos financie
 ## 6. Pregunta abierta
 
 ¿El caso de uso principal es más bien "backup preventivo/disaster recovery" (poca frecuencia, alto valor si algo se pierde) o también "portabilidad" (mover un encargo entre organizaciones/entornos, por ejemplo de un ambiente de prueba a producción, o entre dos instalaciones)? La Fase 2 (restaurar como nuevo) cubre ambos casos igual de bien, pero afecta si vale la pena invertir en la Fase 3 (restaurar destructivo) pronto o dejarla para después — si el caso real es solo portabilidad, la Fase 3 se puede posponer indefinidamente.
+
+---
+
+## 7. Implementación y verificación (BKP-01..11, 2026-08-16/17)
+
+**Estado: implementado y verificado localmente el modo seguro completo (exportar + restaurar como encargo nuevo). Pendiente autorización explícita de deploy al VPS. El modo destructivo (BKP-12/13) no está construido — sigue siendo opcional según la respuesta al §6.**
+
+### 7.1 Decisiones de diseño (BKP-01/02)
+
+- **Lista explícita y ordenada de modelos** (`AUDIT_SCOPED_MODELS` en `audit-backup.types.ts`), no introspección automática del DMMF para el recorrido de exportación — un backup de datos financieros/personales debe ser auditable por una persona, y el orden de dependencia (quién debe existir antes que quién al restaurar) no se puede inferir solo con metadata. **32 modelos** verificados 1:1 contra el schema real (`verificarCompletitudModelos()`, que sí usa el DMMF — para *detectar* huecos, no para reemplazar la lista a mano).
+- **Remapeo de IDs**: cada fila recibe un ID nuevo generado por Prisma; las FK internas al backup se remapean con un `Map` construido incrementalmente; las FK a `User`/`AuditEntity`/`AuditTemplate` se conservan solo si existen en la organización que restaura (si no, quedan `null` con advertencia — nunca se remapean a un usuario distinto); `Organization` siempre pasa a ser la del usuario que restaura; una referencia cruzada colgante (`PaperLink`/`PaperReference` fuera del backup) omite la fila completa si la FK es requerida, o la deja vacía si es opcional.
+- **FKs derivadas del schema real** (`obtenerFksDeModelo()` en `audit-backup-schema.ts`, vía `Prisma.dmmf.datamodel.models`) en vez de una tabla de FKs mantenida a mano — mismo criterio de "verificar contra el schema real" que `verificarCompletitudModelos()`.
+- **Alcance: portabilidad dentro de la misma organización.** `verificarBackupManifest()` rechaza un backup cuya `organizationId` no coincida con la del usuario que restaura — es una frontera de seguridad real, no solo una validación de conveniencia.
+- **Archivos**: se detectan recorriendo TODO el `data.json` ya exportado en busca de cualquier string que contenga el bucket `audit-files` o el patrón `sections/{paperId}/...` — más robusto que enumerar a mano "qué campo de qué modelo tiene adjuntos" (encontró en pruebas reales un patrón `procedures/{paperId}/{procId}/...` no anticipado). Al restaurar, los archivos se suben recién después de que TODAS las filas existen (para conocer el `paperId` nuevo), y luego se parchean las URLs ya guardadas en `PaperSection.attachments`/`value` para apuntar a las rutas nuevas.
+
+### 7.2 Bugs reales encontrados en pruebas end-to-end (no por revisión de código)
+
+1. **Orden de modelos**: `workingPaper` estaba listado antes que `auditPhase`/`auditFolder`, pero `WorkingPaper.folderId → AuditFolder.id` — el `folderId` nunca se podía remapear (quedaba `null` silenciosamente). Corregido reordenando a `auditPhase → auditFolder → workingPaper` al inicio del nivel 1.
+2. **Autorreferencia de `AuditFolder`** (`parentId` apunta a otra fila del mismo modelo — árbol de carpetas): el remapeo genérico solo resuelve dependencias ENTRE modelos, no el orden dentro de un mismo modelo. Se agregó `ordenarPorJerarquia()` (orden topológico: padres antes que hijos) aplicado solo al array de `auditFolder` antes de crearlo.
+3. **Subida de archivos grandes intermitentemente fallida** ("fetch failed" — error de transporte de Node, sin respuesta estructurada de Supabase): reproducido de forma consistente en pruebas reales con un adjunto de ~3.9MB, consistente con la flakiness de red ya documentada de este entorno. Corregido con reintentos (hasta 3, backoff simple) en `AuditBackupFilesService.subirArchivo()` — solo reintenta errores de transporte, no rechazos válidos de la API.
+
+### 7.3 Verificación
+
+Prueba end-to-end contra el encargo demo principal (`Empresa Comercial Demo SA de CV`, 133 filas exportadas, 6 archivos incluyendo un adjunto de ~3.9MB): exportar → restaurar como nuevo → verificar conteos idénticos de `WorkingPaper`/`PaperSection`, todas las FK internas apuntando al encargo nuevo (nunca al original), URLs de adjuntos reescritas a rutas nuevas, encargo de prueba borrado en cascada sin afectar el original. **12/12 checks OK, 0 advertencias, dos corridas consecutivas estables** tras los tres fixes de §7.2.
+
+Verificado también en navegador real: botón "Backup" en la pantalla del encargo (`/dashboard/audits/[id]`) descarga el ZIP con 200 OK, sin errores de consola.
+
+### 7.4 Pendiente
+
+- **BKP-09** (frontend de restauración — subir ZIP + confirmar) aún no construido; hoy la restauración solo se puede invocar contra el endpoint `POST /audits/restore-backup` directamente.
+- **BKP-12/13** (modo destructivo) no construido — decisión pendiente del usuario según §6.
+- Deploy al VPS no autorizado todavía para este feature.

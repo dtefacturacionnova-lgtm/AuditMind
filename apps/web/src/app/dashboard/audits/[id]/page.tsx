@@ -7,7 +7,7 @@ import {
   AlertTriangle, Upload, BadgeCheck, Edit2, ChevronRight,
   TrendingUp, Target, Shield, Sparkles, Wand2, Loader2, X,
   ClipboardCopy, Check, ListChecks, Plus, Trash2, BarChart3,
-  CheckCircle2, Circle, RotateCcw, Printer,
+  CheckCircle2, Circle, RotateCcw, Printer, Download,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { useAudit, useUpdateAuditStatus } from '@/hooks/useAudits';
@@ -89,6 +89,7 @@ export default function AuditDetailPage() {
   const [showRollForward,    setShowRollForward]    = useState(false);
   const [showIndexReport,    setShowIndexReport]    = useState(false);
   const [showAiTests,        setShowAiTests]        = useState(false);
+  const [descargandoBackup,  setDescargandoBackup]  = useState(false);
 
   const { data: audit, isLoading } = useAudit(id);
   const updateStatus = useUpdateAuditStatus();
@@ -142,6 +143,20 @@ export default function AuditDetailPage() {
     await updateStatus.mutateAsync({ id, status: newStatus, comment: statusComment });
     setShowStatusModal(false);
     setStatusComment('');
+  }
+
+  async function handleDescargarBackup() {
+    setDescargandoBackup(true);
+    try {
+      await apiClient.downloadFile(
+        `/audits/${id}/backup`,
+        `AuditMind_Backup_${id.slice(0, 8)}.zip`,
+      );
+    } catch (err) {
+      alert((err as Error).message || 'Error al descargar el backup');
+    } finally {
+      setDescargandoBackup(false);
+    }
   }
 
   return (
@@ -213,6 +228,16 @@ export default function AuditDetailPage() {
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   Roll-forward
+                </button>
+                {/* BKP-06 — Backup completo del encargo (rol CAE o superior) */}
+                <button
+                  onClick={handleDescargarBackup}
+                  disabled={descargandoBackup}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 disabled:opacity-50 transition-colors"
+                  title="Descargar backup completo del encargo — datos, archivos y referencias"
+                >
+                  {descargandoBackup ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  {descargandoBackup ? 'Generando…' : 'Backup'}
                 </button>
                 {/* PI.7d — Orquestador de pruebas IA */}
                 <button

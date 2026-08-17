@@ -33,6 +33,7 @@ import { EmailModule } from './email/email.module';
 import { PdfModule } from './pdf/pdf.module';
 import { FiscalModule } from './fiscal/fiscal.module';
 import { AuditProceduresModule } from './audit-procedures/audit-procedures.module';
+import { AuditBackupModule } from './audits/backup/audit-backup.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { AuditProceduresModule } from './audit-procedures/audit-procedures.modul
     UsersModule,
     AuditUniverseModule,
     AuditsModule,
+    AuditBackupModule,
     WorkingPapersModule,
     FindingsModule,
     PbcModule,

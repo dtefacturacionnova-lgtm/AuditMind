@@ -3,7 +3,7 @@ import {
 } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
-import { FieldEvidenceKind } from '@prisma/client';
+import { FieldEvidenceKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthUser } from '../../auth/jwt.strategy';
 import { AiService } from '../../ai/ai.service';
@@ -145,12 +145,12 @@ export class FieldEvidenceService {
     if (!evidencia) return;
 
     if (evidencia.kind === FieldEvidenceKind.TEXT_NOTE) {
-      // Sin normalización a texto que hacer — queda lista para que EVD-05 extraiga
-      // directo de textoOriginal.
+      // Sin normalización a texto que hacer — pasa directo a extraer de textoOriginal.
       await this.prisma.fieldEvidence.update({
         where: { id: evidenceId },
         data:  { status: 'EXTRACTING', procesamientoIniciado: new Date() },
       });
+      await this.ejecutarExtraccion(evidenceId);
       return;
     }
 
@@ -185,7 +185,10 @@ export class FieldEvidenceService {
         where: { id: evidenceId },
         data:  { status: 'FAILED', errorMsg: message },
       });
+      return; // no seguir a extracción si la transcripción falló
     }
+
+    await this.ejecutarExtraccion(evidenceId);
   }
 
   private async descargarOriginal(storageKey: string | null): Promise<Buffer> {
@@ -193,6 +196,93 @@ export class FieldEvidenceService {
     const { data, error } = await this.supabase.storage.from('audit-files').download(storageKey);
     if (error || !data) throw new Error(error?.message ?? 'No se pudo descargar el archivo original');
     return Buffer.from(await data.arrayBuffer());
+  }
+
+  // ─── Extracción estructurada + validación anti-alucinación (EVD-05/EVD-06) ──
+
+  private async ejecutarExtraccion(evidenceId: string) {
+    const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
+    if (!evidencia) return;
+
+    const transcript = evidencia.transcript as { texto?: string; segmentos?: unknown[] } | null;
+    const fuenteTexto = evidencia.kind === FieldEvidenceKind.TEXT_NOTE
+      ? (evidencia.textoOriginal ?? '')
+      : (transcript?.texto ?? '');
+
+    if (!fuenteTexto.trim()) {
+      await this.prisma.fieldEvidence.update({
+        where: { id: evidenceId },
+        data:  { status: 'FAILED', errorMsg: 'No hay texto fuente para extraer (transcripción vacía).' },
+      });
+      return;
+    }
+
+    try {
+      const inicio = Date.now();
+      const resultado = await this.aiService.extractFieldEvidence({
+        fuente_tipo: evidencia.kind === FieldEvidenceKind.TEXT_NOTE ? 'texto' : 'transcripcion_audio',
+        contenido: fuenteTexto,
+        segmentos: evidencia.kind === FieldEvidenceKind.AUDIO_NOTE
+          ? (transcript?.segmentos as { inicio: number; fin: number; texto: string }[] | undefined)
+          : undefined,
+        instrucciones_extra: [evidencia.descripcion, evidencia.lugar ? `Lugar: ${evidencia.lugar}` : null]
+          .filter(Boolean).join('\n') || undefined,
+      });
+
+      // Anti-alucinación (§6.9): la cita debe existir literal (normalizada por
+      // minúsculas + colapso de espacios, sin tocar tildes/puntuación) en la
+      // fuente. No se descarta el hallazgo — se persiste con validadaCita:false
+      // para trazabilidad, y queda excluido de aceptar/promover.
+      const fuenteNormalizada = this.normalizarParaComparar(fuenteTexto);
+      const hallazgosData = resultado.hallazgos.map(h => ({
+        evidenceId,
+        tipo:                   h.tipo,
+        descripcion:            h.descripcion,
+        citaTextual:            h.cita_textual,
+        fuenteRef:              h.fuente_ref,
+        nivelRiesgo:            h.nivel_riesgo,
+        justificacion:          h.justificacion,
+        validadaCita:           fuenteNormalizada.includes(this.normalizarParaComparar(h.cita_textual)),
+        referenciasExpediente:  h.referencias_expediente as unknown as Prisma.InputJsonValue,
+      }));
+
+      await this.prisma.$transaction([
+        ...(hallazgosData.length > 0
+          ? [this.prisma.fieldEvidenceFinding.createMany({ data: hallazgosData })]
+          : []),
+        this.prisma.fieldEvidence.update({
+          where: { id: evidenceId },
+          data: {
+            status: 'READY',
+            extraccionRaw: {
+              resumen_ejecutivo:     resultado.resumen_ejecutivo,
+              temas:                 resultado.temas,
+              entidades_mencionadas: resultado.entidades_mencionadas,
+            } as unknown as Prisma.InputJsonValue,
+            modeloLlm:    resultado.modelo,
+            processingMs: Date.now() - inicio,
+          },
+        }),
+      ]);
+
+      const descartadas = hallazgosData.filter(h => !h.validadaCita).length;
+      if (descartadas > 0) {
+        this.logger.warn(
+          `Evidencia ${evidenceId}: ${descartadas} hallazgo(s) con cita no verificable — excluidos de sugerencias por defecto.`,
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Extracción falló para ${evidenceId}: ${message}`);
+      await this.prisma.fieldEvidence.update({
+        where: { id: evidenceId },
+        data:  { status: 'FAILED', errorMsg: message },
+      });
+    }
+  }
+
+  private normalizarParaComparar(texto: string): string {
+    return texto.toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
   // ─── Reaper perezoso (§6.3.2) ────────────────────────────────────────────

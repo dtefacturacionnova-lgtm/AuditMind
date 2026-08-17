@@ -355,6 +355,48 @@ export class AiService {
     return res.json();
   }
 
+  // ─── Evidencia de campo — extracción estructurada de hallazgos (EVD-05) ─────
+  async extractFieldEvidence(payload: {
+    fuente_tipo: 'texto' | 'transcripcion_audio';
+    contenido: string;
+    segmentos?: { inicio: number; fin: number; texto: string }[];
+    contexto_expediente?: {
+      audit_title?: string;
+      audit_type?: string;
+      papeles?: { code: string; title: string; sections: { key: string; label: string }[] }[];
+      extractos?: { code: string; section_key?: string; resumen: string }[];
+    };
+    instrucciones_extra?: string;
+  }): Promise<{
+    resumen_ejecutivo: string;
+    temas: string[];
+    entidades_mencionadas: { nombre: string; tipo: string }[];
+    hallazgos: {
+      tipo: string;
+      descripcion: string;
+      cita_textual: string;
+      fuente_ref: string | null;
+      nivel_riesgo: string;
+      justificacion: string | null;
+      referencias_expediente: { code: string; section_key?: string; motivo: string }[];
+    }[];
+    modelo: string;
+    input_tokens: number;
+    output_tokens: number;
+  }> {
+    const res = await fetch(`${this.aiServiceUrl}/evidence/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': this.internalKey },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`Extracción error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
   // ─── RAG — Bases disponibles ─────────────────────────────────────────────────
   async listRagBases(): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/rag/bases`);

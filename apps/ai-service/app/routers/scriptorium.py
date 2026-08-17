@@ -7,7 +7,6 @@ Endpoints:
   POST /scriptorium/audit-program     — genera programa de auditoría con procedimientos NIA
   POST /scriptorium/working-paper     — genera borrador de papel de trabajo
 """
-import json
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
@@ -15,6 +14,7 @@ from typing import Optional
 from app.config import settings
 from app.services.llm_router import chat_with_agent, TaskComplexity
 from app.services.agent_prompts import get_agent_system_prompt
+from app.services.json_utils import parse_json_response as _parse_json_response
 
 router = APIRouter()
 
@@ -115,30 +115,6 @@ def _finding_to_text(f: FindingData) -> str:
     if f.recommendation:
         parts.append(f"\nRECOMENDACIÓN:\n{f.recommendation}")
     return "\n".join(parts)
-
-
-def _parse_json_response(text: str, default: dict) -> dict:
-    """Try to extract JSON from LLM response, return default on failure."""
-    try:
-        # Look for JSON block in response
-        if "```json" in text:
-            start = text.index("```json") + 7
-            end = text.index("```", start)
-            return json.loads(text[start:end].strip())
-        elif "```" in text:
-            start = text.index("```") + 3
-            end = text.index("```", start)
-            return json.loads(text[start:end].strip())
-        elif text.strip().startswith("{"):
-            return json.loads(text.strip())
-        # Try to find JSON object in text
-        brace_start = text.find("{")
-        brace_end = text.rfind("}")
-        if brace_start != -1 and brace_end != -1:
-            return json.loads(text[brace_start:brace_end + 1])
-    except (json.JSONDecodeError, ValueError):
-        pass
-    return default
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────

@@ -14,8 +14,10 @@ from enum import Enum
 from anthropic import AsyncAnthropic
 from google import genai
 from google.genai import types as genai_types
+from pydantic import BaseModel, ValidationError
 
 from app.config import settings
+from app.services.json_utils import parse_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -199,3 +201,108 @@ async def chat_with_agent(
             return await _chat_claude(claude_model, system_prompt, messages, max_tokens)
 
     return await _chat_claude(model, system_prompt, messages, max_tokens)
+
+
+# ─── Salida estructurada (EVD-05) ──────────────────────────────────────────────
+# Función nueva, no un parámetro más de chat_with_agent: la extracción es tarea
+# determinista (temperature baja fija), no conversacional (temperature=0.7 fijo
+# de _chat_gemini), y necesita validación Pydantic + reintento — nada de eso
+# aplica al resto de los usos de chat_with_agent.
+
+class StructuredGenerationError(Exception):
+    """El LLM no devolvió una respuesta que valide contra el schema pedido,
+    ni siquiera tras el reintento con el error de validación anexado."""
+
+
+async def _generate_structured_once(
+    agent_type: str,
+    system_prompt: str,
+    user_content: str,
+    response_schema: type[BaseModel],
+    max_tokens: int,
+    temperature: float,
+) -> dict:
+    model, _ = get_model_for_agent(agent_type, TaskComplexity.STANDARD, LLMProvider.GEMINI)
+    try:
+        response = await _gemini.aio.models.generate_content(
+            model=model,
+            contents=[{"role": "user", "parts": [{"text": user_content}]}],
+            config=genai_types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+                response_mime_type="application/json",
+                response_schema=response_schema,
+                thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        text = _extract_gemini_text(response)
+        usage = response.usage_metadata
+        return {
+            "parsed": parse_json_response(text, {}),
+            "model": model,
+            "input_tokens": getattr(usage, "prompt_token_count", 0) or 0,
+            "output_tokens": getattr(usage, "candidates_token_count", 0) or 0,
+        }
+    except Exception as gemini_err:
+        logger.warning("generate_structured: Gemini falló (%s) — fallback a Claude", gemini_err)
+        claude_model, _ = get_model_for_agent(agent_type, TaskComplexity.STANDARD, LLMProvider.CLAUDE)
+        instruction = (
+            system_prompt
+            + "\n\nResponde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni bloques markdown."
+        )
+        response = await _anthropic.messages.create(
+            model=claude_model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=instruction,
+            messages=[{"role": "user", "content": user_content}],
+        )
+        return {
+            "parsed": parse_json_response(response.content[0].text, {}),
+            "model": claude_model,
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
+
+
+async def generate_structured(
+    agent_type: str,
+    system_prompt: str,
+    user_content: str,
+    response_schema: type[BaseModel],
+    max_tokens: int = 8192,
+    temperature: float = 0.1,
+) -> dict:
+    """Genera una respuesta JSON validada contra un schema Pydantic.
+
+    Gemini primero (JSON mode); si falla, cae a Claude con instrucción JSON
+    explícita — mismo patrón de fallback que chat_with_agent, reutilizado, no
+    reinventado. El texto de cualquiera de los dos proveedores se parsea con
+    el mismo parser compartido (json_utils.parse_json_response) y se valida
+    con Pydantic. Si no valida, UN reintento con el error de validación
+    anexado al prompt; si vuelve a fallar, error — nunca se devuelve un
+    resultado sin validar.
+    """
+    last_error: str | None = None
+    content = user_content
+
+    for attempt in range(2):
+        result = await _generate_structured_once(agent_type, system_prompt, content, response_schema, max_tokens, temperature)
+        try:
+            validated = response_schema.model_validate(result["parsed"])
+            return {
+                "data": validated.model_dump(),
+                "modelo": result["model"],
+                "input_tokens": result["input_tokens"],
+                "output_tokens": result["output_tokens"],
+            }
+        except ValidationError as e:
+            last_error = str(e)
+            logger.warning("generate_structured: validación Pydantic falló (intento %d): %s", attempt + 1, last_error)
+            content = (
+                f"{user_content}\n\n---\nTu respuesta anterior no cumplió el formato esperado. "
+                f"Error de validación: {last_error}\nCorrige y responde de nuevo, solo el JSON."
+            )
+
+    raise StructuredGenerationError(f"No se pudo generar una respuesta válida tras 2 intentos: {last_error}")

@@ -1727,11 +1727,16 @@ INSTRUCCIONES DE SALIDA:
       const n = parseFloat(String(v).replace(/[^\d.-]/g, ''));
       return Number.isFinite(n) ? n : null;
     };
-    const findKey = (row: Record<string, unknown>, patterns: string[]): string | undefined => {
-      const keys = Object.keys(row);
+    // Unión de claves de TODAS las filas (no solo la primera) — una tabla MATRIX
+    // puede tener filas con distintas columnas rellenas (ej. una fila de Atributos
+    // con TDT/Nivel de Confianza que las filas MUS no tienen), así que buscar el
+    // patrón solo en row[0] se perdería columnas que aparecen más adelante.
+    const findKey = (rows: Record<string, unknown>[], patterns: string[]): string | undefined => {
+      const keys = new Set<string>();
+      for (const r of rows) for (const k of Object.keys(r)) keys.add(k);
       const norm2 = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
       for (const p of patterns) {
-        const found = keys.find(k => norm2(k).includes(p));
+        const found = [...keys].find(k => norm2(k).includes(p));
         if (found) return found;
       }
       return undefined;
@@ -1745,7 +1750,7 @@ INSTRUCCIONES DE SALIDA:
     const s2Rows = asRows(byKey.get('S2')?.value);
     const s3Rows = asRows(byKey.get('S3')?.value);
     const s5Rows = asRows(byKey.get('S5')?.value) as Array<{
-      area?: string; bookValue?: unknown; auditedValue?: unknown;
+      area?: string; bookValue?: unknown; auditedValue?: unknown; cumple?: unknown;
     }>;
 
     if (s5Rows.length === 0) {
@@ -1758,15 +1763,30 @@ INSTRUCCIONES DE SALIDA:
     // Materialidad real del encargo — PT-A4, la misma fuente que usa el puente a PT-FIN-B08.
     const { mg, me, uae } = await this.getMaterialidadByAudit(wp.auditId, user);
 
-    // Tipo de muestreo declarado por área (S2)
+    // Tipo de muestreo declarado por área (S2), y sus parámetros de planificación:
+    // Universo estimado (N) alimenta "Nivel de Alcance" para CUALQUIER tipo de
+    // muestreo (MUS, Atributos, Dirigido, 100%); TDT y Nivel de Confianza solo
+    // aplican a áreas de Atributos (pruebas de control, ver más abajo).
     const tipoByArea = new Map<string, string>();
+    const universoByArea = new Map<string, number>();
+    const tdtByArea = new Map<string, number>();
+    const clByArea = new Map<string, number>();
     if (s2Rows.length > 0) {
-      const areaKey = findKey(s2Rows[0], ['area']);
-      const tipoKey = findKey(s2Rows[0], ['tipo de muestreo']);
+      const areaKey = findKey(s2Rows, ['area']);
+      const tipoKey = findKey(s2Rows, ['tipo de muestreo']);
+      const universoKey = findKey(s2Rows, ['universo estimado', 'universo (n)']);
+      const tdtKey = findKey(s2Rows, ['desviacion tolerable', 'tdt', 'tdr']);
+      const clKey = findKey(s2Rows, ['nivel de confianza', 'confianza']);
       for (const r of s2Rows) {
         const area = areaKey ? normArea(norm(r[areaKey])) : '';
         if (!area) continue;
         tipoByArea.set(area, tipoKey ? norm(r[tipoKey]) : '');
+        const u = universoKey ? asNumber(r[universoKey]) : null;
+        if (u != null && u > 0) universoByArea.set(area, u);
+        const t = tdtKey ? asNumber(r[tdtKey]) : null;
+        if (t != null && t > 0) tdtByArea.set(area, t);
+        const c = clKey ? asNumber(r[clKey]) : null;
+        if (c != null && c > 0) clByArea.set(area, c);
       }
     }
 
@@ -1774,10 +1794,10 @@ INSTRUCCIONES DE SALIDA:
     interface DesignInfo { interval: number | null; k: number | null; nPlanned: number | null; }
     const designByArea = new Map<string, DesignInfo>();
     if (s3Rows.length > 0) {
-      const areaKey     = findKey(s3Rows[0], ['area']);
-      const intervalKey = findKey(s3Rows[0], ['intervalo de muestreo']);
-      const kKey        = findKey(s3Rows[0], ['factor k']);
-      const nKey        = findKey(s3Rows[0], ['n = k']);
+      const areaKey     = findKey(s3Rows, ['area']);
+      const intervalKey = findKey(s3Rows, ['intervalo de muestreo']);
+      const kKey        = findKey(s3Rows, ['factor k']);
+      const nKey        = findKey(s3Rows, ['n = k']);
       for (const r of s3Rows) {
         const area = areaKey ? normArea(norm(r[areaKey])) : '';
         if (!area) continue;
@@ -1789,35 +1809,54 @@ INSTRUCCIONES DE SALIDA:
       }
     }
 
-    // Agrupar ítems examinados de S5 por área
+    // Agrupar ítems examinados de S5 por área — dos formas de "examinado" que
+    // coexisten en la misma tabla: (a) valor en libros/auditado (MUS/Dirigido/100%)
+    // y (b) resultado Cumple/No cumple/N-A (Atributos — pruebas de control). Un
+    // ítem puede tener una forma u otra según el tipo de muestreo de su área.
     interface ItemAgg { bookValue: number; diff: number; }
+    interface AttrItemAgg { cumple: 'SI' | 'NO' | 'NA'; }
     const itemsByArea = new Map<string, ItemAgg[]>();
+    const attrItemsByArea = new Map<string, AttrItemAgg[]>();
     const rawAreaLabel = new Map<string, string>();
     for (const r of s5Rows) {
       const rawArea = norm(r.area);
       if (!rawArea) continue;
       const area = normArea(rawArea);
       if (!rawAreaLabel.has(area)) rawAreaLabel.set(area, rawArea);
+
       const bv = typeof r.bookValue === 'number' ? r.bookValue : asNumber(r.bookValue);
       const av = r.auditedValue === null || r.auditedValue === undefined || r.auditedValue === ''
         ? null
         : (typeof r.auditedValue === 'number' ? r.auditedValue : asNumber(r.auditedValue));
-      if (av === null || bv === null) continue; // sin examinar todavía, o sin valor en libros
-      if (!itemsByArea.has(area)) itemsByArea.set(area, []);
-      itemsByArea.get(area)!.push({ bookValue: bv, diff: bv - av });
+      if (av !== null && bv !== null) {
+        if (!itemsByArea.has(area)) itemsByArea.set(area, []);
+        itemsByArea.get(area)!.push({ bookValue: bv, diff: bv - av });
+      }
+
+      const cumpleRaw = norm(r.cumple).toUpperCase();
+      if (cumpleRaw === 'SI' || cumpleRaw === 'NO' || cumpleRaw === 'NA') {
+        if (!attrItemsByArea.has(area)) attrItemsByArea.set(area, []);
+        attrItemsByArea.get(area)!.push({ cumple: cumpleRaw });
+      }
     }
 
-    type Accion   = 'NINGUNA' | 'CERCA_DEL_LIMITE' | 'AMPLIAR_MUESTRA' | 'PROPONER_AJUSTE' | 'MODIFICAR_OPINION';
+    type Accion   = 'NINGUNA' | 'CERCA_DEL_LIMITE' | 'AMPLIAR_MUESTRA' | 'PROPONER_AJUSTE' | 'MODIFICAR_OPINION' | 'CONTROL_NO_EFECTIVO';
     type Semaforo = 'VERDE' | 'AMARILLO' | 'NARANJA' | 'ROJO';
 
     interface AreaResult {
-      area: string; tipoMuestreo: string; esMUS: boolean;
+      area: string; tipoMuestreo: string; esMUS: boolean; esAtributos: boolean;
       itemsExaminados: number; itemsConError: number; erroresEncontrados: number;
       intervaloMuestreo: number | null; factorK: number | null; nivelConfianzaPct: number | null;
       precisionBasica: number | null; errorMasProbable: number | null;
       ampliacionPrecision: number | null; limiteSuperiorError: number | null;
       valorComparado: number; uae: number | null; me: number | null; mg: number | null;
       superaUAE: boolean; superaME: boolean; superaMG: boolean;
+      // Atributos (pruebas de control) — tasa de desviación en vez de $ de error.
+      itemsConDesviacion: number | null; tasaDesviacionMuestra: number | null;
+      limiteSuperiorDesviacion: number | null; tasaDesviacionTolerable: number | null;
+      // Nivel de Alcance — % de la población (N declarado en S2) que cubrió la
+      // muestra examinada. Aplica a CUALQUIER tipo de muestreo, no solo Atributos.
+      universoN: number | null; nivelAlcancePct: number | null;
       accion: Accion; semaforo: Semaforo;
       ampliacionSugerida: { itemsAdicionales: number; muestraTotalSugerida: number } | null;
       nota: string | null;
@@ -1825,10 +1864,84 @@ INSTRUCCIONES DE SALIDA:
 
     const filas: AreaResult[] = [];
 
-    for (const [area, items] of itemsByArea) {
+    const allAreas = new Set<string>([...itemsByArea.keys(), ...attrItemsByArea.keys()]);
+
+    for (const area of allAreas) {
       const tipoRaw = tipoByArea.get(area) ?? '';
       const esMUS = /mus/i.test(tipoRaw);
+      const esAtributos = /atribut/i.test(tipoRaw);
       const design = designByArea.get(area);
+      const universoN = universoByArea.get(area) ?? null;
+
+      // ── Atributos (pruebas de control): tasa de desviación, no $ de error ──
+      if (esAtributos) {
+        const attrItems = attrItemsByArea.get(area) ?? [];
+        const itemsExaminados = attrItems.length;
+        // Convención de S5 (misma que el panel de ejecución de PT-A4): 'NO' =
+        // No hay desviación (conforme) · 'SI' = Sí hay desviación.
+        const itemsConDesviacion = attrItems.filter(i => i.cumple === 'SI').length;
+
+        let tasaDesviacionMuestra: number | null = null;
+        let limiteSuperiorDesviacion: number | null = null;
+        let nota: string | null = null;
+        let accion: Accion = 'NINGUNA';
+        let semaforo: Semaforo = 'VERDE';
+        let ampliacionSugerida: AreaResult['ampliacionSugerida'] = null;
+        const tdt = tdtByArea.get(area) ?? null;
+        const clPct = clByArea.get(area) ?? 95; // default NIA 530 — mismo que el panel de ejecución (PT-A4)
+        const nivelConfianzaPct = clPct;
+
+        if (itemsExaminados === 0) {
+          nota = 'Sin ítems con resultado (Cumple/No cumple) registrado en S5 para esta área — nada que evaluar todavía.';
+        } else {
+          tasaDesviacionMuestra = (itemsConDesviacion / itemsExaminados) * 100;
+          const riskLevel = 1 - clPct / 100;
+          // Mismo factor de confiabilidad Poisson que MUS, aplicado a una TASA (÷ n)
+          // en vez de a un monto (× intervalo) — es la forma estándar de la cota
+          // superior de desviación (AICPA/NIA 530) para muestreo de atributos.
+          limiteSuperiorDesviacion = (reliabilityFactor(itemsConDesviacion, riskLevel) / itemsExaminados) * 100;
+
+          if (tdt == null) {
+            nota = (nota ? nota + ' ' : '') + 'Sin Tasa de Desviación Tolerable (TDT) definida en S2 para esta área — no es posible evaluar contra un umbral; se muestra solo la tasa de desviación observada.';
+          } else if (limiteSuperiorDesviacion >= tdt && tasaDesviacionMuestra >= tdt) {
+            accion = 'CONTROL_NO_EFECTIVO'; semaforo = 'ROJO';
+          } else if (limiteSuperiorDesviacion >= tdt) {
+            accion = 'AMPLIAR_MUESTRA'; semaforo = 'AMARILLO';
+          } else if (tdt > 0 && limiteSuperiorDesviacion >= tdt * 0.75) {
+            accion = 'CERCA_DEL_LIMITE'; semaforo = 'AMARILLO';
+          }
+
+          if (tdt != null && (accion === 'AMPLIAR_MUESTRA' || accion === 'CERCA_DEL_LIMITE')) {
+            const nTotal = Math.ceil(itemsExaminados * (limiteSuperiorDesviacion / tdt));
+            const itemsAdicionales = Math.max(0, nTotal - itemsExaminados);
+            if (itemsAdicionales > 0) ampliacionSugerida = { itemsAdicionales, muestraTotalSugerida: nTotal };
+          }
+        }
+
+        const nivelAlcancePct = universoN != null && universoN > 0
+          ? Math.min(100, (itemsExaminados / universoN) * 100)
+          : null;
+
+        filas.push({
+          area: rawAreaLabel.get(area) ?? area,
+          tipoMuestreo: tipoRaw || 'No especificado (revisar S2)',
+          esMUS: false, esAtributos: true,
+          itemsExaminados, itemsConError: itemsConDesviacion, erroresEncontrados: 0,
+          intervaloMuestreo: null, factorK: null, nivelConfianzaPct,
+          precisionBasica: null, errorMasProbable: null, ampliacionPrecision: null, limiteSuperiorError: null,
+          valorComparado: tasaDesviacionMuestra ?? 0, uae: null, me: null, mg: null,
+          superaUAE: false, superaME: false, superaMG: false,
+          itemsConDesviacion, tasaDesviacionMuestra, limiteSuperiorDesviacion, tasaDesviacionTolerable: tdt,
+          universoN, nivelAlcancePct,
+          accion, semaforo,
+          ampliacionSugerida,
+          nota,
+        });
+        continue;
+      }
+
+      // ── MUS / Dirigido / 100% — lógica original sin cambios ──
+      const items = itemsByArea.get(area) ?? [];
 
       const itemsExaminados = items.length;
       const itemsConError = items.filter(i => i.diff !== 0).length;
@@ -1915,10 +2028,21 @@ INSTRUCCIONES DE SALIDA:
         if (itemsAdicionales > 0) ampliacionSugerida = { itemsAdicionales, muestraTotalSugerida: nTotal };
       }
 
+      // Cobertura en $ (no en conteo de ítems): el "Universo estimado (N)" de S2
+      // para áreas MUS/Dirigido/100% se documenta convencionalmente en dólares
+      // (es lo que ya hace el auditor en la práctica), así que el alcance real
+      // que importa es cuánto $ de esa población cubrió la muestra examinada —
+      // no cuántos ítems, que puede ser un % engañosamente bajo en MUS (pocos
+      // ítems grandes cubren la mayoría del valor).
+      const examinedValueSum = items.reduce((s, i) => s + i.bookValue, 0);
+      const nivelAlcancePct = universoN != null && universoN > 0
+        ? Math.min(100, (examinedValueSum / universoN) * 100)
+        : null;
+
       filas.push({
         area: rawAreaLabel.get(area) ?? area,
         tipoMuestreo: tipoRaw || 'No especificado (revisar S2)',
-        esMUS,
+        esMUS, esAtributos: false,
         itemsExaminados, itemsConError, erroresEncontrados,
         intervaloMuestreo: design?.interval ?? null,
         factorK: design?.k ?? null,
@@ -1926,6 +2050,9 @@ INSTRUCCIONES DE SALIDA:
         precisionBasica, errorMasProbable, ampliacionPrecision, limiteSuperiorError,
         valorComparado, uae, me, mg,
         superaUAE, superaME, superaMG,
+        itemsConDesviacion: null, tasaDesviacionMuestra: null,
+        limiteSuperiorDesviacion: null, tasaDesviacionTolerable: null,
+        universoN, nivelAlcancePct,
         accion, semaforo,
         ampliacionSugerida,
         nota,

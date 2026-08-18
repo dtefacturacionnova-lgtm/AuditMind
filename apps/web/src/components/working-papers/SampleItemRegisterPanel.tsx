@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import {
-  Plus, Trash2, X, FileText, Loader2, Paperclip, HelpCircle, Import, Info,
+  Plus, Trash2, X, FileText, Loader2, Paperclip, HelpCircle, Import,
 } from 'lucide-react';
 import {
   useAttachToDocumentEvidence, useRemoveDocumentEvidenceAttachment, useSamplingExecutionByAudit,
@@ -12,13 +12,16 @@ import type { EvidenceAttachment } from './DocumentEvidencePanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type CumpleResultado = 'SI' | 'NO' | 'NA';
+
 export interface SampleItemRow {
   id:           string;
   area:         string;
   itemRef:      string;
   descripcion:  string;
-  bookValue:    number | null;   // Valor en libros ($)
-  auditedValue: number | null;   // Valor auditado ($) — null = aún no examinado
+  bookValue:    number | null;   // Valor en libros ($) — áreas MUS
+  auditedValue: number | null;   // Valor auditado ($) — áreas MUS, null = aún no examinado
+  cumple:       CumpleResultado | null; // Resultado de la prueba de control — áreas de Atributos
   fecha:        string;
   execRef:      string;          // Ref. papel de ejecución (C-xx)
   attachments:  EvidenceAttachment[];
@@ -43,6 +46,7 @@ function newRow(): SampleItemRow {
     descripcion:  '',
     bookValue:    null,
     auditedValue: null,
+    cumple:       null,
     fecha:        '',
     execRef:      '',
     attachments:  [],
@@ -117,8 +121,9 @@ function ImportFromExecutionModal({
   const [customArea, setCustomArea] = useState('');
   const [selectedIdx, setSelectedIdx] = useState<Set<number>>(new Set());
 
-  const isMUS = execution?.mode === 'MUS';
-  const items: SamplingExecutionItem[] = isMUS ? (execution?.selected ?? []) : [];
+  const isMUS  = execution?.mode === 'MUS';
+  const isAttr = execution?.mode === 'ATTRIBUTES';
+  const items: SamplingExecutionItem[] = execution ? (execution.selected ?? []) : [];
 
   function toggleAll() {
     if (selectedIdx.size === items.length) setSelectedIdx(new Set());
@@ -142,8 +147,9 @@ function ImportFromExecutionModal({
         area,
         itemRef: String(it.referencia ?? ''),
         descripcion: String(it.descripcion ?? ''),
-        bookValue: looseAmount(it.monto),
+        bookValue: isMUS ? looseAmount(it.monto) : null,
         auditedValue: null,
+        cumple: null,
         fecha: looseDate(it.fecha, execution?.executed_at ?? ''),
         execRef: '',
         attachments: [],
@@ -175,14 +181,6 @@ function ImportFromExecutionModal({
             &quot;Ejecución de Muestreo&quot;). Ejecute una selección ahí primero, o siga llenando esta tabla a mano.
           </p>
         )}
-        {!isLoading && execution && !isMUS && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5">
-            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            La última ejecución de PT-A4 fue por Atributos (pruebas de control), sin montos monetarios — no aplica
-            para esta tabla, que necesita valor en libros. Ejecute una selección MUS en PT-A4 primero.
-          </p>
-        )}
-
         {isMUS && execution && (
           <div className="space-y-3">
             <p className="text-[11px] text-gray-500">
@@ -254,6 +252,79 @@ function ImportFromExecutionModal({
             </div>
             <p className="text-[10px] text-gray-400">
               Se importan como &quot;sin examinar&quot; (Valor auditado vacío) — complételo por ítem al revisar cada uno.
+            </p>
+          </div>
+        )}
+
+        {isAttr && execution && (
+          <div className="space-y-3">
+            <p className="text-[11px] text-gray-500">
+              Ejecución por Atributos del {new Date(execution.executed_at).toLocaleString('es-SV')} — {execution.sample_size} de {execution.total_items} ítems seleccionados.
+              Nota: PT-A4 solo guarda la última ejecución; si ya importó estos mismos ítems antes, evite duplicarlos.
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Área destino en esta tabla</label>
+              {areaOptions.length > 0 ? (
+                <select
+                  value={targetArea}
+                  onChange={e => setTargetArea(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={customArea}
+                  onChange={e => setCustomArea(e.target.value)}
+                  placeholder="Escriba el nombre del área (debe coincidir con S2/S3)"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              )}
+            </div>
+
+            <div className="border border-gray-100 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                <button onClick={toggleAll} className="text-[11px] text-blue-600 hover:underline font-medium">
+                  {selectedIdx.size === items.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                </button>
+                <span className="text-[11px] text-gray-400">{selectedIdx.size} de {items.length} elegidos</span>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-white border-b border-gray-100 text-[10px] text-gray-400 uppercase tracking-wide">
+                      <th className="px-2 py-1.5 w-6"></th>
+                      <th className="px-2 py-1.5 text-left">Referencia</th>
+                      <th className="px-2 py-1.5 text-left">Descripción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, i) => (
+                      <tr key={i} className="border-b border-gray-50 last:border-0">
+                        <td className="px-2 py-1"><input type="checkbox" checked={selectedIdx.has(i)} onChange={() => toggleOne(i)} /></td>
+                        <td className="px-2 py-1 font-mono text-gray-600">{String(it.referencia ?? '—')}</td>
+                        <td className="px-2 py-1 text-gray-600">{String(it.descripcion ?? '—')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">Cancelar</button>
+              <button
+                onClick={handleImport}
+                disabled={selectedIdx.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                <Import className="w-3.5 h-3.5" /> Importar {selectedIdx.size || ''} ítem{selectedIdx.size === 1 ? '' : 's'}
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400">
+              Se importan como &quot;sin examinar&quot; (Cumple vacío) — complételo por ítem al revisar cada uno.
             </p>
           </div>
         )}
@@ -427,6 +498,21 @@ function SampleItemRowItem({ row, index, paperId, readOnly, onUpdate, onDelete }
         ) : <span className="text-[10px] text-gray-300">—</span>}
       </td>
 
+      {/* Cumple — resultado de la prueba de control, solo áreas de Atributos */}
+      <td className={`${tdBase} w-24`}>
+        <select
+          value={row.cumple ?? ''}
+          onChange={e => onUpdate({ cumple: e.target.value === '' ? null : (e.target.value as CumpleResultado) })}
+          disabled={readOnly}
+          className="w-full text-xs border border-gray-200 rounded px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:bg-gray-50 disabled:cursor-default"
+        >
+          <option value="">— Pendiente —</option>
+          <option value="NO">No (conforme)</option>
+          <option value="SI">Sí (desviación)</option>
+          <option value="NA">N/A</option>
+        </select>
+      </td>
+
       <td className={`${tdBase} w-28`}>
         <input type="date" value={row.fecha} onChange={e => onUpdate({ fecha: e.target.value })}
           disabled={readOnly} className={dateCls} />
@@ -500,9 +586,10 @@ export function SampleItemRegisterPanel({ paperId, auditId, areaOptions = [], ro
   }
   function deleteRow(id: string) { onChange(rows.filter(r => r.id !== id)); }
 
-  const examinados = rows.filter(r => r.auditedValue !== null).length;
+  const examinados = rows.filter(r => r.auditedValue !== null || r.cumple !== null).length;
   const conError = rows.filter(r => { const { diff } = itemDifference(r); return r.auditedValue !== null && diff !== 0; }).length;
   const totalDiff = rows.reduce((sum, r) => sum + itemDifference(r).diff, 0);
+  const conDesviacion = rows.filter(r => r.cumple === 'SI').length;
 
   const headers = [
     { label: '#',           cls: 'w-6 text-center' },
@@ -513,6 +600,7 @@ export function SampleItemRegisterPanel({ paperId, auditId, areaOptions = [], ro
     { label: 'Valor auditado',  cls: 'w-28 text-right' },
     { label: 'Diferencia',  cls: 'w-24 text-right' },
     { label: 'Tainting',    cls: 'w-20 text-center' },
+    { label: 'Cumple',      cls: 'w-24' },
     { label: 'Fecha',       cls: 'w-28' },
     { label: 'Ref. ejecución', cls: 'w-24' },
     { label: 'Evidencia',   cls: 'w-36' },
@@ -562,6 +650,11 @@ export function SampleItemRegisterPanel({ paperId, auditId, areaOptions = [], ro
                 {conError} con diferencia · total {fmtUSD(totalDiff)}
               </span>
             )}
+            {conDesviacion > 0 && (
+              <span className="text-[11px] font-medium text-red-600">
+                {conDesviacion} con desviación (No cumple)
+              </span>
+            )}
             <button
               onClick={() => setShowHelp(true)}
               className="ml-auto flex items-center gap-1 text-[10px] text-gray-400 hover:text-violet-600 transition-colors"
@@ -571,7 +664,7 @@ export function SampleItemRegisterPanel({ paperId, auditId, areaOptions = [], ro
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth: '1200px' }}>
+            <table className="w-full text-sm" style={{ minWidth: '1300px' }}>
               <thead>
                 <tr className="bg-white border-b border-gray-100">
                   {headers.map(h => (

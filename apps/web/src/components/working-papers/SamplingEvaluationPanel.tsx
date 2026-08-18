@@ -8,13 +8,14 @@ import { useRecalculateSamplingEvaluation } from '@/hooks/useWorkingPaperGraph';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SamplingAccion = 'NINGUNA' | 'CERCA_DEL_LIMITE' | 'AMPLIAR_MUESTRA' | 'PROPONER_AJUSTE' | 'MODIFICAR_OPINION';
+export type SamplingAccion = 'NINGUNA' | 'CERCA_DEL_LIMITE' | 'AMPLIAR_MUESTRA' | 'PROPONER_AJUSTE' | 'MODIFICAR_OPINION' | 'CONTROL_NO_EFECTIVO';
 export type SamplingSemaforo = 'VERDE' | 'AMARILLO' | 'NARANJA' | 'ROJO';
 
 export interface SamplingEvalAreaResult {
   area:                 string;
   tipoMuestreo:         string;
   esMUS:                boolean;
+  esAtributos:          boolean;
   itemsExaminados:      number;
   itemsConError:        number;
   erroresEncontrados:   number;
@@ -32,6 +33,12 @@ export interface SamplingEvalAreaResult {
   superaUAE:            boolean;
   superaME:             boolean;
   superaMG:             boolean;
+  itemsConDesviacion:       number | null;
+  tasaDesviacionMuestra:    number | null;
+  limiteSuperiorDesviacion: number | null;
+  tasaDesviacionTolerable:  number | null;
+  universoN:            number | null;
+  nivelAlcancePct:      number | null;
   accion:               SamplingAccion;
   semaforo:             SamplingSemaforo;
   ampliacionSugerida:   { itemsAdicionales: number; muestraTotalSugerida: number } | null;
@@ -69,15 +76,28 @@ const SEMAFORO_CFG: Record<SamplingSemaforo, { dot: string; bg: string; text: st
 };
 
 const ACCION_LABEL: Record<SamplingAccion, string> = {
-  NINGUNA:           'Ninguna acción adicional',
-  CERCA_DEL_LIMITE:  'Cerca del límite — vigilar',
-  AMPLIAR_MUESTRA:   'Ampliar la muestra',
-  PROPONER_AJUSTE:   'Proponer ajuste (AJE)',
-  MODIFICAR_OPINION: 'Evaluar modificación de opinión',
+  NINGUNA:             'Ninguna acción adicional',
+  CERCA_DEL_LIMITE:    'Cerca del límite — vigilar',
+  AMPLIAR_MUESTRA:     'Ampliar la muestra',
+  PROPONER_AJUSTE:     'Proponer ajuste (AJE)',
+  MODIFICAR_OPINION:   'Evaluar modificación de opinión',
+  CONTROL_NO_EFECTIVO: 'Control no operando efectivamente',
 };
 
 /** Frase en lenguaje simple, generada a partir de los números reales del área. */
 function explainPlain(f: SamplingEvalAreaResult): string {
+  if (f.esAtributos) {
+    if (f.itemsExaminados === 0) return `En ${f.area}, no hay ítems con resultado registrado todavía.`;
+    const desv = f.itemsConDesviacion ?? 0;
+    const base = desv === 0
+      ? `En ${f.area}, ninguno de los ${f.itemsExaminados} ítems examinados presentó desviación`
+      : `En ${f.area}, ${desv} de ${f.itemsExaminados} ítems examinados presentaron desviación (tasa de ${(f.tasaDesviacionMuestra ?? 0).toFixed(1)}%)`;
+    if (f.tasaDesviacionTolerable == null) {
+      return `${base}. Falta definir la Tasa de Desviación Tolerable (TDT) en S2 para poder concluir si el control es efectivo.`;
+    }
+    return `${base}. Considerando el margen por riesgo de muestreo, el límite superior de desviación llega a ${(f.limiteSuperiorDesviacion ?? 0).toFixed(1)}%, contra una tolerancia de ${f.tasaDesviacionTolerable.toFixed(1)}%. ${accionPlain(f)}`;
+  }
+
   const errores = f.itemsConError === 0
     ? `no se encontró ningún error en los ${f.itemsExaminados} ítems examinados`
     : `se encontraron ${f.itemsConError} ítem${f.itemsConError === 1 ? '' : 's'} con diferencia de ${f.itemsExaminados} examinados`;
@@ -102,11 +122,18 @@ function explainPlain(f: SamplingEvalAreaResult): string {
 }
 function accionPlain(f: SamplingEvalAreaResult): string {
   switch (f.accion) {
-    case 'NINGUNA':           return 'Ambos quedan por debajo de lo que preocupa — no se requiere nada adicional.';
-    case 'CERCA_DEL_LIMITE':  return 'Está cerca del límite de materialidad — vale la pena vigilar esta área en el cierre.';
-    case 'AMPLIAR_MUESTRA':   return 'El margen de riesgo (no el error en sí) supera la materialidad — lo más eficiente suele ser examinar algunos ítems adicionales para reducir ese margen.';
-    case 'PROPONER_AJUSTE':   return 'El error proyectado en sí ya supera la materialidad de ejecución — corresponde proponer un ajuste a la administración.';
-    case 'MODIFICAR_OPINION': return 'El error supera la materialidad global — debe evaluarse el efecto en la opinión del informe.';
+    case 'NINGUNA':             return f.esAtributos
+      ? 'El límite superior de desviación queda por debajo de la tolerancia — el control parece estar operando efectivamente.'
+      : 'Ambos quedan por debajo de lo que preocupa — no se requiere nada adicional.';
+    case 'CERCA_DEL_LIMITE':    return f.esAtributos
+      ? 'Está cerca de la tolerancia — vale la pena vigilar este control en el cierre.'
+      : 'Está cerca del límite de materialidad — vale la pena vigilar esta área en el cierre.';
+    case 'AMPLIAR_MUESTRA':     return f.esAtributos
+      ? 'El margen de riesgo de muestreo (no la tasa observada en sí) supera la tolerancia — lo más eficiente suele ser examinar algunos ítems adicionales para reducir ese margen.'
+      : 'El margen de riesgo (no el error en sí) supera la materialidad — lo más eficiente suele ser examinar algunos ítems adicionales para reducir ese margen.';
+    case 'PROPONER_AJUSTE':     return 'El error proyectado en sí ya supera la materialidad de ejecución — corresponde proponer un ajuste a la administración.';
+    case 'MODIFICAR_OPINION':   return 'El error supera la materialidad global — debe evaluarse el efecto en la opinión del informe.';
+    case 'CONTROL_NO_EFECTIVO': return 'Tanto la tasa observada como el límite superior de desviación superan la tolerancia — el control no parece estar operando efectivamente; considere aumentar el riesgo de control evaluado y ampliar los procedimientos sustantivos de esta área.';
   }
 }
 
@@ -214,6 +241,28 @@ function MethodologyModal({ onClose }: { onClose: () => void }) {
             Áreas Dirigidas o de examen 100% no usan esta proyección estadística — su "UEL" es directamente
             la suma de las diferencias encontradas, porque no hay población sin examinar que proyectar.
           </div>
+
+          <div className="bg-violet-50 border border-violet-200 rounded-xl p-3">
+            <p className="font-semibold text-violet-700 mb-1">Áreas de Atributos (pruebas de control)</p>
+            <p>
+              Aquí no hay montos: cada ítem se marca Cumple/No cumple (S5). La tasa de desviación de la
+              muestra se proyecta al mismo estilo que MUS — con el mismo método Poisson, pero aplicado a una
+              tasa (÷ n) en vez de a un monto (× intervalo) — dando un límite superior de desviación que se
+              compara contra la Tasa de Desviación Tolerable (TDT) declarada en S2. Si el límite superior y la
+              tasa observada superan la TDT, el control se marca como no efectivo.
+            </p>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+            <p className="font-semibold text-blue-700 mb-1">Nivel de Alcance</p>
+            <p>
+              Independiente del tipo de muestreo, cada tarjeta muestra qué % del Universo estimado (N,
+              declarado en S2) cubrió realmente la muestra examinada — útil para documentar, por ejemplo, qué
+              porcentaje del inventario se llegó a revisar. En MUS/Dirigido/100% se mide en $ (valor examinado
+              ÷ valor total de la población) porque unos pocos ítems grandes pueden cubrir la mayoría del
+              valor; en Atributos se mide en cantidad de ítems, porque ahí no hay montos que sumar.
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -250,6 +299,27 @@ function ThresholdBar({ value, uae, me, mg }: { value: number; uae: number | nul
   );
 }
 
+/** Misma idea que ThresholdBar pero en % (tasa de desviación vs. TDT) en vez de $. */
+function DeviationBar({ value, tdt }: { value: number; tdt: number | null }) {
+  const max = Math.max(value, tdt ?? 0, 1) * 1.15;
+  const pct = (v: number) => Math.min(100, (v / max) * 100);
+  return (
+    <div className="mt-1.5">
+      <div className="relative h-2.5 rounded-full bg-gray-100 overflow-hidden">
+        <div
+          className={`absolute inset-y-0 left-0 rounded-full ${tdt != null && value >= tdt ? 'bg-red-500' : 'bg-emerald-500'}`}
+          style={{ width: `${pct(value)}%` }}
+        />
+        {tdt != null && <div className="absolute inset-y-0 border-l-2 border-red-500" style={{ left: `${pct(tdt)}%` }} title={`TDT ${tdt.toFixed(1)}%`} />}
+      </div>
+      <div className="flex justify-between text-[9px] text-gray-400 mt-0.5">
+        <span>0%</span>
+        {tdt != null && <span className="text-red-500 font-medium">TDT {tdt.toFixed(1)}%</span>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Tarjeta por área ─────────────────────────────────────────────────────────
 
 function MetricTile({ label, value }: { label: string; value: string }) {
@@ -261,6 +331,22 @@ function MetricTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+function AlcanceBadge({ f }: { f: SamplingEvalAreaResult }) {
+  if (f.nivelAlcancePct == null) return null;
+  const title = f.universoN == null ? undefined
+    : f.esAtributos
+      ? `${f.itemsExaminados} de ${f.universoN} ítems del universo estimado (N)`
+      : `% del valor ($) del universo estimado (N = ${fmtUSD(f.universoN)}) que cubrió la muestra examinada`;
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5"
+      title={title}
+    >
+      Alcance {f.nivelAlcancePct.toFixed(1)}%
+    </span>
+  );
+}
+
 function AreaCard({ f }: { f: SamplingEvalAreaResult }) {
   const sem = SEMAFORO_CFG[f.semaforo];
   return (
@@ -268,11 +354,16 @@ function AreaCard({ f }: { f: SamplingEvalAreaResult }) {
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div>
           <p className="text-sm font-semibold text-gray-800">{f.area}</p>
-          <p className="text-[10px] text-gray-400">{f.tipoMuestreo} · {f.itemsExaminados} examinados · {f.itemsConError} con diferencia</p>
+          <p className="text-[10px] text-gray-400">
+            {f.tipoMuestreo} · {f.itemsExaminados} examinados · {f.esAtributos ? `${f.itemsConDesviacion ?? 0} con desviación` : `${f.itemsConError} con diferencia`}
+          </p>
         </div>
-        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${sem.text} ${sem.bg} ${sem.border}`}>
-          {sem.icon} {ACCION_LABEL[f.accion]}
-        </span>
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          <AlcanceBadge f={f} />
+          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${sem.text} ${sem.bg} ${sem.border}`}>
+            {sem.icon} {ACCION_LABEL[f.accion]}
+          </span>
+        </div>
       </div>
 
       {f.nota && (
@@ -281,7 +372,14 @@ function AreaCard({ f }: { f: SamplingEvalAreaResult }) {
         </p>
       )}
 
-      {f.esMUS ? (
+      {f.esAtributos ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2.5">
+          <MetricTile label="Tasa de desviación (muestra)" value={f.tasaDesviacionMuestra != null ? `${f.tasaDesviacionMuestra.toFixed(1)}%` : '—'} />
+          <MetricTile label="Límite superior de desviación" value={f.limiteSuperiorDesviacion != null ? `${f.limiteSuperiorDesviacion.toFixed(1)}%` : '—'} />
+          <MetricTile label="Tasa de desviación tolerable (TDT)" value={f.tasaDesviacionTolerable != null ? `${f.tasaDesviacionTolerable.toFixed(1)}%` : '— (definir en S2)'} />
+          <MetricTile label="Nivel de confianza" value={f.nivelConfianzaPct != null ? `${f.nivelConfianzaPct}%` : '—'} />
+        </div>
+      ) : f.esMUS ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2.5">
           <MetricTile label="Error más probable (MLE)" value={fmtUSD(f.errorMasProbable ?? 0)} />
           <MetricTile label="Precisión básica" value={fmtUSD(f.precisionBasica ?? 0)} />
@@ -295,7 +393,9 @@ function AreaCard({ f }: { f: SamplingEvalAreaResult }) {
         </div>
       )}
 
-      <ThresholdBar value={f.valorComparado} uae={f.uae} me={f.me} mg={f.mg} />
+      {f.esAtributos
+        ? <DeviationBar value={f.tasaDesviacionMuestra ?? 0} tdt={f.tasaDesviacionTolerable} />
+        : <ThresholdBar value={f.valorComparado} uae={f.uae} me={f.me} mg={f.mg} />}
 
       <p className="mt-2 text-[11px] text-gray-500 italic leading-relaxed">{explainPlain(f)}</p>
 
@@ -303,7 +403,7 @@ function AreaCard({ f }: { f: SamplingEvalAreaResult }) {
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
           <TrendingUp className="w-3.5 h-3.5 shrink-0" />
           <span>
-            Ampliación sugerida: examinar <strong>{f.ampliacionSugerida.itemsAdicionales} ítem{f.ampliacionSugerida.itemsAdicionales === 1 ? '' : 's'} adicional{f.ampliacionSugerida.itemsAdicionales === 1 ? '' : 'es'}</strong> (muestra total ≈ {f.ampliacionSugerida.muestraTotalSugerida}) para reducir el margen de riesgo por debajo de la materialidad.
+            Ampliación sugerida: examinar <strong>{f.ampliacionSugerida.itemsAdicionales} ítem{f.ampliacionSugerida.itemsAdicionales === 1 ? '' : 's'} adicional{f.ampliacionSugerida.itemsAdicionales === 1 ? '' : 'es'}</strong> (muestra total ≈ {f.ampliacionSugerida.muestraTotalSugerida}) para reducir el margen de riesgo por debajo de {f.esAtributos ? 'la tolerancia' : 'la materialidad'}.
           </span>
         </div>
       )}

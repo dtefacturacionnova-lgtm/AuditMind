@@ -958,6 +958,16 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Conciliación de CxC (EXC-32) — solo en Diferencias Identificadas (S1) de PT-FIN-C-SUST */}
+            {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-C-SUST' && section.sectionKey === 'S1' && !readonly && (
+              <ExcelTemplateBar
+                paperId={paperId}
+                templateKey="CONCILIACION_CXC"
+                label="Conciliación de CxC"
+                description="Solo si esta área es Cuentas por Cobrar: concilie el auxiliar de clientes por antigüedad vs. el saldo según contabilidad fuera de línea — si queda una diferencia real, se agrega aquí automáticamente."
+              />
+            )}
+
             {/* Revisión Analítica NIA 520 (EXC-14/15) — solo en S1c de PT-FIN-B07 */}
             {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-B07' && section.sectionKey === 'S1c' && !readonly && (
               <ExcelTemplateBar

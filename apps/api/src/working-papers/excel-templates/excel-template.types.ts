@@ -51,6 +51,7 @@ export type ExcelTemplateKey =
   | 'REVISION_ANALITICA'      // Revisión Analítica (NIA 520)        — PT-FIN-B07
   | 'CIRCULARIZACION_CXC'     // Circularización / Conciliación CxC  — C-02 / PT-NIA530
   | 'CONCILIACION_CXC'        // Conciliación auxiliar vs. contabilidad — C-02
+  | 'CONCILIACION_CXP'        // Conciliación auxiliar vs. contabilidad — C-03/C-04
   | 'CONCILIACION_FISCAL'     // Tax reconciliation                  — PT-FISC-*
   | 'GENERICA';               // Plantilla genérica (EXC-24) — cualquier papel/sección elegible
 

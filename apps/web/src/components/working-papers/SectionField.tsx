@@ -988,6 +988,16 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Comparativa de Ingresos (EXC-35) — solo en Diferencias Identificadas (S1) de PT-FIN-C-SUST */}
+            {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-C-SUST' && section.sectionKey === 'S1' && !readonly && (
+              <ExcelTemplateBar
+                paperId={paperId}
+                templateKey="COMPARATIVA_INGRESOS"
+                label="Comparativa de Ingresos"
+                description="Solo si esta área es Ingresos: cruce mes a mes de Declaración de IVA, Registros de IVA, Contabilidad y Pago a Cuenta fuera de línea — si un mes no cuadra entre fuentes, se agrega aquí automáticamente."
+              />
+            )}
+
             {/* Revisión Analítica NIA 520 (EXC-14/15) — solo en S1c de PT-FIN-B07 */}
             {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-B07' && section.sectionKey === 'S1c' && !readonly && (
               <ExcelTemplateBar

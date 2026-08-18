@@ -6,6 +6,7 @@ import { CIRCULARIZACION_CXC_TEMPLATE } from './circularizacion-cxc.template';
 import { CONCILIACION_CXC_TEMPLATE } from './conciliacion-cxc.template';
 import { CONCILIACION_CXP_TEMPLATE } from './conciliacion-cxp.template';
 import { PRUEBA_PPE_TEMPLATE } from './prueba-ppe.template';
+import { COMPARATIVA_INGRESOS_TEMPLATE } from './comparativa-ingresos.template';
 import { ARQUEO_CAJA_TEMPLATE } from './arqueo-caja.template';
 
 /**
@@ -14,20 +15,21 @@ import { ARQUEO_CAJA_TEMPLATE } from './arqueo-caja.template';
  *
  * Catálogo (§4): Composición de Cuenta, Conciliación Bancaria, Revisión
  * Analítica, Circularización de CxC, Conciliación de CxC, Conciliación de
- * CxP, Prueba de PPE y Arqueo de Caja.
+ * CxP, Prueba de PPE, Comparativa de Ingresos y Arqueo de Caja.
  *
  * Nota de alcance conocida: `CONCILIACION_BANCARIA`, `ARQUEO_CAJA`,
- * `CONCILIACION_CXC`, `CONCILIACION_CXP` y `PRUEBA_PPE` aplican a
- * `PT-FIN-C-SUST`, el mismo paperCode que usan las 14 áreas sustantivas
- * (C-01..C-14) — no hay una señal programática que distinga "esta instancia
- * es Caja y Bancos"/"es CxC"/"es CxP"/"es PPE" de las demás, así que las
- * cinco se muestran en S1 de CUALQUIER área. El auditor simplemente no usa
- * la que no aplica; una mejora futura sería exponer un `areaTag` en
- * `WorkingPaper` para filtrar esto en la UI. Las cinco escriben en S1 con su
- * propio marcador `_excelOrigen` (distinto entre sí), así que coexisten sin
- * pisarse en el mismo papel. `CIRCULARIZACION_CXC` tiene la misma limitación
- * sobre `PT-NIA530 S5` (un solo papel para todo el encargo, no solo CxC) —
- * ver la nota en `circularizacion-cxc.template.ts`.
+ * `CONCILIACION_CXC`, `CONCILIACION_CXP`, `PRUEBA_PPE` y
+ * `COMPARATIVA_INGRESOS` aplican a `PT-FIN-C-SUST`, el mismo paperCode que
+ * usan las 14 áreas sustantivas (C-01..C-14) — no hay una señal programática
+ * que distinga "esta instancia es Caja y Bancos"/"es CxC"/"es CxP"/"es
+ * PPE"/"es Ingresos" de las demás, así que las seis se muestran en S1 de
+ * CUALQUIER área. El auditor simplemente no usa la que no aplica; una
+ * mejora futura sería exponer un `areaTag` en `WorkingPaper` para filtrar
+ * esto en la UI. Las seis escriben en S1 con su propio marcador
+ * `_excelOrigen` (distinto entre sí), así que coexisten sin pisarse en el
+ * mismo papel. `CIRCULARIZACION_CXC` tiene la misma limitación sobre
+ * `PT-NIA530 S5` (un solo papel para todo el encargo, no solo CxC) — ver la
+ * nota en `circularizacion-cxc.template.ts`.
  */
 export const EXCEL_TEMPLATES: Partial<Record<ExcelTemplateKey, ExcelTemplateRegistry[ExcelTemplateKey]>> = {
   COMPOSICION_CUENTA: COMPOSICION_CUENTA_TEMPLATE,
@@ -37,6 +39,7 @@ export const EXCEL_TEMPLATES: Partial<Record<ExcelTemplateKey, ExcelTemplateRegi
   CONCILIACION_CXC: CONCILIACION_CXC_TEMPLATE,
   CONCILIACION_CXP: CONCILIACION_CXP_TEMPLATE,
   PRUEBA_PPE: PRUEBA_PPE_TEMPLATE,
+  COMPARATIVA_INGRESOS: COMPARATIVA_INGRESOS_TEMPLATE,
   ARQUEO_CAJA: ARQUEO_CAJA_TEMPLATE,
 };
 

@@ -53,6 +53,7 @@ export type ExcelTemplateKey =
   | 'CONCILIACION_CXC'        // Conciliación auxiliar vs. contabilidad — C-02
   | 'CONCILIACION_CXP'        // Conciliación auxiliar vs. contabilidad — C-03/C-04
   | 'PRUEBA_PPE'              // Rollforward de Propiedad, Planta y Equipo — B-02a
+  | 'COMPARATIVA_INGRESOS'    // Cruce mensual IVA/Contabilidad/Pago a Cuenta
   | 'CONCILIACION_FISCAL'     // Tax reconciliation                  — PT-FISC-*
   | 'GENERICA';               // Plantilla genérica (EXC-24) — cualquier papel/sección elegible
 

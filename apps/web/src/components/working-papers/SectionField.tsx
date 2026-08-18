@@ -978,6 +978,16 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Prueba de PPE (EXC-34) — solo en Diferencias Identificadas (S1) de PT-FIN-C-SUST */}
+            {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-C-SUST' && section.sectionKey === 'S1' && !readonly && (
+              <ExcelTemplateBar
+                paperId={paperId}
+                templateKey="PRUEBA_PPE"
+                label="Prueba de PPE"
+                description="Solo si esta área es Propiedad, Planta y Equipo: documente el rollforward de costo/depreciación por cuenta (saldo inicial + adiciones − bajas ± traslados ± reclasificaciones) fuera de línea — si el movimiento no cuadra contra la balanza o el cuadro del cliente, se agrega aquí automáticamente."
+              />
+            )}
+
             {/* Revisión Analítica NIA 520 (EXC-14/15) — solo en S1c de PT-FIN-B07 */}
             {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-B07' && section.sectionKey === 'S1c' && !readonly && (
               <ExcelTemplateBar

@@ -511,6 +511,56 @@ export class FieldEvidenceService {
     });
   }
 
+  // ─── Reproducción/descarga del archivo original (validez evidenciaria) ─────
+  // "view": URL firmada de corta duración para escuchar/ver en pantalla — misma
+  // población que ya puede leer el transcript y la cita literal completos en la
+  // UI (KINDS_SOPORTADOS + @Roles(AUDITOR) del controller), así que reproducir
+  // el original no expone más de lo que el hallazgo ya muestra en texto.
+  // "download": copia local permanente — a diferencia de "view", rompe la
+  // trazabilidad de acceso (una vez descargado, ya no hay registro de quién lo
+  // reenvía). Se reserva a quien capturó la evidencia o a roles de supervisión.
+  private static readonly ROLES_DESCARGA = new Set([
+    'SENIOR_AUDITOR', 'AUDIT_MANAGER', 'CAE', 'ADMIN', 'SUPER_ADMIN',
+  ]);
+
+  async obtenerUrlMedia(
+    paperId: string,
+    evidenceId: string,
+    modo: 'view' | 'download',
+    user: AuthUser,
+  ): Promise<{ url: string; expiresIn: number }> {
+    await this.assertPaperAccess(paperId, user);
+
+    const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
+    if (!evidencia || evidencia.paperId !== paperId) throw new NotFoundException('Evidencia no encontrada');
+    if (!evidencia.storageKey) {
+      throw new BadRequestException('Esta evidencia no tiene archivo original (nota de texto — el texto ES la evidencia).');
+    }
+
+    if (modo === 'download') {
+      const puedeDescargar = evidencia.capturedById === user.id
+        || FieldEvidenceService.ROLES_DESCARGA.has(user.role);
+      if (!puedeDescargar) {
+        throw new ForbiddenException(
+          'Solo quien capturó esta evidencia o un rol de supervisión (Senior/Gerente/CAE) puede descargarla. ' +
+          'El resto del equipo con acceso al encargo puede escucharla/verla, pero no llevarse una copia.',
+        );
+      }
+    }
+
+    const EXPIRES_IN = 300; // 5 min — se regenera en cada solicitud, nunca se persiste
+    const { data, error } = await this.supabase.storage
+      .from('audit-files')
+      .createSignedUrl(
+        evidencia.storageKey,
+        EXPIRES_IN,
+        modo === 'download' ? { download: evidencia.filename ?? true } : undefined,
+      );
+    if (error || !data) throw new Error(error?.message ?? 'No se pudo generar la URL del archivo original');
+
+    return { url: data.signedUrl, expiresIn: EXPIRES_IN };
+  }
+
   // ─── Eliminar (SENIOR_AUDITOR — acto de custodia, no de edición) ─────────
 
   async eliminar(paperId: string, evidenceId: string, user: AuthUser) {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Mic, Square, FileText, ChevronDown, ChevronUp, Loader2, CheckCircle2,
   XCircle, AlertTriangle, Trash2, ArrowUpCircle, Sparkles, ShieldAlert, Users, Camera,
+  Volume2, ImageIcon, Download, Quote,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useUser } from '@/hooks/useUser';
@@ -11,9 +12,133 @@ import type { PaperSection } from '@/hooks/useWorkingPaperGraph';
 import { PhotoAnnotator } from './PhotoAnnotator';
 import {
   useFieldEvidenceList, useCreateFieldEvidence, useDeleteFieldEvidence,
-  useAcceptFinding, useDiscardFinding, usePromoteFinding,
+  useAcceptFinding, useDiscardFinding, usePromoteFinding, fetchFieldEvidenceMediaUrl,
   type FieldEvidence, type FieldEvidenceFinding, type FieldEvidenceStatus, type AnotacionFoto,
 } from '@/hooks/useFieldEvidence';
+
+// Roles que pueden descargar el archivo original de una evidencia que no capturaron
+// ellos mismos — debe coincidir con ROLES_DESCARGA en field-evidence.service.ts.
+// Escuchar/ver en pantalla, en cambio, no rompe custodia y queda abierto a
+// cualquiera con acceso al papel (misma población que ya lee la cita literal).
+const ROLES_DESCARGA = ['SENIOR_AUDITOR', 'AUDIT_MANAGER', 'CAE', 'ADMIN', 'SUPER_ADMIN'];
+
+/** Overlay de solo lectura — dibuja las marcas guardadas sobre la foto original,
+ * sin herramientas de edición (esas viven en PhotoAnnotator, usado al capturar). */
+function AnnotatedPhotoView({ imageUrl, anotaciones }: { imageUrl: string; anotaciones: AnotacionFoto[] }) {
+  return (
+    <div className="relative rounded-lg overflow-hidden border border-gray-200">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={imageUrl} alt="Foto original" className="w-full h-auto block" />
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+        <defs>
+          <marker id="flecha-punta-view" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#dc2626" />
+          </marker>
+        </defs>
+        {anotaciones.map((a, i) => (
+          <g key={i}>
+            {a.tipo === 'circulo' && (
+              <circle cx={a.x * 100} cy={a.y * 100} r={(a.radio ?? 0.05) * 100} fill="none" stroke="#dc2626" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+            )}
+            {a.tipo === 'flecha' && (
+              <line x1={a.x * 100} y1={a.y * 100} x2={(a.x2 ?? a.x) * 100} y2={(a.y2 ?? a.y) * 100} stroke="#dc2626" strokeWidth={1.2} vectorEffect="non-scaling-stroke" markerEnd="url(#flecha-punta-view)" />
+            )}
+            {a.tipo === 'texto' && (
+              <circle cx={a.x * 100} cy={a.y * 100} r={1.6} fill="#dc2626" />
+            )}
+            <text x={a.x * 100 + 2} y={a.y * 100 - 2} fontSize={4} fill="#dc2626" fontWeight="bold" stroke="white" strokeWidth={0.6} paintOrder="stroke">{i + 1}</text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+/** Reproductor/visor del archivo original (EVD-17) — botones "Escuchar"/"Ver foto"
+ * (URL firmada de 5 min, disponible para cualquiera con acceso al papel) y
+ * "Descargar" (mismo mecanismo pero restringido a quien la capturó o roles de
+ * supervisión — ver justificación en field-evidence.service.ts). */
+function MediaOriginal({ evidencia, paperId, puedeDescargar }: {
+  evidencia: FieldEvidence; paperId: string; puedeDescargar: boolean;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [descargando, setDescargando] = useState(false);
+  const [error, setError] = useState('');
+
+  const esAudio = evidencia.kind === 'AUDIO_NOTE' || evidencia.kind === 'INTERVIEW_AUDIO';
+  const esFoto = evidencia.kind === 'ANNOTATED_PHOTO';
+  if (!esAudio && !esFoto) return null;
+
+  async function alternar() {
+    if (abierto) { setAbierto(false); return; }
+    setError('');
+    setAbierto(true);
+    if (!url) {
+      setCargando(true);
+      try {
+        const media = await fetchFieldEvidenceMediaUrl(paperId, evidencia.id, 'view');
+        setUrl(media.url);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'No se pudo cargar el archivo original.');
+      } finally {
+        setCargando(false);
+      }
+    }
+  }
+
+  async function descargar() {
+    setError('');
+    setDescargando(true);
+    try {
+      const media = await fetchFieldEvidenceMediaUrl(paperId, evidencia.id, 'download');
+      window.open(media.url, '_blank');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo descargar el archivo original.');
+    } finally {
+      setDescargando(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={alternar}
+          className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-2.5 py-1.5"
+        >
+          {esAudio ? <Volume2 className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
+          {abierto ? 'Ocultar' : esAudio ? 'Escuchar grabación original' : 'Ver foto original'}
+        </button>
+        {puedeDescargar && (
+          <button
+            type="button"
+            onClick={descargar}
+            disabled={descargando}
+            className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-2.5 py-1.5 disabled:opacity-50"
+          >
+            {descargando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            Descargar
+          </button>
+        )}
+      </div>
+
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
+
+      {abierto && cargando && (
+        <p className="text-[11px] text-gray-400 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Generando enlace…</p>
+      )}
+      {abierto && url && esAudio && (
+        <audio controls src={url} className="w-full h-9" />
+      )}
+      {abierto && url && esFoto && (
+        <AnnotatedPhotoView imageUrl={url} anotaciones={evidencia.anotaciones ?? []} />
+      )}
+    </div>
+  );
+}
 
 /**
  * Panel de Evidencia de Campo (EVD-09) — capacidad general de captura rápida
@@ -194,6 +319,7 @@ function EvidenciaCard({
   seccionesDestino: PaperSection[];
 }) {
   const eliminar = useDeleteFieldEvidence(paperId);
+  const { user } = useUser();
   const [verNoVerificables, setVerNoVerificables] = useState(false);
 
   const validados = evidencia.findings.filter(f => f.validadaCita);
@@ -202,6 +328,9 @@ function EvidenciaCard({
     : evidencia.kind === 'ANNOTATED_PHOTO' ? Camera
     : evidencia.kind === 'AUDIO_NOTE' ? Mic : FileText;
   const hayHablantes = evidencia.transcript?.segmentos?.some(s => s.hablante) ?? false;
+  const puedeDescargar = Boolean(
+    user && (user.id === evidencia.capturedById || ROLES_DESCARGA.includes(user.role)),
+  );
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
@@ -244,6 +373,15 @@ function EvidenciaCard({
           </button>
         )}
       </div>
+
+      {evidencia.kind === 'TEXT_NOTE' && evidencia.textoOriginal && (
+        <blockquote className="flex items-start gap-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-2.5 py-2">
+          <Quote className="w-3.5 h-3.5 shrink-0 mt-0.5 text-gray-300" />
+          <span className="whitespace-pre-wrap">{evidencia.textoOriginal}</span>
+        </blockquote>
+      )}
+
+      <MediaOriginal evidencia={evidencia} paperId={paperId} puedeDescargar={puedeDescargar} />
 
       {evidencia.status === 'FAILED' && evidencia.errorMsg && (
         <div className="flex items-start gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">

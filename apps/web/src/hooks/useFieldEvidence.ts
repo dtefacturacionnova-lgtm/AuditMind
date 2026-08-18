@@ -68,6 +68,7 @@ export interface FieldEvidence {
   consentimiento: boolean;
   lugar: string | null;
   descripcion: string | null;
+  anotaciones: AnotacionFoto[] | null;
   transcript: FieldEvidenceTranscript | null;
   extraccionRaw: FieldEvidenceExtraccion | null;
   errorMsg: string | null;
@@ -141,6 +142,16 @@ export function useCreateFieldEvidence(paperId: string) {
       qc.invalidateQueries({ queryKey: ['field-evidence', paperId] });
     },
   });
+}
+
+/** URL firmada de corta duración (5 min) para escuchar/ver o descargar el
+ * archivo original — se pide bajo demanda (al hacer clic), nunca se cachea. */
+export async function fetchFieldEvidenceMediaUrl(
+  paperId: string,
+  evidenceId: string,
+  mode: 'view' | 'download',
+): Promise<{ url: string; expiresIn: number }> {
+  return apiClient.get(`/working-papers/${paperId}/evidence/${evidenceId}/media?mode=${mode}`);
 }
 
 export function useDeleteFieldEvidence(paperId: string) {

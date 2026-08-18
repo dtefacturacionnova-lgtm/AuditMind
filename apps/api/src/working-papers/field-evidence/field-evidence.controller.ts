@@ -90,6 +90,19 @@ export class FieldEvidenceController {
     return this.svc.obtenerUno(paperId, evidenceId, user);
   }
 
+  @Get(':evidenceId/media')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'URL firmada de corta duración para escuchar/ver (mode=view) o descargar (mode=download, restringido) el archivo original' })
+  obtenerUrlMedia(
+    @Param('paperId') paperId: string,
+    @Param('evidenceId') evidenceId: string,
+    @Query('mode') mode: string | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const modo = mode === 'download' ? 'download' : 'view';
+    return this.svc.obtenerUrlMedia(paperId, evidenceId, modo, user);
+  }
+
   @Delete(':evidenceId')
   @Roles(UserRole.SENIOR_AUDITOR)
   @HttpCode(HttpStatus.OK)

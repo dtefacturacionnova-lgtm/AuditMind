@@ -328,9 +328,10 @@ export class AiService {
     filename: string,
     mimeType: string,
     language?: string,
+    diarizar?: boolean, // EVD-12, Fase 2 — solo para INTERVIEW_AUDIO
   ): Promise<{
     texto: string;
-    segmentos: { inicio: number; fin: number; texto: string }[];
+    segmentos: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
     idioma: string;
     duracion_seg: number;
     modelo: string;
@@ -340,6 +341,7 @@ export class AiService {
     const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimeType || 'application/octet-stream' });
     formData.append('file', blob, filename);
     if (language) formData.append('language', language);
+    if (diarizar) formData.append('diarizar', 'true');
 
     // 45 min de audio en CPU puede tardar varios minutos — no debe colgar para siempre.
     const res = await fetch(`${this.aiServiceUrl}/evidence/transcribe`, {
@@ -359,7 +361,7 @@ export class AiService {
   async extractFieldEvidence(payload: {
     fuente_tipo: 'texto' | 'transcripcion_audio';
     contenido: string;
-    segmentos?: { inicio: number; fin: number; texto: string }[];
+    segmentos?: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
     contexto_expediente?: {
       audit_title?: string;
       audit_type?: string;

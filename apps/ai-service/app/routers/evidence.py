@@ -5,6 +5,7 @@ NestJS es el orquestador único (ver docs/inteligencia-de-evidencia-de-campo.md 
 /transcribe (EVD-03) y /extract (EVD-05).
 """
 import asyncio
+import logging
 import os
 import tempfile
 from typing import Literal, Optional
@@ -16,6 +17,8 @@ from app.services.auth import verify_internal_key
 from app.services.whisper_service import transcribe_sync
 from app.services.llm_router import generate_structured, StructuredGenerationError
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB — una entrevista de 45min a 128kbps ≈ 43MB (§6.5)
@@ -25,6 +28,7 @@ class Segmento(BaseModel):
     inicio: float
     fin: float
     texto: str
+    hablante: Optional[str] = None  # poblado solo si diarizar=True (Fase 2, EVD-12)
 
 
 class TranscribeResponse(BaseModel):
@@ -40,10 +44,16 @@ class TranscribeResponse(BaseModel):
 async def transcribe(
     file: UploadFile = File(...),
     language: Optional[str] = Form(None),
+    diarizar: bool = Form(False),
     x_internal_key: Optional[str] = Header(default=None, alias="x-internal-key"),
 ):
     """Transcribe un archivo de audio con faster-whisper. Requiere x-internal-key
-    (llamada interna NestJS → FastAPI, mismo patrón que /rag/ingest/pdf)."""
+    (llamada interna NestJS → FastAPI, mismo patrón que /rag/ingest/pdf).
+
+    diarizar=True (solo para INTERVIEW_AUDIO, Fase 2) agrega separación de hablantes
+    con pyannote-audio sobre los segmentos de Whisper. Si la diarización falla (p. ej.
+    falta HUGGINGFACE_TOKEN), la transcripción se entrega igual sin `hablante` —
+    degradación controlada, nunca se pierde la transcripción por esto."""
     verify_internal_key(x_internal_key)
 
     content = await file.read()
@@ -59,6 +69,13 @@ async def transcribe(
 
     try:
         result = await asyncio.to_thread(transcribe_sync, tmp_path, language)
+        if diarizar:
+            try:
+                from app.services.diarization_service import diarizar_sync, asignar_hablantes
+                turnos = await asyncio.to_thread(diarizar_sync, tmp_path)
+                result["segmentos"] = asignar_hablantes(result["segmentos"], turnos)
+            except Exception as e:
+                logger.warning("Diarización omitida — transcripción continúa sin hablantes: %s", e)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al transcribir el audio: {e}")
@@ -112,6 +129,7 @@ class SegmentoInput(BaseModel):
     inicio: float
     fin: float
     texto: str
+    hablante: Optional[str] = None  # poblado solo para INTERVIEW_AUDIO diarizado
 
 
 class ContextoExpedientePapel(BaseModel):
@@ -199,8 +217,19 @@ def _build_extraction_user_content(request: ExtractRequest) -> str:
     parts = [f"FUENTE ({request.fuente_tipo}):\n{request.contenido}"]
 
     if request.segmentos:
-        segs = "\n".join(f"  [{s.inicio:.1f}s-{s.fin:.1f}s] {s.texto}" for s in request.segmentos)
+        segs = "\n".join(
+            f"  [{s.inicio:.1f}s-{s.fin:.1f}s]{f' {s.hablante}:' if s.hablante else ''} {s.texto}"
+            for s in request.segmentos
+        )
         parts.append(f"\nSEGMENTOS CON TIMESTAMP (usa estos para fuente_ref, formato mm:ss):\n{segs}")
+        if any(s.hablante for s in request.segmentos):
+            parts.append(
+                "\nLa fuente es una entrevista diarizada — los segmentos indican qué hablante "
+                "(SPEAKER_00, SPEAKER_01, ...) dijo cada parte. No sabes cuál hablante es el "
+                "auditor y cuál el entrevistado; si es relevante para un hallazgo, refiérete a "
+                "ellos por su etiqueta tal cual (p. ej. \"SPEAKER_01 afirmó que...\"), nunca "
+                "asumas roles."
+            )
 
     if request.instrucciones_extra:
         parts.append(f"\nCONTEXTO APORTADO POR EL AUDITOR:\n{request.instrucciones_extra}")

@@ -9,11 +9,19 @@ import { AuthUser } from '../../auth/jwt.strategy';
 import { AiService } from '../../ai/ai.service';
 import { PaperReferencesService } from '../paper-references.service';
 
-// Fase 1 (EVD-03..11): solo texto y nota de voz. El resto del enum ya existe en el
-// schema (evita migración cuando lleguen las fases siguientes) pero el pipeline
-// todavía no sabe procesarlas — se rechazan explícitamente en vez de crear filas
-// que quedarían atascadas para siempre.
-const FASE_1_KINDS: FieldEvidenceKind[] = [FieldEvidenceKind.TEXT_NOTE, FieldEvidenceKind.AUDIO_NOTE];
+// Kinds que el pipeline sabe procesar hoy (Fase 1: texto/nota de voz; Fase 2:
+// entrevista formal diarizada). ANNOTATED_PHOTO/SHORT_VIDEO ya existen en el enum
+// del schema (evita migración cuando lleguen esas fases) pero se rechazan
+// explícitamente — crear una fila que el pipeline nunca sabrá procesar la dejaría
+// atascada para siempre.
+const KINDS_SOPORTADOS: FieldEvidenceKind[] = [
+  FieldEvidenceKind.TEXT_NOTE,
+  FieldEvidenceKind.AUDIO_NOTE,
+  FieldEvidenceKind.INTERVIEW_AUDIO,
+];
+
+// Kinds que requieren transcripción de audio antes de extraer (todo lo que no es texto).
+const KINDS_CON_AUDIO: FieldEvidenceKind[] = [FieldEvidenceKind.AUDIO_NOTE, FieldEvidenceKind.INTERVIEW_AUDIO];
 
 // Reaper perezoso (§6.3.2 del diseño) — sin scheduler; un job que lleva más de
 // esto en TRANSCRIBING/EXTRACTING se asume zombi (proceso reiniciado a mitad)
@@ -70,9 +78,9 @@ export class FieldEvidenceService {
   ) {
     const wp = await this.assertPaperAccess(paperId, user);
 
-    if (!dto.kind || !FASE_1_KINDS.includes(dto.kind)) {
+    if (!dto.kind || !KINDS_SOPORTADOS.includes(dto.kind)) {
       throw new BadRequestException(
-        `Tipo de evidencia "${dto.kind}" aún no soportado — Fase 1 solo procesa TEXT_NOTE y AUDIO_NOTE.`,
+        `Tipo de evidencia "${dto.kind}" aún no soportado por el pipeline.`,
       );
     }
     if (!dto.sectionKey?.trim()) throw new BadRequestException('sectionKey es obligatorio');
@@ -84,6 +92,13 @@ export class FieldEvidenceService {
     }
     if (dto.kind !== FieldEvidenceKind.TEXT_NOTE && !file) {
       throw new BadRequestException(`Se requiere un archivo para el tipo "${dto.kind}".`);
+    }
+    // Entrevista formal — el consentimiento explícito del entrevistado es obligatorio
+    // antes de aceptar la grabación (§6.5 del diseño; no es opcional, no hay bypass).
+    if (dto.kind === FieldEvidenceKind.INTERVIEW_AUDIO && dto.consentimiento !== 'true') {
+      throw new BadRequestException(
+        'Una entrevista formal requiere confirmar el consentimiento explícito del entrevistado antes de subir la grabación.',
+      );
     }
 
     const sha256 = file
@@ -156,7 +171,8 @@ export class FieldEvidenceService {
       return;
     }
 
-    // AUDIO_NOTE — único otro kind de Fase 1.
+    // AUDIO_NOTE / INTERVIEW_AUDIO — ambos requieren transcripción; INTERVIEW_AUDIO
+    // además pide diarización (separar hablantes) a faster-whisper+pyannote (§6.7/EVD-12).
     await this.prisma.fieldEvidence.update({
       where: { id: evidenceId },
       data:  { status: 'TRANSCRIBING', procesamientoIniciado: new Date() },
@@ -169,6 +185,8 @@ export class FieldEvidenceService {
         buffer,
         evidencia.filename ?? 'audio',
         evidencia.mimeType ?? 'audio/mpeg',
+        undefined,
+        evidencia.kind === FieldEvidenceKind.INTERVIEW_AUDIO,
       );
 
       await this.prisma.fieldEvidence.update({
@@ -206,10 +224,13 @@ export class FieldEvidenceService {
     const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
     if (!evidencia) return;
 
-    const transcript = evidencia.transcript as { texto?: string; segmentos?: unknown[] } | null;
+    const transcript = evidencia.transcript as {
+      texto?: string;
+      segmentos?: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
+    } | null;
     const fuenteTexto = evidencia.kind === FieldEvidenceKind.TEXT_NOTE
       ? (evidencia.textoOriginal ?? '')
-      : (transcript?.texto ?? '');
+      : this.construirTextoConHablantes(transcript);
 
     if (!fuenteTexto.trim()) {
       await this.prisma.fieldEvidence.update({
@@ -225,9 +246,7 @@ export class FieldEvidenceService {
       const resultado = await this.aiService.extractFieldEvidence({
         fuente_tipo: evidencia.kind === FieldEvidenceKind.TEXT_NOTE ? 'texto' : 'transcripcion_audio',
         contenido: fuenteTexto,
-        segmentos: evidencia.kind === FieldEvidenceKind.AUDIO_NOTE
-          ? (transcript?.segmentos as { inicio: number; fin: number; texto: string }[] | undefined)
-          : undefined,
+        segmentos: KINDS_CON_AUDIO.includes(evidencia.kind) ? transcript?.segmentos : undefined,
         contexto_expediente: contextoExpediente,
         instrucciones_extra: [evidencia.descripcion, evidencia.lugar ? `Lugar: ${evidencia.lugar}` : null]
           .filter(Boolean).join('\n') || undefined,
@@ -287,6 +306,21 @@ export class FieldEvidenceService {
 
   private normalizarParaComparar(texto: string): string {
     return texto.toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  // Entrevista diarizada (EVD-12): si los segmentos traen `hablante`, la fuente para
+  // extracción/anti-alucinación se reconstruye con etiqueta de hablante por segmento
+  // en vez del `texto` plano de Whisper — así el LLM puede atribuir citas a quien las
+  // dijo. `cita_textual` sigue siendo un substring literal de este texto (la etiqueta
+  // no es parte de la cita en sí, el LLM cita solo las palabras).
+  private construirTextoConHablantes(
+    transcript: { texto?: string; segmentos?: { texto: string; hablante?: string | null }[] } | null,
+  ): string {
+    const segmentos = transcript?.segmentos;
+    if (!segmentos?.length || !segmentos.some(s => s.hablante)) {
+      return transcript?.texto ?? '';
+    }
+    return segmentos.map(s => `[${s.hablante ?? '¿?'}] ${s.texto}`).join(' ');
   }
 
   // ─── Cruce con el expediente (EVD-07, §6.6/§2.3) ─────────────────────────

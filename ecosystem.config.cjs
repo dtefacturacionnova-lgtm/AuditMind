@@ -90,8 +90,17 @@ module.exports = {
         INTERNAL_API_KEY:          e.AI_SERVICE_INTERNAL_KEY,
         API_URL:                   'https://auditoria.ianovatechsystems.com/api',
         WEB_URL:                   'https://auditoria.ianovatechsystems.com',
+        // Evidencia de campo (EVD-03/EVD-12) — este bloque enumera vars explícitas,
+        // no hereda el .env, así que hay que propagarlas a mano (§6.7/§6.12 del diseño).
+        WHISPER_MODEL_SIZE:        e.WHISPER_MODEL_SIZE || 'base',
+        WHISPER_COMPUTE_TYPE:      e.WHISPER_COMPUTE_TYPE || 'int8',
+        WHISPER_DEVICE:            e.WHISPER_DEVICE || 'cpu',
+        HUGGINGFACE_TOKEN:         e.HUGGINGFACE_TOKEN,
       },
-      max_memory_restart: '800M',
+      // Subido de 800M — pyannote-audio (diarización, EVD-12) trae torch/torchaudio y
+      // usa 1-2GB de RAM en inferencia; el VPS tiene sobra (26GB libres verificado
+      // 2026-08-17). Las entrevistas formales son un flujo poco frecuente, no constante.
+      max_memory_restart: '2500M',
       autorestart: true,
       watch: false,
     },

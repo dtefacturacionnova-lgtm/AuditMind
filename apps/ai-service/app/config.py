@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     WHISPER_COMPUTE_TYPE: str = "int8"
     WHISPER_DEVICE: str = "cpu"
 
+    # Evidencia de campo — diarización de hablantes con pyannote-audio (EVD-12, Fase 2).
+    # Token de Hugging Face con la licencia de pyannote/speaker-diarization-3.1 y
+    # pyannote/segmentation-3.0 aceptada (huggingface.co/settings/tokens). Sin esto,
+    # la diarización falla con un mensaje explícito — la transcripción sigue
+    # funcionando igual (degradación controlada, ver diarization_service.py).
+    HUGGINGFACE_TOKEN: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

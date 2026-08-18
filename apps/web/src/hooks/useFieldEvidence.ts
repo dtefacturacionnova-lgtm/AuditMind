@@ -36,7 +36,7 @@ export interface FieldEvidenceFinding {
 
 export interface FieldEvidenceTranscript {
   texto: string;
-  segmentos: { inicio: number; fin: number; texto: string }[];
+  segmentos: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
   idioma: string;
   duracion_seg: number;
   modelo: string;
@@ -80,13 +80,14 @@ export interface FieldEvidence {
 }
 
 export interface CrearEvidenciaInput {
-  kind: 'TEXT_NOTE' | 'AUDIO_NOTE';
+  kind: 'TEXT_NOTE' | 'AUDIO_NOTE' | 'INTERVIEW_AUDIO';
   sectionKey: string;
   capturedAt: string; // ISO
+  consentimiento?: boolean; // obligatorio true para INTERVIEW_AUDIO — validado también en backend
   lugar?: string;
   descripcion?: string;
   texto?: string;         // obligatorio para TEXT_NOTE
-  file?: File | Blob;     // obligatorio para AUDIO_NOTE
+  file?: File | Blob;     // obligatorio para AUDIO_NOTE / INTERVIEW_AUDIO
   fileName?: string;      // nombre de archivo para el Blob grabado (MediaRecorder no trae uno)
 }
 
@@ -119,6 +120,7 @@ export function useCreateFieldEvidence(paperId: string) {
       formData.append('kind', input.kind);
       formData.append('sectionKey', input.sectionKey);
       formData.append('capturedAt', input.capturedAt);
+      if (input.consentimiento !== undefined) formData.append('consentimiento', String(input.consentimiento));
       if (input.lugar) formData.append('lugar', input.lugar);
       if (input.descripcion) formData.append('descripcion', input.descripcion);
       if (input.texto) formData.append('texto', input.texto);

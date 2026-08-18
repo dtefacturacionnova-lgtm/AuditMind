@@ -37,3 +37,8 @@ Pillow>=10.4.0
 # ─── Evidencia de Campo — transcripción de audio autoalojada (EVD-03) ──────────
 # Trae ctranslate2 + av (PyAV empaqueta ffmpeg) — no requiere ffmpeg de sistema.
 faster-whisper>=1.0.0
+
+# ─── Evidencia de Campo — diarización de hablantes (EVD-12, Fase 2) ────────────
+# Trae torch + torchaudio (nuevo en este proyecto, ~500MB-1GB). Modelo "gated" —
+# requiere HUGGINGFACE_TOKEN con licencia aceptada (ver diarization_service.py).
+pyannote-audio>=3.1.0

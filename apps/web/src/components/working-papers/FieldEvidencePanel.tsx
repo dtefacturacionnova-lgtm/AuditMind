@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Mic, Square, FileText, ChevronDown, ChevronUp, Loader2, CheckCircle2,
-  XCircle, AlertTriangle, Trash2, ArrowUpCircle, Sparkles, ShieldAlert,
+  XCircle, AlertTriangle, Trash2, ArrowUpCircle, Sparkles, ShieldAlert, Users,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useUser } from '@/hooks/useUser';
@@ -197,7 +197,8 @@ function EvidenciaCard({
 
   const validados = evidencia.findings.filter(f => f.validadaCita);
   const noVerificables = evidencia.findings.filter(f => !f.validadaCita);
-  const Icon = evidencia.kind === 'AUDIO_NOTE' ? Mic : FileText;
+  const Icon = evidencia.kind === 'INTERVIEW_AUDIO' ? Users : evidencia.kind === 'AUDIO_NOTE' ? Mic : FileText;
+  const hayHablantes = evidencia.transcript?.segmentos?.some(s => s.hablante) ?? false;
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 space-y-3">
@@ -211,6 +212,11 @@ function EvidenciaCard({
               <span className="text-xs font-medium text-gray-800">{formatDate(evidencia.capturedAt)}</span>
               <span className="text-xs text-gray-400">· {evidencia.capturedByName}</span>
               <EstadoBadge status={evidencia.status} />
+              {evidencia.kind === 'INTERVIEW_AUDIO' && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5">
+                  <Users className="w-3 h-3" /> Entrevista formal{hayHablantes ? ' · hablantes separados' : ''}
+                </span>
+              )}
             </div>
             {(evidencia.lugar || evidencia.descripcion) && (
               <p className="text-xs text-gray-500 mt-0.5 truncate">
@@ -299,16 +305,21 @@ function EvidenciaCard({
 
 function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: string }) {
   const crear = useCreateFieldEvidence(paperId);
-  const [modo, setModo] = useState<'texto' | 'audio'>('texto');
+  const [modo, setModo] = useState<'texto' | 'audio' | 'entrevista'>('texto');
   const [texto, setTexto] = useState('');
   const [lugar, setLugar] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [error, setError] = useState('');
 
+  // Entrevista formal (EVD-12, Fase 2) — el consentimiento explícito del entrevistado
+  // es obligatorio antes de subir la grabación; el backend lo revalida igual (§6.5).
+  const [consentimientoConfirmado, setConsentimientoConfirmado] = useState(false);
+
   // Grabación de audio — MediaRecorder nativo del navegador, sin librerías.
   const [grabando, setGrabando] = useState(false);
   const [segundos, setSegundos] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioNombre, setAudioNombre] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -343,6 +354,12 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
     if (timerRef.current) clearInterval(timerRef.current);
   }
 
+  function handleArchivoSeleccionado(file: File) {
+    setError('');
+    setAudioBlob(file);
+    setAudioNombre(file.name);
+  }
+
   async function handleSubmit() {
     setError('');
     try {
@@ -353,14 +370,30 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
           texto: texto.trim(), lugar: lugar.trim() || undefined, descripcion: descripcion.trim() || undefined,
         });
         setTexto('');
-      } else {
+      } else if (modo === 'audio') {
         if (!audioBlob) { setError('Grabe una nota de voz antes de guardar.'); return; }
         await crear.mutateAsync({
           kind: 'AUDIO_NOTE', sectionKey, capturedAt: new Date().toISOString(),
-          file: audioBlob, fileName: 'nota_voz.webm',
+          file: audioBlob, fileName: audioNombre ?? 'nota_voz.webm',
           lugar: lugar.trim() || undefined, descripcion: descripcion.trim() || undefined,
         });
         setAudioBlob(null);
+        setAudioNombre(null);
+      } else {
+        if (!audioBlob) { setError('Grabe o suba la grabación de la entrevista antes de guardar.'); return; }
+        if (!consentimientoConfirmado) {
+          setError('Debe confirmar que el entrevistado dio su consentimiento explícito para la grabación.');
+          return;
+        }
+        await crear.mutateAsync({
+          kind: 'INTERVIEW_AUDIO', sectionKey, capturedAt: new Date().toISOString(),
+          consentimiento: true,
+          file: audioBlob, fileName: audioNombre ?? 'entrevista.webm',
+          lugar: lugar.trim() || undefined, descripcion: descripcion.trim() || undefined,
+        });
+        setAudioBlob(null);
+        setAudioNombre(null);
+        setConsentimientoConfirmado(false);
       }
       setLugar('');
       setDescripcion('');
@@ -384,6 +417,12 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
         >
           <Mic className="w-3.5 h-3.5" /> Nota de voz
         </button>
+        <button
+          onClick={() => setModo('entrevista')}
+          className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 ${modo === 'entrevista' ? 'bg-gray-900 text-white' : 'text-gray-500 border border-gray-200'}`}
+        >
+          <Users className="w-3.5 h-3.5" /> Entrevista formal
+        </button>
       </div>
 
       {modo === 'texto' ? (
@@ -395,28 +434,73 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
           className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-gray-400 resize-none"
         />
       ) : (
-        <div className="flex items-center gap-3 py-2">
-          {!grabando && !audioBlob && (
-            <button
-              onClick={iniciarGrabacion}
-              className="flex items-center gap-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg px-4 py-2"
-            >
-              <Mic className="w-4 h-4" /> Grabar
-            </button>
-          )}
-          {grabando && (
-            <button
-              onClick={detenerGrabacion}
-              className="flex items-center gap-2 text-sm font-medium text-white bg-gray-900 rounded-lg px-4 py-2 animate-pulse"
-            >
-              <Square className="w-4 h-4" /> Detener ({segundos}s)
-            </button>
-          )}
-          {!grabando && audioBlob && (
-            <div className="flex items-center gap-3">
-              <audio controls src={URL.createObjectURL(audioBlob)} className="h-9" />
-              <button onClick={iniciarGrabacion} className="text-xs text-gray-500 hover:text-gray-700 underline">Regrabar</button>
+        <div className="space-y-3">
+          {modo === 'entrevista' && (
+            <div className="flex items-start gap-2 text-xs text-indigo-900 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+              <Users className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <p>
+                Separa automáticamente a los hablantes (diarización) y exige confirmar el
+                consentimiento del entrevistado antes de subir la grabación. Puede grabar
+                en vivo o subir un archivo ya grabado (hasta 100MB — una entrevista de
+                45 min cabe cómoda).
+              </p>
             </div>
+          )}
+
+          <div className="flex items-center gap-3 py-2">
+            {!grabando && !audioBlob && (
+              <button
+                onClick={iniciarGrabacion}
+                className="flex items-center gap-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg px-4 py-2"
+              >
+                <Mic className="w-4 h-4" /> Grabar
+              </button>
+            )}
+            {grabando && (
+              <button
+                onClick={detenerGrabacion}
+                className="flex items-center gap-2 text-sm font-medium text-white bg-gray-900 rounded-lg px-4 py-2 animate-pulse"
+              >
+                <Square className="w-4 h-4" /> Detener ({segundos}s)
+              </button>
+            )}
+            {!grabando && audioBlob && (
+              <div className="flex items-center gap-3">
+                <audio controls src={URL.createObjectURL(audioBlob)} className="h-9" />
+                <button
+                  onClick={() => { setAudioBlob(null); setAudioNombre(null); }}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                >
+                  Quitar
+                </button>
+              </div>
+            )}
+            {modo === 'entrevista' && !grabando && (
+              <label className="text-xs text-gray-500 hover:text-gray-700 underline cursor-pointer">
+                {audioBlob ? 'Regrabar' : 'o subir un archivo…'}
+                <input
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleArchivoSeleccionado(f); e.target.value = ''; }}
+                />
+              </label>
+            )}
+          </div>
+
+          {modo === 'entrevista' && (
+            <label className="flex items-start gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                checked={consentimientoConfirmado}
+                onChange={e => setConsentimientoConfirmado(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Confirmo que el entrevistado dio su <strong>consentimiento explícito</strong> para
+                grabar esta entrevista y procesarla con IA.
+              </span>
+            </label>
           )}
         </div>
       )}

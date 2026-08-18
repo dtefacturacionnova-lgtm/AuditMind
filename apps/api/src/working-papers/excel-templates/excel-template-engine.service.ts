@@ -47,6 +47,36 @@ export class ExcelTemplateEngineService {
     WorkingPaperStatus.ARCHIVED,
   ];
 
+  // Convención visual de celdas de entrada/referencia (todas las plantillas —
+  // ver hallazgo del usuario 2026-08-18: sin esto, nada distingue a simple
+  // vista dónde debe escribir el auditor de lo que es solo de consulta, y la
+  // única barrera real era la protección de hoja, invisible hasta que se
+  // intenta escribir). Mismo par de colores que usa `escribirCabeceraEncargo`
+  // para el mini-legend — deben coincidir.
+  private static readonly FILL_ENTRADA = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFFF7CC' } };
+  private static readonly BORDE_ENTRADA = (() => {
+    const lado = { style: 'thin' as const, color: { argb: 'FFD4A017' } };
+    return { top: lado, left: lado, bottom: lado, right: lado };
+  })();
+  private static readonly FILL_REFERENCIA = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF2F2F2' } };
+  private static readonly FONT_REFERENCIA = { italic: true, color: { argb: 'FF888888' } };
+
+  /** Marca una celda como zona de entrada (LIBRE) — fondo amarillo + borde, la
+   *  misma convención en toda plantilla. Se aplica ADEMÁS de `protection`, que
+   *  sigue siendo lo único que Excel de verdad hace cumplir. */
+  private marcarEntrada(cell: { fill: unknown; border: unknown }) {
+    cell.fill = ExcelTemplateEngineService.FILL_ENTRADA;
+    cell.border = ExcelTemplateEngineService.BORDE_ENTRADA;
+  }
+
+  /** Marca una celda como solo-referencia (CONTROLADA) — fondo gris + texto
+   *  itálico atenuado, para que se lea como "no editable" antes de intentar
+   *  escribir ahí (la protección de hoja ya lo impide; esto lo hace obvio). */
+  private marcarReferencia(cell: { fill: unknown; font: unknown }) {
+    cell.fill = ExcelTemplateEngineService.FILL_REFERENCIA;
+    cell.font = { ...(cell.font as object ?? {}), ...ExcelTemplateEngineService.FONT_REFERENCIA };
+  }
+
   constructor(
     private readonly prisma:        PrismaService,
     private readonly paperSections: PaperSectionsService,
@@ -605,6 +635,24 @@ export class ExcelTemplateEngineService {
       const c2 = ws.getCell(fila, 2);
       c2.value = valor; c2.protection = { locked: true };
     });
+
+    // Fila 5 — leyenda de color (fila 6 en adelante es donde empieza el
+    // contenido de la plantilla; ver la convención de layout documentada
+    // arriba de esta clase). Dos muestras de color reales, no solo texto —
+    // el color hay que verlo, no describirlo.
+    ws.mergeCells(5, 1, 5, 2);
+    const swatchEntrada = ws.getCell(5, 1);
+    swatchEntrada.value = '  Escriba aquí';
+    swatchEntrada.font = { bold: true, size: 9 };
+    this.marcarEntrada(swatchEntrada);
+    swatchEntrada.protection = { locked: true };
+
+    ws.mergeCells(5, 3, 5, 4);
+    const swatchReferencia = ws.getCell(5, 3);
+    swatchReferencia.value = '  Solo referencia — no editable';
+    swatchReferencia.font = { size: 9 };
+    this.marcarReferencia(swatchReferencia);
+    swatchReferencia.protection = { locked: true };
   }
 
   private aValorCelda(v: unknown): ExcelCellValue {
@@ -636,6 +684,7 @@ export class ExcelTemplateEngineService {
       const fmt = numFmtPorFormato(rango.forma.formato);
       if (fmt) cell.numFmt = fmt;
       cell.protection = { locked: rango.zona === 'CONTROLADA' };
+      if (rango.zona === 'CONTROLADA') this.marcarReferencia(cell); else this.marcarEntrada(cell);
       workbook.definedNames.add(rangoA1(rango.hoja, colAncla, filaAncla, colAncla, filaAncla), rango.rangoNombre);
       return;
     }
@@ -685,6 +734,7 @@ export class ExcelTemplateEngineService {
         const fmt = numFmtPorFormato(col.formato);
         if (fmt) cell.numFmt = fmt;
         cell.protection = { locked: zonaCol === 'CONTROLADA' };
+        if (zonaCol === 'CONTROLADA') this.marcarReferencia(cell); else this.marcarEntrada(cell);
         if (col.opciones?.length && zonaCol === 'LIBRE') {
           cell.dataValidation = { type: 'list', allowBlank: true, formulae: [`"${col.opciones.join(',')}"`] };
         }

@@ -27,6 +27,7 @@ const MARCA_ORIGEN = 'CONCILIACION_BANCARIA';
 interface FilaPartida {
   tipo?: unknown;
   afecta?: unknown;
+  referencia?: unknown;
   descripcion?: unknown;
   monto?: unknown;
   fecha?: unknown;
@@ -44,7 +45,10 @@ export const CONCILIACION_BANCARIA_TEMPLATE: ExcelTemplateDef = {
   descripcion:
     'Concilia el saldo según banco con el saldo según libros — depósitos en tránsito, cheques pendientes, notas no registradas. Si queda una diferencia real, se registra automáticamente en Diferencias Identificadas (S1).',
   paperCodeAplicable: ['PT-FIN-C-SUST'],
-  version: 1,
+  // v2 (2026-08-18): agregada la columna 'N° Referencia / Cheque' — cambia el
+  // layout de columnas de la tabla, por eso sube la versión (un archivo v1 ya
+  // descargado debe rechazarse limpio, no leerse con las columnas corridas).
+  version: 2,
   hojas: [
     { nombre: 'Conciliación', congelarEn: 'A18', anchoColumnas: [22, 30, 16, 14] },
     { nombre: 'Saldos TB', congelarEn: 'A3', anchoColumnas: [14, 35, 16, 16, 16] },
@@ -83,6 +87,7 @@ export const CONCILIACION_BANCARIA_TEMPLATE: ExcelTemplateDef = {
               opciones: ['Depósito en tránsito', 'Cheque pendiente de cobro', 'Nota de débito no registrada', 'Nota de crédito no registrada', 'Otro'],
             },
             { clave: 'afecta', encabezado: 'Afecta a', ancho: 10, opciones: ['Banco', 'Libros'] },
+            { clave: 'referencia', encabezado: 'N° Referencia / Cheque', ancho: 18 },
             { clave: 'descripcion', encabezado: 'Descripción', ancho: 35 },
             { clave: 'monto', encabezado: 'Monto (con signo)', ancho: 16, formato: 'MONEDA' },
             { clave: 'fecha', encabezado: 'Fecha', ancho: 14, formato: 'FECHA' },

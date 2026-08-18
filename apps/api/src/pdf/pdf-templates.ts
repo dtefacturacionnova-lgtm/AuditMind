@@ -4,6 +4,7 @@
  */
 import { renderCosoResultsBlock, renderCosoQuestionTable } from './coso-pdf';
 import { renderSampleItemRegisterTable, renderSamplingEvaluationBlock } from './nia530-pdf';
+import { renderFieldEvidenceBlock, type FieldEvidencePdf } from './field-evidence-pdf';
 
 // Utilities ────────────────────────────────────────────────────────────────────
 
@@ -285,6 +286,7 @@ export interface WorkingPaperReportData {
     qualityReport?: { score?: number; level?: string; recommendation?: string; issues?: Array<{ section?: string; type?: string; message: string }>; strengths?: string[] } | null;
     signOff?: { preparedByName?: string | null; preparedAt?: string | null; reviewedByName?: string | null; reviewedAt?: string | null; signedOffByName?: string | null; signedOffAt?: string | null };
     pbcLinks?: Array<{ code?: string; title?: string; status?: string }>;
+    fieldEvidence?: FieldEvidencePdf[];
   };
 }
 
@@ -867,6 +869,8 @@ export function renderWorkingPaperBody(data: WorkingPaperReportData): string {
 
     ${isCoso ? '' : '<h2>Secciones del Papel</h2>'}
     ${sectionsHtml}
+
+    ${renderFieldEvidenceBlock(wp.fieldEvidence ?? [])}
 
     ${proceduresHtml ? `<h2>Procedimientos</h2>${proceduresHtml}` : ''}
 

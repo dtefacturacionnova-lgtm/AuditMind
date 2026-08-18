@@ -83,6 +83,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { UserRole, WorkingPaperStatus } from '@prisma/client';
 import { ExcelTemplateEngineService } from './excel-templates/excel-template-engine.service';
 import { getExcelTemplate } from './excel-templates/excel-templates.registry';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('Papeles de Trabajo')
 @ApiBearerAuth()
@@ -100,6 +101,7 @@ export class WorkingPapersController {
     private readonly aiService:        AiService,
     private readonly pdfService:       PdfService,
     private readonly excelEngine:      ExcelTemplateEngineService,
+    private readonly prisma:           PrismaService,
   ) {}
 
   // ─── Listados ─────────────────────────────────────────────────────────────────
@@ -732,6 +734,17 @@ export class WorkingPapersController {
       (PAPER_TEMPLATES[w.paperCode ?? ''] ?? []).map(t => [t.sectionKey, t]),
     );
 
+    // Evidencia de Campo (EVD-01..14) — vive en su propia tabla `field_evidences`,
+    // no en `paper_sections`, así que hay que traerla aparte para que el export
+    // a PDF no la omita (antes se omitía por completo: el generador solo leía
+    // wp.sections). Consulta directa vía Prisma en vez de FieldEvidenceService
+    // para evitar el ciclo de módulos FieldEvidenceModule → WorkingPapersModule.
+    const fieldEvidence = await this.prisma.fieldEvidence.findMany({
+      where:   { paperId: id },
+      include: { findings: true },
+      orderBy: { capturedAt: 'desc' },
+    }).catch(() => []);
+
     const body = renderWorkingPaperBody({
       paper: {
         code:         w.code,
@@ -787,6 +800,18 @@ export class WorkingPapersController {
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pbcLinks: (pbcLinks as any[]).map(p => ({ code: p.code, title: p.title, status: p.status })),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fieldEvidence: (fieldEvidence as any[]).map(e => ({
+          kind: e.kind, status: e.status, capturedAt: e.capturedAt?.toISOString?.() ?? null,
+          capturedByName: e.capturedByName, lugar: e.lugar, descripcion: e.descripcion,
+          consentimiento: e.consentimiento, filename: e.filename,
+          textoOriginal: e.textoOriginal, transcript: e.transcript, anotaciones: e.anotaciones,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          findings: (e.findings as any[] ?? []).map((f: any) => ({
+            tipo: f.tipo, descripcion: f.descripcion, citaTextual: f.citaTextual,
+            fuenteRef: f.fuenteRef, nivelRiesgo: f.nivelRiesgo, disposition: f.disposition,
+          })),
+        })),
       },
     });
 

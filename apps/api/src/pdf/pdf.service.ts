@@ -182,7 +182,7 @@ export class PdfService implements OnModuleDestroy {
   <meta charset="utf-8">
   <title>${opts.title}</title>
   <style>
-    @page { size: A4; margin: 0; }
+    @page { size: A4; }
     * { box-sizing: border-box; }
     body {
       margin: 0; padding: 0;

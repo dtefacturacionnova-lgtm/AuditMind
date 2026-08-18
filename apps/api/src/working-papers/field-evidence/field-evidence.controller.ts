@@ -103,6 +103,17 @@ export class FieldEvidenceController {
     return this.svc.obtenerUrlMedia(paperId, evidenceId, modo, user);
   }
 
+  @Post(':evidenceId/retry')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Reintentar el análisis de una evidencia en estado FAILED, sin re-subir el archivo original' })
+  reintentar(
+    @Param('paperId') paperId: string,
+    @Param('evidenceId') evidenceId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.reintentar(paperId, evidenceId, user);
+  }
+
   @Delete(':evidenceId')
   @Roles(UserRole.SENIOR_AUDITOR)
   @HttpCode(HttpStatus.OK)

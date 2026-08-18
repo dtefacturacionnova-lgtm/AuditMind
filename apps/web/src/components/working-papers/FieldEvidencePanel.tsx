@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Mic, Square, FileText, ChevronDown, ChevronUp, Loader2, CheckCircle2,
   XCircle, AlertTriangle, Trash2, ArrowUpCircle, Sparkles, ShieldAlert, Users, Camera,
-  Volume2, ImageIcon, Download, Quote,
+  Volume2, ImageIcon, Download, Quote, RotateCcw,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useUser } from '@/hooks/useUser';
@@ -12,7 +12,7 @@ import type { PaperSection } from '@/hooks/useWorkingPaperGraph';
 import { PhotoAnnotator } from './PhotoAnnotator';
 import {
   useFieldEvidenceList, useCreateFieldEvidence, useDeleteFieldEvidence,
-  useAcceptFinding, useDiscardFinding, usePromoteFinding, fetchFieldEvidenceMediaUrl,
+  useAcceptFinding, useDiscardFinding, usePromoteFinding, useRetryFieldEvidence, fetchFieldEvidenceMediaUrl,
   type FieldEvidence, type FieldEvidenceFinding, type FieldEvidenceStatus, type AnotacionFoto,
 } from '@/hooks/useFieldEvidence';
 
@@ -319,6 +319,7 @@ function EvidenciaCard({
   seccionesDestino: PaperSection[];
 }) {
   const eliminar = useDeleteFieldEvidence(paperId);
+  const reintentar = useRetryFieldEvidence(paperId);
   const { user } = useUser();
   const [verNoVerificables, setVerNoVerificables] = useState(false);
 
@@ -384,8 +385,19 @@ function EvidenciaCard({
       <MediaOriginal evidencia={evidencia} paperId={paperId} puedeDescargar={puedeDescargar} />
 
       {evidencia.status === 'FAILED' && evidencia.errorMsg && (
-        <div className="flex items-start gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {evidencia.errorMsg}
+        <div className="space-y-1.5">
+          <div className="flex items-start gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {evidencia.errorMsg}
+          </div>
+          <button
+            type="button"
+            onClick={() => reintentar.mutate(evidencia.id)}
+            disabled={reintentar.isPending}
+            className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-2.5 py-1.5 disabled:opacity-50"
+          >
+            {reintentar.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+            Reintentar análisis
+          </button>
         </div>
       )}
 
@@ -680,7 +692,7 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
                 </button>
               </div>
             )}
-            {modo === 'entrevista' && !grabando && (
+            {(modo === 'entrevista' || modo === 'audio') && !grabando && (
               <label className="text-xs text-gray-500 hover:text-gray-700 underline cursor-pointer">
                 {audioBlob ? 'Regrabar' : 'o subir un archivo…'}
                 <input

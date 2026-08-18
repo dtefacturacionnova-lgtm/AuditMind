@@ -561,6 +561,31 @@ export class FieldEvidenceService {
     return { url: data.signedUrl, expiresIn: EXPIRES_IN };
   }
 
+  // ─── Reintentar análisis (evidencia FAILED, ej. por créditos de LLM agotados) ─
+  // El archivo original ya está en Storage — no hace falta re-subir nada, solo
+  // volver a disparar el pipeline. procesarEvidenciaBackground ya sabe descargar
+  // el original de Storage cuando no recibe un buffer en memoria (línea ~204).
+  async reintentar(paperId: string, evidenceId: string, user: AuthUser) {
+    await this.assertPaperAccess(paperId, user);
+
+    const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
+    if (!evidencia || evidencia.paperId !== paperId) throw new NotFoundException('Evidencia no encontrada');
+    if (evidencia.status !== 'FAILED') {
+      throw new BadRequestException('Solo se puede reintentar una evidencia en estado "Falló".');
+    }
+
+    await this.prisma.fieldEvidence.update({
+      where: { id: evidenceId },
+      data:  { status: 'UPLOADED', errorMsg: null },
+    });
+
+    this.procesarEvidenciaBackground(evidenceId).catch(err =>
+      this.logger.error(`Fallo reintentando evidencia ${evidenceId}: ${err.message}`, err.stack),
+    );
+
+    return this.prisma.fieldEvidence.findUniqueOrThrow({ where: { id: evidenceId } });
+  }
+
   // ─── Eliminar (SENIOR_AUDITOR — acto de custodia, no de edición) ─────────
 
   async eliminar(paperId: string, evidenceId: string, user: AuthUser) {

@@ -165,6 +165,17 @@ export function useDeleteFieldEvidence(paperId: string) {
   });
 }
 
+export function useRetryFieldEvidence(paperId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (evidenceId: string) =>
+      apiClient.post<FieldEvidence>(`/working-papers/${paperId}/evidence/${evidenceId}/retry`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['field-evidence', paperId] });
+    },
+  });
+}
+
 export function useAcceptFinding(paperId: string) {
   const qc = useQueryClient();
   return useMutation({

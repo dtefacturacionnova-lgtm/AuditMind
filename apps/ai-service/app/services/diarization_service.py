@@ -24,19 +24,24 @@ def _get_pipeline():
         from pyannote.audio import Pipeline
         _pipeline = Pipeline.from_pretrained(
             "pyannote/speaker-diarization-3.1",
-            use_auth_token=settings.HUGGINGFACE_TOKEN,
+            token=settings.HUGGINGFACE_TOKEN,
         )
     return _pipeline
 
 
 def diarizar_sync(audio_path: str) -> list[dict]:
     """Devuelve los turnos de habla detectados: [{inicio, fin, hablante}].
-    Síncrona a propósito — el caller la corre en un thread (asyncio.to_thread)."""
+    Síncrona a propósito — el caller la corre en un thread (asyncio.to_thread).
+
+    pyannote-audio 4.x devuelve un DiarizeOutput (dataclass) en vez del Annotation
+    directo de 3.x — el Annotation con .itertracks() ahora vive en
+    .speaker_diarization."""
     pipeline = _get_pipeline()
-    diarization = pipeline(audio_path)
+    output = pipeline(audio_path)
+    annotation = getattr(output, "speaker_diarization", output)  # 4.x vs 3.x
     return [
         {"inicio": round(turn.start, 2), "fin": round(turn.end, 2), "hablante": speaker}
-        for turn, _, speaker in diarization.itertracks(yield_label=True)
+        for turn, _, speaker in annotation.itertracks(yield_label=True)
     ]
 
 

@@ -66,3 +66,6 @@ coverage
 # Misc
 *.tsbuildinfo
 .cache
+
+# FFmpeg shared-library build for pyannote-audio/torchcodec on Windows (dev-only, not committed)
+apps/ai-service/ffmpeg-shared/

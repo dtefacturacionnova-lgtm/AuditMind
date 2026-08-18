@@ -10,18 +10,27 @@ import { AiService } from '../../ai/ai.service';
 import { PaperReferencesService } from '../paper-references.service';
 
 // Kinds que el pipeline sabe procesar hoy (Fase 1: texto/nota de voz; Fase 2:
-// entrevista formal diarizada). ANNOTATED_PHOTO/SHORT_VIDEO ya existen en el enum
-// del schema (evita migración cuando lleguen esas fases) pero se rechazan
+// entrevista formal diarizada; Fase 3: foto anotada). SHORT_VIDEO ya existe en el
+// enum del schema (evita migración cuando llegue esa fase) pero se rechaza
 // explícitamente — crear una fila que el pipeline nunca sabrá procesar la dejaría
 // atascada para siempre.
 const KINDS_SOPORTADOS: FieldEvidenceKind[] = [
   FieldEvidenceKind.TEXT_NOTE,
   FieldEvidenceKind.AUDIO_NOTE,
   FieldEvidenceKind.INTERVIEW_AUDIO,
+  FieldEvidenceKind.ANNOTATED_PHOTO,
 ];
 
-// Kinds que requieren transcripción de audio antes de extraer (todo lo que no es texto).
+// Kinds que requieren transcripción de audio antes de extraer (todo lo que no es texto/foto).
 const KINDS_CON_AUDIO: FieldEvidenceKind[] = [FieldEvidenceKind.AUDIO_NOTE, FieldEvidenceKind.INTERVIEW_AUDIO];
+
+export interface AnotacionFoto {
+  tipo: 'circulo' | 'flecha' | 'texto';
+  x: number; y: number;           // 0-1, relativas al tamaño de la imagen
+  x2?: number; y2?: number;       // flecha: punto final
+  radio?: number;                 // circulo
+  nota?: string;                  // lo que el auditor escribió sobre la zona
+}
 
 // Reaper perezoso (§6.3.2 del diseño) — sin scheduler; un job que lleva más de
 // esto en TRANSCRIBING/EXTRACTING se asume zombi (proceso reiniciado a mitad)
@@ -36,6 +45,7 @@ export interface CrearEvidenciaDto {
   lugar?: string;
   descripcion?: string;
   texto?: string;           // obligatorio para TEXT_NOTE
+  anotaciones?: string;     // ANNOTATED_PHOTO — JSON.stringify(AnotacionFoto[])
 }
 
 type UploadedFileLike = { buffer: Buffer; originalname: string; mimetype: string; size: number };
@@ -101,6 +111,16 @@ export class FieldEvidenceService {
       );
     }
 
+    let anotaciones: AnotacionFoto[] | undefined;
+    if (dto.kind === FieldEvidenceKind.ANNOTATED_PHOTO && dto.anotaciones) {
+      try {
+        anotaciones = JSON.parse(dto.anotaciones);
+        if (!Array.isArray(anotaciones)) throw new Error('no es un arreglo');
+      } catch {
+        throw new BadRequestException('anotaciones debe ser un JSON válido de la forma [{tipo,x,y,...}].');
+      }
+    }
+
     const sha256 = file
       ? createHash('sha256').update(file.buffer).digest('hex')
       : createHash('sha256').update(Buffer.from(dto.texto!, 'utf-8')).digest('hex');
@@ -123,6 +143,7 @@ export class FieldEvidenceService {
         consentimiento:  dto.consentimiento === 'true',
         lugar:           dto.lugar,
         descripcion:     dto.descripcion,
+        anotaciones:     anotaciones as unknown as Prisma.InputJsonValue ?? undefined,
       },
     });
 
@@ -161,8 +182,9 @@ export class FieldEvidenceService {
     const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
     if (!evidencia) return;
 
-    if (evidencia.kind === FieldEvidenceKind.TEXT_NOTE) {
-      // Sin normalización a texto que hacer — pasa directo a extraer de textoOriginal.
+    if (!KINDS_CON_AUDIO.includes(evidencia.kind)) {
+      // TEXT_NOTE (el texto ES la evidencia) y ANNOTATED_PHOTO (la imagen ES la
+      // evidencia, sin transcripción posible) — pasan directo a extraer.
       await this.prisma.fieldEvidence.update({
         where: { id: evidenceId },
         data:  { status: 'EXTRACTING', procesamientoIniciado: new Date() },
@@ -228,11 +250,20 @@ export class FieldEvidenceService {
       texto?: string;
       segmentos?: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
     } | null;
+    const esFoto = evidencia.kind === FieldEvidenceKind.ANNOTATED_PHOTO;
+    const anotaciones = esFoto ? (evidencia.anotaciones as unknown as AnotacionFoto[] | null) ?? [] : [];
     const fuenteTexto = evidencia.kind === FieldEvidenceKind.TEXT_NOTE
       ? (evidencia.textoOriginal ?? '')
-      : this.construirTextoConHablantes(transcript);
+      : esFoto
+        ? this.construirTextoDesdeAnotaciones(anotaciones)
+        : this.construirTextoConHablantes(transcript);
 
-    if (!fuenteTexto.trim()) {
+    // Una foto ES la evidencia aunque el auditor no haya escrito ninguna nota en
+    // las zonas marcadas — a diferencia de texto/audio, "sin texto fuente" no
+    // significa "no hay nada que analizar" (§6.9 se relaja solo para este kind;
+    // los hallazgos sin nota literal que citar simplemente no se generan, ver
+    // el prompt de extracción en evidence.py).
+    if (!fuenteTexto.trim() && !esFoto) {
       await this.prisma.fieldEvidence.update({
         where: { id: evidenceId },
         data:  { status: 'FAILED', errorMsg: 'No hay texto fuente para extraer (transcripción vacía).' },
@@ -243,13 +274,22 @@ export class FieldEvidenceService {
     try {
       const inicio = Date.now();
       const contextoExpediente = await this.construirContextoExpediente(evidencia);
+      let imagenBase64: string | undefined;
+      if (esFoto) {
+        const buffer = await this.descargarOriginal(evidencia.storageKey);
+        imagenBase64 = buffer.toString('base64');
+      }
       const resultado = await this.aiService.extractFieldEvidence({
-        fuente_tipo: evidencia.kind === FieldEvidenceKind.TEXT_NOTE ? 'texto' : 'transcripcion_audio',
+        fuente_tipo: evidencia.kind === FieldEvidenceKind.TEXT_NOTE
+          ? 'texto' : esFoto ? 'foto_anotada' : 'transcripcion_audio',
         contenido: fuenteTexto,
         segmentos: KINDS_CON_AUDIO.includes(evidencia.kind) ? transcript?.segmentos : undefined,
         contexto_expediente: contextoExpediente,
         instrucciones_extra: [evidencia.descripcion, evidencia.lugar ? `Lugar: ${evidencia.lugar}` : null]
           .filter(Boolean).join('\n') || undefined,
+        imagen_base64: imagenBase64,
+        imagen_mime_type: esFoto ? (evidencia.mimeType ?? 'image/jpeg') : undefined,
+        anotaciones: esFoto ? anotaciones : undefined,
       });
 
       // Anti-alucinación (§6.9): la cita debe existir literal (normalizada por
@@ -313,6 +353,18 @@ export class FieldEvidenceService {
   // en vez del `texto` plano de Whisper — así el LLM puede atribuir citas a quien las
   // dijo. `cita_textual` sigue siendo un substring literal de este texto (la etiqueta
   // no es parte de la cita en sí, el LLM cita solo las palabras).
+  // Foto anotada (EVD-14): la "fuente" citable para anti-alucinación es lo que el
+  // AUDITOR escribió sobre cada zona marcada — no una descripción visual inventada
+  // por el LLM. Zonas sin nota simplemente no aportan texto citable (el prompt de
+  // extracción ya le dice al LLM que no genere hallazgo para esas). Numeración
+  // 1-based consistente con "zona #N" que el LLM usa en fuente_ref.
+  private construirTextoDesdeAnotaciones(anotaciones: AnotacionFoto[]): string {
+    return anotaciones
+      .map((a, i) => (a.nota?.trim() ? `[zona #${i + 1}] ${a.nota.trim()}` : null))
+      .filter((s): s is string => !!s)
+      .join('\n');
+  }
+
   private construirTextoConHablantes(
     transcript: { texto?: string; segmentos?: { texto: string; hablante?: string | null }[] } | null,
   ): string {

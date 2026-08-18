@@ -1048,9 +1048,8 @@ model AuditRestoreLog {
 }
 
 // ─── EVD-04: Evidencia de campo (docs/inteligencia-de-evidencia-de-campo.md §6.2) ─
-// Fase 1 (EVD-03..11): TEXT_NOTE y AUDIO_NOTE. El resto de FieldEvidenceKind ya
-// vive en el schema para no requerir migración cuando lleguen las fases
-// siguientes, pero el pipeline (FieldEvidenceService) solo procesa Fase 1 hoy.
+// TEXT_NOTE/AUDIO_NOTE (Fase 1), INTERVIEW_AUDIO (Fase 2), ANNOTATED_PHOTO (Fase 3)
+// ya son procesados por el pipeline. SHORT_VIDEO (Fase 4) sigue pendiente.
 enum FieldEvidenceKind {
   TEXT_NOTE        // texto libre / lluvia de ideas — Fase 1
   AUDIO_NOTE       // nota de voz corta del auditor — Fase 1
@@ -1096,6 +1095,7 @@ model FieldEvidence {
   consentimiento Boolean   @default(false) // obligatorio true para INTERVIEW_AUDIO
   lugar          String?   // "Bodega central, Soyapango"
   descripcion    String?   // contexto del auditor: "arqueo de caja chica, turno noche"
+  anotaciones    Json?     // ANNOTATED_PHOTO (EVD-14): [{tipo, x, y, ..., nota?}] en coords 0-1 relativas a la imagen — la foto original nunca se modifica (custodia)
 
   // ── Resultado del pipeline ──
   transcript            Json?    // {texto, segmentos, idioma, duracion_seg} — ver EVD-03/whisper_service

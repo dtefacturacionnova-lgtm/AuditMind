@@ -359,7 +359,7 @@ export class AiService {
 
   // ─── Evidencia de campo — extracción estructurada de hallazgos (EVD-05) ─────
   async extractFieldEvidence(payload: {
-    fuente_tipo: 'texto' | 'transcripcion_audio';
+    fuente_tipo: 'texto' | 'transcripcion_audio' | 'foto_anotada';
     contenido: string;
     segmentos?: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
     contexto_expediente?: {
@@ -369,6 +369,13 @@ export class AiService {
       extractos?: { code: string; section_key?: string; resumen: string }[];
     };
     instrucciones_extra?: string;
+    // foto_anotada (EVD-14) — imagen original en base64 + anotaciones del auditor
+    imagen_base64?: string;
+    imagen_mime_type?: string;
+    anotaciones?: {
+      tipo: 'circulo' | 'flecha' | 'texto';
+      x: number; y: number; x2?: number; y2?: number; radio?: number; nota?: string;
+    }[];
   }): Promise<{
     resumen_ejecutivo: string;
     temas: string[];

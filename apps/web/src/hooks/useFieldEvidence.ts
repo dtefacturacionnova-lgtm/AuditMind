@@ -79,16 +79,25 @@ export interface FieldEvidence {
   findings: FieldEvidenceFinding[];
 }
 
+export interface AnotacionFoto {
+  tipo: 'circulo' | 'flecha' | 'texto';
+  x: number; y: number;
+  x2?: number; y2?: number;
+  radio?: number;
+  nota?: string;
+}
+
 export interface CrearEvidenciaInput {
-  kind: 'TEXT_NOTE' | 'AUDIO_NOTE' | 'INTERVIEW_AUDIO';
+  kind: 'TEXT_NOTE' | 'AUDIO_NOTE' | 'INTERVIEW_AUDIO' | 'ANNOTATED_PHOTO';
   sectionKey: string;
   capturedAt: string; // ISO
   consentimiento?: boolean; // obligatorio true para INTERVIEW_AUDIO — validado también en backend
   lugar?: string;
   descripcion?: string;
   texto?: string;         // obligatorio para TEXT_NOTE
-  file?: File | Blob;     // obligatorio para AUDIO_NOTE / INTERVIEW_AUDIO
+  file?: File | Blob;     // obligatorio para AUDIO_NOTE / INTERVIEW_AUDIO / ANNOTATED_PHOTO
   fileName?: string;      // nombre de archivo para el Blob grabado (MediaRecorder no trae uno)
+  anotaciones?: AnotacionFoto[]; // ANNOTATED_PHOTO
 }
 
 const PROCESANDO: FieldEvidenceStatus[] = ['UPLOADED', 'TRANSCRIBING', 'EXTRACTING'];
@@ -121,6 +130,7 @@ export function useCreateFieldEvidence(paperId: string) {
       formData.append('sectionKey', input.sectionKey);
       formData.append('capturedAt', input.capturedAt);
       if (input.consentimiento !== undefined) formData.append('consentimiento', String(input.consentimiento));
+      if (input.anotaciones) formData.append('anotaciones', JSON.stringify(input.anotaciones));
       if (input.lugar) formData.append('lugar', input.lugar);
       if (input.descripcion) formData.append('descripcion', input.descripcion);
       if (input.texto) formData.append('texto', input.texto);

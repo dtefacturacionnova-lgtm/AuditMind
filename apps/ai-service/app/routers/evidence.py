@@ -5,6 +5,7 @@ NestJS es el orquestador único (ver docs/inteligencia-de-evidencia-de-campo.md 
 /transcribe (EVD-03) y /extract (EVD-05).
 """
 import asyncio
+import base64
 import logging
 import os
 import tempfile
@@ -132,6 +133,21 @@ class SegmentoInput(BaseModel):
     hablante: Optional[str] = None  # poblado solo para INTERVIEW_AUDIO diarizado
 
 
+TipoAnotacion = Literal["circulo", "flecha", "texto"]
+
+
+class Anotacion(BaseModel):
+    """Marca dibujada por el auditor sobre una foto (EVD-14) — coordenadas 0-1
+    relativas al tamaño de la imagen, para que sobrevivan cualquier escalado."""
+    tipo: TipoAnotacion
+    x: float
+    y: float
+    x2: Optional[float] = None  # flecha: punto final
+    y2: Optional[float] = None
+    radio: Optional[float] = None  # circulo
+    nota: Optional[str] = None  # lo que el auditor escribió sobre esta zona
+
+
 class ContextoExpedientePapel(BaseModel):
     code: str
     title: str
@@ -152,11 +168,18 @@ class ContextoExpediente(BaseModel):
 
 
 class ExtractRequest(BaseModel):
-    fuente_tipo: Literal["texto", "transcripcion_audio"]
+    fuente_tipo: Literal["texto", "transcripcion_audio", "foto_anotada"]
     contenido: str
     segmentos: Optional[list[SegmentoInput]] = None
     contexto_expediente: Optional[ContextoExpediente] = None
     instrucciones_extra: Optional[str] = None
+    # foto_anotada (EVD-14) — la imagen original se manda tal cual (nunca se
+    # modifican los pixeles con las marcas); las anotaciones viajan como
+    # metadata separada y se le describen al LLM en texto además de dárselas
+    # a ver en la imagen misma.
+    imagen_base64: Optional[str] = None
+    imagen_mime_type: Optional[str] = None
+    anotaciones: Optional[list[Anotacion]] = None
 
 
 class ExtractResponse(ExtraccionEvidencia):
@@ -184,7 +207,16 @@ def _build_extraction_system_prompt() -> str:
         "- inconsistencia_con_expediente: contradice algo ya documentado en el expediente "
         "(solo si se te da contexto del expediente)\n"
         "- incumplimiento_mencionado: \"no se hace X que la norma/política exige\"\n"
-        "- anomalia_visual: solo aplica a evidencia visual (foto/video), no a texto/audio\n\n"
+        "- anomalia_visual: algo visualmente anómalo en una foto/video (solo aplica a esas fuentes)\n\n"
+        "Si la fuente es una FOTO ANOTADA: el auditor marcó una o más zonas sobre la imagen "
+        "(círculo, flecha o nota de texto) — recibes la imagen completa MÁS la lista de esas "
+        "zonas numeradas con su nota (si el auditor escribió una). Tu `cita_textual` para "
+        "hallazgos de foto DEBE ser una subcadena LITERAL de la nota del auditor de la zona "
+        "correspondiente — no inventes una \"cita\" describiendo lo que ves, esa descripción va "
+        "en `descripcion`/`justificacion`, no en `cita_textual`. Si una zona no tiene nota "
+        "del auditor, puedes describir lo que observas en `resumen_ejecutivo`/`temas` pero NO "
+        "generes un hallazgo individual para esa zona (no hay nada literal que citar). "
+        "`fuente_ref` para foto siempre en formato \"zona #N\" (N = número de la zona).\n\n"
         "No reportes trivialidades — justifica cada hallazgo explicando por qué le importa "
         "a un auditor. El resumen ejecutivo es 2-4 frases. Los temas son categorías cortas "
         "para agrupar la evidencia (ej. \"control de acceso\", \"segregación de funciones\"). "
@@ -231,6 +263,21 @@ def _build_extraction_user_content(request: ExtractRequest) -> str:
                 "asumas roles."
             )
 
+    if request.anotaciones:
+        zonas = []
+        for i, a in enumerate(request.anotaciones, start=1):
+            pos = f"({a.x:.0%}, {a.y:.0%})"
+            if a.tipo == "flecha" and a.x2 is not None and a.y2 is not None:
+                pos += f" → ({a.x2:.0%}, {a.y2:.0%})"
+            elif a.tipo == "circulo" and a.radio is not None:
+                pos += f", radio {a.radio:.0%}"
+            nota = f' — nota del auditor: "{a.nota}"' if a.nota else " — (sin nota del auditor)"
+            zonas.append(f"  zona #{i}: {a.tipo} en {pos}{nota}")
+        parts.append(
+            "\nZONAS MARCADAS SOBRE LA IMAGEN (coordenadas relativas, origen arriba-izquierda; "
+            "la imagen adjunta te deja ver exactamente qué hay ahí):\n" + "\n".join(zonas)
+        )
+
     if request.instrucciones_extra:
         parts.append(f"\nCONTEXTO APORTADO POR EL AUDITOR:\n{request.instrucciones_extra}")
 
@@ -254,8 +301,17 @@ async def extract(
     normalizada a texto (nota de texto o transcripción de audio)."""
     verify_internal_key(x_internal_key)
 
-    if not request.contenido.strip():
+    # foto_anotada puede llegar sin notas del auditor (contenido vacío) — la imagen
+    # ES la evidencia; para las demás fuentes, sin contenido no hay nada que extraer.
+    if not request.contenido.strip() and request.fuente_tipo != "foto_anotada":
         raise HTTPException(status_code=400, detail="contenido no puede estar vacío")
+
+    imagen = None
+    if request.imagen_base64:
+        try:
+            imagen = (base64.b64decode(request.imagen_base64), request.imagen_mime_type or "image/jpeg")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"imagen_base64 inválida: {e}")
 
     try:
         result = await generate_structured(
@@ -264,6 +320,7 @@ async def extract(
             user_content=_build_extraction_user_content(request),
             response_schema=ExtraccionEvidencia,
             temperature=0.1,
+            imagen=imagen,
         )
     except StructuredGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))

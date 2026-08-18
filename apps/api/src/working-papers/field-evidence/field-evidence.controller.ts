@@ -42,6 +42,10 @@ class CrearEvidenciaBody {
   @IsOptional()
   @IsString()
   texto?: string;
+
+  @IsOptional()
+  @IsString()
+  anotaciones?: string; // ANNOTATED_PHOTO — JSON.stringify([{tipo,x,y,...}]), coords 0-1 relativas a la imagen
 }
 
 @ApiTags('Evidencia de Campo')

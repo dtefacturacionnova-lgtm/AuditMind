@@ -3,15 +3,16 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Mic, Square, FileText, ChevronDown, ChevronUp, Loader2, CheckCircle2,
-  XCircle, AlertTriangle, Trash2, ArrowUpCircle, Sparkles, ShieldAlert, Users,
+  XCircle, AlertTriangle, Trash2, ArrowUpCircle, Sparkles, ShieldAlert, Users, Camera,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useUser } from '@/hooks/useUser';
 import type { PaperSection } from '@/hooks/useWorkingPaperGraph';
+import { PhotoAnnotator } from './PhotoAnnotator';
 import {
   useFieldEvidenceList, useCreateFieldEvidence, useDeleteFieldEvidence,
   useAcceptFinding, useDiscardFinding, usePromoteFinding,
-  type FieldEvidence, type FieldEvidenceFinding, type FieldEvidenceStatus,
+  type FieldEvidence, type FieldEvidenceFinding, type FieldEvidenceStatus, type AnotacionFoto,
 } from '@/hooks/useFieldEvidence';
 
 /**
@@ -197,7 +198,9 @@ function EvidenciaCard({
 
   const validados = evidencia.findings.filter(f => f.validadaCita);
   const noVerificables = evidencia.findings.filter(f => !f.validadaCita);
-  const Icon = evidencia.kind === 'INTERVIEW_AUDIO' ? Users : evidencia.kind === 'AUDIO_NOTE' ? Mic : FileText;
+  const Icon = evidencia.kind === 'INTERVIEW_AUDIO' ? Users
+    : evidencia.kind === 'ANNOTATED_PHOTO' ? Camera
+    : evidencia.kind === 'AUDIO_NOTE' ? Mic : FileText;
   const hayHablantes = evidencia.transcript?.segmentos?.some(s => s.hablante) ?? false;
 
   return (
@@ -215,6 +218,11 @@ function EvidenciaCard({
               {evidencia.kind === 'INTERVIEW_AUDIO' && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5">
                   <Users className="w-3 h-3" /> Entrevista formal{hayHablantes ? ' · hablantes separados' : ''}
+                </span>
+              )}
+              {evidencia.kind === 'ANNOTATED_PHOTO' && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                  <Camera className="w-3 h-3" /> Foto anotada
                 </span>
               )}
             </div>
@@ -305,7 +313,7 @@ function EvidenciaCard({
 
 function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: string }) {
   const crear = useCreateFieldEvidence(paperId);
-  const [modo, setModo] = useState<'texto' | 'audio' | 'entrevista'>('texto');
+  const [modo, setModo] = useState<'texto' | 'audio' | 'entrevista' | 'foto'>('texto');
   const [texto, setTexto] = useState('');
   const [lugar, setLugar] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -314,6 +322,27 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
   // Entrevista formal (EVD-12, Fase 2) — el consentimiento explícito del entrevistado
   // es obligatorio antes de subir la grabación; el backend lo revalida igual (§6.5).
   const [consentimientoConfirmado, setConsentimientoConfirmado] = useState(false);
+
+  // Foto anotada (EVD-14, Fase 3) — la imagen se sube tal cual (custodia); las
+  // marcas viajan como metadata separada, nunca se pintan sobre los pixeles.
+  const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [anotaciones, setAnotaciones] = useState<AnotacionFoto[]>([]);
+
+  function handleFotoSeleccionada(file: File) {
+    setError('');
+    if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+    setFotoFile(file);
+    setFotoUrl(URL.createObjectURL(file));
+    setAnotaciones([]);
+  }
+
+  function quitarFoto() {
+    if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+    setFotoFile(null);
+    setFotoUrl(null);
+    setAnotaciones([]);
+  }
 
   // Grabación de audio — MediaRecorder nativo del navegador, sin librerías.
   const [grabando, setGrabando] = useState(false);
@@ -379,7 +408,7 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
         });
         setAudioBlob(null);
         setAudioNombre(null);
-      } else {
+      } else if (modo === 'entrevista') {
         if (!audioBlob) { setError('Grabe o suba la grabación de la entrevista antes de guardar.'); return; }
         if (!consentimientoConfirmado) {
           setError('Debe confirmar que el entrevistado dio su consentimiento explícito para la grabación.');
@@ -394,6 +423,15 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
         setAudioBlob(null);
         setAudioNombre(null);
         setConsentimientoConfirmado(false);
+      } else {
+        if (!fotoFile) { setError('Suba o tome una foto antes de guardar.'); return; }
+        await crear.mutateAsync({
+          kind: 'ANNOTATED_PHOTO', sectionKey, capturedAt: new Date().toISOString(),
+          file: fotoFile, fileName: fotoFile.name,
+          anotaciones: anotaciones.length > 0 ? anotaciones : undefined,
+          lugar: lugar.trim() || undefined, descripcion: descripcion.trim() || undefined,
+        });
+        quitarFoto();
       }
       setLugar('');
       setDescripcion('');
@@ -423,6 +461,12 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
         >
           <Users className="w-3.5 h-3.5" /> Entrevista formal
         </button>
+        <button
+          onClick={() => setModo('foto')}
+          className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 ${modo === 'foto' ? 'bg-gray-900 text-white' : 'text-gray-500 border border-gray-200'}`}
+        >
+          <Camera className="w-3.5 h-3.5" /> Foto anotada
+        </button>
       </div>
 
       {modo === 'texto' ? (
@@ -433,6 +477,29 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
           placeholder="Escriba lo observado — una cita textual exacta permite que la IA la use como evidencia verificable…"
           className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-gray-400 resize-none"
         />
+      ) : modo === 'foto' ? (
+        <div className="space-y-2">
+          {!fotoFile ? (
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-lg py-8 cursor-pointer hover:border-gray-300 text-gray-500 text-xs">
+              <Camera className="w-6 h-6" />
+              Tomar o subir una foto
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleFotoSeleccionada(f); e.target.value = ''; }}
+              />
+            </label>
+          ) : (
+            <>
+              <PhotoAnnotator imageUrl={fotoUrl!} anotaciones={anotaciones} onChange={setAnotaciones} />
+              <button type="button" onClick={quitarFoto} className="text-xs text-gray-500 hover:text-gray-700 underline">
+                Quitar foto
+              </button>
+            </>
+          )}
+        </div>
       ) : (
         <div className="space-y-3">
           {modo === 'entrevista' && (

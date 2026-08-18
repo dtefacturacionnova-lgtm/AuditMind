@@ -344,6 +344,13 @@ export class WorkingPapersController {
     return this.sectionsService.propagateControlDeficiencias(id, user);
   }
 
+  @Post(':id/propagate-confirmaciones')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Consolidar Confirmaciones Externas (NIA 505) conciliadas/sin respuesta en Diferencias Identificadas de PT-FIN-C-SUST S1 (determinista, sin IA)' })
+  propagateConfirmaciones(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateConfirmaciones(id, user);
+  }
+
   @Post(':id/recalculate-coso-component-analysis')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Recalcular conteos de deficiencias por componente COSO en PT-NIA265 S2 a partir de S1 (determinista, preserva juicio del auditor)' })

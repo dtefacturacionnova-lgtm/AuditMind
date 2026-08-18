@@ -3,7 +3,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, FindingSeverity, FindingStatus } from '@prisma/client';
+import { Prisma, FindingSeverity, FindingStatus, ConfirmationStatus, ConfirmationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PaperGraphService } from './paper-graph.service';
@@ -1400,6 +1400,130 @@ INSTRUCCIONES DE SALIDA:
       message: consolidated.length > 0
         ? `${consolidated.length} deficiencia(s) consolidadas desde PT-A3 (evaluación de controles) y PT-ITGC (controles generales de TI).`
         : 'No se encontraron excepciones con severidad Menor/Significativa/Material en PT-A3 ni PT-ITGC — puede que aún no se hayan registrado pruebas de control, o que no haya deficiencias.',
+    };
+  }
+
+  /**
+   * Consolida Confirmaciones Externas (NIA 505, módulo `ExternalConfirmation`)
+   * en "Diferencias Identificadas" (S1) de PT-FIN-C-SUST — el mismo destino
+   * que ya alimentan Conciliación Bancaria/CxC/CxP y Arqueo de Caja. A
+   * diferencia de `propagateControlDeficiencias` (que REEMPLAZA S1 por
+   * completo porque ahí solo viven deficiencias), aquí S1 es compartida con
+   * filas manuales y de otras fuentes — se sigue el mismo convenio de
+   * marcador que usan las plantillas Excel (`_origen` propio, solo se
+   * reemplaza lo que este método escribió antes).
+   *
+   * No hay señal programática de qué área es esta instancia de C-SUST — se
+   * traen confirmaciones de TODOS los tipos (BANK/CLIENT/SUPPLIER/LAWYER/
+   * OTHER) del encargo, igual que Conciliación Bancaria/CxC/CxP se muestran
+   * en cualquier área; el auditor no usa lo que no aplica.
+   *
+   * Solo se materializan confirmaciones en estado TERMINAL:
+   *  - RECONCILED con diferencia material (≥ $0.01): fila de diferencia
+   *    completa, igual que las plantillas Excel.
+   *  - NO_RESPONSE / ALT_PROCEDURE: fila cualitativa con campos numéricos en
+   *    blanco — mismo patrón que ya usan las filas de S1 originadas en
+   *    evidencia de campo (`_origen: 'evidencia'`) para hallazgos sin cifra.
+   * DRAFT/SENT/RECEIVED se omiten — RECEIVED todavía no pasó por el juicio
+   * del auditor en `reconcile()` (¿la diferencia es explicable o es un
+   * error?); consolidar antes de eso adelantaría una conclusión que aún no
+   * se tomó.
+   */
+  async propagateConfirmaciones(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-FIN-C-SUST') {
+      throw new BadRequestException(
+        'Solo un papel PT-FIN-C-SUST puede consolidar Confirmaciones Externas',
+      );
+    }
+
+    const MARCA_ORIGEN = 'CONFIRMACION_EXTERNA';
+    const TIPO_LABEL: Record<ConfirmationType, string> = {
+      BANK:     'Bancos — Confirmación Externa (NIA 505)',
+      CLIENT:   'Cuentas por Cobrar — Confirmación Externa (NIA 505)',
+      SUPPLIER: 'Cuentas por Pagar — Confirmación Externa (NIA 505)',
+      LAWYER:   'Asuntos Legales — Confirmación Externa (NIA 505)',
+      OTHER:    'Confirmación Externa (NIA 505)',
+    };
+
+    const confirmaciones = await this.prisma.externalConfirmation.findMany({
+      where: {
+        auditId: wp.auditId,
+        status: { in: [ConfirmationStatus.RECONCILED, ConfirmationStatus.NO_RESPONSE, ConfirmationStatus.ALT_PROCEDURE] },
+      },
+      orderBy: [{ type: 'asc' }, { respondentName: 'asc' }],
+    });
+
+    const s1 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+    });
+    const existentes = (Array.isArray(s1?.value) ? s1!.value : []) as Array<Record<string, unknown>>;
+    const conservadas = existentes.filter(r => r['_origen'] !== MARCA_ORIGEN);
+
+    const nuevas: Array<Record<string, unknown>> = [];
+    let seq = conservadas.length;
+
+    for (const conf of confirmaciones) {
+      const etiqueta = TIPO_LABEL[conf.type];
+      const nombre = conf.respondentName;
+
+      if (conf.status === ConfirmationStatus.RECONCILED) {
+        const diferencia = conf.difference != null ? Number(conf.difference) : 0;
+        if (Math.abs(diferencia) < 0.01) continue; // conciliado sin diferencia material — nada que reportar
+
+        const saldoLibros = conf.amount != null ? Number(conf.amount) : null;
+        const saldoConfirmado = conf.responseAmount != null ? Number(conf.responseAmount) : null;
+        seq++;
+        nuevas.push({
+          '_origen':         MARCA_ORIGEN,
+          '_confirmationId': conf.id,
+          'N°':               String(seq),
+          'Área/Cuenta':      `${etiqueta} — ${nombre}`,
+          'Descripción de la diferencia':
+            `Confirmación externa recibida de ${nombre} (${conf.accountRef ?? 'sin ref.'}) con diferencia no conciliada`
+            + (saldoLibros != null ? ` entre el saldo según libros $${saldoLibros.toFixed(2)}` : '')
+            + (saldoConfirmado != null ? ` y el saldo confirmado $${saldoConfirmado.toFixed(2)}` : '') + '.'
+            + (conf.differenceExplanation ? ` ${conf.differenceExplanation}` : ''),
+          'Saldo según cliente ($)':  saldoLibros != null ? saldoLibros.toFixed(2) : '',
+          'Saldo según auditor ($)':  saldoConfirmado != null ? saldoConfirmado.toFixed(2) : '',
+          'Diferencia ($)':           diferencia.toFixed(2),
+          'Naturaleza (Error/Estimación/Fraude/No ajustable)': 'Error',
+          'Proponer AJE (Sí/No/Pendiente)': 'Pendiente',
+        });
+      } else {
+        // NO_RESPONSE / ALT_PROCEDURE — hallazgo cualitativo, sin cifra que reportar.
+        seq++;
+        nuevas.push({
+          '_origen':         MARCA_ORIGEN,
+          '_confirmationId': conf.id,
+          'N°':               String(seq),
+          'Área/Cuenta':      `${etiqueta} — ${nombre}`,
+          'Descripción de la diferencia': conf.status === ConfirmationStatus.NO_RESPONSE
+            ? `Sin respuesta a la confirmación externa enviada a ${nombre} (${conf.accountRef ?? 'sin ref.'}) — pendiente aplicar procedimiento alternativo.`
+            : `${nombre} (${conf.accountRef ?? 'sin ref.'}) no respondió a la confirmación externa; procedimiento alternativo aplicado: ${conf.alternativeProcedure ?? 'sin detalle registrado'}.`,
+          'Saldo según cliente ($)':  '',
+          'Saldo según auditor ($)':  '',
+          'Diferencia ($)':           '',
+          'Naturaleza (Error/Estimación/Fraude/No ajustable)': 'No ajustable',
+          'Proponer AJE (Sí/No/Pendiente)': 'No',
+        });
+      }
+    }
+
+    const value = [...conservadas, ...nuevas];
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: value as any },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S1', value);
+
+    return {
+      consolidated: nuevas.length,
+      message: nuevas.length > 0
+        ? `${nuevas.length} confirmación(es) externa(s) consolidada(s) en Diferencias Identificadas.`
+        : 'No hay confirmaciones externas en estado Conciliado (con diferencia), Sin Respuesta o Procedimiento Alternativo para este encargo — revise el módulo de Confirmaciones.',
     };
   }
 

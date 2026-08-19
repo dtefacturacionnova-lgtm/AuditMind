@@ -340,13 +340,23 @@ export class FieldEvidenceService {
   }
 
   // ─── Duración de video, mejor esfuerzo (EVD-15) ──────────────────────────
-  // Parseo directo de la caja `mvhd` dentro de `moov` de un contenedor MP4/MOV/M4V
-  // — cubre el caso común (cámara de teléfono, la mayoría de grabadores web).
-  // Sin librería de video en Node en este repo y no se instala ffmpeg solo para
-  // esto; contenedores no reconocibles (ej. WebM) devuelven null sin bloquear la
-  // subida — la validación definitiva ocurre igual en ai-service tras decodificar
-  // (ver procesarVideo), que si el video resulta más largo marca la evidencia
-  // FAILED en vez de dejarla atascada.
+  // Parseo directo de cajas ISO-BMFF (ISO/IEC 14496-12) dentro de `moov` de un
+  // contenedor MP4/MOV/M4V — cubre el caso común (cámara de teléfono, la mayoría
+  // de grabadores web). Sin librería de video en Node en este repo y no se
+  // instala ffmpeg solo para esto; contenedores no reconocibles (ej. WebM)
+  // devuelven null sin bloquear la subida — la validación definitiva ocurre
+  // igual en ai-service tras decodificar (ver procesarVideo), que si el video
+  // resulta más largo marca la evidencia FAILED en vez de dejarla atascada.
+  //
+  // Preferimos la duración de la PISTA DE VIDEO (mdia→mdhd de la pista cuyo
+  // hdlr dice 'vide') sobre `mvhd` de nivel película: `mvhd` reporta el máximo
+  // entre TODAS las pistas, así que si la pista de audio dura más que la de
+  // video (caso real: video de ~6s con una cola de audio de ~11-12s) `mvhd`
+  // sobreestima y el pre-check de 180s podría rechazar por error un video
+  // legítimamente corto. Si no se puede identificar la pista de video
+  // (contenedor atípico, estructura no reconocida), cae a `mvhd` como
+  // fallback — mismo principio de "nunca bloquear la subida por no poder
+  // parsear" que ya seguía el código original.
   private extraerDuracionMp4Seg(buffer: Buffer): number | null {
     try {
       let offset = 0;
@@ -355,7 +365,11 @@ export class FieldEvidenceService {
         const type = buffer.toString('ascii', offset + 4, offset + 8);
         if (size < 8) break;
         if (type === 'moov') {
-          return this.buscarMvhd(buffer, offset + 8, Math.min(offset + size, buffer.length));
+          const moovStart = offset + 8;
+          const moovEnd = Math.min(offset + size, buffer.length);
+          const duracionVideo = this.buscarDuracionPistaVideo(buffer, moovStart, moovEnd);
+          if (duracionVideo !== null) return duracionVideo;
+          return this.buscarMvhd(buffer, moovStart, moovEnd);
         }
         offset += size;
       }
@@ -365,26 +379,91 @@ export class FieldEvidenceService {
     return null;
   }
 
+  // Recorre moov → trak (una por pista — puede haber varias: video, audio, a
+  // veces subtítulos/metadata) → mdia → hdlr para identificar cuál trak es de
+  // video (Handler Reference Box, ISO/IEC 14496-12 §8.4.3: el handler type es
+  // un FourCC de 4 bytes en el offset 16 desde el inicio de la caja hdlr —
+  // 8 bytes de cabecera de caja + 4 bytes version/flags + 4 bytes pre_defined
+  // reservado), y una vez identificada, lee su duración real en la misma
+  // mdia → mdhd (Media Header Box — mismo layout version 0/1 que mvhd,
+  // ver leerDuracionCajaHeader). Esa duración está en el timescale propio de
+  // la pista, no el de la película, pero el cálculo duration/timescale es
+  // el mismo. null si ningún trak resulta identificable como video.
+  private buscarDuracionPistaVideo(buffer: Buffer, moovStart: number, moovEnd: number): number | null {
+    for (const trakOffset of this.todasLasCajasHijas(buffer, moovStart, moovEnd, 'trak')) {
+      const trakSize = buffer.readUInt32BE(trakOffset);
+      const trakEnd = Math.min(trakOffset + trakSize, moovEnd);
+
+      const mdiaOffset = this.primeraCajaHija(buffer, trakOffset + 8, trakEnd, 'mdia');
+      if (mdiaOffset === null) continue;
+      const mdiaSize = buffer.readUInt32BE(mdiaOffset);
+      const mdiaEnd = Math.min(mdiaOffset + mdiaSize, trakEnd);
+
+      const hdlrOffset = this.primeraCajaHija(buffer, mdiaOffset + 8, mdiaEnd, 'hdlr');
+      if (hdlrOffset === null) continue;
+      const handlerType = buffer.toString('ascii', hdlrOffset + 16, hdlrOffset + 20);
+      if (handlerType !== 'vide') continue;
+
+      const mdhdOffset = this.primeraCajaHija(buffer, mdiaOffset + 8, mdiaEnd, 'mdhd');
+      if (mdhdOffset === null) continue;
+      const duracion = this.leerDuracionCajaHeader(buffer, mdhdOffset);
+      if (duracion !== null) return duracion;
+    }
+    return null;
+  }
+
   private buscarMvhd(buffer: Buffer, start: number, end: number): number | null {
+    const mvhdOffset = this.primeraCajaHija(buffer, start, end, 'mvhd');
+    return mvhdOffset === null ? null : this.leerDuracionCajaHeader(buffer, mvhdOffset);
+  }
+
+  // ─── Utilidades genéricas de recorrido ISO-BMFF ──────────────────────────
+  // Convención compartida por todo este archivo: un "offset de caja" apunta al
+  // campo `size` (4 bytes) de esa caja — su contenido empieza en offset+8.
+
+  // Primera caja hija de tipo `tipo` dentro de [start, end). null si no aparece
+  // o el rango es inconsistente (buffer truncado, size < 8).
+  private primeraCajaHija(buffer: Buffer, start: number, end: number, tipo: string): number | null {
     let offset = start;
     while (offset + 8 <= end) {
       const size = buffer.readUInt32BE(offset);
       const type = buffer.toString('ascii', offset + 4, offset + 8);
       if (size < 8) break;
-      if (type === 'mvhd') {
-        const version = buffer.readUInt8(offset + 8);
-        if (version === 1) {
-          const timescale = buffer.readUInt32BE(offset + 8 + 4 + 8 + 8);
-          const duration = buffer.readBigUInt64BE(offset + 8 + 4 + 8 + 8 + 4);
-          return timescale > 0 ? Number(duration) / timescale : null;
-        }
-        const timescale = buffer.readUInt32BE(offset + 8 + 4 + 4 + 4);
-        const duration = buffer.readUInt32BE(offset + 8 + 4 + 4 + 4 + 4);
-        return timescale > 0 ? duration / timescale : null;
-      }
+      if (type === tipo) return offset;
       offset += size;
     }
     return null;
+  }
+
+  // Como primeraCajaHija pero devuelve TODAS las cajas hijas de ese tipo —
+  // usado para 'trak', que se repite una vez por pista.
+  private todasLasCajasHijas(buffer: Buffer, start: number, end: number, tipo: string): number[] {
+    const resultado: number[] = [];
+    let offset = start;
+    while (offset + 8 <= end) {
+      const size = buffer.readUInt32BE(offset);
+      const type = buffer.toString('ascii', offset + 4, offset + 8);
+      if (size < 8) break;
+      if (type === tipo) resultado.push(offset);
+      offset += size;
+    }
+    return resultado;
+  }
+
+  // Lee duration/timescale de una caja de header tipo mvhd/mdhd — mismo layout
+  // en ambas (ISO/IEC 14496-12 §8.2.2 Movie Header Box / §8.4.2 Media Header
+  // Box): version(1 byte) determina si creation_time/modification_time/duration
+  // son de 32 o 64 bits. `offset` es el offset de caja (posición del campo size).
+  private leerDuracionCajaHeader(buffer: Buffer, offset: number): number | null {
+    const version = buffer.readUInt8(offset + 8);
+    if (version === 1) {
+      const timescale = buffer.readUInt32BE(offset + 8 + 4 + 8 + 8);
+      const duration = buffer.readBigUInt64BE(offset + 8 + 4 + 8 + 8 + 4);
+      return timescale > 0 ? Number(duration) / timescale : null;
+    }
+    const timescale = buffer.readUInt32BE(offset + 8 + 4 + 4 + 4);
+    const duration = buffer.readUInt32BE(offset + 8 + 4 + 4 + 4 + 4);
+    return timescale > 0 ? duration / timescale : null;
   }
 
   // ─── Extracción estructurada + validación anti-alucinación (EVD-05/EVD-06) ──

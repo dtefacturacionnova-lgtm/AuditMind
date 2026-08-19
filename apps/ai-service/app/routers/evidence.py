@@ -8,6 +8,7 @@ import asyncio
 import base64
 import logging
 import os
+import re
 import tempfile
 from typing import Literal, Optional
 
@@ -301,7 +302,11 @@ def _build_extraction_system_prompt() -> str:
         "`descripcion`/`justificacion`, no en `cita_textual`. Si no hay nada textual que citar "
         "para respaldar algo que observas en un frame, no generes ese hallazgo — puedes mencionarlo "
         "en `resumen_ejecutivo`. `fuente_ref` para video usa el mismo formato mm:ss que audio, "
-        "basado en el segmento de transcripción más cercano (no en el instante del frame).\n\n"
+        "basado en el segmento de transcripción más cercano (no en el instante del frame). "
+        "IMPORTANTE: convierte siempre segundos a mm:ss antes de escribir `fuente_ref` — ej. si el "
+        "segmento de transcripción más cercano está en 125.4s, escribe \"02:05\", NUNCA \"125.4s\" "
+        "ni \"2:05.4\" ni el texto \"t=125.4s\" de la etiqueta del frame (esa etiqueta es solo para "
+        "que ubiques el frame, no es el formato de salida).\n\n"
         "No reportes trivialidades — justifica cada hallazgo explicando por qué le importa "
         "a un auditor. El resumen ejecutivo es 2-4 frases. Los temas son categorías cortas "
         "para agrupar la evidencia (ej. \"control de acceso\", \"segregación de funciones\"). "
@@ -387,6 +392,34 @@ def _build_extraction_user_content(request: ExtractRequest) -> str:
     return "\n".join(parts)
 
 
+# El prompt le pide al LLM fuente_ref en formato mm:ss para video (igual que audio),
+# pero en verificación real el LLM a veces copió literal el formato "t=X.Xs" de la
+# etiqueta de frame (ej. "2.8s") en vez de convertir — no basta con reforzar el
+# prompt, se normaliza en código como red de seguridad real (EVD-15, punto débil
+# detectado en verificación con videos sintéticos).
+_RE_FUENTE_REF_MMSS = re.compile(r'^\d{1,2}:\d{2}$')
+_RE_FUENTE_REF_SEGUNDOS_CRUDOS = re.compile(r'^(\d+(?:\.\d+)?)\s*s?$', re.IGNORECASE)
+
+
+def _normalizar_fuente_ref_video(fuente_ref: Optional[str]) -> Optional[str]:
+    """Convierte un fuente_ref de "segundos crudos" (ej. "2.8s", "125.4") a mm:ss
+    (ej. "00:02", "02:05"). Si ya viene en mm:ss, o es cualquier otro texto no
+    reconocible como número de segundos, se devuelve intacto — nunca se inventa
+    una conversión de algo que no es un número de segundos."""
+    if not fuente_ref:
+        return fuente_ref
+    texto = fuente_ref.strip()
+    if _RE_FUENTE_REF_MMSS.match(texto):
+        return fuente_ref
+    m = _RE_FUENTE_REF_SEGUNDOS_CRUDOS.match(texto)
+    if not m:
+        return fuente_ref
+    segundos_totales = float(m.group(1))
+    minutos = int(segundos_totales // 60)
+    segundos = int(segundos_totales % 60)
+    return f"{minutos:02d}:{segundos:02d}"
+
+
 @router.post("/extract", response_model=ExtractResponse)
 async def extract(
     request: ExtractRequest,
@@ -421,6 +454,14 @@ async def extract(
         )
     except StructuredGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+    # Red de seguridad: generate_structured() ya valida contra ExtraccionEvidencia
+    # y devuelve result["data"] como dict (.model_dump()) — normaliza fuente_ref
+    # de cada hallazgo de video aquí mismo, sin depender de que el LLM haya
+    # obedecido el formato mm:ss pedido en el prompt.
+    if request.fuente_tipo == "video_corto":
+        for hallazgo in result["data"].get("hallazgos", []):
+            hallazgo["fuente_ref"] = _normalizar_fuente_ref_video(hallazgo.get("fuente_ref"))
 
     return {
         **result["data"],

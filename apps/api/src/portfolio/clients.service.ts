@@ -23,6 +23,9 @@ const CLIENT_DETAIL_INCLUDE = {
   },
   engagementLetters: {
     orderBy: { createdAt: 'desc' as const },
+    include: {
+      proposal: { select: { id: true, year: true, status: true, feeAmount: true, feeCurrency: true } },
+    },
   },
   engagements: {
     orderBy: { fiscalYear: 'desc' as const },

@@ -11,7 +11,7 @@ import {
   useCreateEngagement, useApproveEngagement, useCancelEngagement,
   ENGAGEMENT_STATUS_CONFIG, ClientDetail, CreateEngagementData,
 } from '@/hooks/usePortfolio';
-import { formatDateUTC } from '@/lib/utils';
+import { formatDateUTC, formatMoney } from '@/lib/utils';
 import { ProfitabilityPanel } from './ProfitabilityPanel';
 
 /** Mismo umbral que ProfitabilityPanel — se repite aquí solo para decidir si se
@@ -21,10 +21,17 @@ const PROFITABILITY_ROLES = ['CAE', 'ADMIN', 'SUPER_ADMIN'];
 const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 const label = 'text-xs font-medium text-gray-600';
 
-function NewEngagementModal({ clientId, onClose }: { clientId: string; onClose: () => void }) {
+function NewEngagementModal({ client, onClose }: { client: ClientDetail; onClose: () => void }) {
   const currentYear = new Date().getFullYear();
+  // Solo cartas SIGNED tienen valor real acá — sin firma no hay honorario exigible
+  // todavía. Si el cliente tiene exactamente una, se preselecciona (caso típico:
+  // primer encargo tras la carta inicial); con varias, el auditor elige a mano.
+  const signedLetters = client.engagementLetters.filter(l => l.status === 'SIGNED');
   const [form, setForm] = useState<CreateEngagementData>({
-    clientId, fiscalYear: currentYear, fiscalYearEndDate: `${currentYear}-12-31`,
+    clientId: client.id,
+    fiscalYear: currentYear,
+    fiscalYearEndDate: `${currentYear}-12-31`,
+    engagementLetterId: signedLetters.length === 1 ? signedLetters[0].id : undefined,
   });
   const create = useCreateEngagement();
 
@@ -33,7 +40,7 @@ function NewEngagementModal({ clientId, onClose }: { clientId: string; onClose: 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await create.mutateAsync(form);
+      await create.mutateAsync({ ...form, engagementLetterId: form.engagementLetterId || undefined });
       onClose();
     } catch { /* shown below */ }
   };
@@ -52,6 +59,27 @@ function NewEngagementModal({ clientId, onClose }: { clientId: string; onClose: 
             <label className={label}>Fecha de cierre fiscal *</label>
             <input required type="date" value={form.fiscalYearEndDate}
               onChange={e => set({ fiscalYearEndDate: e.target.value })} className={cls} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className={label}>Carta de Compromiso vinculada</label>
+            {signedLetters.length > 0 ? (
+              <select value={form.engagementLetterId ?? ''}
+                onChange={e => set({ engagementLetterId: e.target.value || undefined })} className={cls}>
+                <option value="">Sin vincular</option>
+                {signedLetters.map(l => (
+                  <option key={l.id} value={l.id}>
+                    Ejercicio {l.year} — {l.proposal?.feeAmount != null
+                      ? `${formatMoney(l.proposal.feeAmount)} ${l.proposal.feeCurrency}`
+                      : 'honorario no definido'}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+                Este cliente no tiene cartas de compromiso firmadas — la Rentabilidad de este
+                encargo no podrá calcular ingreso hasta vincular una.
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
@@ -233,7 +261,7 @@ export function EngagementsTab({ client }: { client: ClientDetail }) {
         </div>
       )}
 
-      {showNew && <NewEngagementModal clientId={client.id} onClose={() => setShowNew(false)} />}
+      {showNew && <NewEngagementModal client={client} onClose={() => setShowNew(false)} />}
       {approving && (
         <ApproveConfirm
           engagementId={approving.id}

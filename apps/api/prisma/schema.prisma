@@ -367,6 +367,44 @@ enum OrgAuditModality {
   BOTH
 }
 
+enum ClientStatus {
+  PROSPECT
+  IN_ACCEPTANCE
+  PROPOSAL_IN_PROGRESS
+  PENDING_SIGNATURE
+  ACTIVE
+  INACTIVE
+  DECLINED
+}
+
+enum AcceptanceRating {
+  PENDING
+  GREEN
+  YELLOW
+  RED
+}
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum EngagementLetterStatus {
+  DRAFT
+  SENT
+  SIGNED
+  DECLINED
+}
+
+enum EngagementStatus {
+  DRAFT
+  APPROVED
+  CANCELLED
+}
+
 // ─── MÓDULO 01: NÚCLEO MULTI-TENANT ───────────────────────────────────────────
 
 model Organization {
@@ -420,6 +458,11 @@ model Organization {
   holidayConfigs         HolidayConfig[]
   availabilityProfiles   UserAvailabilityProfile[]
   costProfiles           UserCostProfile[]
+  clients                Client[]
+  acceptanceChecks       AcceptanceCheck[]
+  proposals              Proposal[]
+  engagementLetters      EngagementLetter[]
+  engagements            Engagement[]
 
   @@map("organizations")
 }
@@ -463,6 +506,11 @@ model User {
   timeEntries       TimeEntry[]
   availabilityProfiles UserAvailabilityProfile[]
   costProfiles         UserCostProfile[]
+  createdClients           Client[]           @relation("ClientCreator")
+  decidedAcceptanceChecks  AcceptanceCheck[]
+  createdProposals         Proposal[]         @relation("ProposalCreator")
+  createdEngagementLetters EngagementLetter[] @relation("EngagementLetterCreator")
+  createdEngagements       Engagement[]       @relation("EngagementCreator")
 
   @@index([organizationId])
   @@index([email])
@@ -559,6 +607,7 @@ model AuditEntity {
   auditableUnits        AuditableUnit[]
   projectsAsResponsible AuditProject[] @relation("ProjectResponsible")
   projectsAsSupport     AuditProject[] @relation("ProjectSupport")
+  client                Client?
 
   @@index([organizationId])
   @@index([organizationId, entityType])
@@ -1003,6 +1052,163 @@ model UserCostProfile {
   @@map("user_cost_profiles")
 }
 
+// ─── CARTERA (CRM EXTERNO) ───────────────────────────────
+
+model Client {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  legalName          String
+  tradeName          String?
+  taxId              String?
+  industry           String?
+  contactName        String?
+  contactEmail       String?
+  contactPhone       String?
+  address            String?
+  fiscalYearEndMonth Int          @default(12)
+  fiscalYearEndDay   Int          @default(31)
+  status             ClientStatus @default(PROSPECT)
+  auditEntityId      String?      @unique
+  notes              String?
+  createdById        String
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy         User               @relation("ClientCreator", fields: [createdById], references: [id])
+  auditEntity       AuditEntity?       @relation(fields: [auditEntityId], references: [id])
+  acceptanceChecks  AcceptanceCheck[]
+  proposals         Proposal[]
+  engagementLetters EngagementLetter[]
+  engagements       Engagement[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, taxId])
+  @@map("clients")
+}
+
+model AcceptanceCheck {
+  id                   String           @id @default(cuid())
+  organizationId       String
+  clientId             String
+  year                 Int
+  independenceStatus   AcceptanceRating @default(PENDING)
+  independenceNotes    String?
+  competenceStatus     AcceptanceRating @default(PENDING)
+  competenceNotes      String?
+  integrityStatus      AcceptanceRating @default(PENDING)
+  integrityNotes       String?
+  riskStatus           AcceptanceRating @default(PENDING)
+  riskNotes            String?
+  checklist            Json             @default("[]")
+  overallResult        AcceptanceRating @default(PENDING)
+  overallJustification String?
+  decidedById          String?
+  decidedAt            DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  decidedBy    User?        @relation(fields: [decidedById], references: [id])
+  proposals    Proposal[]
+
+  @@unique([clientId, year])
+  @@index([organizationId])
+  @@map("acceptance_checks")
+}
+
+model Proposal {
+  id                String         @id @default(cuid())
+  organizationId    String
+  clientId          String
+  acceptanceCheckId String?
+  year              Int
+  scope             String?
+  fiscalPeriodStart DateTime?
+  fiscalPeriodEnd   DateTime?
+  feeAmount         Decimal?       @db.Decimal(12, 2)
+  feeCurrency       String         @default("USD")
+  teamJson          Json?
+  aiDraftContent    String?
+  finalContent      String?
+  status            ProposalStatus @default(DRAFT)
+  sentAt            DateTime?
+  respondedAt       DateTime?
+  createdById       String
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client           Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  acceptanceCheck  AcceptanceCheck?  @relation(fields: [acceptanceCheckId], references: [id])
+  createdBy        User              @relation("ProposalCreator", fields: [createdById], references: [id])
+  engagementLetter EngagementLetter?
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@map("proposals")
+}
+
+model EngagementLetter {
+  id                 String                 @id @default(cuid())
+  organizationId     String
+  clientId           String
+  proposalId         String?                @unique
+  year               Int
+  content            String
+  signedByClientName String?
+  signedByClientRole String?
+  signedAt           DateTime?
+  fileUrl            String?
+  status             EngagementLetterStatus @default(DRAFT)
+  createdById        String
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  proposal     Proposal?    @relation(fields: [proposalId], references: [id])
+  createdBy    User         @relation("EngagementLetterCreator", fields: [createdById], references: [id])
+  engagements  Engagement[]
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@map("engagement_letters")
+}
+
+model Engagement {
+  id                 String           @id @default(cuid())
+  organizationId     String
+  clientId           String
+  engagementLetterId String?
+  fiscalYear         Int
+  fiscalYearEndDate  DateTime
+  plannedStartDate   DateTime?
+  plannedEndDate     DateTime?
+  leadPartnerId      String?
+  templateId         String?
+  status             EngagementStatus @default(DRAFT)
+  auditId            String?          @unique
+  notes              String?
+  createdById        String
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client           Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  engagementLetter EngagementLetter? @relation(fields: [engagementLetterId], references: [id])
+  template         AuditTemplate?    @relation(fields: [templateId], references: [id])
+  audit            Audit?            @relation("EngagementAudit", fields: [auditId], references: [id])
+  createdBy        User              @relation("EngagementCreator", fields: [createdById], references: [id])
+
+  @@unique([clientId, fiscalYear])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("engagements")
+}
+
 // ─── MÓDULO 04: EVALUACIÓN DE RIESGOS ─────────────────────────────────────────
 
 model RiskRegister {
@@ -1117,6 +1323,7 @@ model Audit {
 
   restoreLogs             AuditRestoreLog[]
   fieldEvidences          FieldEvidence[]
+  engagement              Engagement?    @relation("EngagementAudit")
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -1340,6 +1547,7 @@ model AuditTemplate {
   isSystem       Boolean     @default(false)  // precargada — solo se puede duplicar
   sections       Json?       // SectionDef[] — folder structure: { ref, name, phaseType, children? }
   links          Json?       // PaperLinkDef[] — { sourceCode, sourceField, targetCode, targetField, mappingType?, description? }
+  code           String?     // identificador estable para referenciar la plantilla desde código (p. ej. AUDIT_EXTERNAL_FINANCIAL_V1)
   createdById    String
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
@@ -1347,7 +1555,9 @@ model AuditTemplate {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy      User         @relation("AuditTemplateCreator", fields: [createdById], references: [id])
   audits         Audit[]
+  engagements    Engagement[]
 
+  @@unique([organizationId, code])
   @@index([organizationId])
   @@map("audit_templates")
 }

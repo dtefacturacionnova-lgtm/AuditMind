@@ -8,7 +8,7 @@ import {
   ServerCrash, Settings, ChevronDown, ChevronRight,
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
-  Clock, CalendarClock, DollarSign,
+  Clock, CalendarClock, DollarSign, Handshake,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -33,6 +33,16 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
+  },
+  // ── Cartera (CRM de Auditoría Externa) ────────────────────────────────────
+  {
+    label: 'Cartera',
+    icon: Handshake,
+    module: 'EXTERNAL',
+    children: [
+      { label: 'Cartera de Clientes',          href: '/dashboard/portfolio',          icon: Handshake },
+      { label: 'Planificación Anual Externa',  href: '/dashboard/portfolio/capacity', icon: CalendarClock },
+    ],
   },
   // ── Planificación Anual ───────────────────────────────────────────────────
   {

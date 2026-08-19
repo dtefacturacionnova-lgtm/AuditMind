@@ -15,6 +15,9 @@ import { AuditFoldersModule } from '../audit-folders/audit-folders.module';
   ],
   controllers: [AuditsController],
   providers: [AuditsService, AuditIndexService],
-  exports: [AuditsService],
+  // AuditIndexService se exporta para que PortfolioModule pueda hacer el scaffold
+  // del expediente al aprobar un encargo, reutilizando el mismo servicio que usa
+  // AuditsService.create() en vez de duplicar la creación de papeles.
+  exports: [AuditsService, AuditIndexService],
 })
 export class AuditsModule {}

@@ -23,12 +23,36 @@ export function formatMoney(value: number | string | null | undefined): string {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function formatDate(date: string | Date): string {
+/** `null`/`undefined` (ej. un Audit sin startDate/endDate porque el Engagement
+ *  de origen no traía fechas planeadas) devuelve '' en vez de formatear el
+ *  epoch — así los call sites que ya hacen `formatDate(x) || '—'` funcionan
+ *  como esperan, sin tener que tocar cada uno. */
+export function formatDate(date: string | Date | null | undefined): string {
+  if (!date) return '';
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
   return new Intl.DateTimeFormat('es-CL', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
-  }).format(new Date(date));
+  }).format(d);
+}
+
+/** Para fechas-calendario puras (fiscalYearEndDate, etc.) que el backend
+ *  guarda como medianoche UTC — `formatDate` usa la zona horaria local del
+ *  navegador y le resta un día a cualquier viewer en huso horario negativo
+ *  (UTC-06 muestra "30-12" para un 31-12 real). Fija la zona a UTC para que
+ *  la fecha-calendario se lea igual sin importar dónde esté el navegador. */
+export function formatDateUTC(date: string | Date | null | undefined): string {
+  if (!date) return '';
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(d);
 }
 
 export function formatRelativeTime(date: string | Date): string {

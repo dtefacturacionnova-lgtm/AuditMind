@@ -37,6 +37,7 @@ import { AuditBackupModule } from './audits/backup/audit-backup.module';
 import { FieldEvidenceModule } from './working-papers/field-evidence/field-evidence.module';
 import { CapacityModule } from './capacity/capacity.module';
 import { TimesheetModule } from './timesheet/timesheet.module';
+import { PortfolioModule } from './portfolio/portfolio.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { TimesheetModule } from './timesheet/timesheet.module';
     AuditProceduresModule,
     TimesheetModule,
     CapacityModule,
+    PortfolioModule,
   ],
   providers: [
     // Guards globales — aplican a todos los endpoints excepto los @Public()

@@ -222,19 +222,15 @@ async def _generate_structured_once(
     response_schema: type[BaseModel],
     max_tokens: int,
     temperature: float,
-    imagen: tuple[bytes, str] | None = None,  # (bytes, mime_type) — EVD-14, foto anotada
+    imagenes: list[tuple[bytes, str]] | None = None,  # [(bytes, mime_type), ...] — EVD-14 (1 foto), EVD-15 (hasta 15 frames de video)
 ) -> dict:
     model, _ = get_model_for_agent(agent_type, TaskComplexity.STANDARD, LLMProvider.GEMINI)
     try:
-        if imagen:
-            image_bytes, mime_type = imagen
-            contents = [genai_types.Content(
-                role="user",
-                parts=[
-                    genai_types.Part.from_text(text=user_content),
-                    genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                ],
-            )]
+        if imagenes:
+            parts = [genai_types.Part.from_text(text=user_content)]
+            for image_bytes, mime_type in imagenes:
+                parts.append(genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
+            contents = [genai_types.Content(role="user", parts=parts)]
         else:
             contents = [{"role": "user", "parts": [{"text": user_content}]}]
         response = await _gemini.aio.models.generate_content(
@@ -264,15 +260,13 @@ async def _generate_structured_once(
             system_prompt
             + "\n\nResponde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni bloques markdown."
         )
-        if imagen:
-            image_bytes, mime_type = imagen
-            claude_content = [
-                {"type": "text", "text": user_content},
-                {"type": "image", "source": {
+        if imagenes:
+            claude_content: list | str = [{"type": "text", "text": user_content}]
+            for image_bytes, mime_type in imagenes:
+                claude_content.append({"type": "image", "source": {
                     "type": "base64", "media_type": mime_type,
                     "data": base64.b64encode(image_bytes).decode("ascii"),
-                }},
-            ]
+                }})
         else:
             claude_content = user_content
         response = await _anthropic.messages.create(
@@ -297,7 +291,7 @@ async def generate_structured(
     response_schema: type[BaseModel],
     max_tokens: int = 8192,
     temperature: float = 0.1,
-    imagen: tuple[bytes, str] | None = None,  # (bytes, mime_type) — EVD-14, foto anotada
+    imagenes: list[tuple[bytes, str]] | None = None,  # [(bytes, mime_type), ...] — EVD-14 (1 foto), EVD-15 (varios frames de video)
 ) -> dict:
     """Genera una respuesta JSON validada contra un schema Pydantic.
 
@@ -309,15 +303,17 @@ async def generate_structured(
     anexado al prompt; si vuelve a fallar, error — nunca se devuelve un
     resultado sin validar.
 
-    `imagen`, si se pasa, agrega la imagen como parte multimodal en AMBOS
-    proveedores (Gemini `Part.from_bytes` / Claude content block `image`) —
-    el reintento de validación reenvía la misma imagen, no solo el texto.
+    `imagenes`, si se pasa, agrega cada imagen como parte multimodal en AMBOS
+    proveedores (Gemini `Part.from_bytes` / Claude content block `image`, una
+    por imagen, en el mismo orden) — el reintento de validación reenvía las
+    mismas imágenes, no solo el texto. Con una sola imagen es el caso de
+    EVD-14 (foto anotada); con varias, EVD-15 (frames muestreados de video).
     """
     last_error: str | None = None
     content = user_content
 
     for attempt in range(2):
-        result = await _generate_structured_once(agent_type, system_prompt, content, response_schema, max_tokens, temperature, imagen)
+        result = await _generate_structured_once(agent_type, system_prompt, content, response_schema, max_tokens, temperature, imagenes)
         try:
             validated = response_schema.model_validate(result["parsed"])
             return {

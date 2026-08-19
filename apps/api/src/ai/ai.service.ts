@@ -357,9 +357,54 @@ export class AiService {
     return res.json();
   }
 
+  // ─── Evidencia de campo — procesamiento de video corto (EVD-15, Fase 4) ─────
+  // UNA llamada a ai-service que decodifica el contenedor una sola vez: duración
+  // real, si tiene pista de audio, transcripción (si aplica) y frames muestreados.
+  // Shape de respuesta se deja en snake_case tal cual lo devuelve ai-service —
+  // mismo criterio ya usado en transcribeAudio (§6.0.8 del diseño: la conversión
+  // de convención vive donde cada dato se consume, no en este método puente).
+  async processVideo(
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string,
+    language?: string,
+  ): Promise<{
+    duracion_seg: number;
+    tiene_audio: boolean;
+    transcript: {
+      texto: string;
+      segmentos: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
+      idioma: string;
+      duracion_seg: number;
+      modelo: string;
+      processing_ms: number;
+    } | null;
+    frames: { ts_seg: number; base64: string; mime_type: string }[];
+    processing_ms: number;
+  }> {
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimeType || 'video/mp4' });
+    formData.append('file', blob, filename);
+    if (language) formData.append('language', language);
+
+    // Hasta 180s de video + transcripción en CPU puede tardar varios minutos —
+    // mismo timeout generoso que transcribeAudio, no debe colgar para siempre.
+    const res = await fetch(`${this.aiServiceUrl}/evidence/process-video`, {
+      method: 'POST',
+      headers: { 'x-internal-key': this.internalKey },
+      body: formData,
+      signal: AbortSignal.timeout(600_000),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`Procesamiento de video error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
   // ─── Evidencia de campo — extracción estructurada de hallazgos (EVD-05) ─────
   async extractFieldEvidence(payload: {
-    fuente_tipo: 'texto' | 'transcripcion_audio' | 'foto_anotada';
+    fuente_tipo: 'texto' | 'transcripcion_audio' | 'foto_anotada' | 'video_corto';
     contenido: string;
     segmentos?: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
     contexto_expediente?: {
@@ -369,9 +414,10 @@ export class AiService {
       extractos?: { code: string; section_key?: string; resumen: string }[];
     };
     instrucciones_extra?: string;
-    // foto_anotada (EVD-14) — imagen original en base64 + anotaciones del auditor
-    imagen_base64?: string;
-    imagen_mime_type?: string;
+    // foto_anotada (EVD-14): una imagen (la foto completa). video_corto (EVD-15):
+    // hasta 15 frames muestreados con ts_seg — lista generalizada, antes era una
+    // sola imagen (imagen_base64/imagen_mime_type).
+    imagenes?: { base64: string; mime_type: string; ts_seg?: number }[];
     anotaciones?: {
       tipo: 'circulo' | 'flecha' | 'texto';
       x: number; y: number; x2?: number; y2?: number; radio?: number; nota?: string;

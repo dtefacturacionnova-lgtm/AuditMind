@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.services.auth import verify_internal_key
 from app.services.whisper_service import transcribe_sync
+from app.services.video_service import procesar_video_sync
 from app.services.llm_router import generate_structured, StructuredGenerationError
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB — una entrevista de 45min a 128kbps ≈ 43MB (§6.5)
+_MAX_VIDEO_BYTES = 100 * 1024 * 1024  # mismo límite que audio — video corto tope 180s (EVD-15)
 
 
 class Segmento(BaseModel):
@@ -80,6 +82,65 @@ async def transcribe(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al transcribir el audio: {e}")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+# ─── Video corto (EVD-15, Fase 4) ──────────────────────────────────────────────
+# UNA decodificación del contenedor con PyAV (video_service.procesar_video_sync):
+# duración real, presencia de audio, muestreo de frames, y transcripción de la
+# pista de audio si existe (reutiliza transcribe_sync, no duplica Whisper). NestJS
+# es quien aplica la regla de negocio de 180s máx y la de citabilidad — este
+# endpoint solo reporta la verdad de lo que decodificó (§6.1: ai-service "tonto").
+
+class FrameMuestreado(BaseModel):
+    ts_seg: float
+    base64: str
+    mime_type: str = "image/jpeg"
+
+
+class ProcessVideoResponse(BaseModel):
+    duracion_seg: float
+    tiene_audio: bool
+    transcript: Optional[TranscribeResponse] = None
+    frames: list[FrameMuestreado]
+    processing_ms: int
+
+
+@router.post("/process-video", response_model=ProcessVideoResponse)
+async def process_video(
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    x_internal_key: Optional[str] = Header(default=None, alias="x-internal-key"),
+):
+    """Video corto: decodifica UNA vez con PyAV, muestrea hasta 15 frames
+    (redimensionados a 768px de lado mayor, JPEG calidad 80) y transcribe la
+    pista de audio si existe. No aplica el tope de 180s ni la regla de
+    citabilidad (video sin audio + sin descripción) — esas son reglas de
+    negocio que NestJS decide con el resultado (§6.1 del diseño)."""
+    verify_internal_key(x_internal_key)
+
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+    if len(content) > _MAX_VIDEO_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo supera el límite de 100 MB")
+
+    suffix = os.path.splitext(file.filename or "")[1] or ".mp4"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        result = await asyncio.to_thread(procesar_video_sync, tmp_path, language)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al procesar el video: {e}")
     finally:
         try:
             os.unlink(tmp_path)
@@ -148,6 +209,15 @@ class Anotacion(BaseModel):
     nota: Optional[str] = None  # lo que el auditor escribió sobre esta zona
 
 
+class ImagenEntrada(BaseModel):
+    """Una imagen adjunta a la extracción — generalizado de la foto única de
+    EVD-14 a una lista (EVD-15: hasta 15 frames de video). `ts_seg`, cuando se
+    manda, es el instante del frame dentro del video (None para foto anotada)."""
+    base64: str
+    mime_type: str = "image/jpeg"
+    ts_seg: Optional[float] = None
+
+
 class ContextoExpedientePapel(BaseModel):
     code: str
     title: str
@@ -168,17 +238,16 @@ class ContextoExpediente(BaseModel):
 
 
 class ExtractRequest(BaseModel):
-    fuente_tipo: Literal["texto", "transcripcion_audio", "foto_anotada"]
+    fuente_tipo: Literal["texto", "transcripcion_audio", "foto_anotada", "video_corto"]
     contenido: str
     segmentos: Optional[list[SegmentoInput]] = None
     contexto_expediente: Optional[ContextoExpediente] = None
     instrucciones_extra: Optional[str] = None
-    # foto_anotada (EVD-14) — la imagen original se manda tal cual (nunca se
-    # modifican los pixeles con las marcas); las anotaciones viajan como
-    # metadata separada y se le describen al LLM en texto además de dárselas
-    # a ver en la imagen misma.
-    imagen_base64: Optional[str] = None
-    imagen_mime_type: Optional[str] = None
+    # foto_anotada (EVD-14): una imagen (la foto completa); video_corto (EVD-15):
+    # hasta 15 frames muestreados con ts_seg — la imagen original nunca se
+    # modifica con las marcas; las anotaciones de foto viajan aparte como
+    # metadata y se describen al LLM en texto además de dárselas a ver.
+    imagenes: Optional[list[ImagenEntrada]] = None
     anotaciones: Optional[list[Anotacion]] = None
 
 
@@ -217,6 +286,22 @@ def _build_extraction_system_prompt() -> str:
         "del auditor, puedes describir lo que observas en `resumen_ejecutivo`/`temas` pero NO "
         "generes un hallazgo individual para esa zona (no hay nada literal que citar). "
         "`fuente_ref` para foto siempre en formato \"zona #N\" (N = número de la zona).\n\n"
+        "Si la fuente es un VIDEO CORTO: recibes uno o más FRAMES (imágenes) muestreados a "
+        "intervalos de tiempo del video, en orden cronológico, cada uno marcado con su instante "
+        "(\"FRAME N: t=X.Xs\"). Los frames son fotos espaciadas en el tiempo, NO un video "
+        "continuo — puede haber pasado algo relevante entre dos frames que no verás. Si el "
+        "video tiene pista de audio, también recibes su transcripción con segmentos y marcas de "
+        "tiempo — correlaciona lo dicho con lo visible cuando sea razonable (ej. el auditor narra "
+        "\"aquí se ve la merma\" cerca del instante de un frame que muestra algo anómalo), pero "
+        "nunca asumas una correlación que el texto no respalda. Igual que con foto anotada, tu "
+        "`cita_textual` para CUALQUIER hallazgo de video (incluido `anomalia_visual`) DEBE ser "
+        "una subcadena LITERAL del texto fuente (la transcripción, o la descripción del auditor "
+        "si el video no tiene audio) — nunca inventes una \"cita\" describiendo lo que ves en un "
+        "frame como si fuera un hecho verificado por el auditor; esa descripción va en "
+        "`descripcion`/`justificacion`, no en `cita_textual`. Si no hay nada textual que citar "
+        "para respaldar algo que observas en un frame, no generes ese hallazgo — puedes mencionarlo "
+        "en `resumen_ejecutivo`. `fuente_ref` para video usa el mismo formato mm:ss que audio, "
+        "basado en el segmento de transcripción más cercano (no en el instante del frame).\n\n"
         "No reportes trivialidades — justifica cada hallazgo explicando por qué le importa "
         "a un auditor. El resumen ejecutivo es 2-4 frases. Los temas son categorías cortas "
         "para agrupar la evidencia (ej. \"control de acceso\", \"segregación de funciones\"). "
@@ -263,6 +348,16 @@ def _build_extraction_user_content(request: ExtractRequest) -> str:
                 "asumas roles."
             )
 
+    if request.fuente_tipo == "video_corto" and request.imagenes:
+        frames_desc = "\n".join(
+            f"  FRAME {i}: t={img.ts_seg:.1f}s" if img.ts_seg is not None else f"  FRAME {i}"
+            for i, img in enumerate(request.imagenes, start=1)
+        )
+        parts.append(
+            "\nFRAMES ADJUNTOS (muestras del video en orden cronológico — la imagen adjunta "
+            "número N corresponde a esta lista en el mismo orden):\n" + frames_desc
+        )
+
     if request.anotaciones:
         zonas = []
         for i, a in enumerate(request.anotaciones, start=1):
@@ -306,12 +401,14 @@ async def extract(
     if not request.contenido.strip() and request.fuente_tipo != "foto_anotada":
         raise HTTPException(status_code=400, detail="contenido no puede estar vacío")
 
-    imagen = None
-    if request.imagen_base64:
-        try:
-            imagen = (base64.b64decode(request.imagen_base64), request.imagen_mime_type or "image/jpeg")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"imagen_base64 inválida: {e}")
+    imagenes: list[tuple[bytes, str]] | None = None
+    if request.imagenes:
+        imagenes = []
+        for i, img in enumerate(request.imagenes, start=1):
+            try:
+                imagenes.append((base64.b64decode(img.base64), img.mime_type or "image/jpeg"))
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"imagen #{i} en 'imagenes' inválida: {e}")
 
     try:
         result = await generate_structured(
@@ -320,7 +417,7 @@ async def extract(
             user_content=_build_extraction_user_content(request),
             response_schema=ExtraccionEvidencia,
             temperature=0.1,
-            imagen=imagen,
+            imagenes=imagenes,
         )
     except StructuredGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))

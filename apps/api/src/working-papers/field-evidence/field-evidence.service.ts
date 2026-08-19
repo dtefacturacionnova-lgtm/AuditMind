@@ -9,20 +9,27 @@ import { AuthUser } from '../../auth/jwt.strategy';
 import { AiService } from '../../ai/ai.service';
 import { PaperReferencesService } from '../paper-references.service';
 
-// Kinds que el pipeline sabe procesar hoy (Fase 1: texto/nota de voz; Fase 2:
-// entrevista formal diarizada; Fase 3: foto anotada). SHORT_VIDEO ya existe en el
-// enum del schema (evita migración cuando llegue esa fase) pero se rechaza
-// explícitamente — crear una fila que el pipeline nunca sabrá procesar la dejaría
-// atascada para siempre.
+// Kinds que el pipeline sabe procesar hoy — las 4 fases completas (EVD-15 cierra
+// Fase 4, video corto).
 const KINDS_SOPORTADOS: FieldEvidenceKind[] = [
   FieldEvidenceKind.TEXT_NOTE,
   FieldEvidenceKind.AUDIO_NOTE,
   FieldEvidenceKind.INTERVIEW_AUDIO,
   FieldEvidenceKind.ANNOTATED_PHOTO,
+  FieldEvidenceKind.SHORT_VIDEO,
 ];
 
-// Kinds que requieren transcripción de audio antes de extraer (todo lo que no es texto/foto).
+// Kinds que requieren transcripción de audio antes de extraer (todo lo que no es
+// texto/foto). SHORT_VIDEO NO está aquí a propósito — usa su propio flujo
+// (procesarVideo/aiService.processVideo), que decide internamente si transcribe
+// según si el video trae pista de audio.
 const KINDS_CON_AUDIO: FieldEvidenceKind[] = [FieldEvidenceKind.AUDIO_NOTE, FieldEvidenceKind.INTERVIEW_AUDIO];
+
+// Video corto (EVD-15, decisión de diseño): tope de 3 minutos — controla costo/latencia
+// del muestreo de frames + transcripción. Se valida en dos capas: mejor esfuerzo en la
+// subida (parseo MP4/MOV, ver extraerDuracionMp4Seg) y backstop definitivo tras decodificar
+// en ai-service (procesarVideo), que sí conoce la duración real de cualquier contenedor.
+const MAX_VIDEO_DURATION_SEG = 180;
 
 export interface AnotacionFoto {
   tipo: 'circulo' | 'flecha' | 'texto';
@@ -110,6 +117,21 @@ export class FieldEvidenceService {
         'Una entrevista formal requiere confirmar el consentimiento explícito del entrevistado antes de subir la grabación.',
       );
     }
+    // Video corto — tope de 3 minutos, mismo lugar donde se valida el límite de
+    // tamaño (100MB, ver @UseInterceptors del controller). Mejor esfuerzo: solo
+    // sabemos parsear MP4/MOV/M4V (caja mvhd) sin ffmpeg/librería de video en
+    // Node; si el contenedor no es reconocible esta función devuelve null y no
+    // bloquea la subida — el backstop definitivo corre en ai-service, que sí
+    // decodifica cualquier contenedor y puede marcar la evidencia FAILED si
+    // resulta ser más larga de lo permitido (ver procesarVideo).
+    if (dto.kind === FieldEvidenceKind.SHORT_VIDEO && file) {
+      const duracionSeg = this.extraerDuracionMp4Seg(file.buffer);
+      if (duracionSeg !== null && duracionSeg > MAX_VIDEO_DURATION_SEG) {
+        throw new BadRequestException(
+          `El video dura ${Math.round(duracionSeg)}s y supera el máximo permitido de ${MAX_VIDEO_DURATION_SEG}s (3 minutos). Sube un recorte más corto.`,
+        );
+      }
+    }
 
     let anotaciones: AnotacionFoto[] | undefined;
     if (dto.kind === FieldEvidenceKind.ANNOTATED_PHOTO && dto.anotaciones) {
@@ -182,6 +204,11 @@ export class FieldEvidenceService {
     const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
     if (!evidencia) return;
 
+    if (evidencia.kind === FieldEvidenceKind.SHORT_VIDEO) {
+      await this.procesarVideo(evidencia, fileBuffer);
+      return;
+    }
+
     if (!KINDS_CON_AUDIO.includes(evidencia.kind)) {
       // TEXT_NOTE (el texto ES la evidencia) y ANNOTATED_PHOTO (la imagen ES la
       // evidencia, sin transcripción posible) — pasan directo a extraer.
@@ -233,6 +260,78 @@ export class FieldEvidenceService {
     await this.ejecutarExtraccion(evidenceId);
   }
 
+  // Video corto (EVD-15, Fase 4): una sola llamada a ai-service que decodifica el
+  // contenedor, muestrea frames y transcribe la pista de audio si existe. Dos
+  // reglas post-hoc que no se pueden validar antes de decodificar (§decisión
+  // EVD-15): (a) backstop de duración — si el parseo MP4 de la subida no pudo
+  // determinarla o fue optimista, aquí ya se conoce la duración real; (b) regla
+  // de citabilidad — video sin pista de audio necesita descripcion no vacía como
+  // texto fuente citable, y eso tampoco se sabe hasta decodificar.
+  private async procesarVideo(
+    evidencia: { id: string; storageKey: string | null; filename: string | null; mimeType: string | null; descripcion: string | null },
+    fileBuffer?: Buffer,
+  ) {
+    const evidenceId = evidencia.id;
+    await this.prisma.fieldEvidence.update({
+      where: { id: evidenceId },
+      data:  { status: 'TRANSCRIBING', procesamientoIniciado: new Date() },
+    });
+
+    let frames: { tsSeg: number; base64: string; mimeType: string }[] = [];
+    try {
+      const buffer = fileBuffer ?? await this.descargarOriginal(evidencia.storageKey);
+      const inicio = Date.now();
+      const resultado = await this.aiService.processVideo(
+        buffer,
+        evidencia.filename ?? 'video.mp4',
+        evidencia.mimeType ?? 'video/mp4',
+      );
+
+      if (resultado.duracion_seg > MAX_VIDEO_DURATION_SEG) {
+        await this.prisma.fieldEvidence.update({
+          where: { id: evidenceId },
+          data: {
+            status: 'FAILED',
+            errorMsg: `El video dura ${Math.round(resultado.duracion_seg)}s y supera el máximo permitido de ${MAX_VIDEO_DURATION_SEG}s (3 minutos). Vuelve a subir un recorte más corto.`,
+          },
+        });
+        return;
+      }
+      if (!resultado.tiene_audio && !evidencia.descripcion?.trim()) {
+        await this.prisma.fieldEvidence.update({
+          where: { id: evidenceId },
+          data: {
+            status: 'FAILED',
+            errorMsg: 'El video no tiene pista de audio y no se aportó una descripción — vuelve a subir la evidencia con una descripción de lo observado (el texto fuente citable no puede quedar vacío).',
+          },
+        });
+        return;
+      }
+
+      frames = resultado.frames.map(f => ({ tsSeg: f.ts_seg, base64: f.base64, mimeType: f.mime_type }));
+
+      await this.prisma.fieldEvidence.update({
+        where: { id: evidenceId },
+        data: {
+          status:              'EXTRACTING',
+          transcript:          resultado.transcript ?? Prisma.DbNull,
+          modeloTranscripcion: resultado.transcript?.modelo,
+          processingMs:        Date.now() - inicio,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Procesamiento de video falló para ${evidenceId}: ${message}`);
+      await this.prisma.fieldEvidence.update({
+        where: { id: evidenceId },
+        data:  { status: 'FAILED', errorMsg: message },
+      });
+      return;
+    }
+
+    await this.ejecutarExtraccion(evidenceId, frames);
+  }
+
   private async descargarOriginal(storageKey: string | null): Promise<Buffer> {
     if (!storageKey) throw new Error('La evidencia no tiene archivo original en Storage');
     const { data, error } = await this.supabase.storage.from('audit-files').download(storageKey);
@@ -240,9 +339,60 @@ export class FieldEvidenceService {
     return Buffer.from(await data.arrayBuffer());
   }
 
+  // ─── Duración de video, mejor esfuerzo (EVD-15) ──────────────────────────
+  // Parseo directo de la caja `mvhd` dentro de `moov` de un contenedor MP4/MOV/M4V
+  // — cubre el caso común (cámara de teléfono, la mayoría de grabadores web).
+  // Sin librería de video en Node en este repo y no se instala ffmpeg solo para
+  // esto; contenedores no reconocibles (ej. WebM) devuelven null sin bloquear la
+  // subida — la validación definitiva ocurre igual en ai-service tras decodificar
+  // (ver procesarVideo), que si el video resulta más largo marca la evidencia
+  // FAILED en vez de dejarla atascada.
+  private extraerDuracionMp4Seg(buffer: Buffer): number | null {
+    try {
+      let offset = 0;
+      while (offset + 8 <= buffer.length) {
+        const size = buffer.readUInt32BE(offset);
+        const type = buffer.toString('ascii', offset + 4, offset + 8);
+        if (size < 8) break;
+        if (type === 'moov') {
+          return this.buscarMvhd(buffer, offset + 8, Math.min(offset + size, buffer.length));
+        }
+        offset += size;
+      }
+    } catch {
+      // formato inesperado o buffer truncado — no rompe la subida.
+    }
+    return null;
+  }
+
+  private buscarMvhd(buffer: Buffer, start: number, end: number): number | null {
+    let offset = start;
+    while (offset + 8 <= end) {
+      const size = buffer.readUInt32BE(offset);
+      const type = buffer.toString('ascii', offset + 4, offset + 8);
+      if (size < 8) break;
+      if (type === 'mvhd') {
+        const version = buffer.readUInt8(offset + 8);
+        if (version === 1) {
+          const timescale = buffer.readUInt32BE(offset + 8 + 4 + 8 + 8);
+          const duration = buffer.readBigUInt64BE(offset + 8 + 4 + 8 + 8 + 4);
+          return timescale > 0 ? Number(duration) / timescale : null;
+        }
+        const timescale = buffer.readUInt32BE(offset + 8 + 4 + 4 + 4);
+        const duration = buffer.readUInt32BE(offset + 8 + 4 + 4 + 4 + 4);
+        return timescale > 0 ? duration / timescale : null;
+      }
+      offset += size;
+    }
+    return null;
+  }
+
   // ─── Extracción estructurada + validación anti-alucinación (EVD-05/EVD-06) ──
 
-  private async ejecutarExtraccion(evidenceId: string) {
+  private async ejecutarExtraccion(
+    evidenceId: string,
+    framesVideo?: { tsSeg: number; base64: string; mimeType: string }[],
+  ) {
     const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
     if (!evidencia) return;
 
@@ -251,18 +401,28 @@ export class FieldEvidenceService {
       segmentos?: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
     } | null;
     const esFoto = evidencia.kind === FieldEvidenceKind.ANNOTATED_PHOTO;
+    const esVideo = evidencia.kind === FieldEvidenceKind.SHORT_VIDEO;
     const anotaciones = esFoto ? (evidencia.anotaciones as unknown as AnotacionFoto[] | null) ?? [] : [];
+    // Video (§decisión EVD-15): si `transcript` está poblado, el video tenía
+    // pista de audio (procesarVideo solo lo guarda cuando aiService.processVideo
+    // reportó tiene_audio=true) y ESA es la fuente citable — nunca se mezcla con
+    // descripcion aunque ambas existan. Solo cuando no hay transcript (video
+    // silencioso, ya validado con descripcion no vacía en procesarVideo) se usa
+    // la descripción del auditor como texto fuente.
+    const usaDescripcionComoFuenteVideo = esVideo && !transcript;
     const fuenteTexto = evidencia.kind === FieldEvidenceKind.TEXT_NOTE
       ? (evidencia.textoOriginal ?? '')
       : esFoto
         ? this.construirTextoDesdeAnotaciones(anotaciones)
-        : this.construirTextoConHablantes(transcript);
+        : usaDescripcionComoFuenteVideo
+          ? (evidencia.descripcion ?? '')
+          : this.construirTextoConHablantes(transcript);
 
     // Una foto ES la evidencia aunque el auditor no haya escrito ninguna nota en
-    // las zonas marcadas — a diferencia de texto/audio, "sin texto fuente" no
-    // significa "no hay nada que analizar" (§6.9 se relaja solo para este kind;
-    // los hallazgos sin nota literal que citar simplemente no se generan, ver
-    // el prompt de extracción en evidence.py).
+    // las zonas marcadas — a diferencia de texto/audio/video, "sin texto fuente"
+    // no significa "no hay nada que analizar" (§6.9 se relaja solo para este
+    // kind; los hallazgos sin nota literal que citar simplemente no se generan,
+    // ver el prompt de extracción en evidence.py).
     if (!fuenteTexto.trim() && !esFoto) {
       await this.prisma.fieldEvidence.update({
         where: { id: evidenceId },
@@ -274,21 +434,26 @@ export class FieldEvidenceService {
     try {
       const inicio = Date.now();
       const contextoExpediente = await this.construirContextoExpediente(evidencia);
-      let imagenBase64: string | undefined;
+      let imagenes: { base64: string; mimeType: string; tsSeg?: number }[] | undefined;
       if (esFoto) {
         const buffer = await this.descargarOriginal(evidencia.storageKey);
-        imagenBase64 = buffer.toString('base64');
+        imagenes = [{ base64: buffer.toString('base64'), mimeType: evidencia.mimeType ?? 'image/jpeg' }];
+      } else if (esVideo && framesVideo?.length) {
+        imagenes = framesVideo.map(f => ({ base64: f.base64, mimeType: f.mimeType, tsSeg: f.tsSeg }));
       }
       const resultado = await this.aiService.extractFieldEvidence({
         fuente_tipo: evidencia.kind === FieldEvidenceKind.TEXT_NOTE
-          ? 'texto' : esFoto ? 'foto_anotada' : 'transcripcion_audio',
+          ? 'texto' : esFoto ? 'foto_anotada' : esVideo ? 'video_corto' : 'transcripcion_audio',
         contenido: fuenteTexto,
-        segmentos: KINDS_CON_AUDIO.includes(evidencia.kind) ? transcript?.segmentos : undefined,
+        segmentos: transcript?.segmentos?.length ? transcript.segmentos : undefined,
         contexto_expediente: contextoExpediente,
-        instrucciones_extra: [evidencia.descripcion, evidencia.lugar ? `Lugar: ${evidencia.lugar}` : null]
-          .filter(Boolean).join('\n') || undefined,
-        imagen_base64: imagenBase64,
-        imagen_mime_type: esFoto ? (evidencia.mimeType ?? 'image/jpeg') : undefined,
+        // Si la descripción ya se usó como fuenteTexto (video silencioso), no la
+        // repite aquí — evita mandarle al LLM el mismo texto dos veces.
+        instrucciones_extra: [
+          usaDescripcionComoFuenteVideo ? null : evidencia.descripcion,
+          evidencia.lugar ? `Lugar: ${evidencia.lugar}` : null,
+        ].filter(Boolean).join('\n') || undefined,
+        imagenes: imagenes?.map(i => ({ base64: i.base64, mime_type: i.mimeType, ts_seg: i.tsSeg })),
         anotaciones: esFoto ? anotaciones : undefined,
       });
 

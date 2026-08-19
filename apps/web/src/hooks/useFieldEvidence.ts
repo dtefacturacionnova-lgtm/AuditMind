@@ -89,14 +89,14 @@ export interface AnotacionFoto {
 }
 
 export interface CrearEvidenciaInput {
-  kind: 'TEXT_NOTE' | 'AUDIO_NOTE' | 'INTERVIEW_AUDIO' | 'ANNOTATED_PHOTO';
+  kind: 'TEXT_NOTE' | 'AUDIO_NOTE' | 'INTERVIEW_AUDIO' | 'ANNOTATED_PHOTO' | 'SHORT_VIDEO';
   sectionKey: string;
   capturedAt: string; // ISO
   consentimiento?: boolean; // obligatorio true para INTERVIEW_AUDIO — validado también en backend
   lugar?: string;
   descripcion?: string;
   texto?: string;         // obligatorio para TEXT_NOTE
-  file?: File | Blob;     // obligatorio para AUDIO_NOTE / INTERVIEW_AUDIO / ANNOTATED_PHOTO
+  file?: File | Blob;     // obligatorio para AUDIO_NOTE / INTERVIEW_AUDIO / ANNOTATED_PHOTO / SHORT_VIDEO
   fileName?: string;      // nombre de archivo para el Blob grabado (MediaRecorder no trae uno)
   anotaciones?: AnotacionFoto[]; // ANNOTATED_PHOTO
 }

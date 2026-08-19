@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Mic, Square, FileText, ChevronDown, ChevronUp, Loader2, CheckCircle2,
   XCircle, AlertTriangle, Trash2, ArrowUpCircle, Sparkles, ShieldAlert, Users, Camera,
-  Volume2, ImageIcon, Download, Quote, RotateCcw,
+  Volume2, ImageIcon, Download, Quote, RotateCcw, Video,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useUser } from '@/hooks/useUser';
@@ -69,7 +69,8 @@ function MediaOriginal({ evidencia, paperId, puedeDescargar }: {
 
   const esAudio = evidencia.kind === 'AUDIO_NOTE' || evidencia.kind === 'INTERVIEW_AUDIO';
   const esFoto = evidencia.kind === 'ANNOTATED_PHOTO';
-  if (!esAudio && !esFoto) return null;
+  const esVideo = evidencia.kind === 'SHORT_VIDEO';
+  if (!esAudio && !esFoto && !esVideo) return null;
 
   async function alternar() {
     if (abierto) { setAbierto(false); return; }
@@ -109,8 +110,8 @@ function MediaOriginal({ evidencia, paperId, puedeDescargar }: {
           onClick={alternar}
           className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg px-2.5 py-1.5"
         >
-          {esAudio ? <Volume2 className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
-          {abierto ? 'Ocultar' : esAudio ? 'Escuchar grabación original' : 'Ver foto original'}
+          {esAudio ? <Volume2 className="w-3.5 h-3.5" /> : esVideo ? <Video className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
+          {abierto ? 'Ocultar' : esAudio ? 'Escuchar grabación original' : esVideo ? 'Ver video original' : 'Ver foto original'}
         </button>
         {puedeDescargar && (
           <button
@@ -135,6 +136,9 @@ function MediaOriginal({ evidencia, paperId, puedeDescargar }: {
       )}
       {abierto && url && esFoto && (
         <AnnotatedPhotoView imageUrl={url} anotaciones={evidencia.anotaciones ?? []} />
+      )}
+      {abierto && url && esVideo && (
+        <video controls src={url} className="w-full rounded-lg border border-gray-200 max-h-80" />
       )}
     </div>
   );
@@ -327,6 +331,7 @@ function EvidenciaCard({
   const noVerificables = evidencia.findings.filter(f => !f.validadaCita);
   const Icon = evidencia.kind === 'INTERVIEW_AUDIO' ? Users
     : evidencia.kind === 'ANNOTATED_PHOTO' ? Camera
+    : evidencia.kind === 'SHORT_VIDEO' ? Video
     : evidencia.kind === 'AUDIO_NOTE' ? Mic : FileText;
   const hayHablantes = evidencia.transcript?.segmentos?.some(s => s.hablante) ?? false;
   const puedeDescargar = Boolean(
@@ -353,6 +358,11 @@ function EvidenciaCard({
               {evidencia.kind === 'ANNOTATED_PHOTO' && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
                   <Camera className="w-3 h-3" /> Foto anotada
+                </span>
+              )}
+              {evidencia.kind === 'SHORT_VIDEO' && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5">
+                  <Video className="w-3 h-3" /> Video corto
                 </span>
               )}
             </div>
@@ -463,7 +473,7 @@ function EvidenciaCard({
 
 function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: string }) {
   const crear = useCreateFieldEvidence(paperId);
-  const [modo, setModo] = useState<'texto' | 'audio' | 'entrevista' | 'foto'>('texto');
+  const [modo, setModo] = useState<'texto' | 'audio' | 'entrevista' | 'foto' | 'video'>('texto');
   const [texto, setTexto] = useState('');
   const [lugar, setLugar] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -492,6 +502,88 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
     setFotoFile(null);
     setFotoUrl(null);
     setAnotaciones([]);
+  }
+
+  // Video corto (EVD-15, Fase 4) — límites validados en cliente antes de subir
+  // (180s / 100MB) para no hacer esperar al usuario un rechazo del servidor.
+  // La duración se lee con un <video> oculto: se le asigna un Object URL
+  // temporal, se espera a "loadedmetadata" para leer .duration, y se revoca
+  // el URL — el archivo nunca se sube solo para medirlo.
+  const LIMITE_VIDEO_SEG = 180;
+  const LIMITE_VIDEO_BYTES = 100 * 1024 * 1024;
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [validandoVideo, setValidandoVideo] = useState(false);
+  const videoValidatorRef = useRef<HTMLVideoElement | null>(null);
+
+  function leerDuracionVideo(file: File): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const el = videoValidatorRef.current;
+      if (!el) { reject(new Error('No se pudo validar el video.')); return; }
+      const tempUrl = URL.createObjectURL(file);
+      let resuelto = false;
+      const cleanup = () => {
+        el.removeEventListener('loadedmetadata', onLoaded);
+        el.removeEventListener('durationchange', onDurationChange);
+        el.removeEventListener('error', onError);
+        URL.revokeObjectURL(tempUrl);
+        el.removeAttribute('src');
+        el.load();
+      };
+      const finalizar = (d: number) => { if (resuelto) return; resuelto = true; cleanup(); resolve(d); };
+      const onDurationChange = () => { if (Number.isFinite(el.duration)) finalizar(el.duration); };
+      const onLoaded = () => {
+        if (Number.isFinite(el.duration)) {
+          finalizar(el.duration);
+          return;
+        }
+        // Bug conocido de Chromium: algunos contenedores (p.ej. webm sin la
+        // duración escrita en el header) reportan Infinity/NaN hasta que se
+        // fuerza un seek — se pide y se espera "durationchange"; si en 1s no
+        // hay valor finito, se resuelve con lo que haya para no bloquear al
+        // usuario indefinidamente (el backend igual revalida el límite).
+        el.addEventListener('durationchange', onDurationChange);
+        try { el.currentTime = 1e101; } catch { /* algunos navegadores lanzan aquí, se ignora */ }
+        setTimeout(() => finalizar(el.duration), 1000);
+      };
+      const onError = () => { cleanup(); reject(new Error('No se pudo leer el video seleccionado — puede estar dañado o en un formato no soportado.')); };
+      el.addEventListener('loadedmetadata', onLoaded);
+      el.addEventListener('error', onError);
+      el.src = tempUrl;
+    });
+  }
+
+  async function handleVideoSeleccionado(file: File) {
+    setError('');
+    if (file.size > LIMITE_VIDEO_BYTES) {
+      setError('El video supera el límite de 100MB.');
+      return;
+    }
+    setValidandoVideo(true);
+    try {
+      const duracion = await leerDuracionVideo(file);
+      if (!Number.isFinite(duracion)) {
+        setError('No se pudo determinar la duración del video — pruebe con otro archivo.');
+        return;
+      }
+      if (duracion > LIMITE_VIDEO_SEG) {
+        setError(`El video dura ${Math.round(duracion)}s — el límite es ${LIMITE_VIDEO_SEG} segundos (3 minutos).`);
+        return;
+      }
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+      setVideoFile(file);
+      setVideoUrl(URL.createObjectURL(file));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo validar el video.');
+    } finally {
+      setValidandoVideo(false);
+    }
+  }
+
+  function quitarVideo() {
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    setVideoFile(null);
+    setVideoUrl(null);
   }
 
   // Grabación de audio — MediaRecorder nativo del navegador, sin librerías.
@@ -573,7 +665,7 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
         setAudioBlob(null);
         setAudioNombre(null);
         setConsentimientoConfirmado(false);
-      } else {
+      } else if (modo === 'foto') {
         if (!fotoFile) { setError('Suba o tome una foto antes de guardar.'); return; }
         await crear.mutateAsync({
           kind: 'ANNOTATED_PHOTO', sectionKey, capturedAt: new Date().toISOString(),
@@ -582,6 +674,14 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
           lugar: lugar.trim() || undefined, descripcion: descripcion.trim() || undefined,
         });
         quitarFoto();
+      } else {
+        if (!videoFile) { setError('Suba o grabe un video antes de guardar.'); return; }
+        await crear.mutateAsync({
+          kind: 'SHORT_VIDEO', sectionKey, capturedAt: new Date().toISOString(),
+          file: videoFile, fileName: videoFile.name,
+          lugar: lugar.trim() || undefined, descripcion: descripcion.trim() || undefined,
+        });
+        quitarVideo();
       }
       setLugar('');
       setDescripcion('');
@@ -617,7 +717,17 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
         >
           <Camera className="w-3.5 h-3.5" /> Foto anotada
         </button>
+        <button
+          onClick={() => setModo('video')}
+          className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 ${modo === 'video' ? 'bg-gray-900 text-white' : 'text-gray-500 border border-gray-200'}`}
+        >
+          <Video className="w-3.5 h-3.5" /> Video corto
+        </button>
       </div>
+
+      {/* <video> oculto, solo para leer la duración del archivo seleccionado
+          antes de subirlo — nunca se muestra ni se reproduce. */}
+      <video ref={videoValidatorRef} className="hidden" preload="metadata" muted />
 
       {modo === 'texto' ? (
         <textarea
@@ -648,6 +758,43 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
                 Quitar foto
               </button>
             </>
+          )}
+        </div>
+      ) : modo === 'video' ? (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-xs text-purple-900 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+            <Video className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <p>
+              Grabación corta en video (máximo 3 minutos, 100MB). Si el video no
+              tiene audio, complete el campo de contexto de abajo — sin eso, el
+              sistema no podrá generar hallazgos verificables.
+            </p>
+          </div>
+
+          {!videoFile ? (
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-lg py-8 cursor-pointer hover:border-gray-300 text-gray-500 text-xs">
+              <Video className="w-6 h-6" />
+              Tomar o subir un video corto (máx. 3 min, 100MB)
+              <input
+                type="file"
+                accept="video/*"
+                capture="environment"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleVideoSeleccionado(f); e.target.value = ''; }}
+              />
+            </label>
+          ) : (
+            <>
+              {videoUrl && (
+                <video controls src={videoUrl} className="w-full rounded-lg border border-gray-200 max-h-64" />
+              )}
+              <button type="button" onClick={quitarVideo} className="text-xs text-gray-500 hover:text-gray-700 underline">
+                Quitar video
+              </button>
+            </>
+          )}
+          {validandoVideo && (
+            <p className="text-[11px] text-gray-400 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Validando duración y tamaño del video…</p>
           )}
         </div>
       ) : (
@@ -729,13 +876,28 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
           placeholder="Lugar (opcional)"
           className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-gray-400"
         />
-        <input
-          value={descripcion}
-          onChange={e => setDescripcion(e.target.value)}
-          placeholder="Contexto (opcional)"
-          className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-gray-400"
-        />
+        {modo !== 'video' && (
+          <input
+            value={descripcion}
+            onChange={e => setDescripcion(e.target.value)}
+            placeholder="Contexto (opcional)"
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-gray-400"
+          />
+        )}
       </div>
+
+      {modo === 'video' && (
+        <div>
+          <label className="text-[11px] font-medium text-gray-600">Contexto del video (recomendado)</label>
+          <textarea
+            value={descripcion}
+            onChange={e => setDescripcion(e.target.value)}
+            rows={2}
+            placeholder="Describe brevemente qué muestra el video — es especialmente importante si el video no tiene audio, ya que sin esto el sistema no podrá generar hallazgos verificables."
+            className="w-full mt-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-gray-400 resize-none"
+          />
+        </div>
+      )}
 
       {error && <p className="text-xs text-red-600">{error}</p>}
 

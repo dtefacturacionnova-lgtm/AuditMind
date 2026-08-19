@@ -8,7 +8,7 @@ import {
   ServerCrash, Settings, ChevronDown, ChevronRight,
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
-  Clock, CalendarClock, DollarSign, Handshake,
+  Clock, CalendarClock, DollarSign, Handshake, CheckSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -85,6 +85,7 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { label: 'Captura Semanal',        href: '/dashboard/timesheet',        icon: Clock },
       { label: 'Reporte Consolidado',    href: '/dashboard/timesheet/report', icon: BarChart3 },
+      { label: 'Tareas Administrativas', href: '/dashboard/admin-tasks',      icon: CheckSquare },
     ],
   },
   {

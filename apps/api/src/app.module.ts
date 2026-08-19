@@ -38,6 +38,7 @@ import { FieldEvidenceModule } from './working-papers/field-evidence/field-evide
 import { CapacityModule } from './capacity/capacity.module';
 import { TimesheetModule } from './timesheet/timesheet.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
+import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { PortfolioModule } from './portfolio/portfolio.module';
     TimesheetModule,
     CapacityModule,
     PortfolioModule,
+    AdminTasksModule,
   ],
   providers: [
     // Guards globales — aplican a todos los endpoints excepto los @Public()

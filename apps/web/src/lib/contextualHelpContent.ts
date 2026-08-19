@@ -118,6 +118,17 @@ const ROUTE_HELP: RouteHelpEntry[] = [
     },
   },
   {
+    test: p => p.startsWith('/dashboard/admin-tasks'),
+    topic: {
+      title: 'Tareas Administrativas',
+      body: [
+        'Para trabajo real del equipo que no cuelga de ningún cliente ni auditoría (capacitación, gestión interna, seguimiento comercial, etc.).',
+        'Quien no es Gerente de Auditoría o superior solo ve las tareas asignadas a él o creadas por él — un gerente puede alternar entre "Solo mías" y "Todo el equipo".',
+        'Esto registra la tarea en sí (título, responsable, fecha límite); las horas dedicadas se registran aparte, en Captura de Horas con categoría "Administrativo".',
+      ],
+    },
+  },
+  {
     test: p => p.startsWith('/dashboard/timesheet'),
     topic: {
       title: 'Registro de Horas',

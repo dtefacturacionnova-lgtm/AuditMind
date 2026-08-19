@@ -32,13 +32,13 @@ enum AuditType {
   FORENSIC
   BCP_DRP
   // ── Tipos especializados El Salvador ──────────────────────────────────────
-  INTERNAL_GOVERNMENTAL  // Auditoría Interna Gubernamental (NAIG Decreto 7/2016)
-  EXTERNAL_FINANCIAL     // Auditoría Externa Financiera (CVPCPA Res. 129/2022 + NIA)
-  IT_SECURITY            // Seguridad de la Información (ISO 27001:2022 + NRP-23/32)
-  BCP_CONTINUITY         // Continuidad del Negocio (ISO 22301:2019 + NRP-24)
-  IT_SYSTEMS             // Sistemas de Información y BD (COBIT 2019 + D.L. 144/2024)
-  AML                    // Prevención Lavado de Dinero y Activos (Ley LCDA + NRP-36 + GAFI)
-  FISCAL                 // Auditoría Fiscal (ISR / IVA / CVPCPA El Salvador)
+  INTERNAL_GOVERNMENTAL // Auditoría Interna Gubernamental (NAIG Decreto 7/2016)
+  EXTERNAL_FINANCIAL // Auditoría Externa Financiera (CVPCPA Res. 129/2022 + NIA)
+  IT_SECURITY // Seguridad de la Información (ISO 27001:2022 + NRP-23/32)
+  BCP_CONTINUITY // Continuidad del Negocio (ISO 22301:2019 + NRP-24)
+  IT_SYSTEMS // Sistemas de Información y BD (COBIT 2019 + D.L. 144/2024)
+  AML // Prevención Lavado de Dinero y Activos (Ley LCDA + NRP-36 + GAFI)
+  FISCAL // Auditoría Fiscal (ISR / IVA / CVPCPA El Salvador)
 }
 
 enum AuditStatus {
@@ -47,19 +47,19 @@ enum AuditStatus {
   REVIEW
   CLOSED
   CANCELLED
-  DEFERRED   // Postergada a período futuro (con justificación)
+  DEFERRED // Postergada a período futuro (con justificación)
 }
 
 enum AuditEntityType {
   // Tipos jerárquicos de organigrama
-  CORPORATE     // Corporativo / Holding
-  COMPANY       // Empresa / Razón Social
-  DIVISION      // División / Vicepresidencia
-  DEPARTMENT    // Departamento / Dirección
-  AREA          // Área / Gerencia
-  TEAM          // Equipo / Unidad operativa
-  BRANCH        // Sucursal / Sede / Planta
-  SUBSIDIARY    // Subsidiaria / Filial
+  CORPORATE // Corporativo / Holding
+  COMPANY // Empresa / Razón Social
+  DIVISION // División / Vicepresidencia
+  DEPARTMENT // Departamento / Dirección
+  AREA // Área / Gerencia
+  TEAM // Equipo / Unidad operativa
+  BRANCH // Sucursal / Sede / Planta
+  SUBSIDIARY // Subsidiaria / Filial
   // Tipos legados (compatibilidad)
   PROCESS
   BUSINESS_UNIT
@@ -75,55 +75,55 @@ enum AuditEntityType {
 
 enum AuditOriginType {
   // ─── Planificadas (nacen del flujo Universo Auditable → Plan Anual) ─────────
-  PLANNED_RISK_BASED    // Planificada — Por Evaluación de Riesgos (mayor RI/RC)
-  PLANNED_COMPLIANCE    // Planificada — Por Cumplimiento Normativo (mandato legal/regulatorio)
+  PLANNED_RISK_BASED // Planificada — Por Evaluación de Riesgos (mayor RI/RC)
+  PLANNED_COMPLIANCE // Planificada — Por Cumplimiento Normativo (mandato legal/regulatorio)
   // ─── Imprevistas (surgen después de aprobado el Plan Anual, siempre con plan asociado) ─
-  UNPLANNED_COMMITTEE   // Imprevista — Solicitada por Comité de Auditoría
-  UNPLANNED_MANAGEMENT  // Imprevista — Solicitada por Máxima Autoridad / Dirección
-  UNPLANNED_REGULATOR   // Imprevista — Solicitada por Fiscalizadores / Ente Regulador
+  UNPLANNED_COMMITTEE // Imprevista — Solicitada por Comité de Auditoría
+  UNPLANNED_MANAGEMENT // Imprevista — Solicitada por Máxima Autoridad / Dirección
+  UNPLANNED_REGULATOR // Imprevista — Solicitada por Fiscalizadores / Ente Regulador
   // ─── Legacy — mantener para compatibilidad con registros existentes ──────────
-  PLANNED               // → usar PLANNED_RISK_BASED o PLANNED_COMPLIANCE en nuevos registros
-  UNPLANNED             // → usar UNPLANNED_COMMITTEE / UNPLANNED_MANAGEMENT / UNPLANNED_REGULATOR
-  MANAGEMENT_REQUEST    // → migrar a UNPLANNED_MANAGEMENT
-  REGULATORY_MANDATE    // → migrar a UNPLANNED_REGULATOR
-  FOLLOW_UP             // Seguimiento de hallazgos — siempre debe tener plan asociado
+  PLANNED // → usar PLANNED_RISK_BASED o PLANNED_COMPLIANCE en nuevos registros
+  UNPLANNED // → usar UNPLANNED_COMMITTEE / UNPLANNED_MANAGEMENT / UNPLANNED_REGULATOR
+  MANAGEMENT_REQUEST // → migrar a UNPLANNED_MANAGEMENT
+  REGULATORY_MANDATE // → migrar a UNPLANNED_REGULATOR
+  FOLLOW_UP // Seguimiento de hallazgos — siempre debe tener plan asociado
 }
 
 enum AuditOpinion {
-  SATISFACTORY        // Sin observaciones significativas
-  NEEDS_IMPROVEMENT   // Oportunidades de mejora identificadas
-  UNSATISFACTORY      // Deficiencias significativas
-  CRITICAL            // Deficiencias críticas — acción inmediata
-  NOT_RATED           // Sin calificación (advisory / especial)
+  SATISFACTORY // Sin observaciones significativas
+  NEEDS_IMPROVEMENT // Oportunidades de mejora identificadas
+  UNSATISFACTORY // Deficiencias significativas
+  CRITICAL // Deficiencias críticas — acción inmediata
+  NOT_RATED // Sin calificación (advisory / especial)
 }
 
 enum WorkingPaperType {
-  PLANNING_UNDERSTANDING    // PT-PL → A-x
-  CONTROL_EVALUATION        // PT-EC → B-x
-  SUBSTANTIVE_TEST          // PT-PS → C-x
-  DATA_ANALYSIS             // PT-AD → AD-x
-  FINDING                   // PT-HF → D-x
-  CLOSURE_CONCLUSION        // PT-CC → E-x
-  INTERVIEW                 // Grabación de entrevista
-  CONFIRMATION              // Confirmación externa
-  NORMATIVE_ANALYSIS        // Análisis normativo auto-generado
+  PLANNING_UNDERSTANDING // PT-PL → A-x
+  CONTROL_EVALUATION // PT-EC → B-x
+  SUBSTANTIVE_TEST // PT-PS → C-x
+  DATA_ANALYSIS // PT-AD → AD-x
+  FINDING // PT-HF → D-x
+  CLOSURE_CONCLUSION // PT-CC → E-x
+  INTERVIEW // Grabación de entrevista
+  CONFIRMATION // Confirmación externa
+  NORMATIVE_ANALYSIS // Análisis normativo auto-generado
 }
 
 // ─── PAPELES INTELIGENTES: Tipo estructural del papel ─────────────────────────
 enum WpKind {
-  STANDARD  // Adjuntos libres + narrativa — sin propagación
-  SMART     // Secciones estructuradas tipadas — fuente de datos del grafo
-  MASTER    // Consolida datos de múltiples PT — generado por IA + revisión humana
-  LIVE      // Actualizado en tiempo real — no requiere aprobación manual
-  FILE      // Archivo adjunto (Word, Excel, PPT, PDF, Imagen, Audio) — Supabase Storage
+  STANDARD // Adjuntos libres + narrativa — sin propagación
+  SMART // Secciones estructuradas tipadas — fuente de datos del grafo
+  MASTER // Consolida datos de múltiples PT — generado por IA + revisión humana
+  LIVE // Actualizado en tiempo real — no requiere aprobación manual
+  FILE // Archivo adjunto (Word, Excel, PPT, PDF, Imagen, Audio) — Supabase Storage
 }
 
 // Estado de sincronización del grafo de conocimiento
 enum SyncStatus {
-  DRAFT          // Nunca fue consolidado (estado inicial)
-  SYNCED         // Datos al día — todas las fuentes actualizadas
-  STALE          // Alguna fuente cambió — requiere regeneración del auditor
-  REGENERATING   // Proceso de consolidación IA en curso
+  DRAFT // Nunca fue consolidado (estado inicial)
+  SYNCED // Datos al día — todas las fuentes actualizadas
+  STALE // Alguna fuente cambió — requiere regeneración del auditor
+  REGENERATING // Proceso de consolidación IA en curso
 }
 
 // Tipos de campo para secciones de PT Inteligente
@@ -136,58 +136,58 @@ enum FieldType {
   BOOLEAN
   ENUM_SELECT
   DATE
-  MATRIX           // Tabla de riesgos/controles
-  REFERENCE        // Referencia a otro campo de otro PT
-  RISK_REF         // Referencia a riesgo del registro
-  ATTACHMENT       // Archivos adjuntos
+  MATRIX // Tabla de riesgos/controles
+  REFERENCE // Referencia a otro campo de otro PT
+  RISK_REF // Referencia a riesgo del registro
+  ATTACHMENT // Archivos adjuntos
   ACCOUNT_SCHEDULE // Cédula analítica multi-nivel: código/nombre/saldo/ajustes/saldo ajustado/notas/evidencia por fila
-  DECLARATIONS     // Grid editable de declaraciones de independencia con adjunto por fila
-  LEGAL_MATRIX     // Grid editable de normativas/leyes con columnas especializadas + adjunto por fila
-  AUDIT_REPORTS    // Grid editable de informes de auditoría interna emitidos con adjunto por fila
-  CHECKLIST        // Tabla editable Sí/No/N/A por criterio + conclusión global + fundamento
+  DECLARATIONS // Grid editable de declaraciones de independencia con adjunto por fila
+  LEGAL_MATRIX // Grid editable de normativas/leyes con columnas especializadas + adjunto por fila
+  AUDIT_REPORTS // Grid editable de informes de auditoría interna emitidos con adjunto por fila
+  CHECKLIST // Tabla editable Sí/No/N/A por criterio + conclusión global + fundamento
   COMMUNICATION_LOG // Grid de comunicaciones con AI: fecha/participantes/tema/asuntos/adjunto
-  PROCEDURE_GRID   // Grid jerárquico 2 niveles: Procedimiento → Actividad (NIA 230/330)
+  PROCEDURE_GRID // Grid jerárquico 2 niveles: Procedimiento → Actividad (NIA 230/330)
   SAMPLE_ITEM_REGISTER // Grid de ítems de muestra con valor en libros/auditado, diferencia y tainting % por fila
-  SAMPLING_EVALUATION  // Panel computado: extrapolación de errores MUS (MLE/Precisión Básica/UEL) + semáforo, derivado de SAMPLE_ITEM_REGISTER
-  FLOWCHART            // Editor de flujograma de proceso (nodos/aristas), con nodos vinculables a otro papel/sección
+  SAMPLING_EVALUATION // Panel computado: extrapolación de errores MUS (MLE/Precisión Básica/UEL) + semáforo, derivado de SAMPLE_ITEM_REGISTER
+  FLOWCHART // Editor de flujograma de proceso (nodos/aristas), con nodos vinculables a otro papel/sección
 }
 
 // Tipo de mapeo entre papeles en el grafo
 enum MappingType {
-  DIRECT        // Copia directa del valor fuente
-  AGGREGATED    // Agregación de múltiples fuentes
-  AI_GENERATED  // Genera narrativa con IA usando datos fuente
+  DIRECT // Copia directa del valor fuente
+  AGGREGATED // Agregación de múltiples fuentes
+  AI_GENERATED // Genera narrativa con IA usando datos fuente
 }
 
 enum WorkingPaperStatus {
   // ─── Valores legacy (compatibilidad hacia atrás) ──────────────────────────
-  DRAFT      // → migrar a IN_PROGRESS
-  IN_REVIEW  // → migrar a PENDING_REVIEW
-  APPROVED   // → migrar a SIGNED_OFF
-  ARCHIVED   // → migrar a CLOSED
+  DRAFT // → migrar a IN_PROGRESS
+  IN_REVIEW // → migrar a PENDING_REVIEW
+  APPROVED // → migrar a SIGNED_OFF
+  ARCHIVED // → migrar a CLOSED
   // ─── Nuevos valores (estándar industria: TeamMate+, CaseWare, AuditBoard) ─
-  NOT_STARTED    // No Iniciado   — papel creado, sin trabajo aún
-  IN_PROGRESS    // En Proceso    — auditor trabajando activamente
+  NOT_STARTED // No Iniciado   — papel creado, sin trabajo aún
+  IN_PROGRESS // En Proceso    — auditor trabajando activamente
   PENDING_REVIEW // En Revisión   — enviado al supervisor/revisor
-  RETURNED       // Observado     — revisor devolvió con comentarios
-  REVIEWED       // Revisado      — revisor aceptó el trabajo
-  SIGNED_OFF     // Aprobado      — firma final del gerente/CAE
-  CLOSED         // Cerrado       — auditoría cerrada, papel bloqueado
+  RETURNED // Observado     — revisor devolvió con comentarios
+  REVIEWED // Revisado      — revisor aceptó el trabajo
+  SIGNED_OFF // Aprobado      — firma final del gerente/CAE
+  CLOSED // Cerrado       — auditoría cerrada, papel bloqueado
 }
 
 // ─── Fases del Proyecto de Auditoría ──────────────────────────────────────
 enum PhaseType {
-  PLANNING   // Planificación de la Auditoría
-  FIELDWORK  // Ejecución de la Auditoría
-  REPORTING  // Informe
-  FOLLOWUP   // Eventos Posteriores / Seguimiento
+  PLANNING // Planificación de la Auditoría
+  FIELDWORK // Ejecución de la Auditoría
+  REPORTING // Informe
+  FOLLOWUP // Eventos Posteriores / Seguimiento
 }
 
 enum PhaseStatus {
-  PENDING      // Pendiente de inicio
-  IN_PROGRESS  // En curso
-  COMPLETE     // Completada y firmada
-  LOCKED       // Bloqueada — auditoría cerrada
+  PENDING // Pendiente de inicio
+  IN_PROGRESS // En curso
+  COMPLETE // Completada y firmada
+  LOCKED // Bloqueada — auditoría cerrada
 }
 
 enum FindingSeverity {
@@ -285,16 +285,16 @@ enum CertificationType {
 }
 
 enum TickMark {
-  VERIFIED          // √ Verificado contra documento fuente
-  EXCEPTION         // X Excepción identificada
-  ESTIMATED         // * Estimación del auditor
-  CONFIRMED_THIRD   // © Confirmado con tercero
-  RECALCULATED      // R Recalculado por el auditor
-  FOOTED            // F Sumatoria verificada
-  CROSS_FOOTED      // CF Totales cruzados verificados
-  NOT_APPLICABLE    // NA No aplica
-  PENDING           // ⏱ Pendiente de resolución
-  ATTENTION         // ⚑ Requiere atención del revisor
+  VERIFIED // √ Verificado contra documento fuente
+  EXCEPTION // X Excepción identificada
+  ESTIMATED // * Estimación del auditor
+  CONFIRMED_THIRD // © Confirmado con tercero
+  RECALCULATED // R Recalculado por el auditor
+  FOOTED // F Sumatoria verificada
+  CROSS_FOOTED // CF Totales cruzados verificados
+  NOT_APPLICABLE // NA No aplica
+  PENDING // ⏱ Pendiente de resolución
+  ATTENTION // ⚑ Requiere atención del revisor
 }
 
 enum ConfirmationType {
@@ -307,9 +307,9 @@ enum ConfirmationType {
 
 // Tipo de referencia @mention entre secciones de papeles
 enum RefType {
-  INDEX        // @[A-02]          — referencia al papel completo por código de índice
-  FIELD        // @[A-02::S3]      — referencia a sección específica
-  PROPAGATION  // propagación automática de valor (reemplaza sourceRef string)
+  INDEX // @[A-02]          — referencia al papel completo por código de índice
+  FIELD // @[A-02::S3]      — referencia a sección específica
+  PROPAGATION // propagación automática de valor (reemplaza sourceRef string)
 }
 
 enum ConfirmationStatus {
@@ -335,15 +335,15 @@ enum NotificationChannel {
 }
 
 enum AIAssistantPersonality {
-  ATHENA    // Para auditores — técnico, orientado a procedimientos
-  HERMES    // Para gerentes — operacional, orientado a equipo
-  MINERVA   // Para CAE/Socios — estratégico, orientado al Comité
+  ATHENA // Para auditores — técnico, orientado a procedimientos
+  HERMES // Para gerentes — operacional, orientado a equipo
+  MINERVA // Para CAE/Socios — estratégico, orientado al Comité
 }
 
 enum DataSourceType {
-  SAP_RFC        // SAP via RFC/BAPI
-  REST_API       // API REST genérica (QuickBooks, Netsuite, Oracle ERP Cloud)
-  EXCEL_UPLOAD   // Carga manual de Excel/CSV
+  SAP_RFC // SAP via RFC/BAPI
+  REST_API // API REST genérica (QuickBooks, Netsuite, Oracle ERP Cloud)
+  EXCEL_UPLOAD // Carga manual de Excel/CSV
   CSV_UPLOAD
 }
 
@@ -408,18 +408,18 @@ enum EngagementStatus {
 // ─── MÓDULO 01: NÚCLEO MULTI-TENANT ───────────────────────────────────────────
 
 model Organization {
-  id             String    @id @default(cuid())
-  name           String
-  slug           String    @unique
-  plan           String    @default("starter") // starter | professional | enterprise
-  settings       Json      @default("{}")
-  logoUrl        String?
-  primaryColor   String?   @default("#0F2D4A")
-  active         Boolean   @default(true)
-  trialEndsAt    DateTime?
-  auditModality  OrgAuditModality @default(BOTH)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id            String           @id @default(cuid())
+  name          String
+  slug          String           @unique
+  plan          String           @default("starter") // starter | professional | enterprise
+  settings      Json             @default("{}")
+  logoUrl       String?
+  primaryColor  String?          @default("#0F2D4A")
+  active        Boolean          @default(true)
+  trialEndsAt   DateTime?
+  auditModality OrgAuditModality @default(BOTH)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   // Relations
   users                  User[]
@@ -454,7 +454,7 @@ model Organization {
   processCategoryConfigs ProcessCategoryConfig[]
   strategicObjectives    StrategicObjective[]
   strategicLines         StrategicLine[]
-  auditProjects         AuditProject[]
+  auditProjects          AuditProject[]
   holidayConfigs         HolidayConfig[]
   availabilityProfiles   UserAvailabilityProfile[]
   costProfiles           UserCostProfile[]
@@ -463,54 +463,57 @@ model Organization {
   proposals              Proposal[]
   engagementLetters      EngagementLetter[]
   engagements            Engagement[]
+  adminTasks             AdminTask[]
 
   @@map("organizations")
 }
 
 model User {
-  id                      String                 @id @default(cuid())
-  organizationId          String
-  supabaseUserId          String                 @unique // Supabase Auth UUID
-  email                   String                 @unique
-  name                    String
-  role                    UserRole               @default(AUDITOR)
-  avatarUrl               String?
-  active                  Boolean                @default(true)
-  lastLoginAt             DateTime?
-  timezone                String                 @default("America/Lima")
-  preferredLanguage       String                 @default("es")
-  aiAssistantPersonality  AIAssistantPersonality @default(ATHENA)
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
+  id                     String                 @id @default(cuid())
+  organizationId         String
+  supabaseUserId         String                 @unique // Supabase Auth UUID
+  email                  String                 @unique
+  name                   String
+  role                   UserRole               @default(AUDITOR)
+  avatarUrl              String?
+  active                 Boolean                @default(true)
+  lastLoginAt            DateTime?
+  timezone               String                 @default("America/Lima")
+  preferredLanguage      String                 @default("es")
+  aiAssistantPersonality AIAssistantPersonality @default(ATHENA)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
-  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  certifications    UserCertification[]
-  competencies      UserCompetency[]
-  cpeRecords        CpeRecord[]
-  auditTeams           AuditTeam[]
-  uploadedRequestDocs  AuditRequestDocument[] @relation("UploadedRequestDocs")
-  workingPapers        WorkingPaper[]        @relation("PreparedBy")
-  reviewedPapers       WorkingPaper[]        @relation("ReviewedBy")
-  signedOffPapers       WorkingPaper[]        @relation("WpSignedOffBy")
-  signedOffPhases       AuditPhase[]          @relation("PhaseSignOff")
-  createdIndexTemplates IndexTemplate[]       @relation("IndexTemplateCreator")
-  createdAuditTemplates AuditTemplate[]      @relation("AuditTemplateCreator")
-  createdContentLibraryItems ContentLibraryItem[] @relation("ContentLibraryItemCreator")
-  ownedEntities     AuditEntity[]         @relation("EntityOwner")
-  findings          Finding[]             @relation("FindingResponsible")
-  aiInteractions    AIInteraction[]
-  notifications     Notification[]
-  dataSources       DataSource[]
-  auditRestoreLogs  AuditRestoreLog[]
-  fieldEvidences    FieldEvidence[]
-  timeEntries       TimeEntry[]
-  availabilityProfiles UserAvailabilityProfile[]
-  costProfiles         UserCostProfile[]
-  createdClients           Client[]           @relation("ClientCreator")
-  decidedAcceptanceChecks  AcceptanceCheck[]
-  createdProposals         Proposal[]         @relation("ProposalCreator")
-  createdEngagementLetters EngagementLetter[] @relation("EngagementLetterCreator")
-  createdEngagements       Engagement[]       @relation("EngagementCreator")
+  organization               Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  certifications             UserCertification[]
+  competencies               UserCompetency[]
+  cpeRecords                 CpeRecord[]
+  auditTeams                 AuditTeam[]
+  uploadedRequestDocs        AuditRequestDocument[]    @relation("UploadedRequestDocs")
+  workingPapers              WorkingPaper[]            @relation("PreparedBy")
+  reviewedPapers             WorkingPaper[]            @relation("ReviewedBy")
+  signedOffPapers            WorkingPaper[]            @relation("WpSignedOffBy")
+  signedOffPhases            AuditPhase[]              @relation("PhaseSignOff")
+  createdIndexTemplates      IndexTemplate[]           @relation("IndexTemplateCreator")
+  createdAuditTemplates      AuditTemplate[]           @relation("AuditTemplateCreator")
+  createdContentLibraryItems ContentLibraryItem[]      @relation("ContentLibraryItemCreator")
+  ownedEntities              AuditEntity[]             @relation("EntityOwner")
+  findings                   Finding[]                 @relation("FindingResponsible")
+  aiInteractions             AIInteraction[]
+  notifications              Notification[]
+  dataSources                DataSource[]
+  auditRestoreLogs           AuditRestoreLog[]
+  fieldEvidences             FieldEvidence[]
+  timeEntries                TimeEntry[]
+  availabilityProfiles       UserAvailabilityProfile[]
+  costProfiles               UserCostProfile[]
+  createdClients             Client[]                  @relation("ClientCreator")
+  decidedAcceptanceChecks    AcceptanceCheck[]
+  createdProposals           Proposal[]                @relation("ProposalCreator")
+  createdEngagementLetters   EngagementLetter[]        @relation("EngagementLetterCreator")
+  createdEngagements         Engagement[]              @relation("EngagementCreator")
+  assignedAdminTasks         AdminTask[]               @relation("AdminTaskAssignee")
+  createdAdminTasks          AdminTask[]               @relation("AdminTaskCreator")
 
   @@index([organizationId])
   @@index([email])
@@ -519,30 +522,30 @@ model User {
 }
 
 model UserCertification {
-  id               String            @id @default(cuid())
-  userId           String
-  type             CertificationType
-  certNumber       String?
-  issuedAt         DateTime
-  expiresAt        DateTime?
-  isActive         Boolean           @default(true)
-  verificationUrl  String?
-  createdAt        DateTime          @default(now())
+  id              String            @id @default(cuid())
+  userId          String
+  type            CertificationType
+  certNumber      String?
+  issuedAt        DateTime
+  expiresAt       DateTime?
+  isActive        Boolean           @default(true)
+  verificationUrl String?
+  createdAt       DateTime          @default(now())
 
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("user_certifications")
 }
 
 model UserCompetency {
-  id              String   @id @default(cuid())
+  id              String @id @default(cuid())
   userId          String
   area            String
-  expertiseLevel  Int      // 1-5
-  yearsExperience Int      @default(0)
+  expertiseLevel  Int // 1-5
+  yearsExperience Int    @default(0)
 
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("user_competencies")
@@ -552,13 +555,13 @@ model CpeRecord {
   id          String   @id @default(cuid())
   userId      String
   year        Int
-  category    String   // etica | tecnica | liderazgo
+  category    String // etica | tecnica | liderazgo
   hours       Float
   description String
   completedAt DateTime
   createdAt   DateTime @default(now())
 
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, year])
   @@map("cpe_records")
@@ -567,46 +570,46 @@ model CpeRecord {
 // ─── MÓDULO 02: UNIVERSO DE AUDITORÍA ─────────────────────────────────────────
 
 model AuditEntity {
-  id                          String   @id @default(cuid())
-  organizationId              String
-  name                        String
-  description                 String?
-  entityType                  String   @default("AREA")
-  category                    String?
-  parentEntityId              String?
+  id                         String    @id @default(cuid())
+  organizationId             String
+  name                       String
+  description                String?
+  entityType                 String    @default("AREA")
+  category                   String?
+  parentEntityId             String?
   // Dueño del proceso (negocio)
-  ownerId                     String?
-  responsible                 String?
-  location                    String?
-  sector                      String?
-  relatedSystems              Json     @default("[]")
-  applicableRegulations       Json     @default("[]")
-  inherentRiskScore           Int      @default(50)
-  lastAuditDate               DateTime?
-  recommendedFrequencyMonths  Int      @default(12)
-  active                      Boolean  @default(true)
-  excluded                    Boolean  @default(false)
-  exclusionJustification      String?
+  ownerId                    String?
+  responsible                String?
+  location                   String?
+  sector                     String?
+  relatedSystems             Json      @default("[]")
+  applicableRegulations      Json      @default("[]")
+  inherentRiskScore          Int       @default(50)
+  lastAuditDate              DateTime?
+  recommendedFrequencyMonths Int       @default(12)
+  active                     Boolean   @default(true)
+  excluded                   Boolean   @default(false)
+  exclusionJustification     String?
   // Campos de documentación del área
-  objective                   String?
-  status                      String   @default("ACTIVE")
-  employeeCount               Int?
-  contactEmail                String?
-  contactPhone                String?
-  budget                      String?
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  objective                  String?
+  status                     String    @default("ACTIVE")
+  employeeCount              Int?
+  contactEmail               String?
+  contactPhone               String?
+  budget                     String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
-  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner           User?           @relation("EntityOwner", fields: [ownerId], references: [id])
-  parent          AuditEntity?    @relation("EntityHierarchy", fields: [parentEntityId], references: [id])
-  children        AuditEntity[]   @relation("EntityHierarchy")
-  audits          Audit[]
-  planItems       AuditPlanItem[]
-  riskRegisters   RiskRegister[]
+  organization          Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner                 User?           @relation("EntityOwner", fields: [ownerId], references: [id])
+  parent                AuditEntity?    @relation("EntityHierarchy", fields: [parentEntityId], references: [id])
+  children              AuditEntity[]   @relation("EntityHierarchy")
+  audits                Audit[]
+  planItems             AuditPlanItem[]
+  riskRegisters         RiskRegister[]
   auditableUnits        AuditableUnit[]
-  projectsAsResponsible AuditProject[] @relation("ProjectResponsible")
-  projectsAsSupport     AuditProject[] @relation("ProjectSupport")
+  projectsAsResponsible AuditProject[]  @relation("ProjectResponsible")
+  projectsAsSupport     AuditProject[]  @relation("ProjectSupport")
   client                Client?
 
   @@index([organizationId])
@@ -659,17 +662,17 @@ model ProcessCategoryConfig {
 model StrategicObjective {
   id             String   @id @default(cuid())
   organizationId String
-  code           String   // OE-1, OE-2…
+  code           String // OE-1, OE-2…
   name           String
   description    String?
-  color          String   @default("blue")  // blue|green|amber|rose|purple|teal|orange|indigo
+  color          String   @default("blue") // blue|green|amber|rose|purple|teal|orange|indigo
   icon           String   @default("🎯")
   sortOrder      Int      @default(0)
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   lines         StrategicLine[]
   auditProjects AuditProject[]
 
@@ -682,7 +685,7 @@ model StrategicLine {
   id             String   @id @default(cuid())
   organizationId String
   objectiveId    String
-  code           String   // LE-1.1, LE-1.2…
+  code           String // LE-1.1, LE-1.2…
   name           String
   description    String?
   sortOrder      Int      @default(0)
@@ -703,46 +706,46 @@ model StrategicLine {
 
 // ─── BANCO DE PROYECTOS DE AUDITORÍA ─────────────────────────────────────────
 model AuditProject {
-  id             String   @id @default(cuid())
+  id             String @id @default(cuid())
   organizationId String
-  correlative    String   // "BAP-001"
+  correlative    String // "BAP-001"
   name           String
-  planYear       Int      // año del plan (histórico o actual)
+  planYear       Int // año del plan (histórico o actual)
 
   // Tab 1 — Identificación
   strategicObjectiveId String?
   strategicLineId      String?
-  responsibleEntityId  String?  // área responsable (del organigrama)
-  supportEntityId      String?  // área de apoyo (del organigrama)
-  riskCategory         String?  // 8 categorías predefinidas
+  responsibleEntityId  String? // área responsable (del organigrama)
+  supportEntityId      String? // área de apoyo (del organigrama)
+  riskCategory         String? // 8 categorías predefinidas
   notes                String?
 
   // Tab 2 — Evaluación de Riesgo (campos unificados con AuditableUnitAssessment, escala 1-5)
   // Grupo A — Riesgo Residual (peso 30%)
-  impactScore           Int?    // 1-5 Impacto si ocurre el riesgo
-  likelihoodScore       Int?    // 1-5 Probabilidad de ocurrencia
-  controlMaturityScore  Int?    // 1-5 Madurez de controles existentes
+  impactScore           Int? // 1-5 Impacto si ocurre el riesgo
+  likelihoodScore       Int? // 1-5 Probabilidad de ocurrencia
+  controlMaturityScore  Int? // 1-5 Madurez de controles existentes
   // Grupo B — Factores Contextuales (peso 70%)
-  materialityScore      Int?    // 1-5 Materialidad financiera (20%)
-  strategicAlignScore   Int?    // 1-5 Alineación al Plan Estratégico (20%)
-  operationalAlignScore Int?    // 1-5 Alineación al Plan Operativo (15%)
-  fraudHistoryScore     Int?    // 1-5 Antecedentes de fraude/denuncias (15%)
-  managementReqScore    Int?    // 1-5 Solicitud de la dirección (10%)
-  staffTurnoverScore    Int?    // 1-5 Rotación de personal (10%)
-  coverageHistoryScore  Int?    // 1-5 Historial de cobertura (10%)
+  materialityScore      Int? // 1-5 Materialidad financiera (20%)
+  strategicAlignScore   Int? // 1-5 Alineación al Plan Estratégico (20%)
+  operationalAlignScore Int? // 1-5 Alineación al Plan Operativo (15%)
+  fraudHistoryScore     Int? // 1-5 Antecedentes de fraude/denuncias (15%)
+  managementReqScore    Int? // 1-5 Solicitud de la dirección (10%)
+  staffTurnoverScore    Int? // 1-5 Rotación de personal (10%)
+  coverageHistoryScore  Int? // 1-5 Historial de cobertura (10%)
   // Campos adicionales del proyecto
-  legalRequirement      Int?    // 1-4 Requerimiento legal/normativo (proyecto-específico)
+  legalRequirement      Int? // 1-4 Requerimiento legal/normativo (proyecto-específico)
   lastAuditOpinion      String? // Opinión/resultado de la última auditoría heredada del Universo
-  finalRiskScore        Float?  // 0–100 calculado automáticamente (misma escala que Universo)
+  finalRiskScore        Float? // 0–100 calculado automáticamente (misma escala que Universo)
   finalRiskLevel        String? // BAJO|MEDIO|ALTO|CRITICO
-  includeInPlan     Boolean @default(false)
-  targetPlanYear    Int?    // año del plan anual donde se incluirá
+  includeInPlan         Boolean @default(false)
+  targetPlanYear        Int? // año del plan anual donde se incluirá
 
   // Tab 3 — Planificación de recursos
   legalBasis       String?
   frequencyPerYear Int?    @default(1)
   plannedHours     Float?
-  teamJson         Json?   // [{role,count,costPerHour,hours}]
+  teamJson         Json? // [{role,count,costPerHour,hours}]
   totalBudget      Float?
 
   status    String   @default("DRAFT") // DRAFT|ACTIVE|ARCHIVED
@@ -750,11 +753,11 @@ model AuditProject {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  organization       Organization        @relation(fields: [organizationId],       references: [id], onDelete: Cascade)
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   strategicObjective StrategicObjective? @relation(fields: [strategicObjectiveId], references: [id])
-  strategicLine      StrategicLine?      @relation(fields: [strategicLineId],      references: [id])
+  strategicLine      StrategicLine?      @relation(fields: [strategicLineId], references: [id])
   responsibleEntity  AuditEntity?        @relation("ProjectResponsible", fields: [responsibleEntityId], references: [id])
-  supportEntity      AuditEntity?        @relation("ProjectSupport",      fields: [supportEntityId],      references: [id])
+  supportEntity      AuditEntity?        @relation("ProjectSupport", fields: [supportEntityId], references: [id])
   planItems          AuditPlanItem[]
 
   @@index([organizationId])
@@ -767,11 +770,11 @@ model AuditProject {
 model AuditProcess {
   id             String   @id @default(cuid())
   organizationId String
-  code           String   // "PROC-FIN-01"
-  name           String   // "Gestión de Compras"
+  code           String // "PROC-FIN-01"
+  name           String // "Gestión de Compras"
   description    String?
-  category       String?  // Etiqueta libre del cliente
-  apqcCode       String?  // Código APQC PCF: "1.0"…"13.0"
+  category       String? // Etiqueta libre del cliente
+  apqcCode       String? // Código APQC PCF: "1.0"…"13.0"
   active         Boolean  @default(true)
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())
@@ -793,24 +796,24 @@ model AuditableUnit {
   organizationId  String
   auditEntityId   String
   auditProcessId  String
-  name            String?  // nombre display override (si null: "Entity — Process")
+  name            String? // nombre display override (si null: "Entity — Process")
   auditType       String   @default("OPERATIONAL") // FINANCIAL|OPERATIONAL|IT|COMPLIANCE|FORENSIC|ADVISORY
-  isMandatory     Boolean  @default(false)  // mandato legal/regulatorio → entrada directa al plan
-  mandatoryBasis  String?  // "Ley 29720 Art. 5", "Norma SBS N°2024-001", etc.
+  isMandatory     Boolean  @default(false) // mandato legal/regulatorio → entrada directa al plan
+  mandatoryBasis  String? // "Ley 29720 Art. 5", "Norma SBS N°2024-001", etc.
   // Clasificación estratégica y de riesgo
-  strategicLineId String?  // FK opcional a línea estratégica del Plan Estratégico
-  riskType        String?  // FINANCIERO|OPERACIONAL|TECNOLOGIA|CUMPLIMIENTO|FRAUDE|ESTRATEGICO|LEGAL|ESG
+  strategicLineId String? // FK opcional a línea estratégica del Plan Estratégico
+  riskType        String? // FINANCIERO|OPERACIONAL|TECNOLOGIA|CUMPLIMIENTO|FRAUDE|ESTRATEGICO|LEGAL|ESG
   active          Boolean  @default(true)
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  auditEntity    AuditEntity               @relation(fields: [auditEntityId], references: [id])
-  auditProcess   AuditProcess              @relation(fields: [auditProcessId], references: [id])
-  strategicLine  StrategicLine?            @relation(fields: [strategicLineId], references: [id])
-  assessments    AuditableUnitAssessment[]
-  planItems      AuditPlanItem[]
+  organization  Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  auditEntity   AuditEntity               @relation(fields: [auditEntityId], references: [id])
+  auditProcess  AuditProcess              @relation(fields: [auditProcessId], references: [id])
+  strategicLine StrategicLine?            @relation(fields: [strategicLineId], references: [id])
+  assessments   AuditableUnitAssessment[]
+  planItems     AuditPlanItem[]
 
   @@unique([organizationId, auditEntityId, auditProcessId, auditType])
   @@index([organizationId])
@@ -824,17 +827,17 @@ model AuditableUnit {
 // Motor de scoring multi-factor. Una evaluación por año por unidad.
 // Score final determina candidatura al Plan Anual.
 model AuditableUnitAssessment {
-  id              String   @id @default(cuid())
+  id              String  @id @default(cuid())
   auditableUnitId String
   assessmentYear  Int
   assessedById    String?
 
   // ── Grupo A — Riesgo Residual (peso 70%) ─────────────────────────────────
-  impactScore           Int   @default(3) // 1-5: magnitud del daño si ocurre el riesgo
-  likelihoodScore       Int   @default(3) // 1-5: probabilidad de ocurrencia
-  controlMaturityScore  Int   @default(3) // 1-5: (1=Ad-hoc, 3=Definido, 5=Optimizado)
-  inherentRiskScore     Float @default(9) // calculado: impact × likelihood (1-25)
-  residualRiskScore     Float @default(6) // calculado: inherent × (1 - maturity/5)
+  impactScore          Int   @default(3) // 1-5: magnitud del daño si ocurre el riesgo
+  likelihoodScore      Int   @default(3) // 1-5: probabilidad de ocurrencia
+  controlMaturityScore Int   @default(3) // 1-5: (1=Ad-hoc, 3=Definido, 5=Optimizado)
+  inherentRiskScore    Float @default(9) // calculado: impact × likelihood (1-25)
+  residualRiskScore    Float @default(6) // calculado: inherent × (1 - maturity/5)
 
   // ── Grupo B — Factores Contextuales (peso 70%) ───────────────────────────
   materialityScore      Int @default(3) // 1-5: tamaño financiero/presupuesto del área  (20%)
@@ -847,22 +850,22 @@ model AuditableUnitAssessment {
   coverageHistoryScore  Int @default(1) // 1-5: historial de cobertura (frecuencia real)   (10%)
 
   // ── Score Ponderado Final ─────────────────────────────────────────────────
-  totalScore   Float  @default(0) // calculado: (residual×0.30) + (contextuales×0.70)
-  riskLevel    String @default("MEDIUM") // CRITICAL|HIGH|MEDIUM|LOW — del totalScore
+  totalScore Float  @default(0) // calculado: (residual×0.30) + (contextuales×0.70)
+  riskLevel  String @default("MEDIUM") // CRITICAL|HIGH|MEDIUM|LOW — del totalScore
 
   // ── Historial de cobertura ────────────────────────────────────────────────
   lastAuditDate         DateTime?
-  lastAuditOpinion      String?   // SATISFACTORY|NEEDS_IMPROVEMENT|UNSATISFACTORY|CRITICAL
+  lastAuditOpinion      String? // SATISFACTORY|NEEDS_IMPROVEMENT|UNSATISFACTORY|CRITICAL
   recommendedFreqMonths Int       @default(12) // meses entre auditorías
   nextRecommendedDate   DateTime? // calculado: lastAuditDate + freq
-  coverageGapDays       Int?      // calculado: today − nextRecommendedDate (>0 = vencido)
+  coverageGapDays       Int? // calculado: today − nextRecommendedDate (>0 = vencido)
 
   notes      String?
   assessedAt DateTime @default(now())
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  auditableUnit  AuditableUnit @relation(fields: [auditableUnitId], references: [id], onDelete: Cascade)
+  auditableUnit AuditableUnit @relation(fields: [auditableUnitId], references: [id], onDelete: Cascade)
 
   @@unique([auditableUnitId, assessmentYear])
   @@index([auditableUnitId])
@@ -873,30 +876,30 @@ model AuditableUnitAssessment {
 // ─── MÓDULO 03: PLANIFICACIÓN INTELIGENTE ─────────────────────────────────────
 
 model AuditPlan {
-  id             String   @id @default(cuid())
-  organizationId String
-  year           Int
-  name           String
+  id              String    @id @default(cuid())
+  organizationId  String
+  year            Int
+  name            String
   // DRAFT | PENDING_REVIEW | APPROVED | ACTIVE | AMENDED | CLOSED
-  status         String   @default("DRAFT")
-  planType       String   @default("ANNUAL") // ANNUAL | ROLLING | MULTI_YEAR | INTERIM
-  objectives     Json     @default("[]")
-  totalHours     Float    @default(0)
-  totalBudget    Float?   // presupuesto monetario (moneda local)
+  status          String    @default("DRAFT")
+  planType        String    @default("ANNUAL") // ANNUAL | ROLLING | MULTI_YEAR | INTERIM
+  objectives      Json      @default("[]")
+  totalHours      Float     @default(0)
+  totalBudget     Float? // presupuesto monetario (moneda local)
   // Aprobación
-  approvedById   String?
-  approvedAt     DateTime?
-  rejectedById   String?
-  rejectedAt     DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
   rejectionReason String?
   // Versionado (enmiendas post-aprobación)
-  version        Int      @default(1)
-  amendments     Json     @default("[]") // [{date, description, approvedBy}]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  version         Int       @default(1)
+  amendments      Json      @default("[]") // [{date, description, approvedBy}]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  items         AuditPlanItem[]
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        AuditPlanItem[]
 
   @@unique([organizationId, year])
   @@index([organizationId])
@@ -904,33 +907,33 @@ model AuditPlan {
 }
 
 model AuditPlanItem {
-  id                  String   @id @default(cuid())
-  planId              String
+  id                 String    @id @default(cuid())
+  planId             String
   // Referencia a entidad (legado) O a unidad auditable (nuevo)
-  auditEntityId       String?
-  auditableUnitId     String?  // FK a AuditableUnit (nuevo modelo)
-  auditProjectId      String?  // FK a AuditProject  (P.4 — Banco de Proyectos)
-  estimatedHours      Float    @default(0)
-  tentativeStartDate  DateTime?
-  tentativeEndDate    DateTime?
-  priority            Int      @default(1) // 1=alta, 2=media, 3=baja
+  auditEntityId      String?
+  auditableUnitId    String? // FK a AuditableUnit (nuevo modelo)
+  auditProjectId     String? // FK a AuditProject  (P.4 — Banco de Proyectos)
+  estimatedHours     Float     @default(0)
+  tentativeStartDate DateTime?
+  tentativeEndDate   DateTime?
+  priority           Int       @default(1) // 1=alta, 2=media, 3=baja
   // Origen del item en el plan
-  isMandatory         Boolean  @default(false)  // mandato regulatorio → bypass scoring
-  mandatoryReason     String?  // "Ley 29720 Art. 5"
-  originScore         Float?   // totalScore en el momento de selección (trazabilidad)
+  isMandatory        Boolean   @default(false) // mandato regulatorio → bypass scoring
+  mandatoryReason    String? // "Ley 29720 Art. 5"
+  originScore        Float? // totalScore en el momento de selección (trazabilidad)
   // Vínculo con la auditoría cuando se ejecuta
-  auditId             String?  @unique // FK a Audit (una vez iniciada)
-  notes               String?
+  auditId            String?   @unique // FK a Audit (una vez iniciada)
+  notes              String?
   // L2.4 — Asignación de equipo / responsable
-  responsibleName     String?  // nombre libre del auditor líder asignado
-  teamNotes           String?  // notas de equipo (ej. "Senior + 2 juniors")
+  responsibleName    String? // nombre libre del auditor líder asignado
+  teamNotes          String? // notas de equipo (ej. "Senior + 2 juniors")
 
-  plan           AuditPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
-  auditEntity    AuditEntity?   @relation(fields: [auditEntityId], references: [id])
-  auditableUnit  AuditableUnit? @relation(fields: [auditableUnitId], references: [id])
-  auditProject   AuditProject?  @relation(fields: [auditProjectId], references: [id])
-  audit          Audit?         @relation("PlanItemAudit", fields: [auditId], references: [id])
-  timeEntries    TimeEntry[]
+  plan          AuditPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  auditEntity   AuditEntity?   @relation(fields: [auditEntityId], references: [id])
+  auditableUnit AuditableUnit? @relation(fields: [auditableUnitId], references: [id])
+  auditProject  AuditProject?  @relation(fields: [auditProjectId], references: [id])
+  audit         Audit?         @relation("PlanItemAudit", fields: [auditId], references: [id])
+  timeEntries   TimeEntry[]
 
   @@index([planId])
   @@index([auditableUnitId])
@@ -952,22 +955,22 @@ enum TimeEntryCategory {
 
 // L2.8 — Registro de horas (timesheet) por auditor/auditoría
 model TimeEntry {
-  id              String    @id @default(cuid())
-  organizationId  String
-  auditId         String?
-  planItemId      String?
-  userId          String
-  workDate        DateTime
-  hours           Float
-  description     String?
-  category        TimeEntryCategory @default(CLIENT_BILLABLE)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String            @id @default(cuid())
+  organizationId String
+  auditId        String?
+  planItemId     String?
+  userId         String
+  workDate       DateTime
+  hours          Float
+  description    String?
+  category       TimeEntryCategory @default(CLIENT_BILLABLE)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  audit         Audit?        @relation(fields: [auditId], references: [id])
-  planItem      AuditPlanItem? @relation(fields: [planItemId], references: [id])
-  user          User          @relation(fields: [userId], references: [id])
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  audit        Audit?         @relation(fields: [auditId], references: [id])
+  planItem     AuditPlanItem? @relation(fields: [planItemId], references: [id])
+  user         User           @relation(fields: [userId], references: [id])
 
   @@index([organizationId])
   @@index([auditId])
@@ -997,23 +1000,23 @@ model HolidayConfig {
 }
 
 model UserAvailabilityProfile {
-  id                    String   @id @default(cuid())
-  organizationId        String
-  userId                String
-  year                  Int
-  workingDaysPerWeek    Int      @default(5)
-  standardDailyHours    Float    @default(8)
-  annualVacationDays    Float    @default(15)
-  estimatedSickDays     Float    @default(5)
-  estimatedLeaveDays    Float    @default(3)
-  grossWorkingDays      Int      @default(0)
-  netAvailableDays      Float    @default(0)
-  netAvailableHours     Float    @default(0)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  organizationId     String
+  userId             String
+  year               Int
+  workingDaysPerWeek Int      @default(5)
+  standardDailyHours Float    @default(8)
+  annualVacationDays Float    @default(15)
+  estimatedSickDays  Float    @default(5)
+  estimatedLeaveDays Float    @default(3)
+  grossWorkingDays   Int      @default(0)
+  netAvailableDays   Float    @default(0)
+  netAvailableHours  Float    @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   costProfile  UserCostProfile?
 
   @@unique([organizationId, userId, year])
@@ -1044,8 +1047,8 @@ model UserCostProfile {
   updatedAt                 DateTime @updatedAt
 
   organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  availabilityProfile  UserAvailabilityProfile? @relation(fields: [availabilityProfileId], references: [id])
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  availabilityProfile UserAvailabilityProfile? @relation(fields: [availabilityProfileId], references: [id])
 
   @@unique([organizationId, userId, year])
   @@index([organizationId])
@@ -1217,19 +1220,19 @@ model RiskRegister {
   auditEntityId  String?
   title          String
   description    String
-  category       String   // estratégico | operacional | financiero | TI | compliance | reputacional | ESG
-  probability    Int      // 1-5
-  impact         Int      // 1-5
-  inherentScore  Int      // probability * impact
+  category       String // estratégico | operacional | financiero | TI | compliance | reputacional | ESG
+  probability    Int // 1-5
+  impact         Int // 1-5
+  inherentScore  Int // probability * impact
   controlsScore  Int      @default(0) // efectividad controles
-  residualScore  Int      // calculado
+  residualScore  Int // calculado
   kris           Json     @default("[]") // Key Risk Indicators
   trend          String   @default("STABLE") // INCREASING | STABLE | DECREASING
   lastUpdated    DateTime @default(now())
   createdAt      DateTime @default(now())
 
-  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  auditEntity   AuditEntity? @relation(fields: [auditEntityId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  auditEntity  AuditEntity? @relation(fields: [auditEntityId], references: [id])
 
   @@index([organizationId])
   @@index([organizationId, inherentScore])
@@ -1239,91 +1242,91 @@ model RiskRegister {
 // ─── MÓDULO 05: EJECUCIÓN DE AUDITORÍA ────────────────────────────────────────
 
 model Audit {
-  id                      String      @id @default(cuid())
-  organizationId          String
-  planId                  String?
-  auditEntityId           String?
-  title                   String
-  type                    AuditType
-  status                  AuditStatus @default(PLANNING)
-  scope                   String?
-  objectives              String?
-  startDate               DateTime?
-  endDate                 DateTime?
-  estimatedHours          Float       @default(0)
-  actualHours             Float       @default(0)
-  leadAuditorId           String?
+  id             String      @id @default(cuid())
+  organizationId String
+  planId         String?
+  auditEntityId  String?
+  title          String
+  type           AuditType
+  status         AuditStatus @default(PLANNING)
+  scope          String?
+  objectives     String?
+  startDate      DateTime?
+  endDate        DateTime?
+  estimatedHours Float       @default(0)
+  actualHours    Float       @default(0)
+  leadAuditorId  String?
 
   // Sub-tipo (especialización dentro del tipo principal)
-  subtype                 String?     // EEFF_COMPLETO | PROCESO | SEGURIDAD | etc.
+  subtype String? // EEFF_COMPLETO | PROCESO | SEGURIDAD | etc.
 
   // ─── Planificación Anual — trazabilidad ──────────────────────────────────
-  originType              AuditOriginType @default(PLANNED)
-  auditPeriodStart        DateTime?   // período examinado (≠ fechas de ejecución)
-  auditPeriodEnd          DateTime?
-  methodology             String?     // RISK_BASED|COMPLIANCE|SUBSTANTIVE|ANALYTICAL
-  reportIssuanceDate      DateTime?   // fecha emisión del informe final
-  deferralReason          String?     // si status = DEFERRED
-  deferredToDate          DateTime?   // nueva fecha tentativa si fue diferida
+  originType         AuditOriginType @default(PLANNED)
+  auditPeriodStart   DateTime? // período examinado (≠ fechas de ejecución)
+  auditPeriodEnd     DateTime?
+  methodology        String? // RISK_BASED|COMPLIANCE|SUBSTANTIVE|ANALYTICAL
+  reportIssuanceDate DateTime? // fecha emisión del informe final
+  deferralReason     String? // si status = DEFERRED
+  deferredToDate     DateTime? // nueva fecha tentativa si fue diferida
 
   // ─── Auditorías Imprevistas — documentación de la solicitud ──────────────
   // Aplica cuando originType = UNPLANNED_COMMITTEE | UNPLANNED_MANAGEMENT | UNPLANNED_REGULATOR
-  requestedByName         String?     // Nombre del solicitante (si es externo al sistema)
-  requestedByRole         String?     // Cargo / Rol del solicitante
-  requestDate             DateTime?   // Fecha formal de la solicitud
-  requestReason           String?     // Motivo / justificación de la solicitud
-  requestAntecedents      String?     // Antecedentes relevantes (contexto previo)
+  requestedByName    String? // Nombre del solicitante (si es externo al sistema)
+  requestedByRole    String? // Cargo / Rol del solicitante
+  requestDate        DateTime? // Fecha formal de la solicitud
+  requestReason      String? // Motivo / justificación de la solicitud
+  requestAntecedents String? // Antecedentes relevantes (contexto previo)
 
   // ─── Opinión final de la auditoría ───────────────────────────────────────
-  auditOpinion            AuditOpinion?   // retroalimenta universo / coverage gap
+  auditOpinion AuditOpinion? // retroalimenta universo / coverage gap
 
   // Modo investigación forense
-  isInvestigationMode     Boolean     @default(false)
+  isInvestigationMode      Boolean   @default(false)
   investigationActivatedAt DateTime?
   investigationActivatedBy String?
 
   // Materialidad (NIA 320)
-  materiality             Decimal?    @db.Decimal(15, 2)
-  materialityExecution    Decimal?    @db.Decimal(15, 2) // 75% de MG
-  materialityAccumulation Decimal?    @db.Decimal(15, 2) // 50% de MG
-  materialityBase         String?     // PROFIT_BEFORE_TAX | TOTAL_REVENUE | etc.
-  materialityBaseAmount   Decimal?    @db.Decimal(15, 2)
+  materiality             Decimal? @db.Decimal(15, 2)
+  materialityExecution    Decimal? @db.Decimal(15, 2) // 75% de MG
+  materialityAccumulation Decimal? @db.Decimal(15, 2) // 50% de MG
+  materialityBase         String? // PROFIT_BEFORE_TAX | TOTAL_REVENUE | etc.
+  materialityBaseAmount   Decimal? @db.Decimal(15, 2)
 
   // Modelo de riesgo de auditoría (NIA 200)
-  auditRiskModel          Json?       // { inherentRisk, controlRisk, detectionRisk, ... }
+  auditRiskModel Json? // { inherentRisk, controlRisk, detectionRisk, ... }
 
   // PI.7d — Orquestador de pruebas IA
-  lastAiTestRunAt         DateTime?
-  lastAiTestSummary       Json?       // { ranAt, durationMs, tests: [{ kind, status, ... }], findingIds[], summary }
+  lastAiTestRunAt   DateTime?
+  lastAiTestSummary Json? // { ranAt, durationMs, tests: [{ kind, status, ... }], findingIds[], summary }
 
-  createdAt               DateTime    @default(now())
-  updatedAt               DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  organization           Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  auditEntity            AuditEntity?           @relation(fields: [auditEntityId], references: [id])
-  planItem               AuditPlanItem?         @relation("PlanItemAudit")
-  team                   AuditTeam[]
-  workingPapers          WorkingPaper[]
-  timeEntries            TimeEntry[]
-  pbcRequests            PbcRequest[]
-  findings               Finding[]
-  dataAnalysisJobs       DataAnalysisJob[]
-  auditReports           AuditReport[]
-  externalConfirmations  ExternalConfirmation[]
-  bcpAudit               BcpAudit?
-  connectorImports       ConnectorImport[]
-  requestDocuments       AuditRequestDocument[]
-  trialBalances          TrialBalance[]
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  auditEntity           AuditEntity?           @relation(fields: [auditEntityId], references: [id])
+  planItem              AuditPlanItem?         @relation("PlanItemAudit")
+  team                  AuditTeam[]
+  workingPapers         WorkingPaper[]
+  timeEntries           TimeEntry[]
+  pbcRequests           PbcRequest[]
+  findings              Finding[]
+  dataAnalysisJobs      DataAnalysisJob[]
+  auditReports          AuditReport[]
+  externalConfirmations ExternalConfirmation[]
+  bcpAudit              BcpAudit?
+  connectorImports      ConnectorImport[]
+  requestDocuments      AuditRequestDocument[]
+  trialBalances         TrialBalance[]
   // ─── Expediente de auditoría (fases y carpetas) ───────────────────────────
-  phases                 AuditPhase[]
-  folders                AuditFolder[]
+  phases                AuditPhase[]
+  folders               AuditFolder[]
 
-  templateId              String?
-  template                AuditTemplate? @relation(fields: [templateId], references: [id])
+  templateId String?
+  template   AuditTemplate? @relation(fields: [templateId], references: [id])
 
-  restoreLogs             AuditRestoreLog[]
-  fieldEvidences          FieldEvidence[]
-  engagement              Engagement?    @relation("EngagementAudit")
+  restoreLogs    AuditRestoreLog[]
+  fieldEvidences FieldEvidence[]
+  engagement     Engagement?       @relation("EngagementAudit")
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -1339,16 +1342,16 @@ model Audit {
 // AUDIT_SCOPED_MODELS (no forma parte de lo que se respalda/restaura de un
 // encargo — es metadata DEL SISTEMA sobre el encargo, no del encargo).
 model AuditRestoreLog {
-  id                    String   @id @default(cuid())
-  auditId               String
-  restoredById          String
-  restoredAt            DateTime @default(now())
-  backupGeneradoEn      DateTime
-  backupGeneradoPor     String   // AuthUser.id de quien generó el backup (puede no existir ya)
-  backupAuditTitulo     String   // título del encargo al momento del backup — informativo
-  totalFilasCreadas     Int
-  totalArchivosSubidos  Int
-  advertencias          Json?
+  id                   String   @id @default(cuid())
+  auditId              String
+  restoredById         String
+  restoredAt           DateTime @default(now())
+  backupGeneradoEn     DateTime
+  backupGeneradoPor    String // AuthUser.id de quien generó el backup (puede no existir ya)
+  backupAuditTitulo    String // título del encargo al momento del backup — informativo
+  totalFilasCreadas    Int
+  totalArchivosSubidos Int
+  advertencias         Json?
 
   audit      Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
   restoredBy User  @relation(fields: [restoredById], references: [id])
@@ -1361,60 +1364,60 @@ model AuditRestoreLog {
 // TEXT_NOTE/AUDIO_NOTE (Fase 1), INTERVIEW_AUDIO (Fase 2), ANNOTATED_PHOTO (Fase 3)
 // ya son procesados por el pipeline. SHORT_VIDEO (Fase 4) sigue pendiente.
 enum FieldEvidenceKind {
-  TEXT_NOTE        // texto libre / lluvia de ideas — Fase 1
-  AUDIO_NOTE       // nota de voz corta del auditor — Fase 1
-  INTERVIEW_AUDIO  // entrevista formal (diarización) — Fase 2
-  ANNOTATED_PHOTO  // foto anotada — Fase 3
-  SHORT_VIDEO      // video corto — Fase 4
+  TEXT_NOTE // texto libre / lluvia de ideas — Fase 1
+  AUDIO_NOTE // nota de voz corta del auditor — Fase 1
+  INTERVIEW_AUDIO // entrevista formal (diarización) — Fase 2
+  ANNOTATED_PHOTO // foto anotada — Fase 3
+  SHORT_VIDEO // video corto — Fase 4
 }
 
 enum FieldEvidenceStatus {
-  UPLOADED      // ingesta completa (custodia sellada), pipeline no arrancado
-  TRANSCRIBING  // en el ai-service (solo kinds con audio/video)
-  EXTRACTING    // transcripción lista, extracción LLM en curso (EVD-05)
-  READY         // hallazgos sugeridos disponibles para revisión
-  FAILED        // errorMsg poblado; reintentable
+  UPLOADED // ingesta completa (custodia sellada), pipeline no arrancado
+  TRANSCRIBING // en el ai-service (solo kinds con audio/video)
+  EXTRACTING // transcripción lista, extracción LLM en curso (EVD-05)
+  READY // hallazgos sugeridos disponibles para revisión
+  FAILED // errorMsg poblado; reintentable
 }
 
 enum EvidenceFindingDisposition {
-  PENDING    // sugerido por la IA, sin revisar
-  ACCEPTED   // el auditor lo aceptó (fila materializada en la sección destino)
-  DISCARDED  // el auditor lo descartó
-  PROMOTED   // aceptado Y promovido a PT-HALL
+  PENDING // sugerido por la IA, sin revisar
+  ACCEPTED // el auditor lo aceptó (fila materializada en la sección destino)
+  DISCARDED // el auditor lo descartó
+  PROMOTED // aceptado Y promovido a PT-HALL
 }
 
 model FieldEvidence {
-  id             String              @id @default(cuid())
-  auditId        String              // denormalizado — consultas y alcance de backup
-  paperId        String
-  sectionKey     String              // granularidad: (papel, sección) — capacidad general, no solo entrevistas
-  kind           FieldEvidenceKind
-  status         FieldEvidenceStatus @default(UPLOADED)
+  id         String              @id @default(cuid())
+  auditId    String // denormalizado — consultas y alcance de backup
+  paperId    String
+  sectionKey String // granularidad: (papel, sección) — capacidad general, no solo entrevistas
+  kind       FieldEvidenceKind
+  status     FieldEvidenceStatus @default(UPLOADED)
 
   // ── Custodia (molde: StepEvidence, extendido) ──
-  storageKey     String?   // ruta bare en bucket audit-files; null para TEXT_NOTE
+  storageKey     String? // ruta bare en bucket audit-files; null para TEXT_NOTE
   filename       String?
   mimeType       String?
-  size           Int       @default(0)
-  sha256         String    // SHA-256 de los bytes originales (TEXT_NOTE: del texto UTF-8)
-  textoOriginal  String?   // solo TEXT_NOTE — el texto ES la evidencia
+  size           Int      @default(0)
+  sha256         String // SHA-256 de los bytes originales (TEXT_NOTE: del texto UTF-8)
+  textoOriginal  String? // solo TEXT_NOTE — el texto ES la evidencia
   capturedById   String
-  capturedByName String    // snapshot — sobrevive si la cuenta se elimina
-  capturedAt     DateTime  // cuándo se capturó en campo (puede ≠ uploadedAt)
-  uploadedAt     DateTime  @default(now())
-  consentimiento Boolean   @default(false) // obligatorio true para INTERVIEW_AUDIO
-  lugar          String?   // "Bodega central, Soyapango"
-  descripcion    String?   // contexto del auditor: "arqueo de caja chica, turno noche"
-  anotaciones    Json?     // ANNOTATED_PHOTO (EVD-14): [{tipo, x, y, ..., nota?}] en coords 0-1 relativas a la imagen — la foto original nunca se modifica (custodia)
+  capturedByName String // snapshot — sobrevive si la cuenta se elimina
+  capturedAt     DateTime // cuándo se capturó en campo (puede ≠ uploadedAt)
+  uploadedAt     DateTime @default(now())
+  consentimiento Boolean  @default(false) // obligatorio true para INTERVIEW_AUDIO
+  lugar          String? // "Bodega central, Soyapango"
+  descripcion    String? // contexto del auditor: "arqueo de caja chica, turno noche"
+  anotaciones    Json? // ANNOTATED_PHOTO (EVD-14): [{tipo, x, y, ..., nota?}] en coords 0-1 relativas a la imagen — la foto original nunca se modifica (custodia)
 
   // ── Resultado del pipeline ──
-  transcript            Json?    // {texto, segmentos, idioma, duracion_seg} — ver EVD-03/whisper_service
-  extraccionRaw         Json?    // salida cruda del LLM (trazabilidad) — hallazgos viven en su propia tabla
+  transcript            Json? // {texto, segmentos, idioma, duracion_seg} — ver EVD-03/whisper_service
+  extraccionRaw         Json? // salida cruda del LLM (trazabilidad) — hallazgos viven en su propia tabla
   procesamientoIniciado DateTime? // para el reaper perezoso — timeout a los 30 min
   errorMsg              String?
   processingMs          Int?
-  modeloTranscripcion   String?  // "faster-whisper/base/int8"
-  modeloLlm             String?  // del retorno del LLM Router (EVD-05)
+  modeloTranscripcion   String? // "faster-whisper/base/int8"
+  modeloLlm             String? // del retorno del LLM Router (EVD-05)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1431,23 +1434,23 @@ model FieldEvidence {
 }
 
 model FieldEvidenceFinding {
-  id           String  @id @default(cuid())
-  evidenceId   String
-  tipo         String  // contradiccion | evasiva | anomalia_visual | riesgo_mencionado | inconsistencia_con_expediente | incumplimiento_mencionado
-  descripcion  String
-  citaTextual  String  // debe existir literal en la fuente (validado en EVD-06)
-  fuenteRef    String? // "mm:ss" (audio/video) | "zona #N" (foto) | null (texto)
-  nivelRiesgo  String  // bajo | medio | alto
-  justificacion String?
-  validadaCita Boolean // resultado del check anti-alucinación (EVD-06)
+  id                    String  @id @default(cuid())
+  evidenceId            String
+  tipo                  String // contradiccion | evasiva | anomalia_visual | riesgo_mencionado | inconsistencia_con_expediente | incumplimiento_mencionado
+  descripcion           String
+  citaTextual           String // debe existir literal en la fuente (validado en EVD-06)
+  fuenteRef             String? // "mm:ss" (audio/video) | "zona #N" (foto) | null (texto)
+  nivelRiesgo           String // bajo | medio | alto
+  justificacion         String?
+  validadaCita          Boolean // resultado del check anti-alucinación (EVD-06)
   referenciasExpediente Json? // [{code, sectionKey?, motivo}] — propuestas por el LLM (EVD-07)
 
   // ── Disposición humana (molde: DataFlag) ──
   disposition       EvidenceFindingDisposition @default(PENDING)
   reviewedById      String?
   reviewedAt        DateTime?
-  targetSectionKey  String?  // dónde se materializó la fila al aceptar
-  promotedToPaperId String?  // WorkingPaper PT-HALL creado al promover
+  targetSectionKey  String? // dónde se materializó la fila al aceptar
+  promotedToPaperId String? // WorkingPaper PT-HALL creado al promover
 
   createdAt DateTime @default(now())
 
@@ -1464,7 +1467,7 @@ model AuditPhase {
   id            String      @id @default(cuid())
   auditId       String
   phaseType     PhaseType
-  name          String      // Nombre display editable: "Planificación de la Auditoría"
+  name          String // Nombre display editable: "Planificación de la Auditoría"
   order         Int         @default(0)
   status        PhaseStatus @default(PENDING)
   signedOffById String?
@@ -1474,9 +1477,9 @@ model AuditPhase {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
-  audit        Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  signedOffBy  User?        @relation("PhaseSignOff", fields: [signedOffById], references: [id])
-  folders      AuditFolder[]
+  audit       Audit         @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  signedOffBy User?         @relation("PhaseSignOff", fields: [signedOffById], references: [id])
+  folders     AuditFolder[]
 
   @@unique([auditId, phaseType])
   @@index([auditId])
@@ -1489,20 +1492,20 @@ model AuditPhase {
 model AuditFolder {
   id          String   @id @default(cuid())
   auditId     String
-  phaseId     String?  // null = sin fase asignada (caso raro)
-  parentId    String?  // null = carpeta raíz de la fase
-  ref         String   // "A", "A-1", "A-1.2" — editable por usuario
-  name        String   // "Planificación", "Comunicación de Auditoría"
+  phaseId     String? // null = sin fase asignada (caso raro)
+  parentId    String? // null = carpeta raíz de la fase
+  ref         String // "A", "A-1", "A-1.2" — editable por usuario
+  name        String // "Planificación", "Comunicación de Auditoría"
   description String?
   sortOrder   Int      @default(0)
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  audit    Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  phase    AuditPhase?  @relation(fields: [phaseId], references: [id])
-  parent   AuditFolder?  @relation("FolderTree", fields: [parentId], references: [id])
-  children AuditFolder[] @relation("FolderTree")
+  audit    Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  phase    AuditPhase?    @relation(fields: [phaseId], references: [id])
+  parent   AuditFolder?   @relation("FolderTree", fields: [parentId], references: [id])
+  children AuditFolder[]  @relation("FolderTree")
   papers   WorkingPaper[]
 
   @@index([auditId])
@@ -1517,17 +1520,17 @@ model AuditFolder {
 model IndexTemplate {
   id             String   @id @default(cuid())
   organizationId String
-  name           String   @db.VarChar(120)  // "IIA Estándar", "Auditoría TI"…
+  name           String   @db.VarChar(120) // "IIA Estándar", "Auditoría TI"…
   description    String?
-  isDefault      Boolean  @default(false)   // única plantilla por defecto de la org
-  isSystem       Boolean  @default(false)   // precargada — no se puede eliminar
-  structure      Json     // PhaseTemplate[] (phaseType, name, order, folders[])
+  isDefault      Boolean  @default(false) // única plantilla por defecto de la org
+  isSystem       Boolean  @default(false) // precargada — no se puede eliminar
+  structure      Json // PhaseTemplate[] (phaseType, name, order, folders[])
   createdById    String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy     User         @relation("IndexTemplateCreator", fields: [createdById], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("IndexTemplateCreator", fields: [createdById], references: [id])
 
   @@index([organizationId])
   @@map("index_templates")
@@ -1537,25 +1540,25 @@ model IndexTemplate {
 // Define qué papeles crear automáticamente al iniciar una auditoría.
 // Reemplaza/extiende el mapa AUDIT_TYPE_INDEX hardcodeado.
 model AuditTemplate {
-  id             String      @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
-  name           String      @db.VarChar(150)
+  name           String   @db.VarChar(150)
   description    String?
-  auditTypes     Json        // AuditType[] — tipos para los que aparece en el selector
-  papers         Json        // PaperDef[] — { code, indexSection, title, type, wpKind, paperCode? }
-  isDefault      Boolean     @default(false)  // default para sus tipos aplicables
-  isSystem       Boolean     @default(false)  // precargada — solo se puede duplicar
-  sections       Json?       // SectionDef[] — folder structure: { ref, name, phaseType, children? }
-  links          Json?       // PaperLinkDef[] — { sourceCode, sourceField, targetCode, targetField, mappingType?, description? }
-  code           String?     // identificador estable para referenciar la plantilla desde código (p. ej. AUDIT_EXTERNAL_FINANCIAL_V1)
+  auditTypes     Json // AuditType[] — tipos para los que aparece en el selector
+  papers         Json // PaperDef[] — { code, indexSection, title, type, wpKind, paperCode? }
+  isDefault      Boolean  @default(false) // default para sus tipos aplicables
+  isSystem       Boolean  @default(false) // precargada — solo se puede duplicar
+  sections       Json? // SectionDef[] — folder structure: { ref, name, phaseType, children? }
+  links          Json? // PaperLinkDef[] — { sourceCode, sourceField, targetCode, targetField, mappingType?, description? }
+  code           String? // identificador estable para referenciar la plantilla desde código (p. ej. AUDIT_EXTERNAL_FINANCIAL_V1)
   createdById    String
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      User         @relation("AuditTemplateCreator", fields: [createdById], references: [id])
-  audits         Audit[]
-  engagements    Engagement[]
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("AuditTemplateCreator", fields: [createdById], references: [id])
+  audits       Audit[]
+  engagements  Engagement[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -1581,33 +1584,33 @@ model ContentLibraryItem {
   id             String             @id @default(cuid())
   organizationId String
   kind           ContentLibraryKind
-  groupKey       String             // "C-01" (área) | "S1"-"S5" (componente COSO)
-  groupLabel     String?            // etiqueta legible del grupo para la UI de administración
-  itemLabel      String             // procedimiento (texto completo) | nombre del principio
-  itemSubtitle   String?            // Técnica (Inspección/Confirmación/...) — solo procedimientos
-  itemDetails    Json?              // string[] — preguntas del principio — solo COSO
+  groupKey       String // "C-01" (área) | "S1"-"S5" (componente COSO)
+  groupLabel     String? // etiqueta legible del grupo para la UI de administración
+  itemLabel      String // procedimiento (texto completo) | nombre del principio
+  itemSubtitle   String? // Técnica (Inspección/Confirmación/...) — solo procedimientos
+  itemDetails    Json? // string[] — preguntas del principio — solo COSO
   sortOrder      Int                @default(0)
   isSystem       Boolean            @default(false)
   createdById    String
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      User         @relation("ContentLibraryItemCreator", fields: [createdById], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("ContentLibraryItemCreator", fields: [createdById], references: [id])
 
   @@index([organizationId, kind, groupKey])
   @@map("content_library_items")
 }
 
 model AuditTeam {
-  id          String   @id @default(cuid())
-  auditId     String
-  userId      String
-  role        String   @default("AUDITOR") // LEAD | AUDITOR | SUPERVISOR | OBSERVER
-  assignedAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  auditId    String
+  userId     String
+  role       String   @default("AUDITOR") // LEAD | AUDITOR | SUPERVISOR | OBSERVER
+  assignedAt DateTime @default(now())
 
-  audit  Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  user   User  @relation(fields: [userId], references: [id])
+  audit Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
 
   @@unique([auditId, userId])
   @@index([auditId])
@@ -1618,116 +1621,116 @@ model AuditTeam {
 // Adjuntos que respaldan la solicitud (acta del comité, carta de fiscalizador,
 // memorando de gerencia, etc.). Mismos tipos de archivo que wpKind=FILE.
 model AuditRequestDocument {
-  id            String   @id @default(cuid())
-  auditId       String
-  uploadedById  String
-  filename      String   // nombre en Storage (uuid-safe)
-  originalName  String   // nombre original del archivo
-  mimeType      String   // application/pdf | image/* | application/vnd.openxmlformats...
-  fileSize      Int      // bytes
-  fileUrl       String   // Supabase Storage public URL
-  description   String?  // comentario libre del auditor
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  auditId      String
+  uploadedById String
+  filename     String // nombre en Storage (uuid-safe)
+  originalName String // nombre original del archivo
+  mimeType     String // application/pdf | image/* | application/vnd.openxmlformats...
+  fileSize     Int // bytes
+  fileUrl      String // Supabase Storage public URL
+  description  String? // comentario libre del auditor
+  createdAt    DateTime @default(now())
 
-  audit       Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  uploadedBy  User  @relation("UploadedRequestDocs", fields: [uploadedById], references: [id])
+  audit      Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation("UploadedRequestDocs", fields: [uploadedById], references: [id])
 
   @@index([auditId])
   @@map("audit_request_documents")
 }
 
 model AuditProgram {
-  id             String   @id @default(cuid())
-  auditId        String   @unique
-  title          String
-  objectives     String?
-  steps          Json     @default("[]")
-  generatedByAI  Boolean  @default(false)
-  approvedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String    @id @default(cuid())
+  auditId       String    @unique
+  title         String
+  objectives    String?
+  steps         Json      @default("[]")
+  generatedByAI Boolean   @default(false)
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([auditId])
   @@map("audit_programs")
 }
 
 model WorkingPaper {
-  id              String             @id @default(cuid())
-  auditId         String
+  id                String                  @id @default(cuid())
+  auditId           String
   // ─── Expediente: ubicación en el árbol de carpetas ────────────────────────
-  folderId        String?            // null = papel sin carpeta asignada (legacy)
-  ref             String?            // "A-01", "B-2.3" — código editable por usuario
+  folderId          String? // null = papel sin carpeta asignada (legacy)
+  ref               String? // "A-01", "B-2.3" — código editable por usuario
   // ─── Identificadores legacy (mantener para compatibilidad) ────────────────
-  code            String             // A-1, B-2, C-3, D-1, E-1, AD-1
-  indexSection    String             // A | B | C | D | E | AD
-  title           String
-  type            WorkingPaperType
+  code              String // A-1, B-2, C-3, D-1, E-1, AD-1
+  indexSection      String // A | B | C | D | E | AD
+  title             String
+  type              WorkingPaperType
   // ─── Intelligent Papers ───────────────────────────────────────────────────
-  wpKind          WpKind             @default(STANDARD)
-  syncStatus      SyncStatus         @default(DRAFT)
-  lastSyncedAt    DateTime?
-  narrative       String?
-  paperCode       String?
+  wpKind            WpKind                  @default(STANDARD)
+  syncStatus        SyncStatus              @default(DRAFT)
+  lastSyncedAt      DateTime?
+  narrative         String?
+  paperCode         String?
   // ─── Encabezado estándar de papel de trabajo ──────────────────────────────
-  status          WorkingPaperStatus @default(IN_PROGRESS)
-  periodStart     DateTime?          // Inicio del período auditado
-  periodEnd       DateTime?          // Fin del período auditado
-  notesToReviewer String?            // Canal preparer → revisor
-  carryForward    Boolean            @default(false) // Copiar a próximo año
+  status            WorkingPaperStatus      @default(IN_PROGRESS)
+  periodStart       DateTime? // Inicio del período auditado
+  periodEnd         DateTime? // Fin del período auditado
+  notesToReviewer   String? // Canal preparer → revisor
+  carryForward      Boolean                 @default(false) // Copiar a próximo año
   // ─── Firma adicional (Gerente / CAE) ─────────────────────────────────────
-  signedOffById   String?
-  signedOffAt     DateTime?
+  signedOffById     String?
+  signedOffAt       DateTime?
   // ─── F6.2 Sign-off matrix timestamps ─────────────────────────────────────
-  preparedAt      DateTime?          // Fecha firma preparador
-  reviewedAt      DateTime?          // Fecha firma revisor
+  preparedAt        DateTime? // Fecha firma preparador
+  reviewedAt        DateTime? // Fecha firma revisor
   // ─── F6.4 Retención y bloqueo ─────────────────────────────────────────────
-  retentionUntil  DateTime?          // Fecha hasta la que debe conservarse
+  retentionUntil    DateTime? // Fecha hasta la que debe conservarse
   // ─── Campos existentes ───────────────────────────────────────────────────
-  content         Json               @default("{}")
-  conclusion      String?
-  preparedById    String?
-  reviewedById    String?
-  qualityScore    Int?               // 0-100
-  qualityReport   Json?              // reporte completo del Quality Gate (issues, strengths, recommendation, level)
-  qualityCheckedAt DateTime?
-  version         Int                @default(1)
-  tickMarks       Json               @default("[]")
-  crossReferences Json               @default("[]")
-  aiAssisted      Boolean            @default(false)
-  parentPaperId   String?
+  content           Json                    @default("{}")
+  conclusion        String?
+  preparedById      String?
+  reviewedById      String?
+  qualityScore      Int? // 0-100
+  qualityReport     Json? // reporte completo del Quality Gate (issues, strengths, recommendation, level)
+  qualityCheckedAt  DateTime?
+  version           Int                     @default(1)
+  tickMarks         Json                    @default("[]")
+  crossReferences   Json                    @default("[]")
+  aiAssisted        Boolean                 @default(false)
+  parentPaperId     String?
   // ─── F6.6 Checkout / collaborative lock ──────────────────────────────────
-  checkedOutById  String?            // userId que tiene el paper abierto para edición
-  checkedOutAt    DateTime?          // timestamp del checkout (auto-expires 30 min)
+  checkedOutById    String? // userId que tiene el paper abierto para edición
+  checkedOutAt      DateTime? // timestamp del checkout (auto-expires 30 min)
   // ─── F6.7 Trial Balance links ─────────────────────────────────────────────
   trialBalanceLinks TrialBalancePaperLink[]
   // ─── Archivo adjunto (wpKind = FILE) ─────────────────────────────────────
-  fileUrl          String?           // Supabase Storage public URL
-  originalFilename String?           // Nombre original del archivo
-  mimeType         String?           // MIME type (application/vnd.openxmlformats...)
-  fileSize         Int?              // Tamaño en bytes
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  fileUrl           String? // Supabase Storage public URL
+  originalFilename  String? // Nombre original del archivo
+  mimeType          String? // MIME type (application/vnd.openxmlformats...)
+  fileSize          Int? // Tamaño en bytes
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
-  audit        Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  folder       AuditFolder?   @relation(fields: [folderId], references: [id])
-  preparedBy   User?          @relation("PreparedBy",   fields: [preparedById],  references: [id])
-  reviewedBy   User?          @relation("ReviewedBy",   fields: [reviewedById],  references: [id])
-  signedOffBy  User?          @relation("WpSignedOffBy", fields: [signedOffById], references: [id])
-  parent       WorkingPaper?  @relation("PaperHierarchy", fields: [parentPaperId], references: [id])
-  children     WorkingPaper[] @relation("PaperHierarchy")
-  versions     WorkingPaperVersion[]
-  comments     WorkingPaperComment[]
-  tickEntries  TickMarkEntry[]
-  findings     Finding[]
+  audit          Audit                 @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  folder         AuditFolder?          @relation(fields: [folderId], references: [id])
+  preparedBy     User?                 @relation("PreparedBy", fields: [preparedById], references: [id])
+  reviewedBy     User?                 @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  signedOffBy    User?                 @relation("WpSignedOffBy", fields: [signedOffById], references: [id])
+  parent         WorkingPaper?         @relation("PaperHierarchy", fields: [parentPaperId], references: [id])
+  children       WorkingPaper[]        @relation("PaperHierarchy")
+  versions       WorkingPaperVersion[]
+  comments       WorkingPaperComment[]
+  tickEntries    TickMarkEntry[]
+  findings       Finding[]
   // ─── Knowledge graph relations ────────────────────────────────────────────
-  sourceLinks   PaperLink[]       @relation("SourcePaper")  // Este papel alimenta a...
-  targetLinks   PaperLink[]       @relation("TargetPaper")  // Este papel recibe de...
-  sections      PaperSection[]                              // Secciones tipadas (PT Inteligente)
+  sourceLinks    PaperLink[]           @relation("SourcePaper") // Este papel alimenta a...
+  targetLinks    PaperLink[]           @relation("TargetPaper") // Este papel recibe de...
+  sections       PaperSection[] // Secciones tipadas (PT Inteligente)
   // ─── @mention references ─────────────────────────────────────────────────
-  refsFromHere  PaperReference[]  @relation("RefSource")   // Este papel menciona a...
-  refsToHere    PaperReference[]  @relation("RefTarget")   // Este papel es mencionado por...
+  refsFromHere   PaperReference[]      @relation("RefSource") // Este papel menciona a...
+  refsToHere     PaperReference[]      @relation("RefTarget") // Este papel es mencionado por...
   // ─── F6.3 PBC links ───────────────────────────────────────────────────────
-  pbcLinks      PbcPaperLink[]
+  pbcLinks       PbcPaperLink[]
   // ─── EVD-04 Evidencia de campo ─────────────────────────────────────────────
   fieldEvidences FieldEvidence[]
 
@@ -1742,18 +1745,18 @@ model WorkingPaper {
 
 // ─── GRAFO DE CONOCIMIENTO: Arcos entre papeles ───────────────────────────────
 model PaperLink {
-  id           String      @id @default(cuid())
-  sourceId     String      // PT que genera el dato
-  targetId     String      // PT que consume el dato
-  sourceField  String      // Clave de sección fuente (e.g., "S3.riskLevel")
-  targetField  String      // Clave de sección destino (e.g., "S2.inherentRisk")
-  mappingType  MappingType @default(DIRECT)
-  description  String?     // Descripción human-readable del flujo de datos
-  isActive     Boolean     @default(true)
-  createdAt    DateTime    @default(now())
+  id          String      @id @default(cuid())
+  sourceId    String // PT que genera el dato
+  targetId    String // PT que consume el dato
+  sourceField String // Clave de sección fuente (e.g., "S3.riskLevel")
+  targetField String // Clave de sección destino (e.g., "S2.inherentRisk")
+  mappingType MappingType @default(DIRECT)
+  description String? // Descripción human-readable del flujo de datos
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
 
-  source  WorkingPaper @relation("SourcePaper", fields: [sourceId], references: [id], onDelete: Cascade)
-  target  WorkingPaper @relation("TargetPaper", fields: [targetId], references: [id], onDelete: Cascade)
+  source WorkingPaper @relation("SourcePaper", fields: [sourceId], references: [id], onDelete: Cascade)
+  target WorkingPaper @relation("TargetPaper", fields: [targetId], references: [id], onDelete: Cascade)
 
   @@index([sourceId])
   @@index([targetId])
@@ -1764,22 +1767,22 @@ model PaperLink {
 model PaperSection {
   id           String    @id @default(cuid())
   paperId      String
-  sectionKey   String    // S1, S2, S3... o campo específico
-  label        String    // Nombre display de la sección
-  description  String?   // Instrucción para el auditor
+  sectionKey   String // S1, S2, S3... o campo específico
+  label        String // Nombre display de la sección
+  description  String? // Instrucción para el auditor
   fieldType    FieldType @default(TEXT)
-  value        Json?     // Valor actual (tipado según fieldType)
-  options      Json?     // Para ENUM_SELECT: lista de opciones
+  value        Json? // Valor actual (tipado según fieldType)
+  options      Json? // Para ENUM_SELECT: lista de opciones
   isRequired   Boolean   @default(false)
-  isAutoFilled Boolean   @default(false)   // true = llenado por propagación del grafo
-  sourceRef    String?   // "paperId::sectionKey" origen si isAutoFilled = true
+  isAutoFilled Boolean   @default(false) // true = llenado por propagación del grafo
+  sourceRef    String? // "paperId::sectionKey" origen si isAutoFilled = true
   sortOrder    Int       @default(0)
-  aiHint       String?   // Contexto para el agente IA al generar esta sección
-  attachments  Json?     // [{ id, filename, url, mimeType, size, uploadedAt }] — documentos de soporte
+  aiHint       String? // Contexto para el agente IA al generar esta sección
+  attachments  Json? // [{ id, filename, url, mimeType, size, uploadedAt }] — documentos de soporte
   // ─── PI.2 Granular cascade invalidation ──────────────────────────────────
-  isStale      Boolean   @default(false)   // true = la fuente cambió, requiere revisión
-  staleSince   DateTime?                   // cuándo se marcó stale
-  staleReason  String?                     // qué fuente cambió y por qué
+  isStale      Boolean   @default(false) // true = la fuente cambió, requiere revisión
+  staleSince   DateTime? // cuándo se marcó stale
+  staleReason  String? // qué fuente cambió y por qué
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -1794,21 +1797,21 @@ model PaperSection {
 
 // ─── @MENTION REFERENCIAS ENTRE PAPELES ──────────────────────────────────────
 model PaperReference {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   // Origen — la sección que contiene el @mention
   sourcePaperId    String
-  sourceSectionKey String   // sectionKey del campo que contiene el token @[CODE::SKEY]
+  sourceSectionKey String // sectionKey del campo que contiene el token @[CODE::SKEY]
   // Destino — el papel/sección referenciado
   targetPaperId    String
-  targetSectionKey String?  // null = referencia al papel completo (RefType.INDEX)
+  targetSectionKey String? // null = referencia al papel completo (RefType.INDEX)
   // Tipo
-  refType          RefType  @default(FIELD)
+  refType          RefType   @default(FIELD)
   // Timestamps
   resolvedAt       DateTime? // última propagación de valor
   createdAt        DateTime  @default(now())
 
-  sourcePaper  WorkingPaper @relation("RefSource", fields: [sourcePaperId], references: [id], onDelete: Cascade)
-  targetPaper  WorkingPaper @relation("RefTarget", fields: [targetPaperId], references: [id], onDelete: Cascade)
+  sourcePaper WorkingPaper @relation("RefSource", fields: [sourcePaperId], references: [id], onDelete: Cascade)
+  targetPaper WorkingPaper @relation("RefTarget", fields: [targetPaperId], references: [id], onDelete: Cascade)
 
   @@unique([sourcePaperId, sourceSectionKey, targetPaperId, targetSectionKey])
   @@index([sourcePaperId])
@@ -1818,18 +1821,18 @@ model PaperReference {
 
 // ─── Fiscal SV — Padrón DGII (cache local de contribuyentes) ─────────────────
 model DgiiContribuyente {
-  id              String   @id @default(cuid())
-  organizationId  String   // multi-tenant: cada org carga su padrón
-  nit             String   // 14 dígitos (sin guiones)
-  nrc             String?  // 6 dígitos (Número Registro de Contribuyente)
-  nombre          String
-  giro            String?  // actividad económica CIIU
-  estado          String   // ACTIVO | SUSPENDIDO | CANCELADO | INSCRITO
-  categoria       String?  // PEQUEÑO | MEDIANO | GRANDE | INDIVIDUAL
-  fechaInscripcion DateTime?
+  id                String    @id @default(cuid())
+  organizationId    String // multi-tenant: cada org carga su padrón
+  nit               String // 14 dígitos (sin guiones)
+  nrc               String? // 6 dígitos (Número Registro de Contribuyente)
+  nombre            String
+  giro              String? // actividad económica CIIU
+  estado            String // ACTIVO | SUSPENDIDO | CANCELADO | INSCRITO
+  categoria         String? // PEQUEÑO | MEDIANO | GRANDE | INDIVIDUAL
+  fechaInscripcion  DateTime?
   fechaCambioEstado DateTime?
-  direccion       String?
-  importedAt      DateTime @default(now())
+  direccion         String?
+  importedAt        DateTime  @default(now())
 
   @@unique([organizationId, nit])
   @@index([organizationId, nrc])
@@ -1847,15 +1850,15 @@ model WorkingPaperVersion {
   diff      Json?
 
   // ─── PI.5 — Version history MASTER con diff ──────────────────────────────
-  narrative          String?    // Snapshot del narrative del MASTER en ese momento
-  sectionsSnapshot   Json?      // Array de secciones: [{ sectionKey, label, value, isAutoFilled }]
-  sourcePapersHashes Json?      // { paperCode: SHA-256(sectionsSnapshot) } — para detectar qué fuente cambió
-  reason             String?    // "PT-A1 modificó S3" | "Restauración de v2" | etc.
-  consolidatedById   String?    // userId que disparó la consolidación
-  parentVersionId    String?    // versionNumber de la versión que esta reemplaza
-  isRestore          Boolean    @default(false)  // true si esta versión fue creada por restore
+  narrative          String? // Snapshot del narrative del MASTER en ese momento
+  sectionsSnapshot   Json? // Array de secciones: [{ sectionKey, label, value, isAutoFilled }]
+  sourcePapersHashes Json? // { paperCode: SHA-256(sectionsSnapshot) } — para detectar qué fuente cambió
+  reason             String? // "PT-A1 modificó S3" | "Restauración de v2" | etc.
+  consolidatedById   String? // userId que disparó la consolidación
+  parentVersionId    String? // versionNumber de la versión que esta reemplaza
+  isRestore          Boolean @default(false) // true si esta versión fue creada por restore
 
-  paper  WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  paper WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 
   @@index([paperId])
   @@index([paperId, version])
@@ -1863,15 +1866,15 @@ model WorkingPaperVersion {
 }
 
 model WorkingPaperComment {
-  id          String   @id @default(cuid())
-  paperId     String
-  authorId    String
-  content     String
-  resolved    Boolean  @default(false)
-  resolvedBy  String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  paperId    String
+  authorId   String
+  content    String
+  resolved   Boolean  @default(false)
+  resolvedBy String?
+  createdAt  DateTime @default(now())
 
-  paper  WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  paper WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 
   @@index([paperId])
   @@map("working_paper_comments")
@@ -1880,13 +1883,13 @@ model WorkingPaperComment {
 model TickMarkEntry {
   id        String   @id @default(cuid())
   paperId   String
-  fieldPath String   // ruta del campo en el JSON del papel
+  fieldPath String // ruta del campo en el JSON del papel
   tickMark  TickMark
   note      String?
   createdBy String
   createdAt DateTime @default(now())
 
-  paper  WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  paper WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 
   @@index([paperId])
   @@index([paperId, tickMark])
@@ -1896,26 +1899,26 @@ model TickMarkEntry {
 // ─── MÓDULO 05b: CONFIRMACIONES EXTERNAS (NIA 505) ────────────────────────────
 
 model ExternalConfirmation {
-  id                      String             @id @default(cuid())
-  auditId                 String
-  type                    ConfirmationType
-  respondentName          String
-  respondentEmail         String
-  amount                  Decimal?           @db.Decimal(15, 2)
-  accountRef              String?
-  sentAt                  DateTime?
-  sentBy                  String?
-  responseReceivedAt      DateTime?
-  responseContent         String?
-  responseAmount          Decimal?           @db.Decimal(15, 2)
-  difference              Decimal?           @db.Decimal(15, 2)
-  differenceExplanation   String?
-  status                  ConfirmationStatus @default(DRAFT)
-  alternativeProcedure    String?
-  createdAt               DateTime           @default(now())
-  updatedAt               DateTime           @updatedAt
+  id                    String             @id @default(cuid())
+  auditId               String
+  type                  ConfirmationType
+  respondentName        String
+  respondentEmail       String
+  amount                Decimal?           @db.Decimal(15, 2)
+  accountRef            String?
+  sentAt                DateTime?
+  sentBy                String?
+  responseReceivedAt    DateTime?
+  responseContent       String?
+  responseAmount        Decimal?           @db.Decimal(15, 2)
+  difference            Decimal?           @db.Decimal(15, 2)
+  differenceExplanation String?
+  status                ConfirmationStatus @default(DRAFT)
+  alternativeProcedure  String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
-  audit  Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  audit Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
 
   @@index([auditId])
   @@index([auditId, status])
@@ -1925,7 +1928,7 @@ model ExternalConfirmation {
 // ─── MÓDULO 06: PORTAL DEL AUDITADO ───────────────────────────────────────────
 
 model PbcRequest {
-  id               String          @id @default(cuid())
+  id               String           @id @default(cuid())
   auditId          String
   organizationId   String
   title            String
@@ -1944,10 +1947,10 @@ model PbcRequest {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  audit         Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  messages      PbcMessage[]
-  paperLinks    PbcPaperLink[]
+  audit        Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  organization Organization   @relation(fields: [organizationId], references: [id])
+  messages     PbcMessage[]
+  paperLinks   PbcPaperLink[]
 
   @@index([auditId])
   @@index([organizationId])
@@ -1970,8 +1973,8 @@ model PbcPaperLink {
   createdById String
   createdAt   DateTime @default(now())
 
-  pbc         PbcRequest   @relation(fields: [pbcId],   references: [id], onDelete: Cascade)
-  paper       WorkingPaper @relation(fields: [paperId],  references: [id], onDelete: Cascade)
+  pbc   PbcRequest   @relation(fields: [pbcId], references: [id], onDelete: Cascade)
+  paper WorkingPaper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 
   @@unique([pbcId, paperId, sectionKey, rowId])
   @@index([paperId])
@@ -1985,8 +1988,8 @@ model TrialBalance {
   auditId      String
   orgId        String
   filename     String
-  periodLabel  String   // e.g. "Diciembre 2024"
-  accounts     Json     // array: { code, name, debit, credit, balance }
+  periodLabel  String // e.g. "Diciembre 2024"
+  accounts     Json // array: { code, name, debit, credit, balance }
   totalDebit   Decimal  @db.Decimal(18, 2)
   totalCredit  Decimal  @db.Decimal(18, 2)
   isBalanced   Boolean  @default(false)
@@ -1994,22 +1997,22 @@ model TrialBalance {
   importedAt   DateTime @default(now())
 
   // ─── PI.7b: Benford analysis (NIA 240 forensic) ───────────────────────────
-  benfordResult     Json?     // { conformity, risk_score, mad, chi2_*, digits[], top_anomalous_amounts[], interpretation }
-  benfordRunAt      DateTime?
-  benfordFindingId  String?   // Finding draft auto-generated when risk is high
+  benfordResult    Json? // { conformity, risk_score, mad, chi2_*, digits[], top_anomalous_amounts[], interpretation }
+  benfordRunAt     DateTime?
+  benfordFindingId String? // Finding draft auto-generated when risk is high
 
-  audit        Audit                    @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  paperLinks   TrialBalancePaperLink[]
+  audit      Audit                   @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  paperLinks TrialBalancePaperLink[]
 
   @@index([auditId])
   @@map("trial_balances")
 }
 
 model TrialBalancePaperLink {
-  id             String @id @default(cuid())
+  id             String   @id @default(cuid())
   trialBalanceId String
   paperId        String
-  accountCodes   Json   @default("[]")  // selected account codes
+  accountCodes   Json     @default("[]") // selected account codes
   note           String?
   createdAt      DateTime @default(now())
   createdById    String
@@ -2032,7 +2035,7 @@ model PbcMessage {
   attachmentUrls Json     @default("[]")
   createdAt      DateTime @default(now())
 
-  request  PbcRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request PbcRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@index([requestId])
   @@map("pbc_messages")
@@ -2041,44 +2044,44 @@ model PbcMessage {
 // ─── MÓDULO 07: HALLAZGOS Y RECOMENDACIONES ───────────────────────────────────
 
 model Finding {
-  id                   String          @id @default(cuid())
-  auditId              String
-  workingPaperId       String?
-  organizationId       String
-  title                String
-  condition            String
-  criteria             String
-  cause                String
-  effect               String
-  risk                 String
-  recommendation       String
-  managementResponse   String?
-  severity             FindingSeverity
-  status               FindingStatus   @default(DRAFT)
-  qualityScore         Int             @default(0) // 0-100, mínimo 60 para pasar a revisión
-  aiDraftUsed          Boolean         @default(false)
-  normativeReference   String?         // Nombre de la norma
-  normativeArticle     String?         // Artículo exacto
-  isMaterial           Boolean?        // vs materialidad del audit
-  effectAmount         Decimal?        @db.Decimal(15, 2)
-  responsibleId        String?
-  dueDate              DateTime?
-  closedAt             DateTime?
-  closedById           String?
-  isRecurring          Boolean         @default(false)
-  previousFindingId    String?
-  escalationLevel      EscalationLevel @default(NONE)
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
+  id                 String          @id @default(cuid())
+  auditId            String
+  workingPaperId     String?
+  organizationId     String
+  title              String
+  condition          String
+  criteria           String
+  cause              String
+  effect             String
+  risk               String
+  recommendation     String
+  managementResponse String?
+  severity           FindingSeverity
+  status             FindingStatus   @default(DRAFT)
+  qualityScore       Int             @default(0) // 0-100, mínimo 60 para pasar a revisión
+  aiDraftUsed        Boolean         @default(false)
+  normativeReference String? // Nombre de la norma
+  normativeArticle   String? // Artículo exacto
+  isMaterial         Boolean? // vs materialidad del audit
+  effectAmount       Decimal?        @db.Decimal(15, 2)
+  responsibleId      String?
+  dueDate            DateTime?
+  closedAt           DateTime?
+  closedById         String?
+  isRecurring        Boolean         @default(false)
+  previousFindingId  String?
+  escalationLevel    EscalationLevel @default(NONE)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
-  audit          Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  workingPaper   WorkingPaper?  @relation(fields: [workingPaperId], references: [id])
-  organization   Organization   @relation(fields: [organizationId], references: [id])
-  responsible    User?          @relation("FindingResponsible", fields: [responsibleId], references: [id])
-  previousFinding Finding?      @relation("FindingRecurrence", fields: [previousFindingId], references: [id])
-  relatedFindings Finding[]     @relation("FindingRecurrence")
-  actions        FindingAction[]
-  comments       FindingComment[]
+  audit           Audit            @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  workingPaper    WorkingPaper?    @relation(fields: [workingPaperId], references: [id])
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  responsible     User?            @relation("FindingResponsible", fields: [responsibleId], references: [id])
+  previousFinding Finding?         @relation("FindingRecurrence", fields: [previousFindingId], references: [id])
+  relatedFindings Finding[]        @relation("FindingRecurrence")
+  actions         FindingAction[]
+  comments        FindingComment[]
 
   @@index([auditId])
   @@index([organizationId])
@@ -2089,21 +2092,21 @@ model Finding {
 }
 
 model FindingAction {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   findingId      String
   organizationId String
   description    String
   responsibleId  String?
   dueDate        DateTime
   completionDate DateTime?
-  status         String   @default("PENDING") // PENDING | IN_PROGRESS | COMPLETED | OVERDUE
-  progressPct    Int      @default(0)
-  evidenceUrls   Json     @default("[]")
+  status         String    @default("PENDING") // PENDING | IN_PROGRESS | COMPLETED | OVERDUE
+  progressPct    Int       @default(0)
+  evidenceUrls   Json      @default("[]")
   comments       String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  finding  Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  finding Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
   @@index([findingId])
   @@map("finding_actions")
@@ -2117,7 +2120,7 @@ model FindingComment {
   isInternal Boolean  @default(true)
   createdAt  DateTime @default(now())
 
-  finding  Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  finding Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
 
   @@index([findingId])
   @@map("finding_comments")
@@ -2126,20 +2129,20 @@ model FindingComment {
 // ─── MÓDULO 08: ANALYTICS DE DATOS ────────────────────────────────────────────
 
 model DataAnalysisJob {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   auditId        String
   organizationId String
-  type           String   // GL_ANALYSIS | AP_DUPLICATES | PAYROLL | BENFORD | ANOMALY_ML | etc.
-  status         String   @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED
-  parameters     Json     @default("{}")
+  type           String // GL_ANALYSIS | AP_DUPLICATES | PAYROLL | BENFORD | ANOMALY_ML | etc.
+  status         String    @default("PENDING") // PENDING | RUNNING | COMPLETED | FAILED
+  parameters     Json      @default("{}")
   resultsSummary Json?
-  flaggedCount   Int      @default(0)
-  totalRecords   Int      @default(0)
+  flaggedCount   Int       @default(0)
+  totalRecords   Int       @default(0)
   processingMs   Int?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
   completedAt    DateTime?
 
-  audit        Audit       @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  audit        Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id])
   flags        DataFlag[]
 
@@ -2149,20 +2152,20 @@ model DataAnalysisJob {
 }
 
 model DataFlag {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   jobId       String
   auditId     String
-  entityRef   String   // ID de la transacción o registro analizado
+  entityRef   String // ID de la transacción o registro analizado
   description String
-  riskScore   Float    // 0.0-1.0
-  anomalyType String   // DUPLICATE | ROUND_AMOUNT | OUT_OF_HOURS | BENFORD | ML_ANOMALY | etc.
+  riskScore   Float // 0.0-1.0
+  anomalyType String // DUPLICATE | ROUND_AMOUNT | OUT_OF_HOURS | BENFORD | ML_ANOMALY | etc.
   rawData     Json
   reviewedBy  String?
   reviewedAt  DateTime?
-  disposition String?  // ACCEPTED | FALSE_POSITIVE | FINDING_CREATED
-  createdAt   DateTime @default(now())
+  disposition String? // ACCEPTED | FALSE_POSITIVE | FINDING_CREATED
+  createdAt   DateTime  @default(now())
 
-  job  DataAnalysisJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job DataAnalysisJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@index([jobId])
   @@index([auditId])
@@ -2173,22 +2176,22 @@ model DataFlag {
 // ─── MÓDULO 09: REPORTERÍA ─────────────────────────────────────────────────────
 
 model AuditReport {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   auditId          String
   organizationId   String
-  type             String   // EXECUTIVE | DETAILED | FOLLOW_UP | COMMITTEE
+  type             String // EXECUTIVE | DETAILED | FOLLOW_UP | COMMITTEE
   title            String
-  content          Json     @default("{}")
-  version          Int      @default(1)
-  aiGenerated      Boolean  @default(false)
+  content          Json      @default("{}")
+  version          Int       @default(1)
+  aiGenerated      Boolean   @default(false)
   aiModelUsed      String?
-  status           String   @default("DRAFT") // DRAFT | IN_REVIEW | APPROVED | DISTRIBUTED
+  status           String    @default("DRAFT") // DRAFT | IN_REVIEW | APPROVED | DISTRIBUTED
   approvedById     String?
   approvedAt       DateTime?
-  distributionList Json     @default("[]")
+  distributionList Json      @default("[]")
   scheduledAt      DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   audit        Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -2202,10 +2205,10 @@ model AuditReport {
 
 model Template {
   id             String   @id @default(cuid())
-  organizationId String?  // null = template global del sistema
+  organizationId String? // null = template global del sistema
   title          String
-  category       String   // Planificación | Ejecución | Hallazgos | Informe | Seguimiento
-  type           String   // WORKING_PAPER | CHECKLIST | INTERVIEW_GUIDE | CONFIRMATION | PBC
+  category       String // Planificación | Ejecución | Hallazgos | Informe | Seguimiento
+  type           String // WORKING_PAPER | CHECKLIST | INTERVIEW_GUIDE | CONFIRMATION | PBC
   content        Json
   dynamicFields  Json     @default("[]") // campos que se auto-completan al insertar
   isPublic       Boolean  @default(false)
@@ -2216,7 +2219,7 @@ model Template {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization  Organization? @relation(fields: [organizationId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([category])
@@ -2226,19 +2229,19 @@ model Template {
 // ─── BASE DE CONOCIMIENTO RAG ─────────────────────────────────────────────────
 
 model KnowledgeDocument {
-  id             String   @id @default(cuid())
-  organizationId String?  // null = base global del sistema
+  id             String    @id @default(cuid())
+  organizationId String? // null = base global del sistema
   title          String
-  docType        String   // PDF | WORD | TXT
+  docType        String // PDF | WORD | TXT
   ragBase        RagBase
-  scope          DocScope @default(CLIENT)
+  scope          DocScope  @default(CLIENT)
   fileUrl        String?
-  status         String   @default("PENDING") // PENDING | PROCESSING | READY | FAILED
-  chunkCount     Int      @default(0)
+  status         String    @default("PENDING") // PENDING | PROCESSING | READY | FAILED
+  chunkCount     Int       @default(0)
   processedAt    DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
-  organization  Organization? @relation(fields: [organizationId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([ragBase, scope])
@@ -2248,22 +2251,22 @@ model KnowledgeDocument {
 // ─── MÓDULO 11: MOTOR IA Y AGENTES ────────────────────────────────────────────
 
 model AIInteraction {
-  id              String   @id @default(cuid())
-  organizationId  String
-  userId          String
-  agentName       String   // Scriptorium | Argus | Hermes | Cicero | etc.
-  modelUsed       String
-  inputTokens     Int
-  outputTokens    Int
-  latencyMs       Int
-  taskType        String
-  approved        Boolean?
-  feedbackScore   Int?     // 1-5
-  metadata        Json     @default("{}")
-  createdAt       DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  agentName      String // Scriptorium | Argus | Hermes | Cicero | etc.
+  modelUsed      String
+  inputTokens    Int
+  outputTokens   Int
+  latencyMs      Int
+  taskType       String
+  approved       Boolean?
+  feedbackScore  Int? // 1-5
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now())
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  user          User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
 
   @@index([organizationId])
   @@index([organizationId, agentName])
@@ -2283,7 +2286,7 @@ model LLMRouterLog {
   latencyMs      Int
   createdAt      DateTime @default(now())
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([createdAt])
@@ -2304,7 +2307,7 @@ model ComplianceAssessment {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([organizationId, framework])
@@ -2312,21 +2315,21 @@ model ComplianceAssessment {
 }
 
 model NormativeException {
-  id                    String   @id @default(cuid())
-  organizationId        String
-  framework             String
-  controlRef            String   // Ej: ISO 27001 A.8.2
-  justification         String
-  compensatingControl   String?
-  approvedBy            String
-  approvedAt            DateTime
-  expiresAt             DateTime
-  residualRiskLevel     String   // LOW | MEDIUM | HIGH
-  riskOwnerSignature    String?
-  active                Boolean  @default(true)
-  createdAt             DateTime @default(now())
+  id                  String   @id @default(cuid())
+  organizationId      String
+  framework           String
+  controlRef          String // Ej: ISO 27001 A.8.2
+  justification       String
+  compensatingControl String?
+  approvedBy          String
+  approvedAt          DateTime
+  expiresAt           DateTime
+  residualRiskLevel   String // LOW | MEDIUM | HIGH
+  riskOwnerSignature  String?
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([organizationId, active])
@@ -2336,35 +2339,35 @@ model NormativeException {
 // ─── MÓDULO 13: QAIP ──────────────────────────────────────────────────────────
 
 model QaipEvaluation {
-  id             String            @id @default(cuid())
+  id             String             @id @default(cuid())
   organizationId String
   type           QaipEvaluationType
-  period         String            // Q1-2026 | 2026 | etc.
-  results        Json              @default("{}")
-  overallScore   Int               @default(0) // 0-100
-  status         String            @default("IN_PROGRESS")
+  period         String // Q1-2026 | 2026 | etc.
+  results        Json               @default("{}")
+  overallScore   Int                @default(0) // 0-100
+  status         String             @default("IN_PROGRESS")
   conductedBy    String
   conductedAt    DateTime
   nextDueAt      DateTime?
-  createdAt      DateTime          @default(now())
+  createdAt      DateTime           @default(now())
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@map("qaip_evaluations")
 }
 
 model IndependenceDeclaration {
-  id               String   @id @default(cuid())
-  organizationId   String
-  caeId            String
-  year             Int
-  declarationText  String
-  signedAt         DateTime
-  documentUrl      String?
-  createdAt        DateTime @default(now())
+  id              String   @id @default(cuid())
+  organizationId  String
+  caeId           String
+  year            Int
+  declarationText String
+  signedAt        DateTime
+  documentUrl     String?
+  createdAt       DateTime @default(now())
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([organizationId, year])
   @@index([organizationId])
@@ -2381,7 +2384,7 @@ model AuditCharter {
   effectiveDate  DateTime
   createdAt      DateTime @default(now())
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@map("audit_charters")
@@ -2390,38 +2393,38 @@ model AuditCharter {
 // ─── MÓDULO 14: COMITÉ DE AUDITORÍA ───────────────────────────────────────────
 
 model CommitteeSession {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   organizationId  String
   sessionDate     DateTime
-  agenda          Json     @default("[]")
+  agenda          Json      @default("[]")
   minutes         Json?
-  attendees       Json     @default("[]")
-  status          String   @default("SCHEDULED") // SCHEDULED | COMPLETED | CANCELLED
+  attendees       Json      @default("[]")
+  status          String    @default("SCHEDULED") // SCHEDULED | COMPLETED | CANCELLED
   nextSessionDate DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  organization  Organization       @relation(fields: [organizationId], references: [id])
-  reports       CommitteeReport[]
+  organization Organization      @relation(fields: [organizationId], references: [id])
+  reports      CommitteeReport[]
 
   @@index([organizationId])
   @@map("committee_sessions")
 }
 
 model CommitteeReport {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
   sessionId      String?
   period         String
-  type           String   // QUARTERLY | ANNUAL | SPECIAL
+  type           String // QUARTERLY | ANNUAL | SPECIAL
   content        Json
   preparedById   String
   approvedById   String?
   approvedAt     DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
-  organization  Organization      @relation(fields: [organizationId], references: [id])
-  session       CommitteeSession? @relation(fields: [sessionId], references: [id])
+  organization Organization      @relation(fields: [organizationId], references: [id])
+  session      CommitteeSession? @relation(fields: [sessionId], references: [id])
 
   @@index([organizationId])
   @@map("committee_reports")
@@ -2430,18 +2433,18 @@ model CommitteeReport {
 // ─── MÓDULO 15: BCP/DRP ───────────────────────────────────────────────────────
 
 model BcpAudit {
-  id                 String   @id @default(cuid())
-  auditId            String   @unique
-  organizationId     String
-  framework          String   @default("ISO_22301")
-  bcpMaturityScore   Int?     // 1-5
-  components         Json     @default("{}")
-  rtoRpoAssessment   Json?
-  lastTestedAt       DateTime?
-  recommendations    Json     @default("[]")
-  createdAt          DateTime @default(now())
+  id               String    @id @default(cuid())
+  auditId          String    @unique
+  organizationId   String
+  framework        String    @default("ISO_22301")
+  bcpMaturityScore Int? // 1-5
+  components       Json      @default("{}")
+  rtoRpoAssessment Json?
+  lastTestedAt     DateTime?
+  recommendations  Json      @default("[]")
+  createdAt        DateTime  @default(now())
 
-  audit  Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  audit Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("bcp_audits")
@@ -2463,8 +2466,8 @@ model Notification {
   channel        NotificationChannel @default(IN_APP)
   createdAt      DateTime            @default(now())
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  user          User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
 
   @@index([userId, read])
   @@index([organizationId])
@@ -2474,27 +2477,27 @@ model Notification {
 // ─── MÓDULO 16: CONECTORES DE DATOS (2.6-2.8) ─────────────────────────────────
 
 model DataSource {
-  id              String          @id @default(cuid())
-  organizationId  String
-  name            String
-  type            DataSourceType
-  status          ConnectorStatus @default(INACTIVE)
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  type           DataSourceType
+  status         ConnectorStatus @default(INACTIVE)
   // Connection config (credenciales almacenadas como JSON — encriptar en prod)
-  config          Json            @default("{}")
+  config         Json            @default("{}")
   // Metadata para test de conectividad
-  lastTestedAt    DateTime?
-  lastTestStatus  String?         // "ok" | "error"
-  lastTestError   String?
+  lastTestedAt   DateTime?
+  lastTestStatus String? // "ok" | "error"
+  lastTestError  String?
   // Estadísticas de importaciones
-  lastImportAt    DateTime?
-  totalImports    Int             @default(0)
-  createdById     String
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  lastImportAt   DateTime?
+  totalImports   Int             @default(0)
+  createdById    String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
-  organization  Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy     User              @relation(fields: [createdById], references: [id])
-  imports       ConnectorImport[]
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User              @relation(fields: [createdById], references: [id])
+  imports      ConnectorImport[]
 
   @@index([organizationId])
   @@index([organizationId, type])
@@ -2502,20 +2505,20 @@ model DataSource {
 }
 
 model ConnectorImport {
-  id           String       @id @default(cuid())
-  sourceId     String
-  auditId      String?
-  status       ImportStatus @default(PENDING)
+  id          String       @id @default(cuid())
+  sourceId    String
+  auditId     String?
+  status      ImportStatus @default(PENDING)
   // Resultados
-  recordCount  Int?
-  errorMsg     String?
-  result       Json?        // resumen de datos importados
+  recordCount Int?
+  errorMsg    String?
+  result      Json? // resumen de datos importados
   // Tiempos
-  startedAt    DateTime     @default(now())
-  completedAt  DateTime?
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
 
-  source  DataSource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  audit   Audit?      @relation(fields: [auditId], references: [id])
+  source DataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  audit  Audit?     @relation(fields: [auditId], references: [id])
 
   @@index([sourceId])
   @@index([auditId])
@@ -2528,69 +2531,69 @@ model ConnectorImport {
 // ══════════════════════════════════════════════════════════════════════════════
 
 enum ProcStatus {
-  PENDING      // Sin comenzar
-  IN_PROGRESS  // Al menos un paso iniciado
-  COMPLETED    // Todos los pasos aprobados
-  NA           // No aplicable
+  PENDING // Sin comenzar
+  IN_PROGRESS // Al menos un paso iniciado
+  COMPLETED // Todos los pasos aprobados
+  NA // No aplicable
 }
 
 enum StepStatus {
-  DRAFT        // Borrador — no enviado a revisión
-  IN_PROGRESS  // En ejecución
-  SUBMITTED    // Enviado a primera revisión
-  REVIEWED     // Revisado (puede tener notas)
-  CLEARED      // Notas del revisor limpiadas
-  APPROVED     // Socio/CAE aprobado
+  DRAFT // Borrador — no enviado a revisión
+  IN_PROGRESS // En ejecución
+  SUBMITTED // Enviado a primera revisión
+  REVIEWED // Revisado (puede tener notas)
+  CLEARED // Notas del revisor limpiadas
+  APPROVED // Socio/CAE aprobado
 }
 
 enum StepConclusion {
-  PENDING      // Sin conclusión aún
+  PENDING // Sin conclusión aún
   NO_EXCEPTION // Sin excepción — objetivo cumplido
-  EXCEPTION    // Con excepción — ver exceptionText/exceptionAmount
-  NA           // No aplicable
+  EXCEPTION // Con excepción — ver exceptionText/exceptionAmount
+  NA // No aplicable
 }
 
 enum TestType {
-  DETAIL      // Prueba de detalle (inspección, confirmación, recálculo)
-  ANALYTICAL  // Procedimiento analítico sustantivo (NIA 520)
-  CONTROL     // Prueba de controles (NIA 330 §8)
+  DETAIL // Prueba de detalle (inspección, confirmación, recálculo)
+  ANALYTICAL // Procedimiento analítico sustantivo (NIA 520)
+  CONTROL // Prueba de controles (NIA 330 §8)
 }
 
 enum AuditNature {
-  INSPECTION      // Inspección de documentos y registros
-  OBSERVATION     // Observación de un proceso
-  INQUIRY         // Indagación a la gerencia
-  CONFIRMATION    // Confirmación externa (NIA 505)
-  RECALCULATION   // Recálculo de cómputos
-  REPERFORMANCE   // Rejecución de procedimientos del cliente
-  ANALYTICAL      // Procedimientos analíticos
+  INSPECTION // Inspección de documentos y registros
+  OBSERVATION // Observación de un proceso
+  INQUIRY // Indagación a la gerencia
+  CONFIRMATION // Confirmación externa (NIA 505)
+  RECALCULATION // Recálculo de cómputos
+  REPERFORMANCE // Rejecución de procedimientos del cliente
+  ANALYTICAL // Procedimientos analíticos
 }
 
 enum AuditTiming {
-  INTERIM     // Interino (antes del cierre)
-  YEAR_END    // Al cierre del período
+  INTERIM // Interino (antes del cierre)
+  YEAR_END // Al cierre del período
   ROLLFORWARD // Puente interino → cierre
 }
 
 // Nivel 1 — Procedimiento de auditoría por área/aserción
 model AuditProcedure {
-  id             String     @id @default(cuid())
-  sectionId      String     // FK → PaperSection (PROCEDURE_GRID)
-  refNumber      String     // "B-AR-01", "PROC-01"
-  description    String
-  assertions     String[]   // ["EXI","VAL","COM","OCC","COM","EXA","COR","CLA","PRE"]
-  significantRisk Boolean   @default(false) // ISA 330 §18 — flag binario
-  rmmLevel       String?    // "BAJO" | "MODERADO" | "ALTO" | "MUY_ALTO"
-  rmmRiskRef     String[]   @default([]) // Refs a filas de riesgo (ej. PT-A2::S5::2) — puede haber varios (ISA 330 §28c)
-  wpRef          String?    // Referencia cruzada al papel de trabajo donde se ejecuta/documenta este procedimiento
-  conclusionText String?
-  status         ProcStatus @default(PENDING)
-  sortOrder      Int        @default(0)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  id              String     @id @default(cuid())
+  sectionId       String // FK → PaperSection (PROCEDURE_GRID)
+  refNumber       String // "B-AR-01", "PROC-01"
+  description     String
+  assertions      String[] // ["EXI","VAL","COM","OCC","COM","EXA","COR","CLA","PRE"]
+  significantRisk Boolean    @default(false) // ISA 330 §18 — flag binario
+  rmmLevel        String? // "BAJO" | "MODERADO" | "ALTO" | "MUY_ALTO"
+  rmmRiskRef      String[]   @default([]) // Refs a filas de riesgo (ej. PT-A2::S5::2) — puede haber varios (ISA 330 §28c)
+  wpRef           String? // Referencia cruzada al papel de trabajo donde se ejecuta/documenta este procedimiento
+  conclusionText  String?
+  status          ProcStatus @default(PENDING)
+  sortOrder       Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
-  section  PaperSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  steps    AuditStep[]
+  section PaperSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  steps   AuditStep[]
 
   @@index([sectionId])
   @@index([sectionId, status])
@@ -2600,27 +2603,27 @@ model AuditProcedure {
 // Nivel 2 — Actividad/Paso dentro de un procedimiento
 model AuditStep {
   id                String         @id @default(cuid())
-  procedureId       String         // FK → AuditProcedure
-  refNumber         String         // "B-AR-01-A"
+  procedureId       String // FK → AuditProcedure
+  refNumber         String // "B-AR-01-A"
   description       String
-  assertions        String[]       // puede diferir del padre
+  assertions        String[] // puede diferir del padre
   testType          TestType       @default(DETAIL)
   nature            AuditNature    @default(INSPECTION)
   timing            AuditTiming    @default(YEAR_END)
-  extent            String?        // "45 ítems MUS", "100% de saldo"
-  population        String?        // fuente de datos / universo
-  performedByName   String?        // ISA 230 §9
+  extent            String? // "45 ítems MUS", "100% de saldo"
+  population        String? // fuente de datos / universo
+  performedByName   String? // ISA 230 §9
   performedById     String?
-  datePerformed     DateTime?      // ISA 230 §9 — debe ser ≤ fecha informe
+  datePerformed     DateTime? // ISA 230 §9 — debe ser ≤ fecha informe
   reviewedByName    String?
   reviewedById      String?
   dateReviewed      DateTime?
-  wpRef             String?        // "AR-03-01" — referencia al papel de evidencia
-  resultDescription String?        // ISA 330 §28(d)
+  wpRef             String? // "AR-03-01" — referencia al papel de evidencia
+  resultDescription String? // ISA 330 §28(d)
   conclusion        StepConclusion @default(PENDING)
-  exceptionText     String?        // condicional: descripción de la excepción
+  exceptionText     String? // condicional: descripción de la excepción
   exceptionAmount   Decimal?       @db.Decimal(15, 2) // monto observado
-  difRef            String?        // referencia a PT-DIFS si hay excepción
+  difRef            String? // referencia a PT-DIFS si hay excepción
   hoursPlanned      Float?
   hoursActual       Float?
   status            StepStatus     @default(DRAFT)
@@ -2628,8 +2631,8 @@ model AuditStep {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
-  procedure  AuditProcedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
-  evidences  StepEvidence[]
+  procedure AuditProcedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  evidences StepEvidence[]
 
   @@index([procedureId])
   @@index([procedureId, status])
@@ -2639,18 +2642,58 @@ model AuditStep {
 // Adjuntos por actividad (cédulas B-01, confirmaciones, etc.)
 model StepEvidence {
   id             String   @id @default(cuid())
-  stepId         String   // FK → AuditStep
+  stepId         String // FK → AuditStep
   fileName       String
-  storageKey     String   // Supabase Storage key
-  wpRef          String?  // "AR-03-01"
+  storageKey     String // Supabase Storage key
+  wpRef          String? // "AR-03-01"
   mimeType       String
   size           Int      @default(0) // bytes
   uploadedByName String?
   uploadedById   String?
   uploadedAt     DateTime @default(now())
 
-  step  AuditStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  step AuditStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
 
   @@index([stepId])
   @@map("step_evidences")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tareas Administrativas — sin encargo ni auditoría (brecha vs. AuditBrain)
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum AdminTaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+// Tablero de tareas administrativas generales de la firma (capacitación,
+// gestión interna, seguimiento comercial no ligado a un cliente, etc.) —
+// deliberadamente sin FK a Audit/Engagement: es el espacio para trabajo real
+// del equipo que no cuelga de ningún encargo. Complementa (no reemplaza) la
+// categoría TimeEntryCategory.ADMIN, que registra HORAS; este modelo registra
+// la TAREA en sí (título, responsable, fecha límite, estado).
+model AdminTask {
+  id             String          @id @default(cuid())
+  organizationId String
+  title          String
+  description    String?
+  status         AdminTaskStatus @default(TODO)
+  assignedToId   String?
+  dueDate        DateTime?
+  completedAt    DateTime?
+  createdById    String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedTo   User?        @relation("AdminTaskAssignee", fields: [assignedToId], references: [id])
+  createdBy    User         @relation("AdminTaskCreator", fields: [createdById], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([assignedToId])
+  @@map("admin_tasks")
 }

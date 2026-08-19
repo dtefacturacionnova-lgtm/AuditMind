@@ -24,6 +24,8 @@ import { formatDate } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type AuditModality = 'INTERNAL' | 'EXTERNAL' | 'BOTH';
+
 interface Organization {
   id: string;
   name: string;
@@ -31,6 +33,7 @@ interface Organization {
   plan: string;
   logoUrl?: string;
   primaryColor: string;
+  auditModality: AuditModality;
   settings: Record<string, unknown>;
   createdAt: string;
   _count?: { users: number; audits: number };
@@ -49,8 +52,15 @@ interface UpdateOrganizationDto {
   name?: string;
   logoUrl?: string;
   primaryColor?: string;
+  auditModality?: AuditModality;
   settings?: Record<string, unknown>;
 }
+
+const MODALITY_OPTIONS: { value: AuditModality; label: string; description: string }[] = [
+  { value: 'INTERNAL', label: 'Auditoría Interna',  description: 'Muestra solo "Planificación Anual" (universo de riesgo propio).' },
+  { value: 'EXTERNAL', label: 'Auditoría Externa',   description: 'Muestra solo "Cartera" (clientes, propuestas, encargos).' },
+  { value: 'BOTH',     label: 'Ambas',               description: 'Muestra los dos módulos de planificación en el menú.' },
+];
 
 // ─── Plan config ──────────────────────────────────────────────────────────────
 
@@ -94,6 +104,11 @@ function useUpdateOrganization(orgId: string) {
     onSuccess: (updated) => {
       qc.setQueryData(['organization', orgId], updated);
       qc.invalidateQueries({ queryKey: ['organization', orgId] });
+      // El Sidebar/OrganizationContext lee ['organization', 'me'] (cache separada,
+      // ver apps/web/src/contexts/OrganizationContext.tsx) — sin esto, cambiar la
+      // modalidad de auditoría no se refleja en el menú hasta que expire el
+      // staleTime de 5 minutos o se recargue la página.
+      qc.invalidateQueries({ queryKey: ['organization', 'me'] });
     },
   });
 }
@@ -160,6 +175,7 @@ function OrganizationPageInner() {
   const [logoUrl, setLogoUrl]     = useState('');
   const [primaryColor, setPrimaryColor] = useState('#0F2D4A');
   const [hexInput, setHexInput]   = useState('#0F2D4A');
+  const [auditModality, setAuditModality] = useState<AuditModality>('BOTH');
   const [toastMsg, setToastMsg]   = useState('');
   const [toastOk, setToastOk]     = useState(true);
 
@@ -168,7 +184,8 @@ function OrganizationPageInner() {
     org !== undefined &&
     (name !== (org.name ?? '') ||
       logoUrl !== (org.logoUrl ?? '') ||
-      primaryColor !== (org.primaryColor ?? '#0F2D4A'));
+      primaryColor !== (org.primaryColor ?? '#0F2D4A') ||
+      auditModality !== (org.auditModality ?? 'BOTH'));
 
   // Seed form when data arrives (only once)
   const seeded = useRef(false);
@@ -178,6 +195,7 @@ function OrganizationPageInner() {
       setLogoUrl(org.logoUrl ?? '');
       setPrimaryColor(org.primaryColor ?? '#0F2D4A');
       setHexInput(org.primaryColor ?? '#0F2D4A');
+      setAuditModality(org.auditModality ?? 'BOTH');
       seeded.current = true;
     }
   }, [org]);
@@ -208,6 +226,7 @@ function OrganizationPageInner() {
     if (name !== org?.name) dto.name = name.trim();
     if (logoUrl !== (org?.logoUrl ?? '')) dto.logoUrl = logoUrl.trim() || undefined;
     if (primaryColor !== org?.primaryColor) dto.primaryColor = primaryColor;
+    if (auditModality !== (org?.auditModality ?? 'BOTH')) dto.auditModality = auditModality;
 
     try {
       await updateOrg.mutateAsync(dto);
@@ -379,6 +398,36 @@ function OrganizationPageInner() {
                   />
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Audit modality */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+              <ClipboardList className="h-3.5 w-3.5 text-gray-400" />
+              Modalidad de auditoría
+            </label>
+            <p className="text-xs text-gray-400 -mt-0.5">
+              Controla qué módulo de planificación anual ve el equipo en el menú lateral.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {MODALITY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setAuditModality(opt.value)}
+                  className={`text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                    auditModality === opt.value
+                      ? 'border-[#0F2D4A] bg-[#0F2D4A]/5 ring-1 ring-[#0F2D4A]/20'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <p className={`text-sm font-medium ${auditModality === opt.value ? 'text-[#0F2D4A]' : 'text-gray-800'}`}>
+                    {opt.label}
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{opt.description}</p>
+                </button>
+              ))}
             </div>
           </div>
 

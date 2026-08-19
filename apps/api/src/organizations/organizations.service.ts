@@ -61,8 +61,24 @@ export class OrganizationsService {
         primaryColor: dto.primaryColor,
         plan: dto.subscriptionTier?.toLowerCase(),
         active: true,
+        ...(dto.auditModality !== undefined && { auditModality: dto.auditModality }),
       },
     });
+  }
+
+  async findMine(organizationId: string) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        id: true,
+        name: true,
+        auditModality: true,
+        logoUrl: true,
+        primaryColor: true,
+      },
+    });
+    if (!org) throw new NotFoundException('Organización no encontrada');
+    return org;
   }
 
   async getStats(id: string, user: AuthUser) {

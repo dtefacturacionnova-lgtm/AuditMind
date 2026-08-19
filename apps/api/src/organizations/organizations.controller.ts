@@ -28,6 +28,13 @@ export class OrganizationsController {
     return this.service.findAll();
   }
 
+  @Get('me')
+  @Roles(UserRole.READ_ONLY)
+  @ApiOperation({ summary: 'Obtener datos básicos de la organización del usuario autenticado' })
+  findMine(@CurrentUser() user: AuthUser) {
+    return this.service.findMine(user.organizationId);
+  }
+
   @Get(':id')
   @Roles(UserRole.CAE)
   @ApiOperation({ summary: 'Obtener organización por ID' })

@@ -8,9 +8,11 @@ import {
   ServerCrash, Settings, ChevronDown, ChevronRight,
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
+  Clock, CalendarClock, DollarSign,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
+import { useOrganization, type AuditModality } from '@/contexts/OrganizationContext';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -21,6 +23,9 @@ interface NavItem {
   children?: NavItem[];
   badge?: string;
   disabled?: boolean;
+  /** Restringe la visibilidad del grupo a una modalidad de auditoría específica.
+   *  Sin este campo, el item siempre es visible (comportamiento actual). */
+  module?: 'INTERNAL' | 'EXTERNAL';
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -33,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Planificación Anual',
     icon: CalendarDays,
+    module: 'INTERNAL',
     children: [
       { label: 'Plan Estratégico',          href: '/dashboard/strategic',   icon: Target },
       { label: 'Universo de Auditoría',     href: '/dashboard/universe',    icon: Globe },
@@ -60,6 +66,14 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Hallazgos',              href: '/dashboard/findings',      icon: AlertTriangle },
       { label: 'Portal Auditado (PBC)',   href: '/dashboard/pbc',           icon: Upload },
       { label: 'Confirmaciones Ext.',    href: '/dashboard/confirmations', icon: BadgeCheck },
+    ],
+  },
+  {
+    label: 'Captura de Horas',
+    icon: Clock,
+    children: [
+      { label: 'Captura Semanal',        href: '/dashboard/timesheet',        icon: Clock },
+      { label: 'Reporte Consolidado',    href: '/dashboard/timesheet/report', icon: BarChart3 },
     ],
   },
   {
@@ -101,10 +115,24 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Biblioteca de Contenido', href: '/dashboard/admin/content-library', icon: Library },
       { label: 'Conectores de Datos', href: '/dashboard/admin/data-sources', icon: Plug },
       { label: 'Base de Conocimiento', href: '/dashboard/admin/knowledge', icon: BookOpen },
+      { label: 'Calendario y Capacidad', href: '/dashboard/admin/firm-calendar', icon: CalendarClock },
+      { label: 'Costeo y Tarifas', href: '/dashboard/admin/cost-profiles', icon: DollarSign },
       { label: 'Configuración', href: '/dashboard/admin/settings', icon: Settings },
     ],
   },
 ];
+
+/**
+ * Filtra los grupos de navegación según la modalidad de auditoría de la organización.
+ * - `undefined` (aún cargando) o `'BOTH'` → no filtra nada (evita parpadeo mientras carga).
+ * - `'INTERNAL'` → excluye los items etiquetados `module: 'EXTERNAL'`.
+ * - `'EXTERNAL'` → excluye los items etiquetados `module: 'INTERNAL'`.
+ */
+function getVisibleNavItems(items: NavItem[], modality: AuditModality | undefined): NavItem[] {
+  if (modality === undefined || modality === 'BOTH') return items;
+  const excluded: AuditModality = modality === 'INTERNAL' ? 'EXTERNAL' : 'INTERNAL';
+  return items.filter((item) => item.module !== excluded);
+}
 
 function NavGroup({ item, depth = 0, pathname }: { item: NavItem; depth?: number; pathname: string }) {
   const [open, setOpen] = useState(() => {
@@ -169,7 +197,9 @@ function NavGroup({ item, depth = 0, pathname }: { item: NavItem; depth?: number
 
 export function Sidebar() {
   const { user, signOut } = useUser();
+  const { organization } = useOrganization();
   const pathname = usePathname();
+  const visibleNavItems = getVisibleNavItems(NAV_ITEMS, organization?.auditModality);
 
   return (
     <aside className="flex h-screen w-60 flex-col overflow-hidden bg-[#0F2D4A] shadow-2xl">
@@ -194,7 +224,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 scrollbar-thin scrollbar-thumb-slate-600">
-        {NAV_ITEMS.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavGroup key={item.label} item={item} pathname={pathname} />
         ))}
       </nav>

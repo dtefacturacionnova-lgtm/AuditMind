@@ -1,7 +1,8 @@
 import {
-  IsString, IsInt, IsOptional, IsNumber, IsDateString, IsArray, Min, Max, ArrayNotEmpty,
+  IsString, IsInt, IsOptional, IsNumber, IsDateString, IsArray, Min, Max, ArrayNotEmpty, IsEnum,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { TimeEntryCategory } from '@prisma/client';
 
 export class CreatePlanDto {
   @ApiProperty({ example: 2026 })
@@ -141,6 +142,11 @@ export class CreateTimeEntryDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ enum: TimeEntryCategory, description: 'Default: CLIENT_BILLABLE (aplicado por Prisma si no viene)' })
+  @IsOptional()
+  @IsEnum(TimeEntryCategory)
+  category?: TimeEntryCategory;
 }
 
 export class ImportFromProjectsDto {

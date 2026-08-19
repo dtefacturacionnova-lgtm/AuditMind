@@ -35,6 +35,8 @@ import { FiscalModule } from './fiscal/fiscal.module';
 import { AuditProceduresModule } from './audit-procedures/audit-procedures.module';
 import { AuditBackupModule } from './audits/backup/audit-backup.module';
 import { FieldEvidenceModule } from './working-papers/field-evidence/field-evidence.module';
+import { CapacityModule } from './capacity/capacity.module';
+import { TimesheetModule } from './timesheet/timesheet.module';
 
 @Module({
   imports: [
@@ -70,6 +72,8 @@ import { FieldEvidenceModule } from './working-papers/field-evidence/field-evide
     StrategicModule,
     AuditProjectsModule,
     AuditProceduresModule,
+    TimesheetModule,
+    CapacityModule,
   ],
   providers: [
     // Guards globales — aplican a todos los endpoints excepto los @Public()

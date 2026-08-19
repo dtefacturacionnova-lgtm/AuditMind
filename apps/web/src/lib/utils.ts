@@ -13,6 +13,16 @@ export function formatCurrency(value: number, currency = 'CLP'): string {
   }).format(value);
 }
 
+/** Formatea montos monetarios con 2 decimales, sin atarse a una moneda/locale
+ *  específica (la plataforma no modela "moneda de la organización" todavía).
+ *  Los campos `Decimal` de Prisma llegan del backend serializados como string —
+ *  por eso acepta string|number y siempre normaliza con `Number(...)`. */
+export function formatMoney(value: number | string | null | undefined): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return '$0.00';
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat('es-CL', {
     day: '2-digit',

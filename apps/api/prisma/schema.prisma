@@ -361,6 +361,12 @@ enum ImportStatus {
   FAILED
 }
 
+enum OrgAuditModality {
+  INTERNAL
+  EXTERNAL
+  BOTH
+}
+
 // ─── MÓDULO 01: NÚCLEO MULTI-TENANT ───────────────────────────────────────────
 
 model Organization {
@@ -373,6 +379,7 @@ model Organization {
   primaryColor   String?   @default("#0F2D4A")
   active         Boolean   @default(true)
   trialEndsAt    DateTime?
+  auditModality  OrgAuditModality @default(BOTH)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -410,6 +417,9 @@ model Organization {
   strategicObjectives    StrategicObjective[]
   strategicLines         StrategicLine[]
   auditProjects         AuditProject[]
+  holidayConfigs         HolidayConfig[]
+  availabilityProfiles   UserAvailabilityProfile[]
+  costProfiles           UserCostProfile[]
 
   @@map("organizations")
 }
@@ -450,6 +460,9 @@ model User {
   dataSources       DataSource[]
   auditRestoreLogs  AuditRestoreLog[]
   fieldEvidences    FieldEvidence[]
+  timeEntries       TimeEntry[]
+  availabilityProfiles UserAvailabilityProfile[]
+  costProfiles         UserCostProfile[]
 
   @@index([organizationId])
   @@index([email])
@@ -876,6 +889,18 @@ model AuditPlanItem {
   @@map("audit_plan_items")
 }
 
+enum TimeEntryCategory {
+  CLIENT_BILLABLE
+  CLIENT_NON_BILLABLE
+  ADMIN
+  TRAINING
+  BUSINESS_DEVELOPMENT
+  SICK_LEAVE
+  PERSONAL_LEAVE
+  VACATION
+  OTHER_NON_BILLABLE
+}
+
 // L2.8 — Registro de horas (timesheet) por auditor/auditoría
 model TimeEntry {
   id              String    @id @default(cuid())
@@ -886,18 +911,96 @@ model TimeEntry {
   workDate        DateTime
   hours           Float
   description     String?
+  category        TimeEntryCategory @default(CLIENT_BILLABLE)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   audit         Audit?        @relation(fields: [auditId], references: [id])
   planItem      AuditPlanItem? @relation(fields: [planItemId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
 
   @@index([organizationId])
   @@index([auditId])
   @@index([planItemId])
   @@index([userId])
+  @@index([category])
   @@map("time_entries")
+}
+
+// ─── CALENDARIO Y CAPACIDAD DE LA FIRMA ──────────────────────────────────────
+
+model HolidayConfig {
+  id             String   @id @default(cuid())
+  organizationId String
+  date           DateTime @db.Date
+  label          String
+  recurring      Boolean  @default(false)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, date])
+  @@index([organizationId])
+  @@map("holiday_configs")
+}
+
+model UserAvailabilityProfile {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  userId                String
+  year                  Int
+  workingDaysPerWeek    Int      @default(5)
+  standardDailyHours    Float    @default(8)
+  annualVacationDays    Float    @default(15)
+  estimatedSickDays     Float    @default(5)
+  estimatedLeaveDays    Float    @default(3)
+  grossWorkingDays      Int      @default(0)
+  netAvailableDays      Float    @default(0)
+  netAvailableHours     Float    @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  costProfile  UserCostProfile?
+
+  @@unique([organizationId, userId, year])
+  @@index([organizationId])
+  @@map("user_availability_profiles")
+}
+
+model UserCostProfile {
+  id                        String   @id @default(cuid())
+  organizationId            String
+  userId                    String
+  year                      Int
+  annualBaseSalary          Decimal  @db.Decimal(12, 2)
+  annualBonuses             Decimal  @default(0) @db.Decimal(12, 2)
+  payrollTaxRatePct         Float    @default(0)
+  indirectCostRatePct       Float    @default(0)
+  otherAnnualCosts          Decimal  @default(0) @db.Decimal(12, 2)
+  availabilityProfileId     String?  @unique
+  netAvailableHoursOverride Float?
+  targetMultiplier          Float    @default(3.0)
+  targetUtilizationPct      Float    @default(75)
+  totalAnnualCost           Decimal  @default(0) @db.Decimal(12, 2)
+  costRatePerHour           Decimal  @default(0) @db.Decimal(10, 2)
+  breakEvenBillableRate     Decimal  @default(0) @db.Decimal(10, 2)
+  suggestedBillingRate      Decimal  @default(0) @db.Decimal(10, 2)
+  effectiveOverrideRate     Decimal? @db.Decimal(10, 2)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  organization        Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                 User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  availabilityProfile  UserAvailabilityProfile? @relation(fields: [availabilityProfileId], references: [id])
+
+  @@unique([organizationId, userId, year])
+  @@index([organizationId])
+  @@map("user_cost_profiles")
 }
 
 // ─── MÓDULO 04: EVALUACIÓN DE RIESGOS ─────────────────────────────────────────

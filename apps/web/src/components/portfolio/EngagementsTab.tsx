@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import {
   Briefcase, Plus, BadgeCheck, XCircle, ExternalLink, ShieldAlert,
+  DollarSign, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import {
@@ -11,6 +12,11 @@ import {
   ENGAGEMENT_STATUS_CONFIG, ClientDetail, CreateEngagementData,
 } from '@/hooks/usePortfolio';
 import { formatDateUTC } from '@/lib/utils';
+import { ProfitabilityPanel } from './ProfitabilityPanel';
+
+/** Mismo umbral que ProfitabilityPanel — se repite aquí solo para decidir si se
+ *  muestra el botón (evita importar el componente completo por una constante). */
+const PROFITABILITY_ROLES = ['CAE', 'ADMIN', 'SUPER_ADMIN'];
 
 const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 const label = 'text-xs font-medium text-gray-600';
@@ -130,8 +136,10 @@ function ApproveConfirm({ engagementId, clientName, fiscalYear, onClose }: {
 export function EngagementsTab({ client }: { client: ClientDetail }) {
   const { hasRole } = useUser();
   const canApprove = hasRole(['AUDIT_MANAGER', 'CAE', 'ADMIN', 'SUPER_ADMIN']);
+  const canViewProfitability = hasRole(PROFITABILITY_ROLES);
   const [showNew, setShowNew] = useState(false);
   const [approving, setApproving] = useState<{ id: string; year: number } | null>(null);
+  const [expandedProfitability, setExpandedProfitability] = useState<string | null>(null);
   const cancelEngagement = useCancelEngagement();
 
   return (
@@ -161,44 +169,64 @@ export function EngagementsTab({ client }: { client: ClientDetail }) {
         <div className="space-y-3">
           {client.engagements.map(eng => {
             const cfg = ENGAGEMENT_STATUS_CONFIG[eng.status];
+            const isProfitabilityOpen = expandedProfitability === eng.id;
             return (
-              <div key={eng.id} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">Ejercicio fiscal {eng.fiscalYear}</p>
-                  <p className="text-xs text-gray-400">
-                    Cierre {formatDateUTC(eng.fiscalYearEndDate)}
-                    {eng.plannedStartDate && ` · Planeado ${formatDateUTC(eng.plannedStartDate)} – ${eng.plannedEndDate ? formatDateUTC(eng.plannedEndDate) : '—'}`}
-                  </p>
-                  {eng.notes && <p className="text-xs text-gray-400 mt-1">{eng.notes}</p>}
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
-                  {eng.status === 'DRAFT' && (
-                    <>
-                      {canApprove && (
+              <div key={eng.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Ejercicio fiscal {eng.fiscalYear}</p>
+                    <p className="text-xs text-gray-400">
+                      Cierre {formatDateUTC(eng.fiscalYearEndDate)}
+                      {eng.plannedStartDate && ` · Planeado ${formatDateUTC(eng.plannedStartDate)} – ${eng.plannedEndDate ? formatDateUTC(eng.plannedEndDate) : '—'}`}
+                    </p>
+                    {eng.notes && <p className="text-xs text-gray-400 mt-1">{eng.notes}</p>}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
+                    {eng.status === 'DRAFT' && (
+                      <>
+                        {canApprove && (
+                          <button
+                            onClick={() => setApproving({ id: eng.id, year: eng.fiscalYear })}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700"
+                          >
+                            <BadgeCheck className="w-3.5 h-3.5" /> Aprobar y Crear Auditoría
+                          </button>
+                        )}
                         <button
-                          onClick={() => setApproving({ id: eng.id, year: eng.fiscalYear })}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700"
+                          onClick={() => cancelEngagement.mutate(eng.id)}
+                          disabled={cancelEngagement.isPending}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50"
                         >
-                          <BadgeCheck className="w-3.5 h-3.5" /> Aprobar y Crear Auditoría
+                          <XCircle className="w-3.5 h-3.5" /> Cancelar
                         </button>
-                      )}
-                      <button
-                        onClick={() => cancelEngagement.mutate(eng.id)}
-                        disabled={cancelEngagement.isPending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50 disabled:opacity-50"
-                      >
-                        <XCircle className="w-3.5 h-3.5" /> Cancelar
-                      </button>
-                    </>
-                  )}
-                  {eng.status === 'APPROVED' && eng.audit && (
-                    <Link href={`/dashboard/audits/${eng.audit.id}`}
-                      className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-50">
-                      <ExternalLink className="w-3.5 h-3.5" /> Ver Auditoría
-                    </Link>
-                  )}
+                      </>
+                    )}
+                    {eng.status === 'APPROVED' && eng.audit && (
+                      <>
+                        {canViewProfitability && (
+                          <button
+                            onClick={() => setExpandedProfitability(isProfitabilityOpen ? null : eng.id)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg hover:bg-emerald-50"
+                          >
+                            <DollarSign className="w-3.5 h-3.5" />
+                            Ver Rentabilidad
+                            {isProfitabilityOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                        <Link href={`/dashboard/audits/${eng.audit.id}`}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-50">
+                          <ExternalLink className="w-3.5 h-3.5" /> Ver Auditoría
+                        </Link>
+                      </>
+                    )}
+                  </div>
                 </div>
+                {isProfitabilityOpen && (
+                  <div className="border-t border-gray-100 bg-gray-50/50 p-4">
+                    <ProfitabilityPanel engagementId={eng.id} />
+                  </div>
+                )}
               </div>
             );
           })}

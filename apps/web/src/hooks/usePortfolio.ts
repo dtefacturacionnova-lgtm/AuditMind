@@ -231,10 +231,57 @@ export interface CreateEngagementData {
   notes?:              string;
 }
 
+// ─── Rentabilidad por Encargo ───────────────────────────────────────────────────
+
+export interface ProfitabilityPersonRow {
+  userId:          string;
+  userName:        string;
+  horasTotales:    number;
+  /** null = no se pudo calcular (esa persona no tiene perfil de costeo) — mostrar "Sin costear", nunca $0. */
+  costoCalculado:  number | null;
+  horasSinCostear: number;
+}
+
+export interface ProfitabilityTotals {
+  horasTotales:    number;
+  costoTotal:      number;
+  horasSinCostear: number;
+  /** null = no se pudo calcular (sin honorario vinculado, o falta perfil de costeo de alguien). */
+  margenAbsoluto:  number | null;
+  margenPct:       number | null;
+}
+
+export interface EngagementProfitability {
+  clientName:  string;
+  fiscalYear:  number;
+  /** null = aún no hay propuesta con honorario vinculada — mostrar "Honorario no definido", nunca $0. */
+  ingreso:     { feeAmount: number; feeCurrency: string } | null;
+  /** null = el encargo no está aprobado todavía (estado válido, no error) — no hay horas que mostrar. */
+  auditId:     string | null;
+  porPersona:  ProfitabilityPersonRow[];
+  totales:     ProfitabilityTotals;
+}
+
+/** Resumen de un encargo aprobado dentro del listado de cartera (sin desglose por persona).
+ *  `engagementId`/`clientId` no están descritos en el contrato del endpoint de lista — se
+ *  incluyen como opcionales para poder enlazar al detalle del cliente si el backend los envía,
+ *  sin romper el render si todavía no lo hace. */
+export interface PortfolioProfitabilitySummary {
+  engagementId?: string;
+  clientId?:     string;
+  clientName:    string;
+  fiscalYear:    number;
+  ingreso:       { feeAmount: number; feeCurrency: string } | null;
+  auditId:       string | null;
+  totales:       ProfitabilityTotals;
+}
+
 // ─── Query keys ───────────────────────────────────────────────────────────────
-const CLIENTS_KEY     = 'portfolio-clients';
-const CLIENT_KEY      = 'portfolio-client';
-const ENGAGEMENTS_KEY = 'portfolio-engagements';
+const CLIENTS_KEY         = 'portfolio-clients';
+const CLIENT_KEY          = 'portfolio-client';
+const ENGAGEMENTS_KEY     = 'portfolio-engagements';
+const PROFITABILITY_KEY   = 'portfolio-profitability';
+const PROFITABILITY_LIST_KEY = 'portfolio-profitability-list';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Clientes
@@ -475,6 +522,35 @@ export function useCancelEngagement() {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Rentabilidad por Encargo
+// ═══════════════════════════════════════════════════════════════════════════
+// Ambos endpoints requieren rol CAE o superior (ADMIN/SUPER_ADMIN pasan por la
+// jerarquía de `hasRole`). El parámetro `enabled` permite a la UI evitar por
+// completo la llamada de red cuando el usuario no califica, en vez de dejar que
+// el backend la rechace — pásalo como `hasRole([...])` desde el componente.
+
+/** Rentabilidad de un encargo puntual (con desglose por persona). */
+export function useEngagementProfitability(engagementId: string, enabled = true) {
+  return useQuery<EngagementProfitability>({
+    queryKey: [PROFITABILITY_KEY, engagementId],
+    queryFn:  () => apiClient.get(`/portfolio/engagements/${engagementId}/profitability`),
+    enabled:  enabled && !!engagementId,
+    staleTime: 15_000,
+  });
+}
+
+/** Rentabilidad de todos los encargos aprobados de un año (sin desglose por persona),
+ *  ya ordenados por el backend por margen % descendente (no calculables al final). */
+export function usePortfolioProfitability(year: number, enabled = true) {
+  return useQuery<PortfolioProfitabilitySummary[]>({
+    queryKey: [PROFITABILITY_LIST_KEY, year],
+    queryFn:  () => apiClient.get(`/portfolio/profitability?year=${year}`),
+    enabled:  enabled && !!year,
+    staleTime: 15_000,
+  });
+}
+
 // ─── Config visual ──────────────────────────────────────────────────────────
 
 /** Orden natural del pipeline comercial. INACTIVE/DECLINED se muestran aparte. */
@@ -520,3 +596,12 @@ export const ENGAGEMENT_STATUS_CONFIG: Record<EngagementStatus, { label: string;
   APPROVED:  { label: 'Aprobado', color: 'text-emerald-700', bg: 'bg-emerald-100' },
   CANCELLED: { label: 'Cancelado', color: 'text-red-700',    bg: 'bg-red-100' },
 };
+
+/** Umbrales semánticos de margen % para Rentabilidad por Encargo.
+ *  >30% sano, 10–30% ajustado, <10% (incluye negativo) crítico, null = no calculable. */
+export function marginTone(pct: number | null): { label: string; text: string; bg: string; border: string; dot: string } {
+  if (pct === null) return { label: 'No calculable', text: 'text-gray-500',    bg: 'bg-gray-50',    border: 'border-gray-200',    dot: 'bg-gray-300' };
+  if (pct >= 30)     return { label: 'Margen sano',    text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' };
+  if (pct >= 10)     return { label: 'Margen ajustado', text: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-200',   dot: 'bg-amber-500' };
+  return               { label: 'Margen negativo',    text: 'text-red-700',    bg: 'bg-red-50',     border: 'border-red-200',     dot: 'bg-red-500' };
+}

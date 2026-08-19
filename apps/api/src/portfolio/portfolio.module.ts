@@ -11,6 +11,8 @@ import { EngagementLettersController } from './engagement-letters.controller';
 import { EngagementLettersService } from './engagement-letters.service';
 import { EngagementsController } from './engagements.controller';
 import { EngagementsService } from './engagements.service';
+import { ProfitabilityController } from './profitability.controller';
+import { ProfitabilityService } from './profitability.service';
 
 /**
  * Cartera — pipeline comercial de Auditoría Externa:
@@ -30,6 +32,7 @@ import { EngagementsService } from './engagements.service';
     ProposalsController,
     EngagementLettersController,
     EngagementsController,
+    ProfitabilityController,
   ],
   providers: [
     ClientsService,
@@ -37,6 +40,7 @@ import { EngagementsService } from './engagements.service';
     ProposalsService,
     EngagementLettersService,
     EngagementsService,
+    ProfitabilityService,
   ],
   exports: [ClientsService, EngagementsService],
 })

@@ -40,8 +40,9 @@ const NAV_ITEMS: NavItem[] = [
     icon: Handshake,
     module: 'EXTERNAL',
     children: [
-      { label: 'Cartera de Clientes',          href: '/dashboard/portfolio',          icon: Handshake },
-      { label: 'Planificación Anual Externa',  href: '/dashboard/portfolio/capacity', icon: CalendarClock },
+      { label: 'Cartera de Clientes',          href: '/dashboard/portfolio',              icon: Handshake },
+      { label: 'Planificación Anual Externa',  href: '/dashboard/portfolio/capacity',     icon: CalendarClock },
+      { label: 'Rentabilidad',                 href: '/dashboard/portfolio/profitability', icon: LineChart },
     ],
   },
   // ── Planificación Anual ───────────────────────────────────────────────────

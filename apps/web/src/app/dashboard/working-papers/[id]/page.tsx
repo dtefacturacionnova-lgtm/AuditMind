@@ -44,6 +44,7 @@ import type { WorkingPaper, TickMarkEntry } from '@/hooks/useWorkingPapers';
 import { useSignOff, usePbcLinks, useLinkPbc, useUnlinkPbc } from '@/hooks/useWorkingPaperSignOff';
 import type { SignOffLevel } from '@/hooks/useWorkingPaperSignOff';
 import { useCheckout, useCheckin } from '@/hooks/useCheckout';
+import { useSetPaperHelpContext } from '@/contexts/ContextualHelpContext';
 
 // ─── Scriptorium Draft Modal ──────────────────────────────────────────────────
 
@@ -941,6 +942,7 @@ function cosoToS7(m: string): string {
 export default function WpDetailPage() {
   const params = useParams<{ id: string }>();
   const { data: wp, isLoading } = useWorkingPaper(params.id);
+  useSetPaperHelpContext(wp?.paperCode ?? wp?.code);
 
   const updateWp       = useUpdateWorkingPaper(params.id);
   const updateStatus   = useUpdateWpStatus();

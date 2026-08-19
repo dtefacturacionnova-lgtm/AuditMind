@@ -1064,6 +1064,24 @@ export default function WpDetailPage() {
     }
   }
 
+  async function handleDownloadWordHallazgos() {
+    if (!wp?.sections) return;
+    setDownloadingWord(true);
+    try {
+      const { generateCartaHallazgos } = await import('@/lib/generateCartaHallazgos');
+      const blob = await generateCartaHallazgos(wp.sections);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `comunicacion_hallazgos_${(wp?.paperCode ?? wp?.code ?? params.id)}.docx`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setDownloadingWord(false);
+    }
+  }
+
   const handleStatusChange = async (next: WpStatus) => {
     if (!wp) return;
     await updateStatus.mutateAsync({ id: params.id, status: next, reviewNotes: reviewNotes || undefined });
@@ -1435,6 +1453,18 @@ export default function WpDetailPage() {
                   disabled={downloadingWord}
                   className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
                   title="Descargar Carta de Encargo en formato Word (.docx)"
+                >
+                  {downloadingWord ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                  Word
+                </button>
+              )}
+              {/* Word export — solo PT-HALL-COM */}
+              {wp.paperCode === 'PT-HALL-COM' && (
+                <button
+                  onClick={handleDownloadWordHallazgos}
+                  disabled={downloadingWord}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+                  title="Descargar Comunicación de Hallazgos en formato Word (.docx)"
                 >
                   {downloadingWord ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
                   Word

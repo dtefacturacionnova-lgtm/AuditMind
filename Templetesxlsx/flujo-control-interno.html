@@ -1,0 +1,396 @@
+<meta charset="utf-8">
+<title>AuditMind — Flujo de Evaluación de Control Interno: Interna vs. Financiera Externa</title>
+<style>
+:root{
+  --man:#4A5568; --man-bg:#F7F8FA; --man-bd:#C9D0DC;
+  --ref:#1565C0; --ref-bg:#E8F1FC; --ref-bd:#90B8E8;
+  --ai:#6B21A8;  --ai-bg:#F3E8FF;  --ai-bd:#C084FC;
+  --calc:#0E6B3A;--calc-bg:#EAFAF1;--calc-bd:#6EE7B7;
+  --prop:#B45309;--prop-bg:#FEF3E2;--prop-bd:#F3C078;
+  --bg:#F1F4F8; --surf:#FFF; --border:#DDE3EE;
+  --text:#18202E; --muted:#5A6A82;
+  --ext:#9D174D; --ext-bg:#FCE7F3; --ext-bd:#F4A8CB;
+  --int:#0F5C8C; --int-bg:#E5F2FA; --int-bd:#8FC5E6;
+  --sh:0 1px 4px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.055);
+}
+@media(prefers-color-scheme:dark){:root{
+  --man-bg:#222A35;--man-bd:#3E4A5C;
+  --ref-bg:#0D2038;--ref-bd:#2E5F9E;
+  --ai-bg:#1F0E30; --ai-bd:#7E3FBE;
+  --calc-bg:#082B1C;--calc-bd:#0F6B3A;
+  --prop-bg:#2E1E08;--prop-bd:#9A6423;
+  --bg:#0C1118;--surf:#18222F;--border:#28384A;
+  --text:#D0DBE8;--muted:#7A8EA4;
+  --ext-bg:#3A0F27;--ext-bd:#B54B82;
+  --int-bg:#0B2436;--int-bd:#3E85AE;
+  --sh:0 1px 6px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.055);
+}}
+:root[data-theme="light"]{--man-bg:#F7F8FA;--man-bd:#C9D0DC;--ref-bg:#E8F1FC;--ref-bd:#90B8E8;--ai-bg:#F3E8FF;--ai-bd:#C084FC;--calc-bg:#EAFAF1;--calc-bd:#6EE7B7;--prop-bg:#FEF3E2;--prop-bd:#F3C078;--bg:#F1F4F8;--surf:#FFF;--border:#DDE3EE;--text:#18202E;--muted:#5A6A82;--ext-bg:#FCE7F3;--ext-bd:#F4A8CB;--int-bg:#E5F2FA;--int-bd:#8FC5E6;--sh:0 1px 4px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.055);}
+:root[data-theme="dark"]{--man-bg:#222A35;--man-bd:#3E4A5C;--ref-bg:#0D2038;--ref-bd:#2E5F9E;--ai-bg:#1F0E30;--ai-bd:#7E3FBE;--calc-bg:#082B1C;--calc-bd:#0F6B3A;--prop-bg:#2E1E08;--prop-bd:#9A6423;--bg:#0C1118;--surf:#18222F;--border:#28384A;--text:#D0DBE8;--muted:#7A8EA4;--ext-bg:#3A0F27;--ext-bd:#B54B82;--int-bg:#0B2436;--int-bd:#3E85AE;--sh:0 1px 6px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.055);}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text);font-size:12px;line-height:1.45;}
+.ph{padding:16px 20px 10px;border-bottom:1px solid var(--border);background:var(--surf);}
+.ph h1{font-size:14px;font-weight:700;}
+.ph p{font-size:10.5px;color:var(--muted);margin-top:2px;}
+.outer{overflow-x:auto;padding:18px 16px 10px;}
+.diagram{min-width:1320px;position:relative;}
+/* profile bands */
+.bands{display:flex;gap:14px;margin-bottom:8px;}
+.band{flex:0 0 auto;display:flex;align-items:center;gap:6px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:3px 9px;border-radius:5px;border:1px solid;}
+.band.b-common{background:var(--surf);border-color:var(--border);color:var(--muted);}
+.band.b-ext{background:var(--ext-bg);border-color:var(--ext-bd);color:var(--ext);}
+.band.b-int{background:var(--int-bg);border-color:var(--int-bd);color:var(--int);}
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 20px 14px;border-top:1px solid var(--border);background:var(--surf);}
+.li{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);}
+.dot{width:11px;height:11px;border-radius:2px;border:1.5px solid;}
+.dot.m{background:var(--man-bg);border-color:var(--man-bd);}
+.dot.r{background:var(--ref-bg);border-color:var(--ref-bd);}
+.dot.a{background:var(--ai-bg);border-color:var(--ai-bd);}
+.dot.c{background:var(--calc-bg);border-color:var(--calc-bd);}
+.dot.p{background:var(--prop-bg);border-color:var(--prop-bd);}
+.ll{width:24px;height:2px;}
+.ll.rs{border-top:2px solid var(--ref);}
+.ll.ai{border-top:2px solid var(--ai);border-style:dashed;}
+.ll.pr{border-top:2.5px solid var(--prop);}
+/* columns */
+.cols{display:flex;gap:14px;align-items:flex-start;}
+.col{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;}
+.cw0{width:186px;}
+.cw1{width:196px;}
+.cw2{width:178px;}
+.cw3{width:220px;}
+.cw4{width:230px;}
+.clabel{font-size:9.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;text-align:center;padding:2px 0 6px;}
+/* paper card */
+.pcard{background:var(--surf);border-radius:7px;box-shadow:var(--sh);overflow:hidden;}
+.pcard.ext-only{outline:1.5px dashed var(--ext-bd);outline-offset:-1.5px;}
+.ph2{padding:5px 9px;display:flex;align-items:center;justify-content:space-between;gap:4px;}
+.ph2 .codewrap{display:flex;flex-direction:column;gap:1px;}
+.ph2 .code{font-family:Consolas,"Cascadia Code",monospace;font-size:10px;font-weight:700;color:#fff;letter-spacing:.1px;}
+.ph2 .nm{font-size:9.5px;color:rgba(255,255,255,.85);font-weight:600;}
+.badge{font-size:7.5px;font-weight:800;letter-spacing:.4px;padding:1.5px 5px;border-radius:9px;text-transform:uppercase;white-space:nowrap;flex-shrink:0;}
+.badge.ext{background:var(--ext);color:#fff;}
+.pb{padding:7px 9px;display:flex;flex-direction:column;gap:4px;}
+/* section rows */
+.srow{border-radius:4px;padding:3px 7px;font-size:9.5px;line-height:1.4;border:1px solid;}
+.srow.m {background:var(--man-bg);border-color:var(--man-bd);color:var(--man);}
+.srow.r {background:var(--ref-bg);border-color:var(--ref-bd);color:var(--ref);}
+.srow.a {background:var(--ai-bg); border-color:var(--ai-bd); color:var(--ai);}
+.srow.c {background:var(--calc-bg);border-color:var(--calc-bd);color:var(--calc);}
+.srow.p {background:var(--prop-bg);border-color:var(--prop-bd);color:var(--prop);}
+.srow .sk{font-family:Consolas,monospace;font-size:8.5px;font-weight:700;margin-right:4px;}
+.srow .icon{font-size:9px;margin-right:3px;}
+/* col head colors */
+.hc0{background:#1A4472;}
+.hc1{background:#185C48;}
+.hc2{background:#8A2A63;}
+.hc3{background:#923610;}
+.hc4{background:#4C3A80;}
+/* svg */
+#sv{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;}
+/* note box */
+.notebox{border:1.5px dashed var(--border);border-radius:6px;padding:6px 9px;}
+.notebox .nt{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:3px;}
+.notebox .nb{font-size:9.5px;color:var(--muted);line-height:1.5;}
+.notebox.warn{border-color:var(--ext-bd);}
+.notebox.warn .nt{color:var(--ext);}
+/* profile compare footer */
+.compare{margin:0 16px 22px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surf);}
+.compare h2{font-size:11.5px;font-weight:700;padding:10px 14px;border-bottom:1px solid var(--border);}
+table.cmp{width:100%;border-collapse:collapse;font-size:10px;}
+table.cmp th,table.cmp td{padding:7px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top;}
+table.cmp th{font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700;background:var(--bg);}
+table.cmp td.dim{font-weight:700;color:var(--text);white-space:nowrap;}
+table.cmp tr:last-child td{border-bottom:none;}
+table.cmp td.i{color:var(--int);}
+table.cmp td.e{color:var(--ext);}
+</style>
+
+<div class="ph">
+  <h1>Flujo de Evaluación de Control Interno — cómo se alimentan los papeles inteligentes entre sí</h1>
+  <p>Núcleo común a ambos perfiles metodológicos (Auditoría Interna NOGAI/GIAS-IIA y Auditoría Financiera Externa NIA) + los tramos exclusivos de Externa (PT-A5, Flujograma). Las flechas naranjas son botones de propagación determinística — sin IA, el auditor los dispara y puede repetirlos sin duplicar filas.</p>
+</div>
+
+<div class="outer">
+<div class="diagram" id="diagram">
+<svg id="sv"></svg>
+
+<div class="bands">
+  <div class="band b-common">🔗 Núcleo común — Interna + Externa</div>
+  <div class="band b-ext">🌐 Solo Auditoría Financiera Externa (NIA)</div>
+</div>
+
+<div class="cols">
+
+  <!-- COL 0: RIESGO -->
+  <div class="col cw0">
+    <div class="clabel" style="color:#1A4472;">1 · Riesgo (PT-A2)</div>
+
+    <div class="pcard" id="a2">
+      <div class="ph2 hc0">
+        <div class="codewrap"><span class="code">PT-A2</span><span class="nm">Riesgo Inherente</span></div>
+      </div>
+      <div class="pb">
+        <div class="srow m"><span class="sk">S1</span> Áreas/Ciclos + Objetivo relacionado</div>
+        <div class="srow m"><span class="sk">S4</span> Score RI (1-5, 5 niveles)</div>
+        <div class="srow m" id="a2-s5"><span class="sk">S5</span> Riesgos Específicos</div>
+        <div class="srow m" id="a2-s6"><span class="sk">S6</span> Riesgos Significativos + NIA 240</div>
+      </div>
+    </div>
+
+    <div class="notebox">
+      <div class="nt">Único papel de entrada</div>
+      <div class="nb">Ambos perfiles arrancan aquí — la diferencia entre Interna y Externa aparece recién en la columna 3 (RMM), no en cómo se identifica el riesgo.</div>
+    </div>
+  </div>
+
+  <!-- COL 1: CONTROL -->
+  <div class="col cw1">
+    <div class="clabel" style="color:#185C48;">2 · Control (PT-A3 / COSO / ITGC)</div>
+
+    <div class="pcard" id="a3">
+      <div class="ph2 hc1">
+        <div class="codewrap"><span class="code">PT-A3</span><span class="nm">Control Interno NIA 315</span></div>
+      </div>
+      <div class="pb">
+        <div class="srow m"><span class="sk">S2</span> Catálogo de Controles</div>
+        <div class="srow m" id="a3-s4"><span class="sk">S4</span> Excepciones / Deficiencias</div>
+        <div class="srow m" id="a3-s10"><span class="sk">S10</span> Segregación de Funciones</div>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="ph2 hc1"><div class="codewrap"><span class="code">PT-COSO</span><span class="nm">Evaluación COSO 2013</span></div></div>
+      <div class="pb">
+        <div class="srow m">S1-S5 · 65 preguntas / 17 principios (checklist)</div>
+        <div class="srow c"><span class="icon">⚡</span> Puntaje 100-400 calculado de %Sí</div>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="ph2 hc1"><div class="codewrap"><span class="code">PT-ITGC</span><span class="nm">Controles Generales TI</span></div></div>
+      <div class="pb">
+        <div class="srow m" id="itgc-s"><span class="sk">S1-S4</span> AM/CM/OPS/PD (checklist)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COL 2: RMM (solo Externa) -->
+  <div class="col cw2">
+    <div class="clabel" style="color:#8A2A63;">3 · RMM — Solo Externa</div>
+
+    <div class="pcard ext-only" id="a5">
+      <div class="ph2 hc2">
+        <div class="codewrap"><span class="code">PT-A5</span><span class="nm">Matriz RMM NIA 315.32</span></div>
+        <span class="badge ext">Externa</span>
+      </div>
+      <div class="pb">
+        <div class="srow a" id="a5-s1"><span class="icon">✨</span><span class="sk">S1</span> RMM = RI×RC, isAutoFilled Gemini ← A2 S4 + A3 S5</div>
+        <div class="srow m"><span class="sk">S3</span> Significativos + NIA 240 consolidados</div>
+      </div>
+    </div>
+
+    <div class="notebox warn">
+      <div class="nt">🌐 Por qué solo Externa</div>
+      <div class="nb">RMM por área/cuenta/aserción es un concepto de NIA 315.32 — no existe en la metodología NOGAI/GIAS-IIA. En un encargo Interno este papel no se siembra: la fila de PT-MRCI referencia PT-A2 directo, Cuenta/Aserción quedan vacías.</div>
+    </div>
+  </div>
+
+  <!-- COL 3: MATRIZ CONSOLIDADA -->
+  <div class="col cw3">
+    <div class="clabel" style="color:#923610;">4 · Matriz Consolidada (común)</div>
+
+    <div class="pcard" id="mrci">
+      <div class="ph2 hc3">
+        <div class="codewrap"><span class="code">PT-MRCI</span><span class="nm">Riesgo · Control · Impacto</span></div>
+      </div>
+      <div class="pb">
+        <div class="srow p" id="mrci-prop1"><span class="icon">⇢</span><span class="sk">S1</span> Propagar Riesgos ← A2 S5/S6 (+A5 S1 si existe)</div>
+        <div class="srow p" id="mrci-prop2"><span class="icon">⇢</span> Propagar Segregación ← A3 S10 (filas nuevas)</div>
+        <div class="srow p" id="mrci-prop3"><span class="icon">⇢</span> Propagar NIA 530 ← Atributos (actualiza Operando/Residual)</div>
+        <div class="srow m">Control Mitigante / Diseño Efectivo (manual)</div>
+        <div class="srow c" id="mrci-s3"><span class="icon">⚡</span><span class="sk">S3</span> Mapa de Calor por Área</div>
+        <div class="srow m" id="mrci-s4"><span class="sk">S4</span> Conclusión — aiHint por perfil</div>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="ph2 hc3"><div class="codewrap"><span class="code">PT-NIA530</span><span class="nm">Muestreo — Atributos</span></div></div>
+      <div class="pb">
+        <div class="srow m">S5 Ítems examinados (walkthrough)</div>
+        <div class="srow c" id="nia530-s4"><span class="icon">⚡</span><span class="sk">S4</span> Evaluación — CONTROL_NO_EFECTIVO</div>
+      </div>
+    </div>
+
+    <div class="notebox">
+      <div class="nt">3 botones, un solo destino</div>
+      <div class="nb">Las 3 propagaciones son independientes y se pueden correr en cualquier orden — cada una solo toca las filas/columnas que le corresponden (por <code>_origen</code> o por match de área), nunca pisa lo que el auditor ya escribió a mano.</div>
+    </div>
+  </div>
+
+  <!-- COL 4: CIERRE -->
+  <div class="col cw4">
+    <div class="clabel" style="color:#4C3A80;">5 · Deficiencias, Flujo y Reporte</div>
+
+    <div class="pcard">
+      <div class="ph2 hc4"><div class="codewrap"><span class="code">PT-NIA265</span><span class="nm">Carta de Debilidades</span></div></div>
+      <div class="pb">
+        <div class="srow p" id="nia265-s1"><span class="icon">⇢</span><span class="sk">S1</span> Propagar Deficiencias ← A3 S4 + ITGC (reemplaza todo)</div>
+        <div class="srow c"><span class="icon">⚡</span><span class="sk">S2</span> Mapa por componente COSO (recalcula)</div>
+      </div>
+    </div>
+
+    <div class="pcard ext-only" id="flow">
+      <div class="ph2 hc4">
+        <div class="codewrap"><span class="code">PT-FIN-A3-KC</span><span class="nm">Flujograma (S3b)</span></div>
+        <span class="badge ext">Externa</span>
+      </div>
+      <div class="pb">
+        <div class="srow m">Nodos por carril (responsable) — manual</div>
+        <div class="srow r" id="flow-badge"><span class="icon">🔗</span> Nodo "control" ← rowId de PT-MRCI → badge de color</div>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="ph2" style="background:#2A3F5C;"><div class="codewrap"><span class="code">Cockpit</span><span class="nm">Pestaña Control Interno</span></div></div>
+      <div class="pb">
+        <div class="srow r" id="cockpit"><span class="icon">🔗</span> Ficha de Riesgo — lee A2/A3/A5/MRCI/530/265, no escribe nada</div>
+      </div>
+    </div>
+
+    <div class="pcard">
+      <div class="ph2" style="background:#5C3A2A;"><div class="codewrap"><span class="code">PDF</span><span class="nm">Reporte Integrado</span></div></div>
+      <div class="pb">
+        <div class="srow r" id="pdf"><span class="icon">🔗</span> Flujograma + tabla RI/Residual + mapa de calor + conclusión</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.cols -->
+</div><!-- /.diagram -->
+</div><!-- /.outer -->
+
+<div class="legend">
+  <strong style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;align-self:center;">Tipo de sección</strong>
+  <div class="li"><div class="dot m"></div> Manual — el auditor digita</div>
+  <div class="li"><div class="dot r"></div> 🔗 Referencia auto / solo lectura</div>
+  <div class="li"><div class="dot a"></div> ✨ IA Gemini genera el contenido</div>
+  <div class="li"><div class="dot c"></div> ⚡ Calculado por el sistema</div>
+  <div class="li"><div class="dot p"></div> ⇢ Propagación determinística (botón, sin IA)</div>
+  <div class="li"><div class="ll rs"></div> Referencia / lectura</div>
+  <div class="li"><div class="ll ai"></div> Contexto a Gemini</div>
+  <div class="li"><div class="ll pr"></div> Propagación (botón)</div>
+</div>
+
+<div class="compare">
+  <h2>Qué cambia entre perfiles — misma cadena, un solo tramo distinto</h2>
+  <table class="cmp">
+    <thead><tr><th>Dimensión</th><th class="i">Auditoría Interna</th><th class="e">Financiera Externa</th></tr></thead>
+    <tbody>
+      <tr><td class="dim">Papel de entrada al riesgo</td><td class="i">PT-A2 directo</td><td class="e">PT-A2 → PT-A5 (RMM por cuenta/aserción) → PT-MRCI</td></tr>
+      <tr><td class="dim">Cuenta / Aserción en PT-MRCI</td><td class="i">Quedan vacías — no aplica</td><td class="e">Heredadas de PT-A5 S1 por "Propagar Riesgos"</td></tr>
+      <tr><td class="dim">Riesgo Inherente heredado</td><td class="i">De PT-A2 S4 (mapeo 5→4 niveles)</td><td class="e">De PT-A5 S1 (ya en 4 niveles) si hay match, si no de PT-A2 S4</td></tr>
+      <tr><td class="dim">Flujograma con badge de control</td><td class="i">No existe en esta plantilla</td><td class="e">PT-FIN-A3-KC S3b, único papel con esta capa</td></tr>
+      <tr><td class="dim">Conclusión de PT-MRCI S4</td><td class="i">Escala: Satisfactorio…Insatisfactorio (GIAS/IIA 2024)</td><td class="e">Narrativa ligada a RIM y tipo de opinión (nunca una etiqueta genérica)</td></tr>
+      <tr><td class="dim">Las 3 propagaciones hacia PT-MRCI</td><td class="i" colspan="2" style="color:var(--text);">Idénticas para ambos — "Propagar Riesgos" simplemente no encuentra PT-A5 en un encargo Interno y omite ese enriquecimiento sin error.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+(function(){
+  const diag=document.getElementById('diagram');
+  const sv=document.getElementById('sv');
+  let _m=0;
+
+  function pos(el,side,pct){
+    if(!el)return{x:0,y:0};
+    const r=el.getBoundingClientRect(), dr=diag.getBoundingClientRect();
+    const p=pct??0.5;
+    return{
+      x:side==='right'?r.right-dr.left:r.left-dr.left,
+      y:r.top-dr.top+r.height*p
+    };
+  }
+  function arrow(x1,y1,x2,y2,style,color,w){
+    const id='m'+(++_m);
+    const cx=(x1+x2)/2;
+    const d=`M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`;
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',d); p.setAttribute('fill','none');
+    p.setAttribute('stroke',color); p.setAttribute('stroke-width',w||1.7);
+    if(style==='dash') p.setAttribute('stroke-dasharray','5,4');
+    if(style==='dot')  p.setAttribute('stroke-dasharray','2,3');
+    p.setAttribute('stroke-linecap','round');
+    const mk=document.createElementNS('http://www.w3.org/2000/svg','marker');
+    mk.setAttribute('id',id); mk.setAttribute('markerWidth','7'); mk.setAttribute('markerHeight','7');
+    mk.setAttribute('refX','6'); mk.setAttribute('refY','3'); mk.setAttribute('orient','auto');
+    const pl=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    pl.setAttribute('points','0 0,7 3,0 6'); pl.setAttribute('fill',color);
+    mk.appendChild(pl); sv.appendChild(mk);
+    p.setAttribute('marker-end',`url(#${id})`); sv.appendChild(p);
+  }
+
+  function draw(){
+    sv.innerHTML='';
+    const REF='#1565C0', AI='#6B21A8', CALC='#0E6B3A', PROP='#B45309';
+
+    // A2 S5/S6 -> MRCI "Propagar Riesgos"
+    const a2s5=pos(document.getElementById('a2-s5'),'right');
+    const a2s6=pos(document.getElementById('a2-s6'),'right');
+    const mp1=pos(document.getElementById('mrci-prop1'),'left');
+    arrow(a2s5.x,a2s5.y,mp1.x,mp1.y,'solid',PROP,2);
+    arrow(a2s6.x,a2s6.y,mp1.x,mp1.y,'solid',PROP,2);
+
+    // A2 S4 + A3 S5(implicit via a3) -> A5 S1 (AI context, sourceRef)
+    const a5s1=pos(document.getElementById('a5-s1'),'left');
+    arrow(a2s5.x,a2s5.y,a5s1.x,a5s1.y,'dash',AI,1.3);
+    const a3=pos(document.getElementById('a3'),'right');
+    arrow(a3.x,a3.y,a5s1.x,a5s1.y,'dash',AI,1.3);
+
+    // A5 S1 -> MRCI "Propagar Riesgos" (enriquecimiento Externa)
+    const a5s1r=pos(document.getElementById('a5-s1'),'right');
+    arrow(a5s1r.x,a5s1r.y,mp1.x,mp1.y+10,'solid',PROP,2);
+
+    // A3 S10 -> MRCI "Propagar Segregación"
+    const a3s10=pos(document.getElementById('a3-s10'),'right');
+    const mp2=pos(document.getElementById('mrci-prop2'),'left');
+    arrow(a3s10.x,a3s10.y,mp2.x,mp2.y,'solid',PROP,2);
+
+    // NIA530 S4 -> MRCI "Propagar NIA530"
+    const n530=pos(document.getElementById('nia530-s4'),'right');
+    const mp3=pos(document.getElementById('mrci-prop3'),'left');
+    arrow(n530.x,n530.y,mp3.x,mp3.y,'solid',PROP,2);
+
+    // MRCI S1 -> S3 mapa de calor (calc interno, flecha corta)
+    const mrciCard=pos(document.getElementById('mrci'),'right');
+    const mrciS3=pos(document.getElementById('mrci-s3'),'left');
+    arrow(mrciCard.x-6,mrciCard.y-30,mrciS3.x,mrciS3.y,'solid',CALC,1.4);
+
+    // A3 S4 + ITGC -> NIA265 "Propagar Deficiencias"
+    const a3s4=pos(document.getElementById('a3-s4'),'right');
+    const itgc=pos(document.getElementById('itgc-s'),'right');
+    const n265=pos(document.getElementById('nia265-s1'),'left');
+    arrow(a3s4.x,a3s4.y,n265.x,n265.y,'solid',PROP,2);
+    arrow(itgc.x,itgc.y,n265.x,n265.y,'solid',PROP,2);
+
+    // MRCI -> Flujograma badge (reference, rowId)
+    const mrciR=pos(document.getElementById('mrci'),'right');
+    const flowB=pos(document.getElementById('flow-badge'),'left');
+    arrow(mrciR.x,mrciR.y+40,flowB.x,flowB.y,'solid',REF,1.6);
+
+    // MRCI + A2 + A3 + A5 + 530 + 265 -> Cockpit (reference, aggregated)
+    const cockpit=pos(document.getElementById('cockpit'),'left');
+    arrow(mrciR.x,mrciR.y+60,cockpit.x,cockpit.y,'dot',REF,1.2);
+
+    // Cockpit context -> PDF
+    const cockpitR=pos(document.getElementById('cockpit'),'right');
+    const pdf=pos(document.getElementById('pdf'),'left');
+    arrow(cockpitR.x,cockpitR.y,pdf.x,pdf.y,'solid',REF,1.4);
+  }
+
+  setTimeout(draw,80);
+  window.addEventListener('resize',draw);
+})();
+</script>

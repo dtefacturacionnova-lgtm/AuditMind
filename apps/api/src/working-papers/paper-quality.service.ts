@@ -75,8 +75,11 @@ export class PaperQualityService {
     }
 
     // Rule-based score (always computed as baseline)
-    const ruleScore = this.computeRuleScore(sections);
-    const ruleIssues = this.computeRuleIssues(sections);
+    const auditLogicIssues = this.computeAuditLogicIssues(wp.paperCode, sections);
+    const auditLogicPenalty = auditLogicIssues.filter(i => i.severity === 'ERROR').length * 8
+      + auditLogicIssues.filter(i => i.severity === 'WARNING').length * 3;
+    const ruleScore = Math.max(0, this.computeRuleScore(sections) - auditLogicPenalty);
+    const ruleIssues = [...this.computeRuleIssues(sections), ...auditLogicIssues];
 
     // Try AI enhancement
     const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
@@ -145,6 +148,81 @@ export class PaperQualityService {
           severity:   'WARNING',
         });
       }
+    }
+
+    return issues;
+  }
+
+  /**
+   * Fase 4 del plan de Control Interno (docs/modelo-integrado-control-interno-
+   * analisis.md §6) — reglas de LÓGICA DE AUDITORÍA, no de completitud
+   * genérica: activas solo para PT-A5 y PT-MRCI, el corazón de la cadena
+   * riesgo→control. Detectan inconsistencias que el chequeo genérico de
+   * arriba no puede ver porque mira secciones completas, no filas dentro de
+   * una MATRIX.
+   */
+  private computeAuditLogicIssues(
+    paperCode: string | null,
+    sections:  Array<{ sectionKey: string; label: string; value: unknown }>,
+  ): QualityIssue[] {
+    if (paperCode !== 'PT-A5' && paperCode !== 'PT-MRCI') return [];
+
+    const issues: QualityIssue[] = [];
+    const s1 = sections.find(s => s.sectionKey === 'S1');
+    const rows = Array.isArray(s1?.value) ? (s1!.value as Record<string, unknown>[]) : [];
+    if (rows.length === 0) return issues;
+
+    const findKey = (row: Record<string, unknown>, patterns: RegExp[]): string | undefined =>
+      Object.keys(row).find(k => patterns.some(p => p.test(k.toLowerCase())));
+    const cell = (row: Record<string, unknown>, patterns: RegExp[]): string => {
+      const k = findKey(row, patterns);
+      return k ? String(row[k] ?? '').trim() : '';
+    };
+
+    if (paperCode === 'PT-A5') {
+      // Riesgo significativo sin procedimiento de respuesta asignado — NIA
+      // 330.21 exige que todo riesgo significativo tenga un procedimiento
+      // sustantivo específicamente responsivo, no solo genérico.
+      rows.forEach((row, idx) => {
+        const significativo = /^s(i|í)?$/i.test(cell(row, [/riesgo significativo/]));
+        const refPapel = cell(row, [/ref\.? papel de ejecuci[oó]n/]);
+        if (significativo && !refPapel) {
+          const area = cell(row, [/[aá]rea\s*\/?\s*ciclo/]) || `fila ${idx + 1}`;
+          issues.push({
+            sectionKey: 'S1', label: s1!.label, type: 'COHERENCE', severity: 'ERROR',
+            message: `"${area}" está marcada como Riesgo Significativo pero no tiene "Ref. papel de ejecución" — todo riesgo significativo requiere un procedimiento de respuesta específico (NIA 330.21).`,
+          });
+        }
+      });
+    }
+
+    if (paperCode === 'PT-MRCI') {
+      rows.forEach((row, idx) => {
+        const riesgo = cell(row, [/^riesgo$/]);
+        const control = cell(row, [/control mitigante/]);
+        const residual = cell(row, [/riesgo residual/]);
+        const impacto = cell(row, [/impacto potencial/]);
+        const n = cell(row, [/^#$/]) || String(idx + 1);
+
+        if (riesgo.length >= 15 && !control) {
+          issues.push({
+            sectionKey: 'S1', label: s1!.label, type: 'COHERENCE', severity: 'ERROR',
+            message: `Fila #${n} ("${riesgo.slice(0, 60)}${riesgo.length > 60 ? '…' : ''}") tiene Riesgo pero no Control Mitigante — todo riesgo debe emparejarse con un control o documentarse en S2 ("Riesgos sin Control Mitigante Identificado") como 100% sustantivo.`,
+          });
+        } else if (!riesgo && control.length >= 15) {
+          issues.push({
+            sectionKey: 'S1', label: s1!.label, type: 'COHERENCE', severity: 'WARNING',
+            message: `Fila #${n} tiene Control Mitigante ("${control.slice(0, 60)}${control.length > 60 ? '…' : ''}") sin ningún Riesgo asociado — revise si es una fila incompleta o un control sin riesgo que mitigar.`,
+          });
+        }
+
+        if (/alto/i.test(residual) && !impacto) {
+          issues.push({
+            sectionKey: 'S1', label: s1!.label, type: 'COMPLETENESS', severity: 'ERROR',
+            message: `Fila #${n} tiene Riesgo Residual "${residual}" pero "Impacto Potencial en el Dictamen" está vacío — todo residual Alto/Muy Alto requiere una conclusión explícita, aunque sea "Ninguno" con su justificación (se sintetiza en S4).`,
+          });
+        }
+      });
     }
 
     return issues;

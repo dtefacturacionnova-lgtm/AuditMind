@@ -13,6 +13,7 @@ export interface WpStub {
   id: string;
   ref?: string;
   code: string;
+  paperCode?: string;
   title: string;
   status: string;
   wpKind: 'STANDARD' | 'SMART' | 'MASTER' | 'LIVE' | 'FILE';

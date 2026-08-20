@@ -623,11 +623,16 @@ function PaperTableRow({
         <TypeIcon className={cn('h-4 w-4', typeIconCls)} />
       </td>
 
-      {/* Referencia */}
-      <td className="w-16 px-1 py-3">
-        {paper.ref && (
-          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
-            {paper.ref}
+      {/* Referencia — ref (editada por el auditor) si existe, si no el código de
+          plantilla (ej. "PT-A5") para poder ubicarla, si no el code legacy —
+          mismo orden de resolución que ya usa WorkingPaperIndexReport.tsx */}
+      <td className="w-20 px-1 py-3">
+        {(paper.ref ?? paper.paperCode ?? paper.code) && (
+          <span
+            className="inline-block rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600"
+            title={paper.ref ? 'Referencia' : paper.paperCode ? 'Código de plantilla' : 'Código'}
+          >
+            {paper.ref ?? paper.paperCode ?? paper.code}
           </span>
         )}
       </td>
@@ -1373,7 +1378,7 @@ export function ExpedienteTab({ auditId, templateId, onCreatePaper }: Expediente
                   <thead className="sticky top-0 z-10 bg-slate-50">
                     <tr className="border-b border-slate-200">
                       <th className="w-9 py-2 pl-4 pr-1" />
-                      <th className="w-16 px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Ref.</th>
+                      <th className="w-20 px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Ref.</th>
                       <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Documento</th>
                       <th className="w-8 px-1 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400" title="Estado">St.</th>
                       <th className="w-24 px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Indicadores</th>

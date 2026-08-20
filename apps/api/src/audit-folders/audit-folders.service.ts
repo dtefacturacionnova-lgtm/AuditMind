@@ -14,7 +14,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // ─── Selección mínima de papel para el árbol del expediente ──────────────────
 const PAPER_STUB_SELECT = {
-  id: true, ref: true, code: true, title: true,
+  id: true, ref: true, code: true, paperCode: true, title: true,
   status: true, wpKind: true, type: true,
   mimeType: true, originalFilename: true, fileUrl: true,
   createdAt: true,

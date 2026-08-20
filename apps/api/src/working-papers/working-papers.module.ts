@@ -9,6 +9,7 @@ import { PaperLiveService } from './paper-live.service';
 import { CrossAuditLearningService } from './cross-audit-learning.service';
 import { PaperReferencesService } from './paper-references.service';
 import { PaperVersionsService } from './paper-versions.service';
+import { RiskTraceService } from './risk-trace.service';
 import { ExcelTemplateEngineService } from './excel-templates/excel-template-engine.service';
 import { AiModule } from '../ai/ai.module';
 import { ContentLibraryModule } from '../content-library/content-library.module';
@@ -26,6 +27,7 @@ import { ContentLibraryModule } from '../content-library/content-library.module'
     CrossAuditLearningService,     // Sprint 3: Cross-audit learning
     PaperReferencesService,        // Gap 3: @mention references
     PaperVersionsService,          // PI.5: Version history + diff + restore
+    RiskTraceService,              // Fase 6a Control Interno: Ficha de Riesgo (trace read-only)
     ExcelTemplateEngineService,    // EXC-02: motor genérico de plantillas Excel
   ],
   exports: [

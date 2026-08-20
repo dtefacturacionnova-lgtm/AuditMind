@@ -70,6 +70,7 @@ import { PaperLiveService } from './paper-live.service';
 import { CrossAuditLearningService } from './cross-audit-learning.service';
 import { PaperReferencesService } from './paper-references.service';
 import { PaperVersionsService } from './paper-versions.service';
+import { RiskTraceService } from './risk-trace.service';
 import { AiService } from '../ai/ai.service';
 import { PdfService } from '../pdf/pdf.service';
 import { renderWorkingPaperBody } from '../pdf/pdf-templates';
@@ -98,6 +99,7 @@ export class WorkingPapersController {
     private readonly crossAudit:       CrossAuditLearningService,
     private readonly references:       PaperReferencesService,
     private readonly versionsService:  PaperVersionsService,
+    private readonly riskTrace:        RiskTraceService,
     private readonly aiService:        AiService,
     private readonly pdfService:       PdfService,
     private readonly excelEngine:      ExcelTemplateEngineService,
@@ -164,6 +166,30 @@ export class WorkingPapersController {
   @ApiQuery({ name: 'auditType', required: false })
   getCatalogue(@Query('auditType') auditType?: string) {
     return this.service.getCatalogue(auditType);
+  }
+
+  // ─── Fase 6a Control Interno: Ficha de Riesgo (trace de solo lectura) ────────
+
+  @Get('risk-trace/:auditId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Ficha de Riesgo — traza un riesgo/área a través de PT-A2/A5/A3/NIA530/MRCI/NIA265/COSO y el flujograma. Ancla: paperId+sectionKey+rowIndex (fila clicada) o ?area= (área completa). Solo lectura.' })
+  @ApiQuery({ name: 'paperId',    required: false, description: 'Papel ancla (la fila donde el usuario hizo clic)' })
+  @ApiQuery({ name: 'sectionKey', required: false })
+  @ApiQuery({ name: 'rowIndex',   required: false, type: Number })
+  @ApiQuery({ name: 'area',       required: false, description: 'Alternativa: trazar un área completa sin fila específica' })
+  getRiskTrace(
+    @Param('auditId') auditId: string,
+    @CurrentUser() user: AuthUser,
+    @Query('paperId')    paperId?: string,
+    @Query('sectionKey') sectionKey?: string,
+    @Query('rowIndex')   rowIndex?: string,
+    @Query('area')       area?: string,
+  ) {
+    const idx = rowIndex !== undefined && rowIndex !== '' ? parseInt(rowIndex, 10) : undefined;
+    if (rowIndex !== undefined && rowIndex !== '' && !Number.isInteger(idx)) {
+      throw new BadRequestException('rowIndex debe ser un entero');
+    }
+    return this.riskTrace.getTrace(auditId, user, { paperId, sectionKey, rowIndex: idx, area });
   }
 
   // ─── Paper CRUD ───────────────────────────────────────────────────────────────

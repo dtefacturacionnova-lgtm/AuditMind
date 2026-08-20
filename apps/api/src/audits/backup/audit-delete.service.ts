@@ -47,11 +47,20 @@ export class AuditDeleteService {
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
 
-    const { conteoPorModelo, totalFilas } = await this.exportSvc.exportarEncargo(auditId, user);
+    const { data, conteoPorModelo, totalFilas } = await this.exportSvc.exportarEncargo(auditId, user);
     const engagementVinculado = await this.prisma.engagement.count({ where: { auditId } });
 
+    // Nombres reales de los papeles del encargo — el frontend los usa para
+    // mostrar "Borrando: {título}" rotando durante la animación de borrado
+    // (puramente cosmético, no hay progreso real por papel que reportar
+    // desde el backend — el borrado ocurre por modelo completo, no fila a
+    // fila — pero el nombre real da más realismo que un mensaje genérico).
+    const paperTitles = ((data.workingPaper ?? []) as Array<{ code?: string; title?: string }>)
+      .map(wp => [wp.code, wp.title].filter(Boolean).join(' — '))
+      .filter(Boolean);
+
     return {
-      auditId, auditTitulo: audit.title, totalFilas, conteoPorModelo, engagementVinculado,
+      auditId, auditTitulo: audit.title, totalFilas, conteoPorModelo, engagementVinculado, paperTitles,
     };
   }
 

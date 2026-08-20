@@ -109,7 +109,11 @@ export function DeleteAuditModal({
             </div>
           ) : deleteMut.isPending ? (
             <div className="py-4">
-              <DocumentDeleteLoader state="deleting" size={72} message={`Borrando "${auditTitle}"…`} />
+              <DocumentDeleteLoader
+                state="deleting" size={72}
+                message={`Borrando "${auditTitle}"…`}
+                items={preview?.paperTitles ?? []}
+              />
             </div>
           ) : (
             <>

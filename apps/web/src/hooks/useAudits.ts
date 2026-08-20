@@ -186,6 +186,8 @@ export interface DeleteAuditPreview {
   totalFilas: number;
   conteoPorModelo: Record<string, number>;
   engagementVinculado: number;
+  /** Nombres reales de los papeles del encargo — para mostrar "Borrando: {título}" rotando en el loader. */
+  paperTitles: string[];
 }
 
 export interface DeleteAuditResultado {

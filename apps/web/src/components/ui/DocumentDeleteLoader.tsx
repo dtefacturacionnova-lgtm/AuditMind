@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileText, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export type DocumentDeleteLoaderState = 'deleting' | 'success' | 'error';
@@ -10,10 +10,21 @@ export interface DocumentDeleteLoaderProps {
   state: DocumentDeleteLoaderState;
   /** Mensaje breve opcional bajo el icono (ej. "Eliminando registros…"). */
   message?: string;
+  /**
+   * Nombres reales (ej. papeles de trabajo) para mostrar rotando bajo el
+   * mensaje mientras `state === 'deleting'` — puramente cosmético, da la
+   * sensación de "está procesando esto ahora mismo". No hay progreso real
+   * por ítem que reportar desde el backend (el borrado ocurre por modelo
+   * completo, no fila a fila), así que esto simplemente recorre la lista en
+   * un ciclo a ritmo fijo — no está sincronizado con el avance real.
+   */
+  items?: string[];
   /** Tamaño del icono en px — el contenedor total es ~1.8× esto. Default 64. */
   size?: number;
   className?: string;
 }
+
+const ITEM_INTERVAL_MS = 650;
 
 const SHRED_SLICES = 7;
 
@@ -40,12 +51,20 @@ const TONE = {
  * haya terminado. Con CSS puro, la corrección funcional (mostrar el
  * resultado) nunca depende de que la animación decorativa llegue a pintarse.
  */
-export function DocumentDeleteLoader({ state, message, size = 64, className = '' }: DocumentDeleteLoaderProps) {
+export function DocumentDeleteLoader({ state, message, items = [], size = 64, className = '' }: DocumentDeleteLoaderProps) {
   const tone = TONE[state];
   const sliceWidth = size / SHRED_SLICES;
   const fallDistance = Math.round(size * 0.22);
 
   const slices = useMemo(() => Array.from({ length: SHRED_SLICES }, (_, i) => i), []);
+
+  const [itemIdx, setItemIdx] = useState(0);
+  useEffect(() => {
+    if (state !== 'deleting' || items.length === 0) return;
+    const id = setInterval(() => setItemIdx(i => (i + 1) % items.length), ITEM_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [state, items.length]);
+  const currentItem = items.length > 0 ? items[itemIdx % items.length] : null;
 
   return (
     <div className={`flex flex-col items-center justify-center gap-3 ${className}`} role="status" aria-live="polite">
@@ -70,6 +89,11 @@ export function DocumentDeleteLoader({ state, message, size = 64, className = ''
           40% { transform: translateX(6px); }
           60% { transform: translateX(-4px); }
           80% { transform: translateX(4px); }
+        }
+        @keyframes dm-item-fade {
+          0% { opacity: 0; transform: translateY(2px); }
+          15%, 85% { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-2px); }
         }
       `}</style>
 
@@ -124,6 +148,16 @@ export function DocumentDeleteLoader({ state, message, size = 64, className = ''
       </div>
 
       {message && <p className={`text-sm font-medium ${tone.text}`}>{message}</p>}
+
+      {state === 'deleting' && currentItem && (
+        <p
+          key={itemIdx}
+          className="text-xs text-gray-400 max-w-[280px] truncate"
+          style={{ animation: `dm-item-fade ${ITEM_INTERVAL_MS}ms ease-in-out` }}
+        >
+          {currentItem}
+        </p>
+      )}
     </div>
   );
 }

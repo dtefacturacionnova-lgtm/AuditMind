@@ -210,7 +210,18 @@ export function useDeleteAudit(auditId: string) {
   return useMutation({
     mutationFn: (confirmarTitulo: string) =>
       apiClient.post<DeleteAuditResultado>(`/audits/${auditId}/delete`, { confirmarTitulo }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['audits'] }),
+    // "Fire and forget" — NO retornar la promesa de invalidateQueries. A
+    // diferencia de crear/restaurar (donde el recurso invalidado sigue
+    // existiendo y su refetch siempre resuelve OK), aquí el encargo YA no
+    // existe: el refetch de useAudit(auditId) que dispara la invalidación
+    // SIEMPRE falla con 404. TanStack Query espera la promesa que retorna
+    // onSuccess antes de asentar la mutación — si esa promesa se rechaza (o
+    // tarda) por culpa de ese refetch fallido, mutateAsync() nunca resuelve
+    // para quien llama, dejando el modal pegado en "isPending" para siempre
+    // aunque el borrado ya haya terminado (bug real, encontrado en pruebas
+    // reales contra producción — verificado con fetch instrumentado que la
+    // llamada real SÍ completaba, solo la promesa de la mutación no).
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['audits'] }).catch(() => {}); },
   });
 }
 

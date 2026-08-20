@@ -370,8 +370,20 @@ export class RiskTraceService {
         const nodes = (fs.value as { nodes?: unknown[] } | null)?.nodes;
         if (!Array.isArray(nodes)) continue;
         for (const n of nodes as Array<Record<string, unknown>>) {
-          if (!textReferencesArea(String(n.label ?? ''), resolved.area)) continue;
-          const linked = n.linkedPaper as { code?: string } | null | undefined;
+          const linked = n.linkedPaper as { code?: string; paperId?: string; sectionKey?: string; rowId?: string } | null | undefined;
+          let matches = textReferencesArea(String(n.label ?? ''), resolved.area);
+          // Fase 2: un nodo vinculado a una fila concreta (rowId, ej. un
+          // marcador de control apuntando a PT-MRCI) cuenta como coincidencia
+          // si ESA fila referencia la misma área — el nodo no tiene por qué
+          // mencionar el área en su propia etiqueta (ver Fase 2 §8.9).
+          if (!matches && linked?.paperId && linked.sectionKey && linked.rowId !== undefined) {
+            const targetRaw = sectionOf(linked.paperId, linked.sectionKey)?.value;
+            const targetRows = Array.isArray(targetRaw) ? (targetRaw as Record<string, unknown>[]) : [];
+            const idx = parseInt(linked.rowId, 10);
+            const targetRow = Number.isInteger(idx) ? targetRows[idx] : undefined;
+            if (targetRow && textReferencesArea(rowText(targetRow), resolved.area)) matches = true;
+          }
+          if (!matches) continue;
           flowNodes.push({
             paperId: fs.paperId, sectionKey: fs.sectionKey,
             nodeId: String(n.id ?? ''), kind: String(n.kind ?? ''),

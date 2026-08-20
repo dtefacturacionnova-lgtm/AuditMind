@@ -393,6 +393,13 @@ export class WorkingPapersController {
     return this.sectionsService.propagateNia530ToMrci(id, user);
   }
 
+  @Post(':id/propagate-segregacion-to-mrci')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Propagar incompatibilidades de PT-A3 S10 (Segregación de Funciones) hacia PT-MRCI S1 como riesgos nuevos (determinista, sin IA)' })
+  propagateSegregacionToMrci(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateSegregacionToMrci(id, user);
+  }
+
   @Post(':id/recalculate-coso-component-analysis')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Recalcular conteos de deficiencias por componente COSO en PT-NIA265 S2 a partir de S1 (determinista, preserva juicio del auditor)' })

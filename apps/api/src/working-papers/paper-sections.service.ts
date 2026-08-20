@@ -1646,6 +1646,102 @@ INSTRUCCIONES DE SALIDA:
   }
 
   /**
+   * Propaga PT-A3 S10 ("Segregación de Funciones") hacia PT-MRCI S1 — Fase 3
+   * del plan de Control Interno. A diferencia de propagateNia530ToMrci (que
+   * ACTUALIZA filas existentes), aquí cada incompatibilidad detectada es un
+   * RIESGO NUEVO que todavía no tiene fila en PT-MRCI — mismo patrón ADD-only
+   * que propagateConfirmaciones: las filas propagadas se marcan con `_origen`
+   * para poder re-ejecutar sin duplicar (se reemplazan, nunca se acumulan) y
+   * sin tocar las filas que el auditor agregó a mano.
+   */
+  async propagateSegregacionToMrci(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-MRCI') {
+      throw new BadRequestException(
+        'Solo un papel PT-MRCI puede recibir la propagación de PT-A3 (Segregación de Funciones)',
+      );
+    }
+
+    const a3 = await this.prisma.workingPaper.findFirst({
+      where:  { auditId: wp.auditId, paperCode: 'PT-A3' },
+      select: { id: true },
+    });
+    if (!a3) {
+      return { added: 0, message: 'Este encargo no tiene un papel PT-A3 — nada que propagar.' };
+    }
+
+    const s10 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId: a3.id, sectionKey: 'S10' } },
+    });
+    const rows = Array.isArray(s10?.value) ? (s10!.value as Record<string, unknown>[]) : [];
+
+    const findKey = (row: Record<string, unknown>, patterns: RegExp[]): string | undefined =>
+      Object.keys(row).find(k => patterns.some(p => p.test(k.toLowerCase())));
+
+    const inadecuadas = rows.filter(r => {
+      const col = findKey(r, [/segregaci[oó]n adecuada/]);
+      return col && /^no$/i.test(String(r[col]).trim());
+    });
+
+    if (inadecuadas.length === 0) {
+      return {
+        added: 0,
+        message: rows.length === 0
+          ? 'PT-A3 S10 (Segregación de Funciones) todavía no tiene filas.'
+          : 'PT-A3 S10 no reporta ninguna fila con "¿Segregación Adecuada?" = No — nada que propagar.',
+      };
+    }
+
+    const MARCA_ORIGEN = 'SEGREGACION_FUNCIONES';
+    const s1 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+    });
+    const existentes = Array.isArray(s1?.value) ? (s1!.value as Array<Record<string, unknown>>) : [];
+    const conservadas = existentes.filter(r => r['_origen'] !== MARCA_ORIGEN);
+
+    let seq = conservadas.length;
+    const nuevas = inadecuadas.map(row => {
+      const procesoCol = findKey(row, [/proceso/, /ciclo/]);
+      const incompatCol = findKey(row, [/incompatibilidad/]);
+      const compensCol = findKey(row, [/control compensatorio/]);
+      const residualCol = findKey(row, [/riesgo resultante/]);
+      const proceso = procesoCol ? String(row[procesoCol] ?? '').trim() : 'Proceso sin identificar';
+      const incompat = incompatCol ? String(row[incompatCol] ?? '').trim() : '';
+      const compensatorio = compensCol ? String(row[compensCol] ?? '').trim() : '';
+      const residual = residualCol ? String(row[residualCol] ?? '').trim() : '';
+
+      seq++;
+      return {
+        '_origen': MARCA_ORIGEN,
+        '#': String(seq),
+        'Riesgo': `Segregación de funciones inadecuada en ${proceso}${incompat ? ` — ${incompat}` : ''}`,
+        'Ref. Riesgo (PT-A2/PT-A5)': 'PT-A3::S10',
+        'Control Mitigante': compensatorio || 'Ninguno identificado',
+        'Ref. Control (PT-A3/PT-ITGC)': 'PT-A3::S10',
+        'Diseño Efectivo (Sí/No)': compensatorio ? 'Sí' : 'No',
+        'Operando Efectivamente (Sí/No)': 'No',
+        'Riesgo Residual (Bajo/Moderado/Alto/Muy Alto)': residual || 'Moderado',
+        'Impacto Potencial en el Dictamen': 'Ninguno',
+        'Ref. PT Ejecución': '',
+      };
+    });
+
+    const value = [...conservadas, ...nuevas];
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: value as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S1', value);
+
+    return {
+      added: nuevas.length,
+      message: `${nuevas.length} riesgo(s) de segregación de funciones propagado(s) desde PT-A3 S10.`,
+    };
+  }
+
+  /**
    * Recalcula PT-NIA265 S2 ("Análisis por Componente COSO — Mapa de Debilidades")
    * contando por severidad las deficiencias de S1 para cada uno de los 5
    * componentes COSO. A diferencia de S1 (que se REEMPLAZA por completo al

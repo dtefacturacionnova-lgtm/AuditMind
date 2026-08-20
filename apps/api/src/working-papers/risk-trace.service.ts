@@ -468,6 +468,17 @@ export class RiskTraceService {
       return accion && accion !== 'NINGUNA';
     }).length;
     const countDeficiencias = rowsOf('PT-NIA265', 'S1').length + rowsOf('PT-COSO', 'S8').length;
+    // Fase 3 — Segregación de Funciones (PT-A3 S10): se blende en el badge de
+    // Control en vez de tener etapa propia (§8.6 — "tarjeta adicional dentro
+    // de Control", su resultado alimenta PT-MRCI igual que cualquier riesgo).
+    const countControles = rowsOf('PT-A3', 'S2').length;
+    const countSegregacionInadecuada = rowsOf('PT-A3', 'S10').filter(r => {
+      const col = findColumn(r, [/segregaci[oó]n adecuada/]);
+      return col && /^no$/i.test(strip(String(r[col])));
+    }).length;
+    const controlLabel = countSegregacionInadecuada > 0
+      ? `${countControles} control(es) · ${countSegregacionInadecuada} debilidad(es) de segregación`
+      : `${countControles} control(es) documentado(s)`;
     const mrciConclusion = sectionOf(paperByCode.get('PT-MRCI')?.id ?? '', 'S4')?.value;
     const stageOf = (kind: RiskTraceBlockKind): BlockSpec => BLOCK_SPECS.find(b => b.kind === kind)!;
     const mk = (kind: ControlInternoStageKey, label: string, spec: BlockSpec | null, count: number, countLabel: string): ControlInternoStage => {
@@ -482,7 +493,7 @@ export class RiskTraceService {
     const stages: ControlInternoStage[] = [
       mk('IDENTIFICACION', 'Identificación',      stageOf('IDENTIFICACION'), s6Rows.length,           `${s6Rows.length} riesgo(s) significativo(s)`),
       mk('RMM',            profile === 'EXTERNA' ? 'Cuenta / RMM' : 'Riesgo', stageOf('RMM'),          countRmmSignificativos, profile === 'EXTERNA' ? `${countRmmSignificativos} área(s) con RMM significativo` : 'No aplica a este perfil'),
-      mk('CONTROL',        'Control',             stageOf('CONTROL'),        rowsOf('PT-A3', 'S2').length, `${rowsOf('PT-A3', 'S2').length} control(es) documentado(s)`),
+      mk('CONTROL',        'Control',             stageOf('CONTROL'),        countControles,           controlLabel),
       mk('PRUEBA',         'Prueba / Muestreo',   stageOf('PRUEBA'),         countPruebaAtencion,      countPruebaAtencion > 0 ? `${countPruebaAtencion} área(s) requieren atención` : 'Sin alertas'),
       mk('RESIDUAL',       'Riesgo Residual',     stageOf('RESIDUAL'),       countResidualAlto,        countResidualAlto > 0 ? `${countResidualAlto} residual(es) Alto/Muy Alto` : 'Sin residuales altos'),
       mk('DEFICIENCIA',    'Deficiencias',        stageOf('DEFICIENCIA'),    countDeficiencias,        `${countDeficiencias} deficiencia(s) comunicada(s)`),

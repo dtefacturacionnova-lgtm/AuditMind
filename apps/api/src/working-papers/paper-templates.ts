@@ -817,6 +817,16 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       sortOrder:    9,
       aiHint:       'Referencia automática al papel PT-ITGC. NIA 315 Rev. 2019: el auditor DEBE evaluar el ambiente TI como componente del CI. El detalle de los 4 dominios (Acceso Lógico, Gestión de Cambios, Operaciones TI, Desarrollo de Programas) y la reliance en SOC 1 se documentan en PT-ITGC. Las deficiencias ITGC aumentan el riesgo de los controles de aplicación que dependen del ambiente TI.',
     },
+    {
+      sectionKey:   'S10',
+      label:        'Segregación de Funciones',
+      description:  'Evaluación de segregación de funciones incompatibles (autorizar / custodiar / registrar / conciliar-revisar) en los procesos significativos. Acotada a los ciclos con mayor riesgo de concentración — no es necesario evaluar cada proceso trivial.',
+      fieldType:    FieldType.MATRIX,
+      isRequired:   false,
+      isAutoFilled: false,
+      sortOrder:    10,
+      aiHint:       'Columnas: # | Proceso / Ciclo | Autoriza (persona/rol) | Ejecuta o Custodia (persona/rol) | Registra (persona/rol) | Concilia o Revisa (persona/rol) | Incompatibilidad Detectada | ¿Segregación Adecuada? (Sí/No) | Control Compensatorio (si aplica) | Riesgo Resultante (Bajo/Moderado/Alto/Muy Alto). Evalúe los 4 roles clásicos de segregación (NIA 315.A106): quien AUTORIZA una transacción, quien EJECUTA/CUSTODIA el activo, quien REGISTRA el movimiento y quien CONCILIA/REVISA de forma independiente. "Incompatibilidad Detectada": describa específicamente qué dos roles recaen en la misma persona (ej. "La misma persona registra la transacción Y concilia el saldo — sin revisión independiente"). Si no existe incompatibilidad, indique "Ninguna — roles adecuadamente separados". "¿Segregación Adecuada?" = No cuando hay concentración de roles incompatibles SIN control compensatorio formal (aprobación gerencial documentada, revisión independiente periódica, sistema con bloqueo de autoaprobación). Priorice ciclos con manejo de efectivo, activos líquidos o alto volumen de ajustes manuales — no es necesario evaluar procesos de bajo riesgo. Las filas con "Segregación Adecuada"=No se pueden propagar a PT-MRCI como riesgos residuales (botón "Propagar a MRCI").',
+    },
   ],
 
   // ──────────────────────────────────────────────────────────────────────────

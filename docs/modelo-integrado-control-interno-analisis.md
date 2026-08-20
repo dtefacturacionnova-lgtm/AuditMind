@@ -191,6 +191,14 @@ Registrar `PT-A5`, `PT-MRCI`, `PT-COSO`, `PT-NIA530` en el array `papers[]` de "
 **Fase 0.5 — Cerrar la cadena Cuenta/Aserción/Objetivo (nueva)**
 Agregar columnas opcionales `Cuenta/Rubro relacionado` y `Aserción relacionada` a `PT-MRCI` S1 (pre-llenables desde `PT-A5` cuando aplique); agregar columna opcional `Objetivo relacionado` a `PT-A2` S1 y `PT-MRCI` S1, con `aiHint` diferenciado por plantilla. Cambio de config/columnas, sin `FieldType` nuevo.
 
+**Fase 0.5b — Propagación determinística PT-A2/PT-A5 → PT-MRCI (✅ Hecho, 2026-08-20)**
+La Fase 0.5 dejó las columnas listas pero sin ningún mecanismo real que las llenara — el propio `aiHint` de `PT-MRCI` S1 documentaba la regla de herencia, pero se aplicaba a mano. Nueva función `propagateRiesgosToMrci` (`apps/api/src/working-papers/paper-sections.service.ts`, junto a `propagateNia530ToMrci`/`propagateSegregacionToMrci`) — mismo patrón determinístico (sin IA) ya usado por esas dos:
+- Lee `PT-A2` S5 (Riesgos Específicos) + S6 (Riesgos Significativos) como candidatos, y S1/S4 para Objetivo y Riesgo Inherente por área (normalizando la escala de 5 niveles de `PT-A2` S4 a la de 4 de `PT-MRCI`).
+- Si el encargo tiene `PT-A5` (solo Externa), enriquece además Cuenta/Aserción/RI desde S1 — sin código separado por perfil, la rama simplemente no se activa si el papel no existe (mismo principio "núcleo común" del resto del módulo).
+- Un solo botón hace dos cosas: enriquece filas ya existentes con columnas opcionales vacías (nunca sobrescribe lo que el auditor ya llenó) y agrega filas nuevas para riesgos sin fila todavía (`_origen: 'PT_A2'`, reemplazo idempotente al re-ejecutar, mismo mecanismo que `propagateSegregacionToMrci`).
+- Endpoint `POST /working-papers/:id/propagate-riesgos-to-mrci`, botón "Propagar Riesgos desde PT-A2/PT-A5" en `SmartPaperSections.tsx` (primero de los tres botones de `PT-MRCI` S1 — lógicamente crea las filas que los otros dos luego actualizan).
+- Verificado contra dos encargos reales: **Externa** (`Empresa Comercial Demo SA de CV`) — 7 filas nuevas, 4 de ellas con Cuenta/Aserción/RI heredados de `PT-A5`, 2 corridas consecutivas sin duplicar (12 filas estables). **Interna** (`Auditoria IIA`, encargo de prueba poblado para esta verificación) — 3 filas nuevas con Objetivo + RI heredado (escala normalizada), Cuenta/Aserción correctamente vacías por no existir `PT-A5` en ese perfil, también idempotente.
+
 **Fase 1 — Cerrar el walkthrough/prueba de controles**
 Propagar `CONTROL_NO_EFECTIVO` de `PT-NIA530` Atributos hacia la fila correspondiente de `PT-MRCI` (Operando Efectivamente + Riesgo Residual).
 

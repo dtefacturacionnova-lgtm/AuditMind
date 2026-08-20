@@ -1742,6 +1742,232 @@ INSTRUCCIONES DE SALIDA:
   }
 
   /**
+   * Propaga los riesgos de PT-A2 (S5 Riesgos Específicos + S6 Riesgos
+   * Significativos) hacia PT-MRCI S1 — cierra el hueco que el propio
+   * `aiHint` de PT-MRCI S1 ya documenta: "Riesgo", "Objetivo relacionado",
+   * "Cuenta/Rubro relacionado", "Aserción relacionada" y "Riesgo Inherente
+   * heredado" deberían heredarse de la fila de origen, pero hoy se
+   * escriben a mano. Común a ambos perfiles de auditoría — PT-A2 es
+   * obligatorio en los dos; PT-A5 (Cuenta/Aserción/RI ya en escala de 4
+   * niveles) solo existe en Auditoría Financiera Externa, así que el
+   * enriquecimiento de esas columnas simplemente no se activa en un
+   * encargo de Auditoría Interna — mismo principio "núcleo común" del
+   * resto del módulo, sin lógica separada por perfil.
+   *
+   * Dos efectos en una sola pasada: (1) ENRIQUECE filas ya existentes que
+   * matcheen un área conocida y tengan las columnas opcionales vacías —
+   * nunca sobrescribe un valor ya presente; (2) AGREGA filas nuevas
+   * (ADD-only, `_origen` tag, mismo patrón idempotente que
+   * `propagateSegregacionToMrci`) por cada riesgo de PT-A2 S5/S6 sin fila
+   * correspondiente todavía. Control Mitigante y el resto de columnas de
+   * control quedan en blanco a propósito en las filas nuevas — eso es
+   * juicio de auditoría sobre PT-A3, no algo que este flujo deba inventar.
+   */
+  async propagateRiesgosToMrci(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-MRCI') {
+      throw new BadRequestException(
+        'Solo un papel PT-MRCI puede recibir la propagación de riesgos desde PT-A2/PT-A5',
+      );
+    }
+
+    const a2 = await this.prisma.workingPaper.findFirst({
+      where:  { auditId: wp.auditId, paperCode: 'PT-A2' },
+      select: { id: true },
+    });
+    if (!a2) {
+      return { added: 0, enriched: 0, message: 'Este encargo no tiene un papel PT-A2 — nada que propagar.' };
+    }
+    const a5 = await this.prisma.workingPaper.findFirst({
+      where:  { auditId: wp.auditId, paperCode: 'PT-A5' },
+      select: { id: true },
+    });
+
+    const findKey = (row: Record<string, unknown>, patterns: string[]): string | undefined =>
+      Object.keys(row).find(k => patterns.some(p => k.toLowerCase().includes(p)));
+    const normArea = (s: string): string =>
+      s.toLowerCase().trim().replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, ' ');
+
+    // ── PT-A2 S1: área → Objetivo relacionado ──────────────────────────────
+    const s1A2 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId: a2.id, sectionKey: 'S1' } },
+    });
+    const objetivoPorArea = new Map<string, string>();
+    for (const row of (Array.isArray(s1A2?.value) ? (s1A2!.value as Record<string, unknown>[]) : [])) {
+      const areaKey = findKey(row, ['ciclo', 'área', 'area']);
+      const objKey  = findKey(row, ['objetivo']);
+      if (!areaKey) continue;
+      const area = normArea(String(row[areaKey] ?? ''));
+      const objetivo = objKey ? String(row[objKey] ?? '').trim() : '';
+      if (area && objetivo) objetivoPorArea.set(area, objetivo);
+    }
+
+    // ── PT-A2 S4: área → Riesgo Inherente (normalizado a la escala de 4 de PT-MRCI) ──
+    const NIVEL_A2_A_MRCI: Record<string, string> = {
+      'muy bajo': 'Bajo', 'bajo': 'Bajo', 'medio': 'Moderado', 'alto': 'Alto', 'muy alto': 'Muy Alto',
+    };
+    const s4A2 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId: a2.id, sectionKey: 'S4' } },
+    });
+    const riPorArea = new Map<string, string>();
+    for (const row of (Array.isArray(s4A2?.value) ? (s4A2!.value as Record<string, unknown>[]) : [])) {
+      const areaKey  = findKey(row, ['ciclo', 'área', 'area']);
+      const nivelKey = findKey(row, ['nivel']);
+      if (!areaKey || !nivelKey) continue;
+      const area  = normArea(String(row[areaKey] ?? ''));
+      const nivel = NIVEL_A2_A_MRCI[String(row[nivelKey] ?? '').trim().toLowerCase()];
+      if (area && nivel) riPorArea.set(area, nivel);
+    }
+
+    // ── PT-A2 S5 + S6: lista de riesgos candidatos (texto + área) ──────────
+    const [s5A2, s6A2] = await Promise.all([
+      this.prisma.paperSection.findUnique({ where: { paperId_sectionKey: { paperId: a2.id, sectionKey: 'S5' } } }),
+      this.prisma.paperSection.findUnique({ where: { paperId_sectionKey: { paperId: a2.id, sectionKey: 'S6' } } }),
+    ]);
+    interface RiesgoCandidato { texto: string; area: string; ref: string }
+    const candidatos: RiesgoCandidato[] = [];
+    for (const row of (Array.isArray(s5A2?.value) ? (s5A2!.value as Record<string, unknown>[]) : [])) {
+      const areaKey = findKey(row, ['ciclo', 'área', 'area']);
+      const descKey = findKey(row, ['descripci']);
+      const texto = descKey ? String(row[descKey] ?? '').trim() : '';
+      if (texto && areaKey) candidatos.push({ texto, area: normArea(String(row[areaKey] ?? '')), ref: 'PT-A2::S5' });
+    }
+    for (const row of (Array.isArray(s6A2?.value) ? (s6A2!.value as Record<string, unknown>[]) : [])) {
+      const areaKey = findKey(row, ['ciclo', 'área', 'area']);
+      const descKey = findKey(row, ['riesgo significativo']);
+      const texto = descKey ? String(row[descKey] ?? '').trim() : '';
+      if (texto && areaKey) candidatos.push({ texto, area: normArea(String(row[areaKey] ?? '')), ref: 'PT-A2::S6' });
+    }
+
+    if (candidatos.length === 0) {
+      return { added: 0, enriched: 0, message: 'PT-A2 S5/S6 todavía no tiene riesgos identificados — nada que propagar.' };
+    }
+
+    // ── PT-A5 S1 (si existe — solo Externa): área → Cuenta/Aserción/RI ─────
+    const enriquecePorArea = new Map<string, { cuenta: string; asercion: string; ri: string }>();
+    if (a5) {
+      const s1A5 = await this.prisma.paperSection.findUnique({
+        where: { paperId_sectionKey: { paperId: a5.id, sectionKey: 'S1' } },
+      });
+      for (const row of (Array.isArray(s1A5?.value) ? (s1A5!.value as Record<string, unknown>[]) : [])) {
+        const areaKey    = findKey(row, ['área', 'area', 'ciclo']);
+        const cuentaKey  = findKey(row, ['cuenta', 'saldo']);
+        const asercionKey = findKey(row, ['aserci']);
+        const riKey = Object.keys(row).find(k => k.trim().toUpperCase() === 'RI');
+        if (!areaKey) continue;
+        const area = normArea(String(row[areaKey] ?? ''));
+        if (!area || enriquecePorArea.has(area)) continue; // primer match por área, no acumula
+        const riRaw = riKey ? String(row[riKey] ?? '').trim().toUpperCase().replace('_', ' ') : '';
+        const RI_A5_A_MRCI: Record<string, string> = { 'BAJO': 'Bajo', 'MODERADO': 'Moderado', 'ALTO': 'Alto', 'MUY ALTO': 'Muy Alto' };
+        enriquecePorArea.set(area, {
+          cuenta:   cuentaKey ? String(row[cuentaKey] ?? '').trim() : '',
+          asercion: asercionKey ? String(row[asercionKey] ?? '').trim() : '',
+          ri:       RI_A5_A_MRCI[riRaw] ?? '',
+        });
+      }
+    }
+
+    // ── PT-MRCI S1 actual ───────────────────────────────────────────────────
+    const s1Mrci = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+    });
+    const filasActuales = Array.isArray(s1Mrci?.value) ? (s1Mrci!.value as Record<string, unknown>[]) : [];
+
+    const COL_RIESGO   = 'Riesgo';
+    const COL_REF       = 'Ref. Riesgo (PT-A2/PT-A5)';
+    const COL_OBJETIVO  = 'Objetivo relacionado (opcional)';
+    const COL_CUENTA    = 'Cuenta/Rubro relacionado (opcional)';
+    const COL_ASERCION  = 'Aserción relacionada (opcional)';
+    const COL_RI        = 'Riesgo Inherente heredado (opcional)';
+
+    /** Resuelve el enriquecimiento (objetivo/cuenta/aserción/RI) para un área dada — PT-A5 tiene prioridad sobre PT-A2 S4 para RI cuando hay match. */
+    const resolverEnriquecimiento = (area: string) => {
+      const deA5 = enriquecePorArea.get(area);
+      return {
+        objetivo: objetivoPorArea.get(area) ?? '',
+        cuenta:   deA5?.cuenta ?? '',
+        asercion: deA5?.asercion ?? '',
+        ri:       deA5?.ri || riPorArea.get(area) || '',
+      };
+    };
+
+    // ── 1. Enriquecer filas existentes (nunca sobrescribe un valor ya presente) ──
+    let enriched = 0;
+    const findRiesgoKey = (row: Record<string, unknown>) => findKey(row, ['riesgo']) ?? COL_RIESGO;
+    const filasEnriquecidas = filasActuales.map(row => {
+      const riesgoKey = findRiesgoKey(row);
+      const textoRiesgo = normArea(String(row[riesgoKey] ?? ''));
+      const areaMatch = candidatos.find(c => textoRiesgo && (textoRiesgo.includes(c.area) || c.area.includes(textoRiesgo)))?.area
+        ?? [...objetivoPorArea.keys(), ...riPorArea.keys(), ...enriquecePorArea.keys()].find(a => textoRiesgo.includes(a));
+      if (!areaMatch) return row;
+      const { objetivo, cuenta, asercion, ri } = resolverEnriquecimiento(areaMatch);
+      const patch: Record<string, unknown> = {};
+      if (objetivo && !String(row[COL_OBJETIVO] ?? '').trim()) patch[COL_OBJETIVO] = objetivo;
+      if (cuenta   && !String(row[COL_CUENTA] ?? '').trim())   patch[COL_CUENTA] = cuenta;
+      if (asercion && !String(row[COL_ASERCION] ?? '').trim()) patch[COL_ASERCION] = asercion;
+      if (ri       && !String(row[COL_RI] ?? '').trim())       patch[COL_RI] = ri;
+      if (Object.keys(patch).length === 0) return row;
+      enriched++;
+      return { ...row, ...patch };
+    });
+
+    // ── 2. Agregar filas nuevas (ADD-only, idempotente por _origen) ────────
+    const MARCA_ORIGEN = 'PT_A2';
+    const conservadas = filasEnriquecidas.filter(r => r['_origen'] !== MARCA_ORIGEN);
+    const yaRepresentados = conservadas.map(r => normArea(String(r[findRiesgoKey(r)] ?? '')));
+
+    let seq = conservadas.length;
+    const nuevas: Record<string, unknown>[] = [];
+    for (const cand of candidatos) {
+      const textoNorm = normArea(cand.texto);
+      const yaExiste = yaRepresentados.some(t => t && (t.includes(textoNorm) || textoNorm.includes(t)));
+      if (yaExiste) continue;
+      const { objetivo, cuenta, asercion, ri } = resolverEnriquecimiento(cand.area);
+      seq++;
+      nuevas.push({
+        '_origen': MARCA_ORIGEN,
+        '#': String(seq),
+        [COL_RIESGO]: cand.texto,
+        [COL_REF]: enriquecePorArea.has(cand.area) ? `${cand.ref} + PT-A5::S1` : cand.ref,
+        [COL_OBJETIVO]: objetivo,
+        [COL_CUENTA]: cuenta,
+        [COL_ASERCION]: asercion,
+        [COL_RI]: ri,
+        'Control Mitigante': '',
+        'Ref. Control (PT-A3/PT-ITGC)': '',
+        'Diseño Efectivo (Sí/No)': '',
+        'Operando Efectivamente (Sí/No)': '',
+        'Riesgo Residual (Bajo/Moderado/Alto/Muy Alto)': '',
+        'Impacto Potencial en el Dictamen (Ninguno/Párrafo de Énfasis/Salvedad/Abstención/Opinión Adversa)': '',
+        'Ref. PT Ejecución': '',
+      });
+      // evita duplicar el mismo candidato dos veces dentro de esta misma corrida
+      yaRepresentados.push(textoNorm);
+    }
+
+    if (enriched === 0 && nuevas.length === 0) {
+      return {
+        added: 0, enriched: 0,
+        message: `Se revisaron ${candidatos.length} riesgo(s) de PT-A2 S5/S6 — todos ya están representados en PT-MRCI S1 con sus columnas opcionales completas.`,
+      };
+    }
+
+    const value = [...conservadas, ...nuevas];
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: value as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S1', value);
+
+    const partes: string[] = [];
+    if (nuevas.length > 0) partes.push(`${nuevas.length} riesgo(s) nuevo(s) agregado(s) desde PT-A2${a5 ? '/PT-A5' : ''}`);
+    if (enriched > 0) partes.push(`${enriched} fila(s) existente(s) enriquecida(s)`);
+    return { added: nuevas.length, enriched, message: partes.join(' · ') + '.' };
+  }
+
+  /**
    * Recalcula PT-NIA265 S2 ("Análisis por Componente COSO — Mapa de Debilidades")
    * contando por severidad las deficiencias de S1 para cada uno de los 5
    * componentes COSO. A diferencia de S1 (que se REEMPLAZA por completo al

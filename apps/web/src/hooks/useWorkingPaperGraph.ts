@@ -363,6 +363,20 @@ export function usePropagateSegregacionToMrci() {
   });
 }
 
+export function usePropagateRiesgosToMrci() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ added: number; enriched: number; message: string }>(
+        `/working-papers/${paperId}/propagate-riesgos-to-mrci`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
 export function usePropagateHallazgosToFindings() {
   const qc = useQueryClient();
   return useMutation({

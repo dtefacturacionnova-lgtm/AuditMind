@@ -425,6 +425,13 @@ export class WorkingPapersController {
     return this.sectionsService.propagateSegregacionToMrci(id, user);
   }
 
+  @Post(':id/propagate-riesgos-to-mrci')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Propagar riesgos de PT-A2 S5/S6 (+ Cuenta/Aserción/RI de PT-A5 S1 si el encargo lo tiene) hacia PT-MRCI S1 — filas nuevas y enriquecimiento de existentes (determinista, sin IA)' })
+  propagateRiesgosToMrci(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateRiesgosToMrci(id, user);
+  }
+
   @Post(':id/recalculate-coso-component-analysis')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Recalcular conteos de deficiencias por componente COSO en PT-NIA265 S2 a partir de S1 (determinista, preserva juicio del auditor)' })

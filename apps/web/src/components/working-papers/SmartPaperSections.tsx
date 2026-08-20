@@ -16,6 +16,7 @@ import {
   usePropagateConfirmaciones,
   usePropagateNia530ToMrci,
   usePropagateSegregacionToMrci,
+  usePropagateRiesgosToMrci,
   useRecalculateCosoComponentAnalysis,
   usePropagateHallazgosToFindings,
   useSeedSubstantiveProcedures,
@@ -410,6 +411,55 @@ function SegregacionPropagateBar({ paperId }: { paperId: string }) {
         >
           <RefreshCw className={`w-3.5 h-3.5 ${propagate.isPending ? 'animate-spin' : ''}`} />
           {propagate.isPending ? 'Propagando…' : 'Propagar Segregación de Funciones'}
+        </button>
+      </div>
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 mt-2 text-xs ${
+          isError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-indigo-50 border border-indigo-200 text-indigo-700'
+        }`}>
+          {isError ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PT-MRCI S1 — botón "Propagar Riesgos" (PT-A2 S5/S6 + PT-A5 S1) ───────────
+
+function RiesgosPropagateBar({ paperId }: { paperId: string }) {
+  const propagate = usePropagateRiesgosToMrci();
+  const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  async function handleClick() {
+    setMsg('');
+    setIsError(false);
+    try {
+      const res = await propagate.mutateAsync(paperId);
+      setMsg(res.message);
+      setIsError(false);
+    } catch (err) {
+      setMsg((err as Error).message || 'Error al propagar riesgos desde PT-A2/PT-A5');
+      setIsError(true);
+    }
+  }
+
+  return (
+    <div className="pt-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-[11px] text-gray-400">
+          Trae los riesgos de PT-A2 S5/S6 como filas — con Objetivo y Riesgo Inherente heredados, y Cuenta/Aserción si el encargo tiene PT-A5 (Financiera Externa) — y completa esas columnas en las filas que ya existan sin sobrescribir nada.
+        </p>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={propagate.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0"
+          title="Propagar riesgos desde PT-A2/PT-A5"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${propagate.isPending ? 'animate-spin' : ''}`} />
+          {propagate.isPending ? 'Propagando…' : 'Propagar Riesgos desde PT-A2/PT-A5'}
         </button>
       </div>
       {msg && (
@@ -1146,6 +1196,7 @@ export function SmartPaperSections({
             return (
               <SectionErrorBoundary key="S1" label={section.label}>
                 <div>
+                  {!readonly && paperId && <RiesgosPropagateBar paperId={paperId} />}
                   {!readonly && paperId && <Nia530PropagateBar paperId={paperId} />}
                   {!readonly && paperId && <SegregacionPropagateBar paperId={paperId} />}
                   <SectionField

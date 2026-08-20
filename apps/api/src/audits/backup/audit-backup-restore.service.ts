@@ -447,8 +447,8 @@ export class AuditBackupRestoreService {
     return { audit: auditFinal, totalFilasCreadas, totalArchivosSubidos, advertencias };
   }
 
-  /** IDs actuales de cada modelo con alcance de encargo — recorre `AUDIT_SCOPED_MODELS` en orden hacia adelante (igual que la exportación) para poder construir las familias de las que dependen los niveles siguientes. */
-  private async recolectarIdsExistentes(auditId: string): Promise<Record<string, string[]>> {
+  /** IDs actuales de cada modelo con alcance de encargo — recorre `AUDIT_SCOPED_MODELS` en orden hacia adelante (igual que la exportación) para poder construir las familias de las que dependen los niveles siguientes. Público: reutilizado también por `AuditsDeleteService` (borrado completo de encargos, 2026-08-20). */
+  async recolectarIdsExistentes(auditId: string): Promise<Record<string, string[]>> {
     const idsPorModelo: Record<string, string[]> = {};
     const idsPorFamilia = nuevasFamiliasDeIds();
     const familias = new Set<string>(MODELOS_QUE_ALIMENTAN_FAMILIA);
@@ -476,8 +476,13 @@ export class AuditBackupRestoreService {
    * filas nuevas sobre datos viejos no borrados dejaría al encargo con
    * datos duplicados/mezclados de forma silenciosa — preferible abortar
    * ruidosamente y que el usuario reintente o pida ayuda.
+   *
+   * Público: reutilizado tal cual por `AuditsDeleteService` para el borrado
+   * completo de un encargo (2026-08-20) — es exactamente la misma operación
+   * ("borrar todo lo que cuelga de este auditId"), solo que ahí nunca se
+   * llega al paso 2 de recrear filas nuevas desde un backup.
    */
-  private async eliminarDatosExistentes(auditId: string, advertencias: AuditBackupAdvertencia[]): Promise<void> {
+  async eliminarDatosExistentes(auditId: string, advertencias: AuditBackupAdvertencia[]): Promise<void> {
     const idsPorModelo = await this.recolectarIdsExistentes(auditId);
     for (const modelo of [...AUDIT_SCOPED_MODELS].reverse()) {
       const ids = idsPorModelo[modelo.model] ?? [];

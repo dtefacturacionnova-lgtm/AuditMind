@@ -30,6 +30,17 @@
  * parecían candidatos NO cuelgan de `Audit` y quedan correctamente FUERA:
  * `QaipEvaluation` y `NormativeException` pertenecen a `Organization`, no a
  * un encargo específico.
+ *
+ * **Actualizado 2026-08-20** (`verificarCompletitudModelos()` re-ejecutado
+ * contra el schema actual, al diseñar el borrado completo de encargos):
+ * agregados `fieldEvidence`/`fieldEvidenceFinding` (Evidencia de Campo,
+ * construido 2026-08-19 — posterior a la verificación original, quedó fuera
+ * por deriva, no por diseño). `engagement` también aparece en la salida de
+ * `verificarCompletitudModelos()` (tiene `auditId`) pero se deja FUERA a
+ * propósito: es el registro comercial (Cliente→Propuesta→Carta de
+ * Compromiso) que ORIGINÓ este `Audit`, no datos que cuelguen de él — borrar
+ * un encargo debe desvincularlo (`auditId = null`), nunca borrar el
+ * `Engagement`. Ver `apps/api/src/audits/audits-delete.service.ts`.
  */
 
 /** Nivel de dependencia — determina el orden de creación al restaurar. */
@@ -48,7 +59,8 @@ export interface AuditScopedModel {
     | { tipo: 'via_jobId' }
     | { tipo: 'via_sectionId' }
     | { tipo: 'via_procedureId' }
-    | { tipo: 'via_stepId' };
+    | { tipo: 'via_stepId' }
+    | { tipo: 'via_evidenceId' };
   nivel: NivelDependencia;
   /** true si además tiene su propio `auditId` directo (ej. DataFlag) — informativo, no cambia el filtro usado. */
   tieneAuditIdPropio?: boolean;
@@ -83,6 +95,7 @@ export const AUDIT_SCOPED_MODELS: AuditScopedModel[] = [
   { model: 'bcpAudit',              filtro: { tipo: 'auditId_directo' }, nivel: 1 },
   { model: 'connectorImport',       filtro: { tipo: 'auditId_directo' }, nivel: 1 },
   { model: 'auditRestoreLog',       filtro: { tipo: 'auditId_directo' }, nivel: 1 }, // bitácora de restauraciones (BKP-12) — metadata, no daña llevarla en el backup
+  { model: 'fieldEvidence',         filtro: { tipo: 'auditId_directo' }, nivel: 1 }, // Evidencia de Campo (EVD-01..18) — agregado 2026-08-20, ver nota arriba
 
   // ─── Nivel 2 — dependen de un modelo de nivel 1 ────────────────────────
   { model: 'paperSection',          filtro: { tipo: 'via_paperId', paperIdField: 'paperId' },       nivel: 2 },
@@ -95,6 +108,7 @@ export const AUDIT_SCOPED_MODELS: AuditScopedModel[] = [
   { model: 'trialBalancePaperLink', filtro: { tipo: 'via_trialBalanceId' },                          nivel: 2 }, // también referencia paperId
   { model: 'pbcMessage',            filtro: { tipo: 'via_pbcId' },                                   nivel: 2 },
   { model: 'dataFlag',              filtro: { tipo: 'via_jobId' }, nivel: 2, tieneAuditIdPropio: true },
+  { model: 'fieldEvidenceFinding',  filtro: { tipo: 'via_evidenceId' }, nivel: 2 }, // evidenceId → FieldEvidence
 
   // ─── Nivel 3 ────────────────────────────────────────────────────────────
   { model: 'findingAction',         filtro: { tipo: 'via_findingId' }, nivel: 3 },
@@ -141,6 +155,8 @@ export function construirWhereParaModelo(
       return ids.auditProcedure.length === 0 ? null : { procedureId: { in: ids.auditProcedure } };
     case 'via_stepId':
       return ids.auditStep.length === 0 ? null : { stepId: { in: ids.auditStep } };
+    case 'via_evidenceId':
+      return ids.fieldEvidence.length === 0 ? null : { evidenceId: { in: ids.fieldEvidence } };
   }
 }
 
@@ -149,6 +165,7 @@ export function nuevasFamiliasDeIds(): Record<string, string[]> {
   return {
     workingPaper: [], finding: [], pbcRequest: [], trialBalance: [],
     dataAnalysisJob: [], paperSection: [], auditProcedure: [], auditStep: [],
+    fieldEvidence: [],
   };
 }
 
@@ -156,6 +173,7 @@ export function nuevasFamiliasDeIds(): Record<string, string[]> {
 export const MODELOS_QUE_ALIMENTAN_FAMILIA = [
   'workingPaper', 'finding', 'pbcRequest', 'trialBalance',
   'dataAnalysisJob', 'paperSection', 'auditProcedure', 'auditStep',
+  'fieldEvidence',
 ] as const;
 
 /**

@@ -175,6 +175,45 @@ export function useRestoreDestructivo(auditId: string) {
   });
 }
 
+// ─── Borrado COMPLETO de un encargo (2026-08-20) ─────────────────────────────
+// A diferencia de la restauración destructiva (BKP-12, sobrescribe pero
+// conserva el Audit), esto lo borra por completo — filas y archivos. Mismo
+// patrón de previsualización + confirmación escrita del título.
+
+export interface DeleteAuditPreview {
+  auditId: string;
+  auditTitulo: string;
+  totalFilas: number;
+  conteoPorModelo: Record<string, number>;
+  engagementVinculado: number;
+}
+
+export interface DeleteAuditResultado {
+  auditId: string;
+  auditTitulo: string;
+  totalFilasBorradas: number;
+  conteoPorModelo: Record<string, number>;
+  archivosBorrados: number;
+  archivosConError: number;
+  engagementesDesvinculados: number;
+  advertencias: { modelo: string; filaId?: string; mensaje: string }[];
+}
+
+export function useDeleteAuditPreview(auditId: string) {
+  return useMutation({
+    mutationFn: () => apiClient.get<DeleteAuditPreview>(`/audits/${auditId}/delete-preview`),
+  });
+}
+
+export function useDeleteAudit(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (confirmarTitulo: string) =>
+      apiClient.post<DeleteAuditResultado>(`/audits/${auditId}/delete`, { confirmarTitulo }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['audits'] }),
+  });
+}
+
 // ─── Papeles disponibles desde plantilla ─────────────────────────────────────
 
 export interface AvailableTemplatePaper {

@@ -7,6 +7,7 @@ import { AuditBackupExportService } from './audit-backup-export.service';
 import { AuditBackupFilesService } from './audit-backup-files.service';
 import { AuditBackupPackageService } from './audit-backup-package.service';
 import { AuditBackupRestoreService } from './audit-backup-restore.service';
+import { AuditDeleteService } from './audit-delete.service';
 
 @Module({
   imports: [MulterModule.register({ storage: memoryStorage() })],
@@ -14,7 +15,7 @@ import { AuditBackupRestoreService } from './audit-backup-restore.service';
   providers: [
     AuditBackupService, AuditBackupExportService,
     AuditBackupFilesService, AuditBackupPackageService,
-    AuditBackupRestoreService,
+    AuditBackupRestoreService, AuditDeleteService,
   ],
   exports: [AuditBackupService, AuditBackupRestoreService],
 })

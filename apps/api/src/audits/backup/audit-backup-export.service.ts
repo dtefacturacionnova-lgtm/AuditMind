@@ -58,6 +58,7 @@ export class AuditBackupExportService {
       if (modelo.model === 'paperSection') idsPorFamilia.paperSection = filas.map(f => f.id as string);
       if (modelo.model === 'auditProcedure') idsPorFamilia.auditProcedure = filas.map(f => f.id as string);
       if (modelo.model === 'auditStep') idsPorFamilia.auditStep = filas.map(f => f.id as string);
+      if (modelo.model === 'fieldEvidence') idsPorFamilia.fieldEvidence = filas.map(f => f.id as string);
     }
 
     // Referencias colgantes: PaperLink/PaperReference cuyo destino es un

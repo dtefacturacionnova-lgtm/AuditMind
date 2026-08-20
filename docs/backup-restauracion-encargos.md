@@ -156,3 +156,54 @@ Verificado también en navegador real: la "Zona de riesgo" (colapsada por defect
 ### 8.3 Pendiente
 
 - Deploy al VPS no autorizado todavía para este feature.
+
+---
+
+## 9. Borrado COMPLETO de un encargo (2026-08-20)
+
+**Estado: implementado localmente, tipo-chequeado (API y Web), servidor arranca limpio. Verificación end-to-end en navegador BLOQUEADA — ver §9.4. No desplegado al VPS.**
+
+Motivado por una pregunta directa del usuario: "si borro un encargo completo, ¿se borra correctamente — incluidos los adjuntos?". La respuesta (investigada, no implementada todavía en ese momento) era **no existe ese botón**, y si se construyera con un `prisma.audit.delete()` ingenuo: (a) fallaría con violación de FK en `AuditPlanItem`/`TimeEntry`/`Engagement`/`ConnectorImport` (las 4 relaciones a `Audit` sin `onDelete: Cascade`, compilan a `RESTRICT`), y (b) aunque no fallara, el cascade de Prisma solo borra filas — nunca los archivos en Supabase Storage.
+
+### 9.1 Decisión de diseño — reutilizar BKP-12, no reinventar
+
+En vez de escribir la lógica de borrado desde cero, se reutiliza tal cual el mecanismo ya construido y probado en producción para la restauración destructiva (§8): `AUDIT_SCOPED_MODELS` (la lista explícita de todo lo que cuelga de un `Audit`) + `AuditBackupRestoreService.eliminarDatosExistentes()` (borrado explícito en orden inverso de dependencia — nunca depende de que la FK tenga cascade) + `AuditBackupExportService.exportarEncargo()` (recorrido de datos) + `AuditBackupFilesService.extraerRutasDeArchivo()` (detección de archivos embebidos). Es literalmente el mismo primer paso de una restauración destructiva — nuevo (`apps/api/src/audits/backup/audit-delete.service.ts`) es solo lo que pasa DESPUÉS: en vez de recrear filas desde un backup, se borra el `Audit` mismo.
+
+**`Engagement` (Cartera) se desvincula, nunca se borra**: `Engagement.auditId` es opcional — antes de borrar el árbol del encargo, se hace `updateMany({ where: { auditId }, data: { auditId: null } })`. El registro comercial (Cliente → Radar de Aceptación → Propuesta → Carta de Compromiso) es historia real del cliente que sobrevive al encargo técnico que originó, no datos que cuelguen de él — por eso queda deliberadamente FUERA de `AUDIT_SCOPED_MODELS`.
+
+**Endpoints** (mismo controller que BKP-12, mismo rol `ADMIN` — la acción de mayor blast-radius del sistema, ahora empatada con restore-destructive): `GET :id/delete-preview` (sin efectos secundarios, cuenta qué se perdería) y `POST :id/delete` (con `confirmarTitulo` en el body — mismo patrón de "escribe el título exacto" que el resto de la zona de riesgo).
+
+### 9.2 Dos bugs reales encontrados en el camino (no en el feature nuevo — en BKP-12/BKP-03, ya en producción)
+
+Al mapear qué hay que borrar/detectar para este feature, se re-ejecutó `AuditBackupExportService.verificarCompletitudModelos()` (la propia red de seguridad que `AUDIT_SCOPED_MODELS` ya tenía diseñada para esto) contra el schema actual:
+
+1. **`fieldEvidence`/`fieldEvidenceFinding` (Evidencia de Campo, EVD-01..18) faltaban en `AUDIT_SCOPED_MODELS`** — se construyeron el 2026-08-19, un día después de la verificación original de esta lista (2026-08-16). Efecto real: un backup de un encargo con evidencia de campo (fotos/audio/video de campo) omite esos datos silenciosamente — ni la exportación los incluye, ni la restauración destructiva los borraba/recreaba. Corregido agregando ambos modelos (nivel 1 y 2) — verificado que el discovery de FKs para el remapeo al restaurar es 100% dirigido por el DMMF de Prisma (`audit-backup-schema.ts`), así que no hace falta ningún ajuste adicional en la lógica de restauración: los campos nuevos (`paperId`, `capturedById`, `evidenceId`) se descubren y remapean solos.
+2. **`AuditBackupFilesService.extraerRutaDeTexto()` solo reconocía el prefijo bare-key `sections/`** — pero `StepEvidence.storageKey` (`procedures/steps/...`) y `FieldEvidence.storageKey` (`evidence/...`) también son bare keys reales, con prefijos distintos, que nunca se detectaban. Efecto real: los archivos de evidencia de pasos de procedimiento y de evidencia de campo quedaban huérfanos en Storage tanto al hacer backup como (ahora) al borrar un encargo. Corregido ampliando a una lista explícita de prefijos conocidos (`sections/`, `procedures/`, `docevidence/`, `acct-schedule/`, `evidence/`).
+
+Ambos bugs preexistían en el feature de backup ya desplegado — se corrigieron aquí porque el nuevo feature de borrado reutiliza exactamente ese mecanismo, y dejarlos rotos habría vuelto a dejar archivos huérfanos.
+
+### 9.3 Verificación hecha
+
+- Type-check limpio en `apps/api` y `apps/web` (`npx tsc --noEmit`).
+- Servidor local reiniciado, arranca sin errores.
+- El guard de rol confirmado end-to-end contra el endpoint real: un token de rol `CAE` (el más alto que existe hoy en la organización demo) recibe `403 Acceso denegado. Se requiere rol: ADMIN` en `GET :id/delete-preview` — el gate está correctamente conectado, no solo declarado.
+
+### 9.4 Bloqueante real para terminar de verificar — no existe ningún usuario `ADMIN`/`SUPER_ADMIN`
+
+Consultada la tabla `User` completa: el rol más alto que existe HOY en cualquier organización de este entorno es `CAE` (`cae@demo.cl`, `jsiguenzatorres@gmail.com`, ambos org `cmpbrhg8b0000fs65tj0aadbp`). **Nadie puede ejecutar ni este feature ni BKP-12 (restore-destructive, ya en producción) en este momento** — ambos exigen `ADMIN`. La verificación E2E de BKP-12 documentada en §8.2 debió haberse hecho con una cuenta elevada temporalmente para la prueba y luego revertida (mismo patrón de "clonado desechable" del resto de esa sección) — no quedó ningún usuario `ADMIN` real después.
+
+**Requiere una decisión del usuario, no algo que se resuelva solo**: elevar el rol de una cuenta real (candidatas obvias: `jsiguenzatorres@gmail.com` o `cae@demo.cl`) a `ADMIN` es un cambio de permisos sobre una cuenta de persona real — fuera de lo que se debe hacer sin pedir permiso explícito, incluso en un entorno de desarrollo local.
+
+### 9.5 Encargos "basura" identificados para la prueba manual (ninguno tocado)
+
+Consultada la tabla `Audit` completa (15 encargos) — candidatos reales para probar el borrado sin arriesgar el encargo demo canónico (`cmsrskxz80001jjekqqy3t4xy`, ver [[fixes_and_lessons]] #21):
+
+| ID | Título | Papeles | Por qué es candidato |
+|---|---|---|---|
+| `audit-01` / `audit-02` / `audit-03` | "Auditoría...Q1/Q4 2026" | 0–5 | IDs literales de seed, no `cuid()` — inequívocamente datos de arranque, no un encargo real |
+| `cmsxcvmmm0001nr8dck5zea1f` | "DEMO — Restaurado desde Backup (funcionalidad BKP)" | 32 | Residuo de la prueba E2E de BKP-10 (§7.3) — debió borrarse tras esa prueba y no se hizo |
+| `cmsxe4brl000110zzm26zayiu` | "DEMO — Restaurado desde Backup (funcionalidad BKP)" | 60 | Mismo caso, segunda instancia — hay DOS residuos de esa prueba, no uno |
+| `cmpz12znu0001761sveexamvi` | "Auditoria Financiera" | 32 | Ya documentado en [[fixes_and_lessons]] #21 como encargo antiguo sin relación con las demos vigentes |
+| `cmpz1qi3j0007i8grz5r8h50r` / `cmq02zopm0001jp1ntcpq0cf9` | "Auditoria IIA" / "Auditoria 2" | 21 / 30 | Nombres genéricos, sin contenido narrativo — candidatos probables de prueba antigua |
+
+`cmt0dqwy8000mcw62ngp6auyz` ("Cliente Piloto Cartera SA de CV") es distinto — **no es basura**, es la prueba E2E real del pipeline de Cartera (§ver [[project_auditmind]]) y tiene un `Engagement` vinculado de verdad. Es el candidato ideal para probar específicamente el paso de desvinculación (§9.1) — verificar que tras borrarlo, el `Engagement`/`Client` siguen existiendo en `/dashboard/portfolio` sin encargo asociado.

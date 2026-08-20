@@ -11,6 +11,7 @@ import { AuthUser } from '../../auth/jwt.strategy';
 import { UserRole } from '@prisma/client';
 import { AuditBackupService } from './audit-backup.service';
 import { AuditBackupRestoreService } from './audit-backup-restore.service';
+import { AuditDeleteService } from './audit-delete.service';
 
 /**
  * Backup y restauración de encargos (BKP-01..13). Ver
@@ -27,6 +28,7 @@ export class AuditBackupController {
   constructor(
     private readonly backupSvc: AuditBackupService,
     private readonly restoreSvc: AuditBackupRestoreService,
+    private readonly deleteSvc: AuditDeleteService,
   ) {}
 
   @Get(':id/backup')
@@ -101,5 +103,27 @@ export class AuditBackupController {
       throw new BadRequestException('Solo se aceptan archivos .zip generados por AuditMind');
     }
     return this.restoreSvc.restaurarDestructivo(id, file.buffer, user, confirmarTitulo);
+  }
+
+  // ─── Borrado COMPLETO de un encargo (2026-08-20) ─────────────────────────
+  // A diferencia de todo lo anterior (que preserva el Audit), esto lo borra
+  // por completo — filas y archivos. Mismo rol ADMIN que restore-destructive
+  // (mayor blast-radius de este controller) y misma confirmación escrita.
+  @Get(':id/delete-preview')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Previsualizar el borrado completo de un encargo — no modifica nada, solo cuenta qué se perdería' })
+  async previsualizarBorrado(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.deleteSvc.previsualizarBorrado(id, user);
+  }
+
+  @Post(':id/delete')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Borrar un encargo por completo — datos, papeles y archivos. Requiere confirmación escrita del título. No se puede deshacer.' })
+  async eliminarEncargoCompleto(
+    @Param('id') id: string,
+    @Body('confirmarTitulo') confirmarTitulo: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.deleteSvc.eliminarEncargoCompleto(id, confirmarTitulo, user);
   }
 }

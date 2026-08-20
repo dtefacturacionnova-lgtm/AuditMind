@@ -54,17 +54,33 @@ export class AuditBackupFilesService {
     return Array.from(rutas);
   }
 
+  /**
+   * Prefijos "bare key" reales que este código genera al subir un archivo —
+   * ver cada `.storage.from('audit-files').upload(...)`/`getPublicUrl(...)`
+   * en `working-papers.service.ts` (sections/, procedures/, docevidence/,
+   * acct-schedule/), `field-evidence.service.ts` (evidence/), y
+   * `audit-procedures.service.ts` (procedures/steps/ — nota: coincide con el
+   * mismo prefijo `procedures/` de arriba, listado aparte solo por claridad).
+   * **2026-08-20**: antes solo reconocía `sections/`, así que `StepEvidence.
+   * storageKey` (procedures/steps/…) y `FieldEvidence.storageKey`
+   * (evidence/…) — ambos bare keys reales, no URLs — nunca se detectaban;
+   * quedaban huérfanos en Storage tanto al hacer backup como al borrar un
+   * encargo completo. Encontrado al diseñar el borrado completo de encargos.
+   */
+  private static readonly PREFIJOS_BARE = ['sections/', 'procedures/', 'docevidence/', 'acct-schedule/', 'evidence/'];
+
   private extraerRutaDeTexto(texto: string): string | null {
     // URL pública completa: .../storage/v1/object/public/audit-files/<ruta>
     const mUrl = new RegExp(`/${BUCKET}/(.+)$`).exec(texto);
     if (mUrl) return decodeURIComponent(mUrl[1]);
-    // Storage key "bare" (ej. StepEvidence.storageKey) — ya es la ruta relativa
-    // dentro del bucket; se reconoce por el mismo prefijo `sections/` que usa
-    // el resto del sistema. No se puede distinguir de un string cualquiera
-    // con certeza — se acepta el riesgo bajo de un falso positivo (un string
-    // que por coincidencia empiece con "sections/" e intentar descargarlo del
-    // bucket, que simplemente fallará y quedará como advertencia, no como error).
-    if (/^sections\/[^/]+\/[^/]+\/.+/.test(texto)) return texto;
+    // Storage key "bare" — ya es la ruta relativa dentro del bucket. No se
+    // puede distinguir de un string cualquiera con certeza — se acepta el
+    // riesgo bajo de un falso positivo (un string que por coincidencia
+    // empiece con uno de estos prefijos e intente descargarlo/borrarlo del
+    // bucket, que simplemente fallará y quedará como advertencia, no error).
+    if (AuditBackupFilesService.PREFIJOS_BARE.some(p => texto.startsWith(p)) && /^[^/]+\/[^/]+\/.+/.test(texto)) {
+      return texto;
+    }
     return null;
   }
 
@@ -120,5 +136,36 @@ export class AuditBackupFilesService {
 
   urlPublica(ruta: string): string {
     return this.supabaseAdmin.storage.from(BUCKET).getPublicUrl(ruta).data.publicUrl;
+  }
+
+  /**
+   * Borra un lote de rutas de Storage (borrado completo de encargos,
+   * 2026-08-20) — en lotes de 100 porque la API de Supabase Storage no
+   * garantiza soportar arrays arbitrariamente grandes en `.remove()`. Un
+   * lote que falla se cuenta como error y se sigue con el resto — la fila de
+   * base de datos que lo referenciaba ya fue borrada en este punto del
+   * flujo, así que no tiene sentido abortar todo por un archivo huérfano que
+   * no se pudo limpiar (mismo criterio de `removeRequestDocument` en
+   * `audits.service.ts`: la limpieza de Storage es best-effort, nunca
+   * bloquea la operación principal).
+   */
+  async borrarArchivos(rutas: string[]): Promise<{ ok: number; error: number }> {
+    if (rutas.length === 0) return { ok: 0, error: 0 };
+    let ok = 0;
+    let error = 0;
+    const LOTE = 100;
+    for (let i = 0; i < rutas.length; i += LOTE) {
+      const lote = rutas.slice(i, i + LOTE);
+      const { data, error: err } = await this.supabaseAdmin.storage.from(BUCKET).remove(lote);
+      if (err) {
+        this.logger.warn(`Error al borrar lote de ${lote.length} archivo(s) de Storage: ${err.message}`);
+        error += lote.length;
+        continue;
+      }
+      ok += data?.length ?? 0;
+      error += lote.length - (data?.length ?? 0);
+    }
+    this.logger.log(`Borrado de Storage: ${ok}/${rutas.length} archivo(s) eliminados`);
+    return { ok, error };
   }
 }

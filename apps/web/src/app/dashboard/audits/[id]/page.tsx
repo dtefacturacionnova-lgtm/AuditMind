@@ -26,6 +26,7 @@ import { useControlInternoSummary }   from '@/hooks/useControlInterno';
 import { AiTestsOrchestratorModal }   from '@/components/audits/AiTestsOrchestratorModal';
 import { WorkingPaperIndexReport }    from '@/components/audits/WorkingPaperIndexReport';
 import { DestructiveRestoreModal }    from '@/components/audits/DestructiveRestoreModal';
+import { DeleteAuditModal }           from '@/components/audits/DeleteAuditModal';
 
 const STATUS_STYLES: Record<string, string> = {
   PLANNING: 'bg-blue-100 text-blue-700 border border-blue-200',
@@ -94,6 +95,7 @@ export default function AuditDetailPage() {
   const [showAiTests,        setShowAiTests]        = useState(false);
   const [showDangerZone,     setShowDangerZone]     = useState(false);
   const [showDestructiveRestore, setShowDestructiveRestore] = useState(false);
+  const [showDeleteAudit, setShowDeleteAudit] = useState(false);
   const [descargandoBackup,  setDescargandoBackup]  = useState(false);
 
   const { data: audit, isLoading } = useAudit(id);
@@ -401,6 +403,20 @@ export default function AuditDetailPage() {
                   <ShieldAlert className="h-3.5 w-3.5" />
                   Restaurar backup sobre este encargo
                 </button>
+
+                <div className="mt-3 pt-3 border-t border-red-100">
+                  <p className="text-xs text-red-600/80 mb-2">
+                    Borrar este encargo por completo — papeles, hallazgos, horas, adjuntos, todo.
+                    No queda nada que restaurar. No se puede deshacer.
+                  </p>
+                  <button
+                    onClick={() => setShowDeleteAudit(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-300 bg-white text-red-700 text-sm font-medium hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Borrar encargo por completo
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -465,6 +481,15 @@ export default function AuditDetailPage() {
           auditId={id}
           auditTitle={audit.title}
           onClose={() => setShowDestructiveRestore(false)}
+        />
+      )}
+
+      {/* Borrado completo de encargo (2026-08-20) */}
+      {showDeleteAudit && (
+        <DeleteAuditModal
+          auditId={id}
+          auditTitle={audit.title}
+          onClose={() => setShowDeleteAudit(false)}
         />
       )}
 

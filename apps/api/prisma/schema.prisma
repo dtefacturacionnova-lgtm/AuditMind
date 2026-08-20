@@ -476,6 +476,7 @@ model User {
   name                   String
   role                   UserRole               @default(AUDITOR)
   avatarUrl              String?
+  initials               String? // firma/iniciales autoconfiguradas (ej. "JST"), opcional — usadas en vez del nombre completo donde el espacio es reducido (ej. ProcedureGridPanel)
   active                 Boolean                @default(true)
   lastLoginAt            DateTime?
   timezone               String                 @default("America/Lima")
@@ -2613,9 +2614,11 @@ model AuditStep {
   extent            String? // "45 ítems MUS", "100% de saldo"
   population        String? // fuente de datos / universo
   performedByName   String? // ISA 230 §9
+  performedByInitials String? // snapshot al momento de "Asignarme" — no se resuelve por lookup
   performedById     String?
   datePerformed     DateTime? // ISA 230 §9 — debe ser ≤ fecha informe
   reviewedByName    String?
+  reviewedByInitials String?
   reviewedById      String?
   dateReviewed      DateTime?
   wpRef             String? // "AR-03-01" — referencia al papel de evidencia

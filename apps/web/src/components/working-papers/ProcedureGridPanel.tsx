@@ -8,7 +8,7 @@ import {
   Link2, Target, UserCheck,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
-import { useUser } from '@/hooks/useUser';
+import { useUser, useMyProfile } from '@/hooks/useUser';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,9 +35,11 @@ interface AuditStep {
   extent?:          string;
   population?:      string;
   performedByName?: string;
+  performedByInitials?: string;
   performedById?:   string;
   datePerformed?:   string;
   reviewedByName?:  string;
+  reviewedByInitials?: string;
   reviewedById?:    string;
   dateReviewed?:    string;
   wpRef?:           string;
@@ -251,13 +253,14 @@ function RiskRefPicker({
 // Los campos de responsable no se escriben a mano — el botón toma el usuario que
 // tiene la sesión abierta y la fecha de hoy, evitando que alguien firme por otro.
 
-function AssignMeButton({ onAssign, label }: { onAssign: (name: string, id: string, date: string) => void; label: string }) {
+function AssignMeButton({ onAssign, label }: { onAssign: (name: string, id: string, date: string, initials?: string) => void; label: string }) {
   const { user } = useUser();
+  const { data: profile } = useMyProfile();
   if (!user) return null;
   return (
     <button
       type="button"
-      onClick={() => onAssign(user.name, user.id, new Date().toISOString().slice(0, 10))}
+      onClick={() => onAssign(user.name, user.id, new Date().toISOString().slice(0, 10), profile?.initials)}
       className="flex items-center gap-1 text-[10px] text-indigo-600 hover:text-indigo-800 px-1.5 py-0.5 rounded hover:bg-indigo-50 transition-colors"
       title={`Asignarme como ${label.toLowerCase()} con la fecha de hoy`}
     >
@@ -323,9 +326,11 @@ function StepForm({ initial, procedureRef, papers, onSave, onCancel, saving }: S
     extent:       initial?.extent       ?? '',
     population:   initial?.population   ?? '',
     performedByName: initial?.performedByName ?? '',
+    performedByInitials: initial?.performedByInitials ?? '',
     performedById:   initial?.performedById   ?? '',
     datePerformed:   initial?.datePerformed   ?? '',
     reviewedByName:  initial?.reviewedByName  ?? '',
+    reviewedByInitials: initial?.reviewedByInitials ?? '',
     reviewedById:    initial?.reviewedById    ?? '',
     dateReviewed:    initial?.dateReviewed    ?? '',
     wpRef:           initial?.wpRef           ?? '',
@@ -476,7 +481,7 @@ function StepForm({ initial, procedureRef, papers, onSave, onCancel, saving }: S
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Realizado por (ISA 230)</label>
             <AssignMeButton
               label="realizado por"
-              onAssign={(name, id, date) => setForm(prev => ({ ...prev, performedByName: name, performedById: id, datePerformed: date }))}
+              onAssign={(name, id, date, initials) => setForm(prev => ({ ...prev, performedByName: name, performedById: id, datePerformed: date, performedByInitials: initials }))}
             />
           </div>
           <input
@@ -503,7 +508,7 @@ function StepForm({ initial, procedureRef, papers, onSave, onCancel, saving }: S
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Revisado por</label>
             <AssignMeButton
               label="revisado por"
-              onAssign={(name, id, date) => setForm(prev => ({ ...prev, reviewedByName: name, reviewedById: id, dateReviewed: date }))}
+              onAssign={(name, id, date, initials) => setForm(prev => ({ ...prev, reviewedByName: name, reviewedById: id, dateReviewed: date, reviewedByInitials: initials }))}
             />
           </div>
           <input
@@ -881,9 +886,15 @@ function StepRow({ step, papers, onUpdate, onDelete, onAddEvidence, onDeleteEvid
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             {step.performedByName && (
-              <span className="text-[10px] text-gray-600">
-                ✍ {step.performedByName}
+              <span className="text-[10px] text-gray-600" title={step.performedByName}>
+                ✍ {step.performedByInitials || step.performedByName}
                 {step.datePerformed && ` · ${new Date(step.datePerformed).toLocaleDateString('es-CL')}`}
+              </span>
+            )}
+            {step.reviewedByName && (
+              <span className="text-[10px] text-gray-600" title={step.reviewedByName}>
+                ✔ {step.reviewedByInitials || step.reviewedByName}
+                {step.dateReviewed && ` · ${new Date(step.dateReviewed).toLocaleDateString('es-CL')}`}
               </span>
             )}
             {step.wpRef && (

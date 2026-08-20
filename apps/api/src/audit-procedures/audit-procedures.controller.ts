@@ -163,6 +163,11 @@ class CreateStepDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  performedByInitials?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   performedById?: string;
 
   @ApiPropertyOptional()
@@ -174,6 +179,11 @@ class CreateStepDto {
   @IsOptional()
   @IsString()
   reviewedByName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reviewedByInitials?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

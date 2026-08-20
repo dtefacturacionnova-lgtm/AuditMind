@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { createClient } from '../lib/supabase/client';
+import { apiClient } from '../lib/api-client';
 import type { User } from '@supabase/supabase-js';
 
 export interface AppUser {
@@ -76,4 +78,28 @@ export function useUser() {
   };
 
   return { user, loading, hasRole, signOut };
+}
+
+export interface MyProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatarUrl?: string;
+  initials?: string;
+}
+
+/**
+ * Perfil del usuario tal como lo guarda Prisma — a diferencia de `useUser()`
+ * (que lee directo de Supabase Auth y solo tiene lo que vive en
+ * user_metadata/app_metadata), este trae campos que solo existen en la BD
+ * (ej. `initials`, la firma/iniciales configurable en Ajustes). `id` aquí es
+ * el `User.id` de Prisma, NO el UUID de Supabase que devuelve `useUser()`.
+ */
+export function useMyProfile() {
+  return useQuery<MyProfile>({
+    queryKey: ['users', 'me'],
+    queryFn: () => apiClient.get<MyProfile>('/users/me'),
+    staleTime: 60_000,
+  });
 }

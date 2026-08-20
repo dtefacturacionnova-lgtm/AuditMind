@@ -43,9 +43,11 @@ export interface CreateStepDto {
   extent?:          string;
   population?:      string;
   performedByName?: string;
+  performedByInitials?: string;
   performedById?:   string;
   datePerformed?:   string;
   reviewedByName?:  string;
+  reviewedByInitials?: string;
   reviewedById?:    string;
   dateReviewed?:    string;
   wpRef?:           string;
@@ -249,9 +251,11 @@ export class AuditProceduresService {
         extent:           dto.extent         ?? null,
         population:       dto.population     ?? null,
         performedByName:  dto.performedByName ?? null,
+        performedByInitials: dto.performedByInitials ?? null,
         performedById:    dto.performedById   ?? null,
         datePerformed:    dto.datePerformed   ? new Date(dto.datePerformed) : null,
         reviewedByName:   dto.reviewedByName  ?? null,
+        reviewedByInitials: dto.reviewedByInitials ?? null,
         reviewedById:     dto.reviewedById    ?? null,
         dateReviewed:     dto.dateReviewed    ? new Date(dto.dateReviewed) : null,
         wpRef:            dto.wpRef           ?? null,
@@ -295,9 +299,11 @@ export class AuditProceduresService {
         ...(dto.extent           !== undefined && { extent:           dto.extent }),
         ...(dto.population       !== undefined && { population:       dto.population }),
         ...(dto.performedByName  !== undefined && { performedByName:  dto.performedByName }),
+        ...(dto.performedByInitials !== undefined && { performedByInitials: dto.performedByInitials }),
         ...(dto.performedById    !== undefined && { performedById:    dto.performedById }),
         ...(dto.datePerformed    !== undefined && { datePerformed:    dto.datePerformed ? new Date(dto.datePerformed) : null }),
         ...(dto.reviewedByName   !== undefined && { reviewedByName:   dto.reviewedByName }),
+        ...(dto.reviewedByInitials !== undefined && { reviewedByInitials: dto.reviewedByInitials }),
         ...(dto.reviewedById     !== undefined && { reviewedById:     dto.reviewedById }),
         ...(dto.dateReviewed     !== undefined && { dateReviewed:     dto.dateReviewed ? new Date(dto.dateReviewed) : null }),
         ...(dto.wpRef            !== undefined && { wpRef:            dto.wpRef }),

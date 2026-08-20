@@ -56,7 +56,7 @@ export class UsersService {
         id: true, name: true, email: true, role: true,
         avatarUrl: true, active: true, createdAt: true,
         organizationId: true, aiAssistantPersonality: true,
-        timezone: true, preferredLanguage: true,
+        timezone: true, preferredLanguage: true, initials: true,
       },
     });
     if (!user) throw new NotFoundException('Usuario no encontrado');
@@ -74,11 +74,12 @@ export class UsersService {
       where: { id },
       data: {
         name: dto.name,
+        initials: dto.initials,
         aiAssistantPersonality: dto.aiAssistantPersonality as any,
       },
       select: {
         id: true, name: true, email: true, role: true,
-        avatarUrl: true, aiAssistantPersonality: true,
+        avatarUrl: true, aiAssistantPersonality: true, initials: true,
       },
     });
   }

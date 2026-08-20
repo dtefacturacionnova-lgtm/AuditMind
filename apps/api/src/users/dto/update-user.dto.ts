@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsBoolean, IsUrl } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsBoolean, IsUrl, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
@@ -7,6 +7,12 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiPropertyOptional({ example: 'JST', description: 'Firma/iniciales — usadas en vez del nombre completo donde el espacio es reducido' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  initials?: string;
 
   @ApiPropertyOptional({ example: 'Auditor Senior' })
   @IsOptional()

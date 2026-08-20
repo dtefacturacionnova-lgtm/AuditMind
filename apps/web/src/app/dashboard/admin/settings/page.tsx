@@ -32,6 +32,7 @@ interface UserProfile {
   email: string;
   role: string;
   avatarUrl?: string;
+  initials?: string;
   aiPersonality: 'PROFESSIONAL' | 'COLLABORATIVE' | 'CONCISE';
   notificationPreferences?: {
     newFindings: boolean;
@@ -43,6 +44,7 @@ interface UserProfile {
 
 type PatchUserPayload = {
   name?: string;
+  initials?: string;
   aiPersonality?: string;
   notificationPreferences?: UserProfile['notificationPreferences'];
 };
@@ -192,6 +194,7 @@ export default function SettingsPage() {
 
   // ── Section 1: profile ──────────────────────────────────────────────────────
   const [displayName, setDisplayName] = useState('');
+  const [initials, setInitials] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // ── Section 2: AI personality (optimistic) ──────────────────────────────────
@@ -216,6 +219,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!profile) return;
     setDisplayName(profile.name ?? '');
+    setInitials(profile.initials ?? '');
     setAiPersonality(profile.aiPersonality ?? 'PROFESSIONAL');
     setNotifPrefs({
       ...DEFAULT_NOTIF_PREFS,
@@ -229,7 +233,7 @@ export default function SettingsPage() {
     if (!displayName.trim()) return;
     setIsSavingProfile(true);
     try {
-      await patchProfile.mutateAsync({ name: displayName.trim() });
+      await patchProfile.mutateAsync({ name: displayName.trim(), initials: initials.trim() });
       showToast('Perfil actualizado correctamente');
     } catch {
       showToast('Error al guardar el perfil');
@@ -422,6 +426,27 @@ export default function SettingsPage() {
                   placeholder="Tu nombre completo"
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A] transition-colors"
                 />
+              </div>
+
+              {/* Iniciales / Firma — usadas en vez del nombre completo donde el
+                  espacio es reducido (ej. Programa de Auditoría → "Asignarme") */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="initials"
+                  className="flex items-center gap-1.5 text-sm font-medium text-gray-700"
+                >
+                  <User className="h-3.5 w-3.5 text-gray-400" />
+                  Iniciales / Firma
+                </label>
+                <input
+                  id="initials"
+                  type="text"
+                  value={initials}
+                  onChange={e => setInitials(e.target.value.toUpperCase().slice(0, 8))}
+                  placeholder="Ej. JST"
+                  className="w-32 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white uppercase tracking-wide focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A] transition-colors"
+                />
+                <p className="text-xs text-gray-400">Se usan en vez de tu nombre completo en espacios reducidos, como &quot;Realizado por&quot; / &quot;Revisado por&quot; del Programa de Auditoría.</p>
               </div>
 
               {/* Email field (read-only) */}

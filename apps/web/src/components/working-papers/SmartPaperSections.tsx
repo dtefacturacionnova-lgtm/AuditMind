@@ -14,6 +14,7 @@ import {
   usePropagateDiferencias,
   usePropagateControlDeficiencias,
   usePropagateConfirmaciones,
+  usePropagateNia530ToMrci,
   useRecalculateCosoComponentAnalysis,
   usePropagateHallazgosToFindings,
   useSeedSubstantiveProcedures,
@@ -310,6 +311,55 @@ function ConfirmacionesPropagateBar({ paperId }: { paperId: string }) {
         >
           <RefreshCw className={`w-3.5 h-3.5 ${propagate.isPending ? 'animate-spin' : ''}`} />
           {propagate.isPending ? 'Consolidando…' : 'Consolidar Confirmaciones'}
+        </button>
+      </div>
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 mt-2 text-xs ${
+          isError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-indigo-50 border border-indigo-200 text-indigo-700'
+        }`}>
+          {isError ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PT-MRCI S1 — botón "Propagar desde NIA 530" (CONTROL_NO_EFECTIVO) ────────
+
+function Nia530PropagateBar({ paperId }: { paperId: string }) {
+  const propagate = usePropagateNia530ToMrci();
+  const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  async function handleClick() {
+    setMsg('');
+    setIsError(false);
+    try {
+      const res = await propagate.mutateAsync(paperId);
+      setMsg(res.message);
+      setIsError(false);
+    } catch (err) {
+      setMsg((err as Error).message || 'Error al propagar desde PT-NIA530');
+      setIsError(true);
+    }
+  }
+
+  return (
+    <div className="pt-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-[11px] text-gray-400">
+          Trae de PT-NIA530 (Atributos) las áreas con CONTROL_NO_EFECTIVO y marca "Operando Efectivamente = No" + escala el Riesgo Residual en las filas coincidentes — nunca revierte una fila ya marcada.
+        </p>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={propagate.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0"
+          title="Propagar CONTROL_NO_EFECTIVO desde PT-NIA530"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${propagate.isPending ? 'animate-spin' : ''}`} />
+          {propagate.isPending ? 'Propagando…' : 'Propagar desde NIA 530'}
         </button>
       </div>
       {msg && (
@@ -1017,6 +1067,36 @@ export function SmartPaperSections({
               <SectionErrorBoundary key="S3" label={section.label}>
                 <div>
                   {!readonly && paperId && <SeedProceduresBar paperId={paperId} />}
+                  <SectionField
+                    section={section}
+                    allSections={sorted}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    paperId={paperId}
+                    paperCode={paperCode}
+                    auditId={auditId}
+                    mentionItems={mentionItems}
+                    aiDraftConfig={aiDraftConfig}
+                    onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                      void createReference.mutateAsync({
+                        paperId,
+                        sourceSectionKey: sectionKey,
+                        targetPaperId,
+                        targetSectionKey,
+                      });
+                    }}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            );
+          }
+
+          // PT-MRCI S1: botón "Propagar desde NIA 530" (CONTROL_NO_EFECTIVO → Operando Efectivamente + Residual).
+          if (paperCode === 'PT-MRCI' && section.sectionKey === 'S1') {
+            return (
+              <SectionErrorBoundary key="S1" label={section.label}>
+                <div>
+                  {!readonly && paperId && <Nia530PropagateBar paperId={paperId} />}
                   <SectionField
                     section={section}
                     allSections={sorted}

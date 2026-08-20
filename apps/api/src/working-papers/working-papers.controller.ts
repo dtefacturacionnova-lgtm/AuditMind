@@ -353,6 +353,13 @@ export class WorkingPapersController {
     return this.sectionsService.propagateConfirmaciones(id, user);
   }
 
+  @Post(':id/propagate-nia530-to-mrci')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Propagar CONTROL_NO_EFECTIVO de PT-NIA530 S4 (Atributos) hacia PT-MRCI S1 — Operando Efectivamente + Riesgo Residual (determinista, sin IA)' })
+  propagateNia530ToMrci(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateNia530ToMrci(id, user);
+  }
+
   @Post(':id/recalculate-coso-component-analysis')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Recalcular conteos de deficiencias por componente COSO en PT-NIA265 S2 a partir de S1 (determinista, preserva juicio del auditor)' })

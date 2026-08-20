@@ -1528,6 +1528,124 @@ INSTRUCCIONES DE SALIDA:
   }
 
   /**
+   * Propaga CONTROL_NO_EFECTIVO de PT-NIA530 S4 (Atributos — pruebas de
+   * control) hacia PT-MRCI S1 ("Operando Efectivamente" + "Riesgo Residual").
+   * Determinista, sin IA — mismo espíritu que propagateConfirmaciones. Solo
+   * ESCALA: nunca revierte una fila que el auditor ya marcó "No" de vuelta a
+   * "Sí", ni baja un Riesgo Residual ya elevado — el juicio manual posterior
+   * del auditor no se pisa por volver a presionar el botón.
+   *
+   * Empareja por nombre de área (normalizado) contra "Riesgo" y "Cuenta/Rubro
+   * relacionado" de cada fila de S1 — mismo mecanismo de coincidencia por
+   * texto que ya usa recalculateSamplingEvaluation para agrupar por área.
+   */
+  async propagateNia530ToMrci(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-MRCI') {
+      throw new BadRequestException(
+        'Solo un papel PT-MRCI puede recibir la propagación de PT-NIA530',
+      );
+    }
+
+    const nia530 = await this.prisma.workingPaper.findFirst({
+      where:  { auditId: wp.auditId, paperCode: 'PT-NIA530' },
+      select: { id: true },
+    });
+    if (!nia530) {
+      return {
+        updated: 0,
+        message: 'Este encargo no tiene un papel PT-NIA530 (Plan Maestro de Muestreo) — nada que propagar.',
+      };
+    }
+
+    const s4Nia530 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId: nia530.id, sectionKey: 'S4' } },
+    });
+    const s4Value = s4Nia530?.value as { filas?: Array<{ area?: unknown; esAtributos?: unknown; accion?: unknown }> } | null;
+    const filas = Array.isArray(s4Value?.filas) ? s4Value!.filas! : [];
+    const areasNoEfectivas = filas
+      .filter(f => f.esAtributos === true && f.accion === 'CONTROL_NO_EFECTIVO')
+      .map(f => String(f.area ?? '').trim())
+      .filter(Boolean);
+
+    if (areasNoEfectivas.length === 0) {
+      return {
+        updated: 0,
+        message: 'PT-NIA530 no reporta ningún área con CONTROL_NO_EFECTIVO todavía — recalcule su evaluación de muestreo (S4) si ya cargó resultados de pruebas de Atributos en S5.',
+      };
+    }
+
+    const normArea = (s: string): string =>
+      s.toLowerCase().trim().replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, ' ');
+    const normAreas = areasNoEfectivas.map(normArea);
+
+    const s1 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+    });
+    const rows = Array.isArray(s1?.value) ? (s1!.value as Record<string, unknown>[]) : [];
+    if (rows.length === 0) {
+      return { updated: 0, message: 'PT-MRCI S1 no tiene filas todavía — nada que actualizar.' };
+    }
+
+    const findKey = (row: Record<string, unknown>, patterns: string[]): string | undefined =>
+      Object.keys(row).find(k => patterns.some(p => k.toLowerCase().includes(p)));
+
+    const RESIDUAL_RANK: Record<string, number> = { 'Bajo': 1, 'Moderado': 2, 'Alto': 3, 'Muy Alto': 4 };
+    const RESIDUAL_BY_RANK = Object.fromEntries(Object.entries(RESIDUAL_RANK).map(([k, v]) => [v, k]));
+
+    let updated = 0;
+    const matchedAreas = new Set<string>();
+    const newRows = rows.map(row => {
+      const riesgoKey = findKey(row, ['riesgo']);
+      const cuentaKey = findKey(row, ['cuenta', 'rubro']);
+      const haystack = normArea(`${String(row[riesgoKey ?? ''] ?? '')} ${String(row[cuentaKey ?? ''] ?? '')}`);
+      const matchIdx = normAreas.findIndex(a => a && haystack.includes(a));
+      if (matchIdx === -1) return row;
+
+      const operandoKey  = findKey(row, ['operando efectiv']) ?? 'Operando Efectivamente (Sí/No)';
+      const residualKey  = findKey(row, ['riesgo residual']) ?? 'Riesgo Residual (Bajo/Moderado/Alto/Muy Alto)';
+      const inherenteKey = findKey(row, ['riesgo inherente']);
+
+      if (String(row[operandoKey] ?? '').trim() === 'No') return row; // ya reflejado, no reescribir
+
+      matchedAreas.add(areasNoEfectivas[matchIdx]);
+      const inherente = inherenteKey ? String(row[inherenteKey] ?? '').trim() : '';
+      const currentResidual = String(row[residualKey] ?? '').trim();
+      const currentRank = RESIDUAL_RANK[currentResidual] ?? 0;
+      const inherenteRank = RESIDUAL_RANK[inherente] ?? 0;
+      // El residual escala hacia el Riesgo Inherente heredado (si existe y es
+      // mayor); si no hay dato de inherente, sube un solo nivel como mínimo.
+      const targetRank = Math.max(currentRank + 1, inherenteRank, 3); // piso ALTO — un control probado no efectivo no puede quedar en Bajo/Moderado
+      updated++;
+      return {
+        ...row,
+        [operandoKey]: 'No',
+        [residualKey]: RESIDUAL_BY_RANK[Math.min(4, targetRank)],
+      };
+    });
+
+    if (updated === 0) {
+      return {
+        updated: 0,
+        message: `Se encontraron ${areasNoEfectivas.length} área(s) con CONTROL_NO_EFECTIVO en PT-NIA530 (${areasNoEfectivas.join(', ')}), pero ninguna fila de esta matriz coincide por nombre de área con "Riesgo" o "Cuenta/Rubro relacionado", o ya estaban marcadas.`,
+      };
+    }
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S1' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: newRows as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S1', newRows);
+
+    return {
+      updated,
+      message: `${updated} fila(s) actualizadas (Operando Efectivamente = No, Riesgo Residual escalado) por CONTROL_NO_EFECTIVO detectado en PT-NIA530: ${[...matchedAreas].join(', ')}.`,
+    };
+  }
+
+  /**
    * Recalcula PT-NIA265 S2 ("Análisis por Componente COSO — Mapa de Debilidades")
    * contando por severidad las deficiencias de S1 para cada uno de los 5
    * componentes COSO. A diferencia de S1 (que se REEMPLAZA por completo al

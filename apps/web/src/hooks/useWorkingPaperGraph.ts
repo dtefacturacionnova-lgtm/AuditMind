@@ -335,6 +335,20 @@ export function usePropagateConfirmaciones() {
   });
 }
 
+export function usePropagateNia530ToMrci() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paperId: string) =>
+      apiClient.post<{ updated: number; message: string }>(
+        `/working-papers/${paperId}/propagate-nia530-to-mrci`,
+        {},
+      ),
+    onSuccess: (_res, paperId) => {
+      qc.invalidateQueries({ queryKey: ['wp', paperId] });
+    },
+  });
+}
+
 export function usePropagateHallazgosToFindings() {
   const qc = useQueryClient();
   return useMutation({

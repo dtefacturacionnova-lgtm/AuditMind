@@ -182,6 +182,8 @@ Al mapear qué hay que borrar/detectar para este feature, se re-ejecutó `AuditB
 
 Ambos bugs preexistían en el feature de backup ya desplegado — se corrigieron aquí porque el nuevo feature de borrado reutiliza exactamente ese mecanismo, y dejarlos rotos habría vuelto a dejar archivos huérfanos.
 
+**Tercer bug, encontrado EN PRODUCCIÓN tras el primer deploy de este feature (2026-08-20)**: `construirWhereParaModelo()` armaba el `where` de `pbcMessage` con un campo `pbcId` hardcoded — pero el campo real en el schema es `PbcMessage.requestId` (`pbcId` sí es el nombre correcto para `pbcPaperLink`, otro modelo que comparte el mismo `filtro.tipo: 'via_pbcId'`; ambos asumían el mismo nombre de campo cuando en realidad difieren). `GET :id/delete-preview` contra `cmpbrhl090008fs656ozrmqhc` (un encargo real con `PbcRequest` pero además con filas de `PbcMessage`) devolvió `500 Internal server error` — el primer caso real que ejercitó esta rama de código, porque requiere un encargo con AMBOS, `PbcRequest` Y `PbcMessage`, no solo lo primero. El mismo bug ya estaba latente en BKP-03 (exportación de backup) desde que se construyó, simplemente ningún backup de prueba anterior tocó un encargo con mensajes PBC reales. Corregido haciendo que `via_pbcId` cargue el nombre de campo (`pbcIdField`), mismo patrón ya usado por `via_paperId` (`paperIdField`) — `pbcPaperLink` usa `'pbcId'`, `pbcMessage` usa `'requestId'`.
+
 ### 9.3 Verificación hecha
 
 - Type-check limpio en `apps/api` y `apps/web` (`npx tsc --noEmit`).

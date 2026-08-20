@@ -40,7 +40,7 @@
  * propósito: es el registro comercial (Cliente→Propuesta→Carta de
  * Compromiso) que ORIGINÓ este `Audit`, no datos que cuelguen de él — borrar
  * un encargo debe desvincularlo (`auditId = null`), nunca borrar el
- * `Engagement`. Ver `apps/api/src/audits/audits-delete.service.ts`.
+ * `Engagement`. Ver `apps/api/src/audits/backup/audit-delete.service.ts`.
  */
 
 /** Nivel de dependencia — determina el orden de creación al restaurar. */
@@ -54,7 +54,7 @@ export interface AuditScopedModel {
     | { tipo: 'auditId_directo' }
     | { tipo: 'via_paperId'; paperIdField: string }
     | { tipo: 'via_findingId' }
-    | { tipo: 'via_pbcId' }
+    | { tipo: 'via_pbcId'; pbcIdField: string }
     | { tipo: 'via_trialBalanceId' }
     | { tipo: 'via_jobId' }
     | { tipo: 'via_sectionId' }
@@ -104,9 +104,14 @@ export const AUDIT_SCOPED_MODELS: AuditScopedModel[] = [
   { model: 'workingPaperVersion',   filtro: { tipo: 'via_paperId', paperIdField: 'paperId' },        nivel: 2 },
   { model: 'workingPaperComment',   filtro: { tipo: 'via_paperId', paperIdField: 'paperId' },        nivel: 2 },
   { model: 'tickMarkEntry',         filtro: { tipo: 'via_paperId', paperIdField: 'paperId' },        nivel: 2 },
-  { model: 'pbcPaperLink',          filtro: { tipo: 'via_pbcId' },                                   nivel: 2 }, // también referencia paperId — ambos deben existir ya
+  { model: 'pbcPaperLink',          filtro: { tipo: 'via_pbcId', pbcIdField: 'pbcId' },              nivel: 2 }, // también referencia paperId — ambos deben existir ya
   { model: 'trialBalancePaperLink', filtro: { tipo: 'via_trialBalanceId' },                          nivel: 2 }, // también referencia paperId
-  { model: 'pbcMessage',            filtro: { tipo: 'via_pbcId' },                                   nivel: 2 },
+  // PbcMessage.requestId (NO 'pbcId' — nombre de campo distinto al resto de
+  // modelos "via_pbcId") — bug real encontrado 2026-08-20: el `where` que se
+  // armaba con 'pbcId' hardcoded le pegaba a un campo inexistente en este
+  // modelo específico y tiraba PrismaClientValidationError en cualquier
+  // encargo con PbcRequest+PbcMessage reales (backup Y borrado completo).
+  { model: 'pbcMessage',            filtro: { tipo: 'via_pbcId', pbcIdField: 'requestId' },          nivel: 2 },
   { model: 'dataFlag',              filtro: { tipo: 'via_jobId' }, nivel: 2, tieneAuditIdPropio: true },
   { model: 'fieldEvidenceFinding',  filtro: { tipo: 'via_evidenceId' }, nivel: 2 }, // evidenceId → FieldEvidence
 
@@ -144,7 +149,7 @@ export function construirWhereParaModelo(
     case 'via_findingId':
       return ids.finding.length === 0 ? null : { findingId: { in: ids.finding } };
     case 'via_pbcId':
-      return ids.pbcRequest.length === 0 ? null : { pbcId: { in: ids.pbcRequest } };
+      return ids.pbcRequest.length === 0 ? null : { [modelo.filtro.pbcIdField]: { in: ids.pbcRequest } };
     case 'via_trialBalanceId':
       return ids.trialBalance.length === 0 ? null : { trialBalanceId: { in: ids.trialBalance } };
     case 'via_jobId':

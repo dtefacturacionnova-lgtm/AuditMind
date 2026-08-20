@@ -7,6 +7,7 @@ import {
   useDeleteAuditPreview, useDeleteAudit,
   type DeleteAuditPreview, type DeleteAuditResultado,
 } from '@/hooks/useAudits';
+import { DocumentDeleteLoader } from '@/components/ui/DocumentDeleteLoader';
 
 /**
  * Borrado COMPLETO de un encargo (2026-08-20) — a diferencia de
@@ -75,6 +76,7 @@ export function DeleteAuditModal({
         <div className="px-5 py-4 space-y-4">
           {resultado ? (
             <div className="space-y-3">
+              <DocumentDeleteLoader state="success" size={44} className="py-1" />
               <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <div className="text-xs text-emerald-800 space-y-1">
@@ -104,6 +106,10 @@ export function DeleteAuditModal({
               >
                 Volver a la lista de encargos
               </button>
+            </div>
+          ) : deleteMut.isPending ? (
+            <div className="py-4">
+              <DocumentDeleteLoader state="deleting" size={72} message={`Borrando "${auditTitle}"…`} />
             </div>
           ) : (
             <>
@@ -179,11 +185,11 @@ export function DeleteAuditModal({
 
                   <button
                     onClick={handleConfirmar}
-                    disabled={!tituloCoincide || deleteMut.isPending}
+                    disabled={!tituloCoincide}
                     className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
-                    {deleteMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
-                    {deleteMut.isPending ? 'Borrando…' : 'Borrar este encargo por completo'}
+                    <ShieldAlert className="h-4 w-4" />
+                    Borrar este encargo por completo
                   </button>
                 </>
               )}

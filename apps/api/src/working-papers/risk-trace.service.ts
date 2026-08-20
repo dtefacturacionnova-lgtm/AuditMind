@@ -120,6 +120,29 @@ export interface ControlInternoSummary {
   areaCatalog: string[];
 }
 
+// ─── Contrato del Reporte Integrado (Fase 7 — control-interno-pdf.ts) ────────
+
+export interface IntegratedReportControlRow {
+  riesgo:           string;
+  controlMitigante: string;
+  riesgoInherente:  string;
+  riesgoResidual:   string;
+  refRiesgo:        string;
+}
+
+export interface IntegratedReportData {
+  auditTitle:  string;
+  entityName:  string;
+  flowchart:   { nodes: unknown[]; edges: unknown[] } | null;
+  flowchartPaperTitle: string | null;
+  controlRows: IntegratedReportControlRow[];
+  heatMap:     Record<string, unknown>[];
+  summary:     { totalRiesgos: number; porNivel: Record<string, number>; pctReduccion: number | null };
+  conclusion:  string | null;
+  recommendations: Array<{ descripcion: string; fuente: string }>;
+  mrciPaper:   { code: string; id: string } | null;
+}
+
 // ─── Normalización y coincidencia por frases ─────────────────────────────────
 
 const strip = (s: unknown): string =>
@@ -501,6 +524,123 @@ export class RiskTraceService {
     ];
 
     return { profile, stages, risks, areaCatalog };
+  }
+
+  /**
+   * Datos para el Reporte Integrado de Control Interno (Fase 7, §8.9) — junta
+   * en una sola estructura lo que `control-interno-pdf.ts` necesita para
+   * ensamblar la página: flujograma (con carriles/marcadores de la Fase 2) +
+   * tabla de controles de PT-MRCI S1 + mapa de calor Área×Nivel de PT-MRCI S3
+   * (alternativa de menor esfuerzo del §8.9 — no requiere separar PT-A2 en
+   * Probabilidad×Impacto) + resumen numérico + conclusión + recomendaciones.
+   * Solo lectura, mismo criterio de "más contenido gana" que getSummary ante
+   * papeles duplicados.
+   */
+  async getIntegratedReportData(auditId: string, user: AuthUser): Promise<IntegratedReportData> {
+    const audit = await this.prisma.audit.findUnique({
+      where:  { id: auditId },
+      select: { organizationId: true, title: true, auditEntity: { select: { name: true } } },
+    });
+    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+
+    const codes = ['PT-MRCI', 'PT-NIA265', 'PT-COSO'];
+    const papers = await this.prisma.workingPaper.findMany({
+      where:   { auditId, paperCode: { in: codes } },
+      orderBy: { createdAt: 'asc' },
+      select:  { id: true, code: true, paperCode: true },
+    });
+    const sections = papers.length > 0
+      ? await this.prisma.paperSection.findMany({
+          where:  { paperId: { in: papers.map(p => p.id) } },
+          select: { paperId: true, sectionKey: true, value: true },
+        })
+      : [];
+    const isFilled = (v: unknown): boolean => {
+      if (v == null) return false;
+      if (Array.isArray(v)) return v.length > 0;
+      if (typeof v === 'object') return Object.keys(v as object).length > 0;
+      return String(v).trim() !== '';
+    };
+    const filledCount = (paperId: string) => sections.filter(s => s.paperId === paperId && isFilled(s.value)).length;
+    const paperByCode = new Map<string, typeof papers[number]>();
+    for (const p of papers) {
+      const current = paperByCode.get(p.paperCode!);
+      if (!current || filledCount(p.id) > filledCount(current.id)) paperByCode.set(p.paperCode!, p);
+    }
+    const sectionOf = (paperId: string, key: string) => sections.find(s => s.paperId === paperId && s.sectionKey === key);
+    const rowsOf = (code: string, key: string): Record<string, unknown>[] => {
+      const paper = paperByCode.get(code);
+      const raw = paper ? sectionOf(paper.id, key)?.value : null;
+      return Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [];
+    };
+    const findKey = (row: Record<string, unknown>, patterns: RegExp[]): string | undefined =>
+      Object.keys(row).find(k => patterns.some(p => p.test(k.toLowerCase())));
+    const cell = (row: Record<string, unknown>, patterns: RegExp[]): string => {
+      const k = findKey(row, patterns);
+      return k ? String(row[k] ?? '').trim() : '';
+    };
+
+    // ── Flujograma: la primera sección FLOWCHART con contenido en el encargo ──
+    const flowSections = await this.prisma.paperSection.findMany({
+      where:  { fieldType: 'FLOWCHART', paper: { auditId } },
+      select: { value: true, paper: { select: { title: true } } },
+    });
+    const flowSection = flowSections.find(s => {
+      const nodes = (s.value as { nodes?: unknown[] } | null)?.nodes;
+      return Array.isArray(nodes) && nodes.length > 0;
+    });
+    const flowVal = flowSection?.value as { nodes?: unknown[]; edges?: unknown[] } | undefined;
+
+    // ── Tabla de controles + resumen numérico (PT-MRCI S1) ──────────────────
+    const mrciRows = rowsOf('PT-MRCI', 'S1');
+    const RANK: Record<string, number> = { bajo: 1, moderado: 2, alto: 3, 'muy alto': 4 };
+    const porNivel: Record<string, number> = { Bajo: 0, Moderado: 0, Alto: 0, 'Muy Alto': 0 };
+    const controlRows = mrciRows.map(row => {
+      const residual = cell(row, [/riesgo residual/]);
+      const key = Object.keys(porNivel).find(k => k.toLowerCase() === residual.toLowerCase().trim());
+      if (key) porNivel[key]++;
+      return {
+        riesgo:           cell(row, [/^riesgo$/]),
+        controlMitigante: cell(row, [/control mitigante/]),
+        riesgoInherente:  cell(row, [/riesgo inherente/]) || '—',
+        riesgoResidual:   residual || '—',
+        refRiesgo:        cell(row, [/ref\.? riesgo/]),
+      };
+    });
+    const altoMuyAlto = porNivel['Alto'] + porNivel['Muy Alto'];
+    const inherenteAltoMuyAlto = mrciRows.filter(r => RANK[cell(r, [/riesgo inherente/]).toLowerCase()] >= 3).length;
+    const pctReduccion = inherenteAltoMuyAlto > 0
+      ? Math.round((1 - altoMuyAlto / inherenteAltoMuyAlto) * 100)
+      : null;
+
+    // ── Conclusión (PT-MRCI S4) y Recomendaciones (NIA265 S1 + COSO S8) ─────
+    const conclusionRaw = sectionOf(paperByCode.get('PT-MRCI')?.id ?? '', 'S4')?.value;
+    const conclusion = typeof conclusionRaw === 'string' && conclusionRaw.trim() ? conclusionRaw.trim() : null;
+
+    const recommendations = [
+      ...rowsOf('PT-NIA265', 'S1').map(r => ({
+        descripcion: cell(r, [/recomendaci[oó]n/]) || cell(r, [/descripci[oó]n/]),
+        fuente: 'PT-NIA265',
+      })),
+      ...rowsOf('PT-COSO', 'S8').map(r => ({
+        descripcion: cell(r, [/recomendaci[oó]n/]),
+        fuente: 'PT-COSO',
+      })),
+    ].filter(r => r.descripcion.length > 0);
+
+    return {
+      auditTitle:  audit.title,
+      entityName:  audit.auditEntity?.name ?? audit.title,
+      flowchart:   flowVal?.nodes?.length ? { nodes: flowVal.nodes!, edges: flowVal.edges ?? [] } : null,
+      flowchartPaperTitle: flowSection?.paper?.title ?? null,
+      controlRows,
+      heatMap:     rowsOf('PT-MRCI', 'S3'),
+      summary:     { totalRiesgos: mrciRows.length, porNivel, pctReduccion },
+      conclusion,
+      recommendations,
+      mrciPaper:   paperByCode.get('PT-MRCI') ? { code: paperByCode.get('PT-MRCI')!.code, id: paperByCode.get('PT-MRCI')!.id } : null,
+    };
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────

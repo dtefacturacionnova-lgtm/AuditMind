@@ -74,6 +74,7 @@ import { RiskTraceService } from './risk-trace.service';
 import { AiService } from '../ai/ai.service';
 import { PdfService } from '../pdf/pdf.service';
 import { renderWorkingPaperBody } from '../pdf/pdf-templates';
+import { renderIntegratedReportBody } from '../pdf/control-interno-pdf';
 import { PAPER_TEMPLATES } from './paper-templates';
 import type { Response } from 'express';
 import { Res, UploadedFile, UseInterceptors, NotFoundException, BadRequestException } from '@nestjs/common';
@@ -197,6 +198,30 @@ export class WorkingPapersController {
   @ApiOperation({ summary: 'Cockpit "Control Interno" — stepper con badges por etapa y lista de riesgos clicables (solo lectura, sin modelo nuevo)' })
   getControlInternoSummary(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
     return this.riskTrace.getSummary(auditId, user);
+  }
+
+  @Get('control-interno-report/:auditId/pdf')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Descargar el Reporte Integrado de Control Interno (flujograma + controles + mapa de calor + conclusión + recomendaciones) en PDF' })
+  async getControlInternoReportPdf(
+    @Param('auditId') auditId: string,
+    @CurrentUser() user: AuthUser,
+    @Res() res: Response,
+  ) {
+    const data = await this.riskTrace.getIntegratedReportData(auditId, user);
+    const body = renderIntegratedReportBody(data);
+    const pdf = await this.pdfService.generateBranded({
+      title:    'Reporte Integrado de Control Interno',
+      subtitle: data.entityName,
+      body,
+      options:  { printPageNumbers: true, format: 'A4', footerNote: `Control Interno — ${data.auditTitle}` },
+    });
+
+    const filename = `auditmind_control_interno_${auditId.slice(0, 8)}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
   }
 
   // ─── Paper CRUD ───────────────────────────────────────────────────────────────

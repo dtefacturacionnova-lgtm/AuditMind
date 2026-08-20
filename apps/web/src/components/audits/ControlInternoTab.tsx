@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import {
-  Loader2, AlertTriangle, ChevronRight,
+  Loader2, AlertTriangle, ChevronRight, Download,
   Target, GitBranch, ShieldCheck, ClipboardCheck, TrendingDown, FileWarning, FileCheck2,
 } from 'lucide-react';
 import {
@@ -10,6 +10,7 @@ import {
   type ControlInternoStage, type RiskTraceAnchor,
 } from '@/hooks/useControlInterno';
 import { RiskTraceDrawer } from './RiskTraceDrawer';
+import { apiClient } from '@/lib/api-client';
 
 const STAGE_ICON: Record<ControlInternoStageKey, React.ElementType> = {
   IDENTIFICACION: Target, RMM: GitBranch, CONTROL: ShieldCheck, PRUEBA: ClipboardCheck,
@@ -65,6 +66,21 @@ function RiskRow({ risk, onClick }: { risk: ControlInternoRiskRow; onClick: () =
 export function ControlInternoTab({ auditId }: { auditId: string }) {
   const { data: summary, isLoading, isError } = useControlInternoSummary(auditId);
   const [drawerAnchor, setDrawerAnchor] = useState<RiskTraceAnchor | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownloadReport() {
+    setDownloading(true);
+    try {
+      await apiClient.downloadFile(
+        `/working-papers/control-interno-report/${auditId}/pdf`,
+        `AuditMind_Control_Interno_${auditId.slice(0, 8)}.pdf`,
+      );
+    } catch (err) {
+      alert((err as Error).message || 'Error al descargar el Reporte Integrado');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -86,7 +102,18 @@ export function ControlInternoTab({ auditId }: { auditId: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-[11px] font-medium text-gray-400 mb-3">{PROFILE_LABEL[summary.profile]}</p>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <p className="text-[11px] font-medium text-gray-400">{PROFILE_LABEL[summary.profile]}</p>
+          <button
+            onClick={handleDownloadReport}
+            disabled={downloading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:border-indigo-300 hover:text-indigo-700 disabled:opacity-50 transition-colors shrink-0"
+            title="Descargar Reporte Integrado de Control Interno (PDF)"
+          >
+            {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            {downloading ? 'Generando…' : 'Reporte Integrado (PDF)'}
+          </button>
+        </div>
         <div className="flex items-start overflow-x-auto pb-2 -mx-1 px-1">
           {summary.stages.map((stage, i) => (
             <div key={stage.key} className="flex items-start shrink-0">

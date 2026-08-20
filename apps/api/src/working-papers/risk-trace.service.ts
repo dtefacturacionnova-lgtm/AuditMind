@@ -85,6 +85,41 @@ export interface RiskTraceResponse {
   flowNodes:   RiskTraceFlowNode[];
 }
 
+// ─── Contrato del cockpit (Fase 6b — pipeline/stepper + lista de riesgos) ────
+
+/** "RMM" se relabela "RIESGO" para el stepper — el nombre interno del bloque
+ *  correspondiente a esta etapa (§8.3 del doc de diseño) sigue siendo RMM. */
+export type ControlInternoStageKey = RiskTraceBlockKind | 'CONCLUSION';
+
+export interface ControlInternoStage {
+  key:        ControlInternoStageKey;
+  label:      string;
+  paperCode:  string | null;
+  wpCode:     string | null;
+  paperId:    string | null;
+  available:  boolean;
+  count:      number;
+  countLabel: string;
+}
+
+export interface ControlInternoRiskRow {
+  paperId:    string;
+  sectionKey: string;
+  rowIndex:   number;
+  label:      string;
+  area:       string | null;
+  badge:      string | null;
+}
+
+export type ControlInternoProfile = 'EXTERNA' | 'INTERNA' | 'GENERICO';
+
+export interface ControlInternoSummary {
+  profile:     ControlInternoProfile;
+  stages:      ControlInternoStage[];
+  risks:       ControlInternoRiskRow[];
+  areaCatalog: string[];
+}
+
 // ─── Normalización y coincidencia por frases ─────────────────────────────────
 
 const strip = (s: unknown): string =>
@@ -336,6 +371,125 @@ export class RiskTraceService {
       blocks,
       flowNodes,
     };
+  }
+
+  /**
+   * Resumen para el cockpit (pestaña "Control Interno", Fase 6b): el stepper
+   * con un badge por etapa y la lista de riesgos clicables que abren la Ficha
+   * de Riesgo (getTrace). Todo de solo lectura — mismos papeles que getTrace,
+   * sin persistir nada nuevo.
+   */
+  async getSummary(auditId: string, user: AuthUser): Promise<ControlInternoSummary> {
+    const audit = await this.prisma.audit.findUnique({
+      where:  { id: auditId },
+      select: { organizationId: true },
+    });
+    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+
+    const codes = [...new Set(BLOCK_SPECS.map(b => b.paperCode))];
+    const papers = await this.prisma.workingPaper.findMany({
+      where:   { auditId, paperCode: { in: codes } },
+      orderBy: { createdAt: 'asc' },
+      select:  { id: true, code: true, paperCode: true },
+    });
+    const sections = papers.length > 0
+      ? await this.prisma.paperSection.findMany({
+          where:  { paperId: { in: papers.map(p => p.id) } },
+          select: { paperId: true, sectionKey: true, value: true },
+        })
+      : [];
+    const isFilled = (v: unknown): boolean => {
+      if (v == null) return false;
+      if (Array.isArray(v)) return v.length > 0;
+      if (typeof v === 'object') return Object.keys(v as object).length > 0;
+      return String(v).trim() !== '';
+    };
+    // Duplicados: gana el papel con más secciones llenas (sin ancla — este
+    // endpoint no tiene una fila específica que deba ganar el desempate).
+    const filledCount = (paperId: string) => sections.filter(s => s.paperId === paperId && isFilled(s.value)).length;
+    const paperByCode = new Map<string, typeof papers[number]>();
+    for (const p of papers) {
+      const current = paperByCode.get(p.paperCode!);
+      if (!current || filledCount(p.id) > filledCount(current.id)) paperByCode.set(p.paperCode!, p);
+    }
+    const sectionOf = (paperId: string, key: string) => sections.find(s => s.paperId === paperId && s.sectionKey === key);
+    const rowsOf = (code: string, key: string, wrapped = false): Record<string, unknown>[] => {
+      const paper = paperByCode.get(code);
+      if (!paper) return [];
+      const sec = sectionOf(paper.id, key);
+      const raw = wrapped ? (sec?.value as { filas?: unknown[] } | null)?.filas : sec?.value;
+      return Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [];
+    };
+
+    const areaCatalog = await this.loadAreaCatalog(paperByCode, sectionOf);
+    const profile: ControlInternoProfile = paperByCode.has('PT-A5')
+      ? 'EXTERNA'
+      : paperByCode.has('PT-MRCI') ? 'INTERNA' : 'GENERICO';
+
+    // ── Lista de riesgos clicables: PT-A2 S6 (riesgos significativos) es la
+    // fuente más específica; si está vacía, un riesgo genérico por área. ──
+    const a2 = paperByCode.get('PT-A2');
+    const s6Rows = rowsOf('PT-A2', 'S6');
+    const risks: ControlInternoRiskRow[] = [];
+    if (a2 && s6Rows.length > 0) {
+      s6Rows.forEach((row, idx) => {
+        const descCol = findColumn(row, DESC_COLUMN);
+        const areaCol = findColumn(row, AREA_COLUMN);
+        const label = descCol ? String(row[descCol] ?? '').trim() : '';
+        const explicitArea = areaCol ? String(row[areaCol] ?? '').trim() : '';
+        const area = explicitArea
+          ? (areaCatalog.find(a => textReferencesArea(explicitArea, a) || textReferencesArea(a, explicitArea)) ?? explicitArea)
+          : (areaCatalog.find(a => textReferencesArea(rowText(row), a)) ?? null);
+        if (label.length < 15 && !area) return; // fila sin contenido identificable
+        risks.push({
+          paperId: a2.id, sectionKey: 'S6', rowIndex: idx,
+          label: label.length >= 15 ? label : (area ?? `Riesgo #${idx + 1}`),
+          area, badge: 'Riesgo Significativo',
+        });
+      });
+    } else {
+      areaCatalog.forEach((area, idx) => {
+        risks.push({ paperId: a2?.id ?? '', sectionKey: 'S1', rowIndex: idx, label: area, area, badge: null });
+      });
+    }
+
+    // ── Badges por etapa — un conteo de solo lectura por bloque de la cadena. ──
+    const countRmmSignificativos = rowsOf('PT-A5', 'S1').filter(r => {
+      const col = findColumn(r, [/riesgo significativo/]);
+      return col && /^s/i.test(strip(String(r[col])));
+    }).length;
+    const countResidualAlto = rowsOf('PT-MRCI', 'S1').filter(r => {
+      const col = findColumn(r, [/riesgo residual/]);
+      return col && /alto/i.test(strip(String(r[col])));
+    }).length;
+    const countPruebaAtencion = rowsOf('PT-NIA530', 'S4', true).filter(r => {
+      const accion = String((r as Record<string, unknown>).accion ?? '');
+      return accion && accion !== 'NINGUNA';
+    }).length;
+    const countDeficiencias = rowsOf('PT-NIA265', 'S1').length + rowsOf('PT-COSO', 'S8').length;
+    const mrciConclusion = sectionOf(paperByCode.get('PT-MRCI')?.id ?? '', 'S4')?.value;
+    const stageOf = (kind: RiskTraceBlockKind): BlockSpec => BLOCK_SPECS.find(b => b.kind === kind)!;
+    const mk = (kind: ControlInternoStageKey, label: string, spec: BlockSpec | null, count: number, countLabel: string): ControlInternoStage => {
+      const paper = spec ? paperByCode.get(spec.paperCode) : undefined;
+      return {
+        key: kind, label,
+        paperCode: spec?.paperCode ?? null, wpCode: paper?.code ?? null, paperId: paper?.id ?? null,
+        available: !!paper, count, countLabel,
+      };
+    };
+
+    const stages: ControlInternoStage[] = [
+      mk('IDENTIFICACION', 'Identificación',      stageOf('IDENTIFICACION'), s6Rows.length,           `${s6Rows.length} riesgo(s) significativo(s)`),
+      mk('RMM',            profile === 'EXTERNA' ? 'Cuenta / RMM' : 'Riesgo', stageOf('RMM'),          countRmmSignificativos, profile === 'EXTERNA' ? `${countRmmSignificativos} área(s) con RMM significativo` : 'No aplica a este perfil'),
+      mk('CONTROL',        'Control',             stageOf('CONTROL'),        rowsOf('PT-A3', 'S2').length, `${rowsOf('PT-A3', 'S2').length} control(es) documentado(s)`),
+      mk('PRUEBA',         'Prueba / Muestreo',   stageOf('PRUEBA'),         countPruebaAtencion,      countPruebaAtencion > 0 ? `${countPruebaAtencion} área(s) requieren atención` : 'Sin alertas'),
+      mk('RESIDUAL',       'Riesgo Residual',     stageOf('RESIDUAL'),       countResidualAlto,        countResidualAlto > 0 ? `${countResidualAlto} residual(es) Alto/Muy Alto` : 'Sin residuales altos'),
+      mk('DEFICIENCIA',    'Deficiencias',        stageOf('DEFICIENCIA'),    countDeficiencias,        `${countDeficiencias} deficiencia(s) comunicada(s)`),
+      { key: 'CONCLUSION', label: 'Conclusión', paperCode: 'PT-MRCI', wpCode: paperByCode.get('PT-MRCI')?.code ?? null, paperId: paperByCode.get('PT-MRCI')?.id ?? null, available: !!paperByCode.get('PT-MRCI'), count: isFilled(mrciConclusion) ? 1 : 0, countLabel: isFilled(mrciConclusion) ? 'Redactada' : 'Pendiente' },
+    ];
+
+    return { profile, stages, risks, areaCatalog };
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────

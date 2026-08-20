@@ -192,6 +192,13 @@ export class WorkingPapersController {
     return this.riskTrace.getTrace(auditId, user, { paperId, sectionKey, rowIndex: idx, area });
   }
 
+  @Get('control-interno-summary/:auditId')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Cockpit "Control Interno" — stepper con badges por etapa y lista de riesgos clicables (solo lectura, sin modelo nuevo)' })
+  getControlInternoSummary(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
+    return this.riskTrace.getSummary(auditId, user);
+  }
+
   // ─── Paper CRUD ───────────────────────────────────────────────────────────────
 
   @Get(':id')

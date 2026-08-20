@@ -21,6 +21,8 @@ import { RollForwardModal }          from '@/components/audits/RollForwardModal'
 import { SignOffMatrix }              from '@/components/audits/SignOffMatrix';
 import { TrialBalanceTab }            from '@/components/audits/TrialBalanceTab';
 import { PapersGraphView }            from '@/components/working-papers/PapersGraphView';
+import { ControlInternoTab }          from '@/components/audits/ControlInternoTab';
+import { useControlInternoSummary }   from '@/hooks/useControlInterno';
 import { AiTestsOrchestratorModal }   from '@/components/audits/AiTestsOrchestratorModal';
 import { WorkingPaperIndexReport }    from '@/components/audits/WorkingPaperIndexReport';
 import { DestructiveRestoreModal }    from '@/components/audits/DestructiveRestoreModal';
@@ -52,7 +54,7 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff' | 'trial-balance' | 'graph';
+type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff' | 'trial-balance' | 'graph' | 'control-interno';
 
 function StatCard({ icon: Icon, label, value, color, sub }: {
   icon: React.ElementType;
@@ -96,6 +98,11 @@ export default function AuditDetailPage() {
 
   const { data: audit, isLoading } = useAudit(id);
   const updateStatus = useUpdateAuditStatus();
+  // Se consulta aquí (no solo dentro de ControlInternoTab) para decidir si la
+  // pestaña se muestra — se auto-oculta si el encargo no tiene sembrado
+  // ningún papel de la cadena de Control Interno. Mismo queryKey → sin fetch duplicado.
+  const { data: controlInternoSummary } = useControlInternoSummary(id);
+  const showControlInterno = (controlInternoSummary?.stages ?? []).some(s => s.available);
 
   if (isLoading) {
     return (
@@ -140,6 +147,7 @@ export default function AuditDetailPage() {
     { key: 'signoff',         label: '✍ Matriz de Firmas' },
     { key: 'trial-balance',  label: '📊 Balance' },
     { key: 'graph',          label: '🕸️ Grafo' },
+    ...(showControlInterno ? [{ key: 'control-interno' as Tab, label: '🛡️ Control Interno' }] : []),
   ];
 
   async function handleStatusChange(newStatus: string) {
@@ -360,6 +368,10 @@ export default function AuditDetailPage() {
               {/* PI.4 — Mapa visual del grafo de conocimiento */}
               {activeTab === 'graph' && (
                 <PapersGraphView auditId={id} />
+              )}
+              {/* Fase 6b Control Interno — cockpit (stepper + Ficha de Riesgo) */}
+              {activeTab === 'control-interno' && (
+                <ControlInternoTab auditId={id} />
               )}
             </div>
           </div>

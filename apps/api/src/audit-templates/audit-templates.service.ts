@@ -1936,6 +1936,12 @@ export class AuditTemplatesService {
           { code: 'A-08', indexSection: 'A',
             title: 'Programa de Auditoría por Área / Aserción (NIA 330)',
             type: WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.MASTER, paperCode: 'PT-PROG' },
+          { code: 'A-08B', indexSection: 'A',
+            title: 'Matriz de Riesgo, Control e Impacto — Drill-down por Riesgo (MRCI)',
+            type: WorkingPaperType.CONTROL_EVALUATION, wpKind: WpKind.MASTER, paperCode: 'PT-MRCI' },
+          { code: 'A-09', indexSection: 'A',
+            title: 'Plan Maestro de Muestreo Estadístico (NIA 530)',
+            type: WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART, paperCode: 'PT-NIA530' },
           // ── B — Estados Financieros y Cédulas Sumarias ────────────────────
           { code: 'B-00', indexSection: 'B-00',
             title: 'PT-EEFF — Importación, Clasificador de Cuentas y Cédula Madre',

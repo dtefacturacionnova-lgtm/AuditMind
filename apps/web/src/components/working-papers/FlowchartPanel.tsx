@@ -21,14 +21,18 @@ import {
   MarkerType,
 } from '@xyflow/react';
 import { useRouter } from 'next/navigation';
-import { Play, Square, Diamond, FileText, X, Link2, Unlink } from 'lucide-react';
-import { useMentionIndex, useCreateReference, type MentionItem } from '@/hooks/useWorkingPaperGraph';
+import { Play, Square, Diamond, FileText, ShieldCheck, X, Link2, Unlink, Tag } from 'lucide-react';
+import { useMentionIndex, useCreateReference, usePaperSections, type MentionItem } from '@/hooks/useWorkingPaperGraph';
 
 import '@xyflow/react/dist/style.css';
 
 // ─── Persisted shape (lo que vive en PaperSection.value) ─────────────────────
 
-export type FlowNodeKind = 'inicio_fin' | 'proceso' | 'decision' | 'documento';
+// 'control' — Fase 2 del plan de Control Interno (docs/modelo-integrado-
+// control-interno-analisis.md §8.9): marcador de control sobre el diagrama,
+// mismo modelo de nodo que los demás, círculo pequeño en vez de forma de
+// proceso. Nodos existentes con los 4 kinds originales no cambian.
+export type FlowNodeKind = 'inicio_fin' | 'proceso' | 'decision' | 'documento' | 'control';
 
 export interface FlowchartLinkedPaper {
   paperId:      string;
@@ -36,6 +40,12 @@ export interface FlowchartLinkedPaper {
   title:        string;
   sectionKey?:  string;
   sectionLabel?: string;
+  /** Fila específica vinculada (típicamente PT-MRCI S1) — habilita el badge
+   *  de Riesgo Residual. Snapshot al momento de vincular, mismo criterio que
+   *  `code`/`title` arriba (no se re-consulta en vivo). */
+  rowId?:         string;
+  rowLabel?:      string;
+  residualLevel?: string;
 }
 
 export interface FlowchartNodeValue {
@@ -44,6 +54,10 @@ export interface FlowchartNodeValue {
   label:  string;
   x:      number;
   y:      number;
+  /** Carril/área — Fase 2 (§8.9). Nodos sin `lane` se muestran en un carril
+   *  único implícito, tanto en el editor como en el PDF — no rompe diagramas
+   *  ya construidos. */
+  lane?:  string;
   linkedPaper?: FlowchartLinkedPaper;
 }
 
@@ -70,10 +84,11 @@ interface Props {
 // ─── Node kind → apariencia ───────────────────────────────────────────────────
 
 const KIND_META: Record<FlowNodeKind, { label: string; icon: typeof Play; addLabel: string }> = {
-  inicio_fin: { label: 'Inicio / Fin', icon: Play,     addLabel: '+ Inicio/Fin' },
-  proceso:    { label: 'Proceso',      icon: Square,   addLabel: '+ Proceso' },
-  decision:   { label: 'Decisión',     icon: Diamond,  addLabel: '+ Decisión' },
-  documento:  { label: 'Documento',    icon: FileText, addLabel: '+ Documento' },
+  inicio_fin: { label: 'Inicio / Fin', icon: Play,       addLabel: '+ Inicio/Fin' },
+  proceso:    { label: 'Proceso',      icon: Square,     addLabel: '+ Proceso' },
+  decision:   { label: 'Decisión',     icon: Diamond,    addLabel: '+ Decisión' },
+  documento:  { label: 'Documento',    icon: FileText,   addLabel: '+ Documento' },
+  control:    { label: 'Control',      icon: ShieldCheck, addLabel: '+ Control' },
 };
 
 function newNode(kind: FlowNodeKind, index: number): FlowchartNodeValue {
@@ -86,10 +101,35 @@ function newNode(kind: FlowNodeKind, index: number): FlowchartNodeValue {
   };
 }
 
+// Paleta estable por nombre de carril — mismo hash en el editor y en el PDF
+// (Fase 7) para que el color de un carril no cambie entre ambos.
+const LANE_PALETTE = [
+  { bg: 'bg-sky-100 text-sky-700 border-sky-300' },
+  { bg: 'bg-violet-100 text-violet-700 border-violet-300' },
+  { bg: 'bg-rose-100 text-rose-700 border-rose-300' },
+  { bg: 'bg-teal-100 text-teal-700 border-teal-300' },
+  { bg: 'bg-orange-100 text-orange-700 border-orange-300' },
+  { bg: 'bg-lime-100 text-lime-700 border-lime-300' },
+];
+function laneStyle(lane: string): string {
+  let hash = 0;
+  for (let i = 0; i < lane.length; i++) hash = (hash * 31 + lane.charCodeAt(i)) >>> 0;
+  return LANE_PALETTE[hash % LANE_PALETTE.length].bg;
+}
+
+const RESIDUAL_DOT: Record<string, string> = {
+  bajo: 'bg-emerald-500', moderado: 'bg-amber-500', alto: 'bg-orange-500', 'muy alto': 'bg-red-600',
+};
+function residualDotClass(level: string): string {
+  const norm = level.toLowerCase().trim();
+  return RESIDUAL_DOT[norm] ?? 'bg-gray-400';
+}
+
 // ─── Nodo custom ───────────────────────────────────────────────────────────────
 
 type FlowNodeData = FlowchartNodeValue & {
   onLabelChange: (id: string, label: string) => void;
+  onLaneChange:  (id: string, lane: string) => void;
   onDelete:      (id: string) => void;
   onLink:        (id: string) => void;
   onUnlink:      (id: string) => void;
@@ -103,7 +143,51 @@ const KIND_SHAPE_CLASS: Record<FlowNodeKind, string> = {
   proceso:    'rounded-lg bg-blue-50 border-blue-400',
   decision:   'rounded-lg bg-amber-50 border-amber-400',
   documento:  'rounded-lg border-dashed bg-violet-50 border-violet-400',
+  control:    'rounded-full bg-cyan-50 border-cyan-400',
 };
+
+/** Tag de carril — compacto, clic para asignar/renombrar (datalist con los
+ *  carriles ya usados en este mismo diagrama, para no escribir el nombre dos
+ *  veces). Se omite del todo si no hay carril y el nodo es de solo lectura. */
+function LaneTag({ nodeId, lane, readOnly, onLaneChange }: {
+  nodeId: string; lane?: string; readOnly: boolean; onLaneChange: (id: string, lane: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(lane ?? '');
+
+  if (readOnly && !lane) return null;
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        list="flowchart-lanes"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { setEditing(false); onLaneChange(nodeId, draft.trim()); }}
+        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setDraft(lane ?? ''); setEditing(false); } }}
+        onMouseDown={e => e.stopPropagation()}
+        placeholder="Carril…"
+        className="text-[10px] border border-gray-200 rounded px-1 py-0.5 outline-none focus:border-indigo-400 w-full nodrag mt-1"
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={() => !readOnly && setEditing(true)}
+      onMouseDown={e => e.stopPropagation()}
+      disabled={readOnly}
+      className={`mt-1 inline-flex items-center gap-1 text-[10px] font-medium rounded-full px-1.5 py-0.5 border max-w-full truncate ${
+        lane ? laneStyle(lane) : 'text-gray-300 border-gray-200 border-dashed'
+      }`}
+      title={readOnly ? lane : 'Asignar carril/área'}
+    >
+      <Tag className="w-2.5 h-2.5 shrink-0" />
+      <span className="truncate">{lane || 'Sin carril'}</span>
+    </button>
+  );
+}
 
 function FlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
   const meta = KIND_META[data.kind];
@@ -144,6 +228,73 @@ function FlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
     if (label !== data.label) data.onLabelChange(data.id, label);
   };
 
+  const residualDot = data.linkedPaper?.residualLevel ? (
+    <span
+      className={`inline-block w-2 h-2 rounded-full shrink-0 ${residualDotClass(data.linkedPaper.residualLevel)}`}
+      title={`Riesgo Residual: ${data.linkedPaper.residualLevel}`}
+    />
+  ) : null;
+
+  // 'control' — marcador pequeño (§8.9): círculo compacto en vez de la
+  // tarjeta rectangular de los demás kinds, mismo modelo de datos por debajo.
+  if (data.kind === 'control') {
+    return (
+      <div className="group relative flex flex-col items-center" style={{ width: 84 }}>
+        <Handle type="target" position={Position.Top}    className="!bg-gray-400 !w-2 !h-2 !border-0" />
+        <Handle type="source" position={Position.Bottom} className="!bg-gray-400 !w-2 !h-2 !border-0" />
+
+        {!data.readOnly && (
+          <button
+            onClick={() => data.onDelete(data.id)}
+            className="absolute -top-1 -right-1 z-10 w-4 h-4 rounded-full bg-white border border-gray-300 text-gray-400 hover:text-red-600 hover:border-red-300 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+            title="Eliminar nodo"
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        )}
+
+        <div className={`relative border-2 shadow-sm ${KIND_SHAPE_CLASS.control} w-11 h-11 flex items-center justify-center`}>
+          <Icon className="w-4 h-4 text-cyan-700" />
+          {residualDot && <span className="absolute -bottom-0.5 -right-0.5">{residualDot}</span>}
+        </div>
+
+        {data.readOnly ? (
+          <span className="text-[10px] font-medium text-gray-600 text-center leading-tight mt-1 line-clamp-2">{data.label}</span>
+        ) : (
+          <input
+            value={label}
+            onChange={handleLabelInput}
+            onBlur={flushLabel}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            onMouseDown={e => e.stopPropagation()}
+            className="text-[10px] font-medium text-gray-600 text-center bg-transparent outline-none w-full nodrag mt-1"
+          />
+        )}
+
+        <LaneTag nodeId={data.id} lane={data.lane} readOnly={data.readOnly} onLaneChange={data.onLaneChange} />
+
+        {data.linkedPaper ? (
+          <button
+            onClick={() => data.onNavigate(data.linkedPaper!.paperId)}
+            onMouseDown={e => e.stopPropagation()}
+            className="mt-1 flex items-center gap-0.5 text-[9px] font-mono text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-1 py-0.5 max-w-full truncate"
+            title={`Ir a ${data.linkedPaper.title}${data.linkedPaper.rowLabel ? ' — ' + data.linkedPaper.rowLabel : ''}`}
+          >
+            <Link2 className="w-2 h-2 shrink-0" />
+            <span className="truncate">{data.linkedPaper.code}</span>
+            {!data.readOnly && (
+              <Unlink className="w-2 h-2 shrink-0 ml-0.5 text-indigo-400 hover:text-red-600" onClick={e => { e.stopPropagation(); data.onUnlink(data.id); }} />
+            )}
+          </button>
+        ) : !data.readOnly ? (
+          <button onClick={() => data.onLink(data.id)} onMouseDown={e => e.stopPropagation()} className="mt-1 text-gray-300 hover:text-indigo-600">
+            <Link2 className="w-2.5 h-2.5" />
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className={`border-2 shadow-sm ${KIND_SHAPE_CLASS[data.kind]} px-3 py-2 w-[180px] group relative`}>
       <Handle type="target" position={Position.Top}    className="!bg-gray-400 !w-2 !h-2 !border-0" />
@@ -175,13 +326,16 @@ function FlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
         )}
       </div>
 
+      <LaneTag nodeId={data.id} lane={data.lane} readOnly={data.readOnly} onLaneChange={data.onLaneChange} />
+
       {data.linkedPaper ? (
         <button
           onClick={() => data.onNavigate(data.linkedPaper!.paperId)}
           onMouseDown={e => e.stopPropagation()}
-          className="flex items-center gap-1 text-[10px] font-mono text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 max-w-full truncate"
-          title={`Ir a ${data.linkedPaper.title}`}
+          className="mt-1 flex items-center gap-1 text-[10px] font-mono text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 max-w-full truncate"
+          title={`Ir a ${data.linkedPaper.title}${data.linkedPaper.rowLabel ? ' — ' + data.linkedPaper.rowLabel : ''}`}
         >
+          {residualDot}
           <Link2 className="w-2.5 h-2.5 shrink-0" />
           <span className="truncate">
             {data.linkedPaper.code}{data.linkedPaper.sectionLabel ? ` · ${data.linkedPaper.sectionLabel}` : ''}
@@ -197,7 +351,7 @@ function FlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
         <button
           onClick={() => data.onLink(data.id)}
           onMouseDown={e => e.stopPropagation()}
-          className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-indigo-600"
+          className="mt-1 flex items-center gap-1 text-[10px] text-gray-400 hover:text-indigo-600"
         >
           <Link2 className="w-2.5 h-2.5" /> Vincular a papel
         </button>
@@ -207,6 +361,69 @@ function FlowNode({ data }: NodeProps<Node<FlowNodeData>>) {
 }
 
 const nodeTypes = { flow: FlowNode };
+
+// ─── Selector de fila — solo cuando se vincula a PT-MRCI (badge de Residual) ──
+// Fase 2 (§8.9): vincular un nodo a una fila concreta de PT-MRCI S1 en vez de
+// solo al papel, para poder mostrar el badge de color por Riesgo Residual.
+// Snapshot al vincular (rowLabel/residualLevel), no lectura en vivo — mismo
+// criterio que `code`/`title` de FlowchartLinkedPaper.
+
+function findColumn(row: Record<string, unknown>, patterns: RegExp[]): string | undefined {
+  const keys = Object.keys(row);
+  for (const p of patterns) {
+    const k = keys.find(k => p.test(k.toLowerCase()));
+    if (k) return k;
+  }
+  return undefined;
+}
+
+function RowPicker({ paperId, sectionKey, onPick, onClose }: {
+  paperId: string; sectionKey: string;
+  onPick: (row: { rowId: string; rowLabel: string; residualLevel?: string }) => void;
+  onClose: () => void;
+}) {
+  const { data: sections, isLoading } = usePaperSections(paperId);
+  const section = sections?.find(s => s.sectionKey === sectionKey);
+  const rows = Array.isArray(section?.value) ? (section!.value as Record<string, unknown>[]) : [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[70vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="p-3 border-b border-gray-100 flex items-center justify-between">
+          <p className="text-sm font-semibold text-gray-700">Vincular a una fila de {section?.label ?? sectionKey}</p>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-2 space-y-1">
+          {isLoading && <p className="text-xs text-gray-400 text-center py-6">Cargando…</p>}
+          {!isLoading && rows.length === 0 && (
+            <p className="text-xs text-gray-400 text-center py-6">Esta sección todavía no tiene filas.</p>
+          )}
+          {rows.map((row, idx) => {
+            const riesgoCol = findColumn(row, [/^riesgo$/, /descripcion/]);
+            const residualCol = findColumn(row, [/riesgo residual/]);
+            const label = riesgoCol ? String(row[riesgoCol] ?? '').trim() : `Fila ${idx + 1}`;
+            const residual = residualCol ? String(row[residualCol] ?? '').trim() : undefined;
+            return (
+              <button
+                key={idx}
+                onClick={() => onPick({ rowId: String(idx), rowLabel: label.slice(0, 80), residualLevel: residual || undefined })}
+                className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-gray-50 flex items-center justify-between gap-2"
+              >
+                <span className="text-xs text-gray-700 truncate flex-1">{label}</span>
+                {residual && (
+                  <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-medium rounded-full px-1.5 py-0.5 ${residualDotClass(residual)} bg-opacity-15 text-gray-700`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${residualDotClass(residual)}`} />
+                    {residual}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Selector de vínculo (popover simple) ─────────────────────────────────────
 
@@ -270,8 +487,15 @@ function FlowchartPanelInner({ paperId, auditId, sectionKey, value, onChange, re
   const { data: mentionItems } = useMentionIndex(auditId ?? '');
   const createReference = useCreateReference();
   const [linkingNodeId, setLinkingNodeId] = useState<string | null>(null);
+  // Paso intermedio, solo cuando el papel elegido es PT-MRCI: pedir además la
+  // fila concreta antes de confirmar el vínculo (habilita el badge de Residual).
+  const [rowPickerTarget, setRowPickerTarget] = useState<{ item: MentionItem; sectionKey: string } | null>(null);
 
   const stored: FlowchartValue = value ?? { nodes: [], edges: [] };
+  const knownLanes = useMemo(
+    () => [...new Set(stored.nodes.map(n => n.lane).filter((l): l is string => !!l))],
+    [stored.nodes],
+  );
 
   const commit = useCallback((next: FlowchartValue) => onChange(next), [onChange]);
 
@@ -281,6 +505,10 @@ function FlowchartPanelInner({ paperId, auditId, sectionKey, value, onChange, re
 
   const handleLabelChange = useCallback((id: string, label: string) => {
     commit({ nodes: stored.nodes.map(n => (n.id === id ? { ...n, label } : n)), edges: stored.edges });
+  }, [stored, commit]);
+
+  const handleLaneChange = useCallback((id: string, lane: string) => {
+    commit({ nodes: stored.nodes.map(n => (n.id === id ? { ...n, lane: lane || undefined } : n)), edges: stored.edges });
   }, [stored, commit]);
 
   const handleDeleteNode = useCallback((id: string) => {
@@ -294,17 +522,39 @@ function FlowchartPanelInner({ paperId, auditId, sectionKey, value, onChange, re
     commit({ nodes: stored.nodes.map(n => (n.id === id ? { ...n, linkedPaper: undefined } : n)), edges: stored.edges });
   }, [stored, commit]);
 
-  const handlePick = useCallback((item: MentionItem, targetSectionKey?: string) => {
+  const applyLink = useCallback((linkedPaper: FlowchartLinkedPaper, targetSectionKey?: string) => {
     if (!linkingNodeId) return;
-    const section = targetSectionKey ? item.sections.find(s => s.sectionKey === targetSectionKey) : undefined;
-    const linkedPaper: FlowchartLinkedPaper = {
-      paperId: item.paperId, code: item.code, title: item.title,
-      sectionKey: section?.sectionKey, sectionLabel: section?.label,
-    };
     commit({ nodes: stored.nodes.map(n => (n.id === linkingNodeId ? { ...n, linkedPaper } : n)), edges: stored.edges });
-    createReference.mutate({ paperId, sourceSectionKey: sectionKey, targetPaperId: item.paperId, targetSectionKey });
+    createReference.mutate({ paperId, sourceSectionKey: sectionKey, targetPaperId: linkedPaper.paperId, targetSectionKey });
     setLinkingNodeId(null);
   }, [linkingNodeId, stored, commit, createReference, paperId, sectionKey]);
+
+  const handlePick = useCallback((item: MentionItem, targetSectionKey?: string) => {
+    if (!linkingNodeId) return;
+    // PT-MRCI + una sección elegida → pedir la fila específica antes de
+    // confirmar (es el papel de donde sale el badge de Riesgo Residual).
+    if (item.paperCode === 'PT-MRCI' && targetSectionKey) {
+      setRowPickerTarget({ item, sectionKey: targetSectionKey });
+      return;
+    }
+    const section = targetSectionKey ? item.sections.find(s => s.sectionKey === targetSectionKey) : undefined;
+    applyLink({
+      paperId: item.paperId, code: item.code, title: item.title,
+      sectionKey: section?.sectionKey, sectionLabel: section?.label,
+    }, targetSectionKey);
+  }, [linkingNodeId, applyLink]);
+
+  const handleRowPick = useCallback((row: { rowId: string; rowLabel: string; residualLevel?: string }) => {
+    if (!rowPickerTarget) return;
+    const { item, sectionKey: targetSectionKey } = rowPickerTarget;
+    const section = item.sections.find(s => s.sectionKey === targetSectionKey);
+    applyLink({
+      paperId: item.paperId, code: item.code, title: item.title,
+      sectionKey: section?.sectionKey, sectionLabel: section?.label,
+      rowId: row.rowId, rowLabel: row.rowLabel, residualLevel: row.residualLevel,
+    }, targetSectionKey);
+    setRowPickerTarget(null);
+  }, [rowPickerTarget, applyLink]);
 
   const rfNodes: Node[] = useMemo(() => stored.nodes.map(n => ({
     id: n.id,
@@ -314,11 +564,11 @@ function FlowchartPanelInner({ paperId, auditId, sectionKey, value, onChange, re
     targetPosition: Position.Top,
     data: {
       ...n, readOnly: !!readOnly,
-      onLabelChange: handleLabelChange, onDelete: handleDeleteNode,
+      onLabelChange: handleLabelChange, onLaneChange: handleLaneChange, onDelete: handleDeleteNode,
       onLink: setLinkingNodeId, onUnlink: handleUnlink,
       onNavigate: (pid: string) => router.push(`/dashboard/working-papers/${pid}`),
     } as FlowNodeData,
-  })), [stored.nodes, readOnly, handleLabelChange, handleDeleteNode, handleUnlink, router]);
+  })), [stored.nodes, readOnly, handleLabelChange, handleLaneChange, handleDeleteNode, handleUnlink, router]);
 
   const rfEdges: Edge[] = useMemo(() => stored.edges.map(e => ({
     id: e.id, source: e.source, target: e.target, type: 'smoothstep',
@@ -443,11 +693,24 @@ function FlowchartPanelInner({ paperId, auditId, sectionKey, value, onChange, re
         )}
       </div>
 
+      <datalist id="flowchart-lanes">
+        {knownLanes.map(l => <option key={l} value={l} />)}
+      </datalist>
+
       {linkingNodeId && (
         <LinkPicker
           items={mentionItems ?? []}
           onPick={handlePick}
           onClose={() => setLinkingNodeId(null)}
+        />
+      )}
+
+      {rowPickerTarget && (
+        <RowPicker
+          paperId={rowPickerTarget.item.paperId}
+          sectionKey={rowPickerTarget.sectionKey}
+          onPick={handleRowPick}
+          onClose={() => { setRowPickerTarget(null); setLinkingNodeId(null); }}
         />
       )}
     </div>

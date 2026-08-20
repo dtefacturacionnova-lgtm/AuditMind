@@ -19,6 +19,7 @@ export interface CreateReferenceDto {
 export interface MentionItem {
   paperId:      string;
   code:         string;   // A-01, B-00…
+  paperCode:    string | null;  // PT-A2, PT-MRCI… — plantilla del papel, no confundir con `code`
   title:        string;
   wpKind:       string;
   sections: {
@@ -51,6 +52,7 @@ export class PaperReferencesService {
       select:  {
         id:    true,
         code:  true,
+        paperCode: true,
         title: true,
         wpKind: true,
         sections: {
@@ -63,6 +65,7 @@ export class PaperReferencesService {
     return papers.map(p => ({
       paperId:  p.id,
       code:     p.code,
+      paperCode: p.paperCode,
       title:    p.title,
       wpKind:   p.wpKind,
       sections: p.sections.map(s => ({

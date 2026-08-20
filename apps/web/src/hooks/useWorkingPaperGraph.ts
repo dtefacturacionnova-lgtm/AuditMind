@@ -845,11 +845,12 @@ export interface MentionSection {
 }
 
 export interface MentionItem {
-  paperId:  string;
-  code:     string;
-  title:    string;
-  wpKind:   string;
-  sections: MentionSection[];
+  paperId:   string;
+  code:      string;
+  paperCode: string | null;
+  title:     string;
+  wpKind:    string;
+  sections:  MentionSection[];
 }
 
 export function useMentionIndex(auditId: string) {

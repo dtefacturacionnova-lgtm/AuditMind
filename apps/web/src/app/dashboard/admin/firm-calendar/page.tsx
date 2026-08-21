@@ -438,7 +438,7 @@ export default function FirmCalendarPage() {
     <div className="flex flex-col h-full">
       <Header
         title="Calendario y Capacidad"
-        breadcrumbs={[{ label: 'Admin' }, { label: 'Calendario y Capacidad' }]}
+        breadcrumbs={[{ label: 'Horas y Rentabilidad' }, { label: 'Calendario y Capacidad' }]}
       />
 
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 max-w-5xl mx-auto w-full">

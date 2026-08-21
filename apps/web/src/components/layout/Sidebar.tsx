@@ -8,7 +8,7 @@ import {
   ServerCrash, Settings, ChevronDown, ChevronRight,
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
-  Clock, CalendarClock, DollarSign, Handshake, CheckSquare,
+  Clock, CalendarClock, DollarSign, Handshake, CheckSquare, Wallet, Gauge,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -34,15 +34,16 @@ const NAV_ITEMS: NavItem[] = [
     href: '/dashboard',
     icon: LayoutDashboard,
   },
-  // ── Cartera (CRM de Auditoría Externa) ────────────────────────────────────
+  // ── Cartera (CRM de Auditoría Externa) — solo el pipeline comercial puro.
+  // Capacidad y Rentabilidad se movieron a "Horas y Rentabilidad": esos datos
+  // (TimeEntry, UserAvailabilityProfile) aplican igual a Auditoría Interna, no
+  // tenía sentido encerrarlos solo para Externa.
   {
     label: 'Cartera',
     icon: Handshake,
     module: 'EXTERNAL',
     children: [
-      { label: 'Cartera de Clientes',          href: '/dashboard/portfolio',              icon: Handshake },
-      { label: 'Planificación Anual Externa',  href: '/dashboard/portfolio/capacity',     icon: CalendarClock },
-      { label: 'Rentabilidad',                 href: '/dashboard/portfolio/profitability', icon: LineChart },
+      { label: 'Cartera de Clientes', href: '/dashboard/portfolio', icon: Handshake },
     ],
   },
   // ── Planificación Anual ───────────────────────────────────────────────────
@@ -79,13 +80,25 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Confirmaciones Ext.',    href: '/dashboard/confirmations', icon: BadgeCheck },
     ],
   },
+  // ── Horas y Rentabilidad ──────────────────────────────────────────────────
+  // Grupo unificado: antes estas pantallas vivían repartidas entre "Captura de
+  // Horas", "Cartera" (solo Externa) y "Administración" — se consolidan aquí
+  // porque todas comparten la misma base de datos (TimeEntry, AuditTeam,
+  // UserAvailabilityProfile/UserCostProfile) y aplican por igual a Interna y
+  // Externa. Sin `module`: siempre visible.
   {
-    label: 'Captura de Horas',
-    icon: Clock,
+    label: 'Horas y Rentabilidad',
+    icon: Wallet,
     children: [
-      { label: 'Captura Semanal',        href: '/dashboard/timesheet',        icon: Clock },
-      { label: 'Reporte Consolidado',    href: '/dashboard/timesheet/report', icon: BarChart3 },
-      { label: 'Tareas Administrativas', href: '/dashboard/admin-tasks',      icon: CheckSquare },
+      { label: 'Captura Semanal',        href: '/dashboard/timesheet',              icon: Clock },
+      { label: 'Reporte Consolidado',    href: '/dashboard/timesheet/report',       icon: BarChart3 },
+      { label: 'Mi Utilización',         href: '/dashboard/my-utilization',         icon: Gauge },
+      { label: 'Dashboard de la Firma',  href: '/dashboard/firm-hours',             icon: Wallet },
+      { label: 'Rentabilidad',           href: '/dashboard/portfolio/profitability', icon: LineChart },
+      { label: 'Capacidad del Equipo',   href: '/dashboard/portfolio/capacity',      icon: CalendarClock },
+      { label: 'Calendario y Capacidad', href: '/dashboard/admin/firm-calendar',     icon: CalendarClock },
+      { label: 'Costeo y Tarifas',       href: '/dashboard/admin/cost-profiles',     icon: DollarSign },
+      { label: 'Tareas Administrativas', href: '/dashboard/admin-tasks',             icon: CheckSquare },
     ],
   },
   {
@@ -127,8 +140,6 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Biblioteca de Contenido', href: '/dashboard/admin/content-library', icon: Library },
       { label: 'Conectores de Datos', href: '/dashboard/admin/data-sources', icon: Plug },
       { label: 'Base de Conocimiento', href: '/dashboard/admin/knowledge', icon: BookOpen },
-      { label: 'Calendario y Capacidad', href: '/dashboard/admin/firm-calendar', icon: CalendarClock },
-      { label: 'Costeo y Tarifas', href: '/dashboard/admin/cost-profiles', icon: DollarSign },
       { label: 'Configuración', href: '/dashboard/admin/settings', icon: Settings },
     ],
   },

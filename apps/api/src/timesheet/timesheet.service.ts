@@ -8,6 +8,7 @@ import {
   CreateTimesheetEntryDto, BulkCreateTimesheetEntryDto,
   QueryTimesheetEntriesDto, QueryTimesheetReportDto, TimesheetReportGroupBy,
 } from './dto/timesheet.dto';
+import { recalculateAuditActualHours } from '../audits/audit-hours.util';
 
 // Mismo criterio de jerarquía que RolesGuard (apps/api/src/common/guards/roles.guard.ts).
 // Se replica aquí (en vez de importarlo) porque el guard no lo exporta — solo lo usa internamente.
@@ -64,7 +65,7 @@ export class TimesheetService {
     const error = this.validateCategoryLinkage(dto);
     if (error) throw new BadRequestException(error);
 
-    return this.prisma.timeEntry.create({
+    const entry = await this.prisma.timeEntry.create({
       data: {
         organizationId: user.organizationId,
         userId:         user.id,
@@ -76,6 +77,8 @@ export class TimesheetService {
         category:       dto.category,
       },
     });
+    await recalculateAuditActualHours(this.prisma, dto.auditId);
+    return entry;
   }
 
   // ── POST /timesheet/entries/bulk ──────────────────────────────────────────
@@ -106,6 +109,9 @@ export class TimesheetService {
       })),
     });
 
+    const affectedAuditIds = [...new Set(dto.entries.map((e) => e.auditId).filter((v): v is string => !!v))];
+    await Promise.all(affectedAuditIds.map((id) => recalculateAuditActualHours(this.prisma, id)));
+
     return { created: result.count };
   }
 
@@ -132,6 +138,7 @@ export class TimesheetService {
     if (!entry || entry.organizationId !== user.organizationId) throw new NotFoundException();
     if (entry.userId !== user.id) throw new ForbiddenException('Solo puedes eliminar tus propias entradas');
     await this.prisma.timeEntry.delete({ where: { id } });
+    await recalculateAuditActualHours(this.prisma, entry.auditId);
     return { deleted: true };
   }
 

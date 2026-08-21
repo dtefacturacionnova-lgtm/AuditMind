@@ -26,6 +26,23 @@ const DEFAULT_COST_FORM = {
   targetUtilizationPct: 75,
 };
 
+// ─── Tarifas de venta (3 niveles) ──────────────────────────────────────────
+// % y $ se mantienen sincronizados en vivo contra la Tarifa de Costo del
+// último cálculo guardado (profile.effectiveOverrideRate ?? suggestedBillingRate).
+// Solo se envía `percent` al guardar — el backend recalcula el monto siempre
+// desde el % contra la tarifa de costo vigente (fuente de verdad única).
+interface TierFormState { label: string; percent: string; amount: string }
+
+const DEFAULT_TIERS: [TierFormState, TierFormState, TierFormState] = [
+  { label: 'Tarifa de Venta 1', percent: '25', amount: '' },
+  { label: 'Tarifa de Venta 2', percent: '30', amount: '' },
+  { label: 'Tarifa de Venta 3', percent: '40', amount: '' },
+];
+
+function fmtNum(n: number): string {
+  return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : '';
+}
+
 function ResultRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={cn('flex items-center justify-between', highlight ? 'py-3' : 'py-2')}>
@@ -58,6 +75,7 @@ export default function CostProfilesPage() {
 
   const [form, setForm] = useState<typeof DEFAULT_COST_FORM>(DEFAULT_COST_FORM);
   const [overrideRate, setOverrideRate] = useState('');
+  const [tiers, setTiers] = useState<[TierFormState, TierFormState, TierFormState]>(DEFAULT_TIERS);
 
   // Re-seed el formulario cuando llega el perfil existente (o cambia empleado/año → sin perfil)
   useEffect(() => {
@@ -72,14 +90,64 @@ export default function CostProfilesPage() {
         targetUtilizationPct: profile.targetUtilizationPct,
       });
       setOverrideRate(profile.effectiveOverrideRate != null ? String(Number(profile.effectiveOverrideRate)) : '');
+      // Base para precalcular $ cuando el backend aún no guardó un monto (perfil
+      // creado antes de esta función, o % recién default-seeded en el cliente).
+      const seedBase = Number(profile.effectiveOverrideRate ?? profile.suggestedBillingRate ?? 0);
+      const seedTier = (label: string | null, percent: number | null, amount: number | null, def: TierFormState): TierFormState => {
+        const pct = percent ?? Number(def.percent);
+        return {
+          label: label ?? def.label,
+          percent: percent != null ? fmtNum(percent) : def.percent,
+          amount: amount != null ? fmtNum(amount) : (seedBase > 0 ? fmtNum(seedBase * (1 + pct / 100)) : ''),
+        };
+      };
+      setTiers([
+        seedTier(profile.saleTier1Label, profile.saleTier1Percent, profile.saleTier1Amount, DEFAULT_TIERS[0]),
+        seedTier(profile.saleTier2Label, profile.saleTier2Percent, profile.saleTier2Amount, DEFAULT_TIERS[1]),
+        seedTier(profile.saleTier3Label, profile.saleTier3Percent, profile.saleTier3Amount, DEFAULT_TIERS[2]),
+      ]);
     } else {
       setForm(DEFAULT_COST_FORM);
       setOverrideRate('');
+      setTiers(DEFAULT_TIERS);
     }
   }, [profile, userId, year]);
 
   const selectedUser = users.find(u => u.id === userId);
   const numCls = 'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A] disabled:bg-gray-50 disabled:text-gray-400';
+
+  // Base para calcular las 3 tarifas de venta: la Tarifa de Costo vigente
+  // (override si está definida, si no la sugerida). Como en el resto de esta
+  // pantalla, refleja el ÚLTIMO cálculo guardado, no ediciones sin guardar.
+  const costBaseRate = overrideRate.trim() !== ''
+    ? Number(overrideRate)
+    : (profile ? Number(profile.suggestedBillingRate) : 0);
+
+  function handleTierPercentChange(idx: 0 | 1 | 2, value: string) {
+    setTiers(prev => {
+      const next = [...prev] as [TierFormState, TierFormState, TierFormState];
+      const pct = Number(value);
+      next[idx] = {
+        ...next[idx],
+        percent: value,
+        amount: value !== '' && !isNaN(pct) && costBaseRate > 0 ? fmtNum(costBaseRate * (1 + pct / 100)) : next[idx].amount,
+      };
+      return next;
+    });
+  }
+
+  function handleTierAmountChange(idx: 0 | 1 | 2, value: string) {
+    setTiers(prev => {
+      const next = [...prev] as [TierFormState, TierFormState, TierFormState];
+      const amt = Number(value);
+      next[idx] = {
+        ...next[idx],
+        amount: value,
+        percent: value !== '' && !isNaN(amt) && costBaseRate > 0 ? fmtNum((amt / costBaseRate - 1) * 100) : next[idx].percent,
+      };
+      return next;
+    });
+  }
 
   // netAvailableHours=0 (sin perfil de Disponibilidad) hace que costRatePerHour salga en 0
   // aunque haya costo anual — es la señal más confiable de que falta configurar disponibilidad.
@@ -95,6 +163,11 @@ export default function CostProfilesPage() {
         year,
         ...form,
         ...(overrideRate.trim() !== '' && { effectiveOverrideRate: Number(overrideRate) }),
+        // Solo se envía el %  — el backend siempre recalcula el monto contra la
+        // Tarifa de Costo vigente (percent es la fuente de verdad, ver capacity.service.ts).
+        saleTier1Label: tiers[0].label, ...(tiers[0].percent.trim() !== '' && { saleTier1Percent: Number(tiers[0].percent) }),
+        saleTier2Label: tiers[1].label, ...(tiers[1].percent.trim() !== '' && { saleTier2Percent: Number(tiers[1].percent) }),
+        saleTier3Label: tiers[2].label, ...(tiers[2].percent.trim() !== '' && { saleTier3Percent: Number(tiers[2].percent) }),
       });
       setToastMsg('Perfil de costeo guardado correctamente');
     } catch (err) {
@@ -128,7 +201,7 @@ export default function CostProfilesPage() {
     <div className="flex flex-col h-full">
       <Header
         title="Costeo y Tarifas"
-        breadcrumbs={[{ label: 'Admin' }, { label: 'Costeo y Tarifas' }]}
+        breadcrumbs={[{ label: 'Horas y Rentabilidad' }, { label: 'Costeo y Tarifas' }]}
       />
 
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 max-w-5xl mx-auto w-full">
@@ -279,6 +352,49 @@ export default function CostProfilesPage() {
                 />
               </div>
 
+              <div className="border-t pt-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                  Tarifas de venta
+                </p>
+                <p className="text-[11px] text-gray-400 mb-3">
+                  Márgenes sobre la Tarifa de Costo ({costBaseRate > 0 ? formatMoney(costBaseRate) : '—'}/hr) para vender la hora de este empleado. Edite % o $ — el otro se calcula solo.
+                </p>
+                <div className="space-y-2.5">
+                  {tiers.map((t, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        type="text" value={t.label}
+                        disabled={!canEdit}
+                        onChange={e => setTiers(prev => {
+                          const next = [...prev] as [TierFormState, TierFormState, TierFormState];
+                          next[i as 0 | 1 | 2] = { ...next[i as 0 | 1 | 2], label: e.target.value };
+                          return next;
+                        })}
+                        className="flex-1 min-w-0 border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A] disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                      <div className="relative w-20 shrink-0">
+                        <input
+                          type="number" step={0.1} value={t.percent}
+                          disabled={!canEdit}
+                          onChange={e => handleTierPercentChange(i as 0 | 1 | 2, e.target.value)}
+                          className="w-full border rounded-lg pl-2.5 pr-5 py-1.5 text-xs text-right focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A] disabled:bg-gray-50 disabled:text-gray-400"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">%</span>
+                      </div>
+                      <div className="relative w-24 shrink-0">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">$</span>
+                        <input
+                          type="number" step={0.01} value={t.amount}
+                          disabled={!canEdit}
+                          onChange={e => handleTierAmountChange(i as 0 | 1 | 2, e.target.value)}
+                          className="w-full border rounded-lg pl-4 pr-2 py-1.5 text-xs text-right font-mono focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A] disabled:bg-gray-50 disabled:text-gray-400"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {canEdit && (
                 <button
                   onClick={handleSave}
@@ -344,6 +460,25 @@ export default function CostProfilesPage() {
                       <span className="text-sm font-mono font-bold text-blue-800">
                         {formatMoney(profile.effectiveOverrideRate)} / hr
                       </span>
+                    </div>
+                  )}
+
+                  {(profile.saleTier1Amount != null || profile.saleTier2Amount != null || profile.saleTier3Amount != null) && (
+                    <div className="mt-3 rounded-lg border border-gray-100 divide-y">
+                      {([
+                        [profile.saleTier1Label, profile.saleTier1Percent, profile.saleTier1Amount],
+                        [profile.saleTier2Label, profile.saleTier2Percent, profile.saleTier2Amount],
+                        [profile.saleTier3Label, profile.saleTier3Percent, profile.saleTier3Amount],
+                      ] as const).map(([label, pct, amt], i) => amt != null && (
+                        <div key={i} className="flex items-center justify-between px-3 py-2">
+                          <span className="text-xs text-gray-600">
+                            {label} <span className="text-gray-400">(+{pct}%)</span>
+                          </span>
+                          <span className="text-sm font-mono font-semibold text-gray-800">
+                            {formatMoney(amt)} / hr
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
 

@@ -7,14 +7,16 @@ import {
   TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Edit2, Save, X,
   Download, ClipboardList, DollarSign, ShieldAlert, BarChart3,
   Globe, AlertCircle, Calendar, Info, Printer, User, History, Users,
-  Sparkles,
+  Sparkles, Link2, Unlink,
 } from 'lucide-react';
+import NextLink from 'next/link';
 import { apiClient } from '@/lib/api-client';
 import { Header } from '@/components/layout/Header';
 import {
   usePlan, useApprovePlan, useActivatePlan, useClosePlan,
   useUpdatePlanItem, useRemovePlanItem, useUpdatePlan,
   useImportFromProjects, usePlanProjectCandidates,
+  useLinkableAudits, useLinkAudit, useUnlinkAudit,
   PLAN_STATUS_CONFIG, PRIORITY_CONFIG, RISK_LEVEL_CONFIG,
   PlanItem, ProjectCandidate, AuditPlan,
 } from '@/hooks/usePlans';
@@ -363,6 +365,8 @@ function QuickAddProjectForm({ planId, existingProjectIds, onAdded }: {
 // ─── Plan item row ────────────────────────────────────────────────────────────
 function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string; canEdit: boolean }) {
   const [editing, setEditing] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [pickedAuditId, setPickedAuditId] = useState('');
   const [hours, setHours]     = useState(String(item.estimatedHours));
   const [prio,  setPrio]      = useState(String(item.priority));
   const [responsible, setResponsible]       = useState(item.responsibleName ?? '');
@@ -375,7 +379,23 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
   );
   const updateItem = useUpdatePlanItem(planId);
   const removeItem = useRemovePlanItem(planId);
+  const linkAudit   = useLinkAudit(planId);
+  const unlinkAudit = useUnlinkAudit(planId);
+  const { data: linkableAudits = [] } = useLinkableAudits(planId);
   const pr = PRIORITY_CONFIG[item.priority] ?? PRIORITY_CONFIG[2];
+
+  const realHours = item.audit?.actualHours ?? null;
+  const realPct = realHours !== null && item.estimatedHours > 0
+    ? Math.round((realHours / item.estimatedHours) * 100) : null;
+  const realTone = realPct === null ? 'text-gray-500'
+    : realPct >= 100 ? 'text-red-600' : realPct >= 80 ? 'text-amber-600' : 'text-emerald-600';
+
+  const handleLink = async () => {
+    if (!pickedAuditId) return;
+    await linkAudit.mutateAsync({ itemId: item.id, auditId: pickedAuditId });
+    setLinking(false);
+    setPickedAuditId('');
+  };
 
   const isFromProject = !!item.auditProjectId;
   const displayName  = isFromProject ? (item.auditProject?.name ?? '—') : (item.auditEntity?.name ?? '—');
@@ -451,7 +471,45 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
               <User className="w-3 h-3" />{item.responsibleName}
             </span>
           )}
+          {item.audit ? (
+            <NextLink
+              href={`/dashboard/audits/${item.audit.id}`}
+              className={cn('text-xs font-medium flex items-center gap-1 hover:underline', realTone)}
+              title="Horas reales trabajadas en el encargo vinculado"
+            >
+              <Link2 className="w-3 h-3" />
+              {realHours!.toFixed(1)}h reales{realPct !== null && ` (${realPct}%)`}
+            </NextLink>
+          ) : linking ? null : (
+            <span className="text-xs text-gray-300">Sin encargo vinculado — 0h reales</span>
+          )}
         </div>
+
+        {linking && (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <select
+              value={pickedAuditId}
+              onChange={e => setPickedAuditId(e.target.value)}
+              className="rounded border border-gray-200 px-2 py-1 text-xs bg-white max-w-[220px]"
+            >
+              <option value="">Seleccionar encargo…</option>
+              {linkableAudits.map(a => (
+                <option key={a.id} value={a.id}>{a.title}</option>
+              ))}
+            </select>
+            <button onClick={handleLink} disabled={!pickedAuditId || linkAudit.isPending}
+              className="text-xs px-2 py-1 rounded bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50">
+              {linkAudit.isPending ? '...' : 'Vincular'}
+            </button>
+            <button onClick={() => { setLinking(false); setPickedAuditId(''); }}
+              className="p-1 text-gray-400 hover:text-gray-600">
+              <X className="w-3.5 h-3.5" />
+            </button>
+            {linkableAudits.length === 0 && (
+              <span className="text-[11px] text-gray-400">No hay encargos sin vincular en esta organización.</span>
+            )}
+          </div>
+        )}
       </div>
 
       {editing ? (
@@ -502,6 +560,24 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
           </span>
           {canEdit && (
             <>
+              {item.audit ? (
+                <button
+                  onClick={async () => {
+                    if (confirm('¿Desvincular este encargo del ítem del plan? Las horas reales dejarán de mostrarse aquí.')) {
+                      await unlinkAudit.mutateAsync(item.id);
+                    }
+                  }}
+                  disabled={unlinkAudit.isPending}
+                  title="Desvincular encargo"
+                  className="p-1 text-gray-300 hover:text-amber-500 disabled:opacity-60">
+                  <Unlink className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button onClick={() => setLinking(v => !v)} title="Vincular a un encargo real"
+                  className="p-1 text-gray-300 hover:text-blue-500">
+                  <Link2 className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button onClick={() => setEditing(true)} className="p-1 text-gray-300 hover:text-blue-500">
                 <Edit2 className="w-3.5 h-3.5" />
               </button>
@@ -1853,6 +1929,8 @@ Genera en español un resumen ejecutivo de 3-4 párrafos (máximo 350 palabras) 
                       { label: 'Entidades manuales',   value: sortedItems.filter(i => i.auditEntity).length },
                       { label: 'Horas asignadas',      value: `${plan.allocatedHours.toLocaleString('es-CL')} h` },
                       { label: 'Horas restantes',      value: `${Math.max(0, plan.remainingHours).toLocaleString('es-CL')} h` },
+                      { label: 'Auditorías iniciadas',  value: `${plan.startedItems} de ${sortedItems.length}` },
+                      { label: 'Horas reales',          value: `${plan.realHours.toLocaleString('es-CL')} h` },
                       { label: 'Prioridad alta',       value: sortedItems.filter(i => i.priority === 1).length },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex justify-between">

@@ -240,6 +240,10 @@ export interface ProfitabilityPersonRow {
   /** null = no se pudo calcular (esa persona no tiene perfil de costeo) — mostrar "Sin costear", nunca $0. */
   costoCalculado:  number | null;
   horasSinCostear: number;
+  /** Tarifa pactada con el cliente (Equipo del Encargo). null = sin tarifa asignada todavía. */
+  tarifaTipo:        string | null;
+  tarifaPorHora:      number | null;
+  ingresoPorTarifa:   number | null;
 }
 
 export interface ProfitabilityTotals {
@@ -249,6 +253,13 @@ export interface ProfitabilityTotals {
   /** null = no se pudo calcular (sin honorario vinculado, o falta perfil de costeo de alguien). */
   margenAbsoluto:  number | null;
   margenPct:       number | null;
+  /** Vista alternativa: horas reales × tarifa pactada por persona (Equipo del Encargo),
+   *  en vez del honorario fijo de la Propuesta. */
+  ingresoPorTarifa:          number;
+  horasSinTarifa:            number;
+  /** null = nadie del equipo tiene tarifa asignada todavía. */
+  margenPorTarifaAbsoluto:   number | null;
+  margenPorTarifaPct:        number | null;
 }
 
 export interface EngagementProfitability {

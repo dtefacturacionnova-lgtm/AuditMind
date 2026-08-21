@@ -158,7 +158,7 @@ export function useMyAssignments() {
   });
 }
 
-export function useTimesheetReport(query: TimesheetReportQuery) {
+export function useTimesheetReport(query: TimesheetReportQuery, opts?: { enabled?: boolean }) {
   const qs = buildQuery({
     groupBy:  query.groupBy,
     dateFrom: query.dateFrom,
@@ -173,7 +173,10 @@ export function useTimesheetReport(query: TimesheetReportQuery) {
     queryFn:   () => apiClient.get(`/timesheet/report${qs}`),
     staleTime: 15_000,
     // groupBy=plan requiere planId en el backend — no dispares la consulta hasta tenerlo.
-    enabled:   query.groupBy !== 'plan' || !!query.planId,
+    // opts.enabled: para vistas que DEBEN ir scoped a un userId propio (ej. Mi Utilización)
+    // — evita el request de fallback sin userId (que en el backend agrega TODA la org
+    // para roles manager+) mientras ese userId todavía no se resolvió.
+    enabled:   (query.groupBy !== 'plan' || !!query.planId) && (opts?.enabled ?? true),
   });
 }
 

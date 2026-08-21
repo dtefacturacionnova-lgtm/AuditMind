@@ -27,6 +27,12 @@ export interface PersonBreakdown {
   totalHours: number;
   totalCost: number;
   uncostedHours: number;
+  // Tarifa pactada con el cliente (AuditTeam.billingRateType/agreedRatePerHour,
+  // congelada al momento de la asignación — ver AuditsService.updateTeamMemberRate).
+  // null = esta persona no tiene una tarifa asignada en el equipo del encargo.
+  billingRateType: string | null;
+  agreedRatePerHour: number | null;
+  revenueByRate: number | null;
 }
 
 export interface AuditCostSummary {
@@ -34,6 +40,10 @@ export interface AuditCostSummary {
   totalHours: number;
   totalCost: number;
   uncostedHours: number;
+  // Suma de horas × tarifa pactada, y horas de personas SIN tarifa asignada
+  // (nunca se asumen a $0 — mismo criterio que uncostedHours).
+  totalRevenueByRate: number;
+  unratedHours: number;
 }
 
 export interface Revenue {
@@ -85,12 +95,16 @@ export class ProfitabilityService {
       return {
         ...base,
         porPersona: [],
-        totales: { horasTotales: 0, costoTotal: 0, horasSinCostear: 0, margenAbsoluto: null, margenPct: null },
+        totales: {
+          horasTotales: 0, costoTotal: 0, horasSinCostear: 0, margenAbsoluto: null, margenPct: null,
+          ingresoPorTarifa: 0, horasSinTarifa: 0, margenPorTarifaAbsoluto: null, margenPorTarifaPct: null,
+        },
       };
     }
 
     const summary = await this.computeAuditCostSummary(engagement.auditId, user.organizationId);
     const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
+    const marginByRate = this.computeMarginByRate(summary);
 
     return {
       ...base,
@@ -104,6 +118,11 @@ export class ProfitabilityService {
         // quedan visibles aparte, nunca mezcladas como si fueran $0.
         costoCalculado: p.totalHours > 0 && p.uncostedHours === p.totalHours ? null : p.totalCost,
         horasSinCostear: p.uncostedHours,
+        // Tarifa pactada con el cliente (Equipo del Encargo) — null si esta
+        // persona no tiene una tarifa asignada todavía.
+        tarifaTipo: p.billingRateType,
+        tarifaPorHora: p.agreedRatePerHour,
+        ingresoPorTarifa: p.revenueByRate,
       })),
       totales: {
         horasTotales: summary.totalHours,
@@ -111,6 +130,10 @@ export class ProfitabilityService {
         horasSinCostear: summary.uncostedHours,
         margenAbsoluto: margin.marginAmount,
         margenPct: margin.marginPercent,
+        ingresoPorTarifa: summary.totalRevenueByRate,
+        horasSinTarifa: summary.unratedHours,
+        margenPorTarifaAbsoluto: marginByRate.marginAmount,
+        margenPorTarifaPct: marginByRate.marginPercent,
       },
     };
   }
@@ -144,6 +167,7 @@ export class ProfitabilityService {
           this.computeAuditCostSummary(e.auditId as string, user.organizationId),
         ]);
         const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
+        const marginByRate = this.computeMarginByRate(summary);
 
         return {
           engagementId: e.id,
@@ -160,6 +184,10 @@ export class ProfitabilityService {
             horasSinCostear: summary.uncostedHours,
             margenAbsoluto: margin.marginAmount,
             margenPct: margin.marginPercent,
+            ingresoPorTarifa: summary.totalRevenueByRate,
+            horasSinTarifa: summary.unratedHours,
+            margenPorTarifaAbsoluto: marginByRate.marginAmount,
+            margenPorTarifaPct: marginByRate.marginPercent,
           },
         };
       }),
@@ -202,6 +230,18 @@ export class ProfitabilityService {
   }
 
   /**
+   * Margen basado en horas reales × tarifa pactada por persona (Equipo del
+   * Encargo) — vista distinta y complementaria a `computeMargin` (que usa el
+   * honorario fijo de la Propuesta). null si NADIE del equipo tiene tarifa
+   * asignada todavía — no se asume ingreso $0 solo porque nadie la configuró.
+   */
+  private computeMarginByRate(summary: AuditCostSummary): Margin {
+    const everyoneUnrated = summary.totalHours > 0 && summary.unratedHours === summary.totalHours;
+    if (everyoneUnrated) return { marginAmount: null, marginPercent: null };
+    return this.computeMargin(summary.totalRevenueByRate, summary.totalCost);
+  }
+
+  /**
    * Costo real del encargo a partir de las TimeEntry facturables/no facturables
    * de cliente ligadas a su Audit, agrupadas por persona y por año calendario
    * de `workDate` (un encargo puede cruzar el fin de año, y el costo por hora
@@ -216,7 +256,7 @@ export class ProfitabilityService {
     });
 
     if (entries.length === 0) {
-      return { byPerson: [], totalHours: 0, totalCost: 0, uncostedHours: 0 };
+      return { byPerson: [], totalHours: 0, totalCost: 0, uncostedHours: 0, totalRevenueByRate: 0, unratedHours: 0 };
     }
 
     // userId -> año -> horas acumuladas
@@ -231,20 +271,27 @@ export class ProfitabilityService {
     const userIds = [...byUser.keys()];
     const years = [...new Set(entries.map((e) => e.workDate.getUTCFullYear()))];
 
-    const [users, costProfiles] = await Promise.all([
+    const [users, costProfiles, teamRates] = await Promise.all([
       this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }),
       this.prisma.userCostProfile.findMany({
         where: { organizationId, userId: { in: userIds }, year: { in: years } },
         select: { userId: true, year: true, costRatePerHour: true },
       }),
+      this.prisma.auditTeam.findMany({
+        where: { auditId, userId: { in: userIds } },
+        select: { userId: true, billingRateType: true, agreedRatePerHour: true },
+      }),
     ]);
 
     const userNameMap = new Map(users.map((u) => [u.id, u.name]));
     const costMap = new Map(costProfiles.map((cp) => [`${cp.userId}:${cp.year}`, Number(cp.costRatePerHour)]));
+    const rateMap = new Map(teamRates.map((t) => [t.userId, t]));
 
     let totalHours = 0;
     let totalCost = 0;
     let uncostedHours = 0;
+    let totalRevenueByRate = 0;
+    let unratedHours = 0;
 
     const byPerson: PersonBreakdown[] = [...byUser.entries()].map(([userId, yearMap]) => {
       let personHours = 0;
@@ -266,6 +313,12 @@ export class ProfitabilityService {
       totalCost += personCost;
       uncostedHours += personUncosted;
 
+      const agreedRate = rateMap.get(userId);
+      const agreedRatePerHour = agreedRate?.agreedRatePerHour != null ? Number(agreedRate.agreedRatePerHour) : null;
+      const revenueByRate = agreedRatePerHour !== null ? round2(personHours * agreedRatePerHour) : null;
+      if (revenueByRate !== null) totalRevenueByRate += revenueByRate;
+      else unratedHours += personHours;
+
       return {
         userId,
         userName: userNameMap.get(userId) ?? userId,
@@ -273,6 +326,9 @@ export class ProfitabilityService {
         totalHours: round2(personHours),
         totalCost: round2(personCost),
         uncostedHours: round2(personUncosted),
+        billingRateType: agreedRate?.billingRateType ?? null,
+        agreedRatePerHour,
+        revenueByRate,
       };
     });
 
@@ -281,6 +337,8 @@ export class ProfitabilityService {
       totalHours: round2(totalHours),
       totalCost: round2(totalCost),
       uncostedHours: round2(uncostedHours),
+      totalRevenueByRate: round2(totalRevenueByRate),
+      unratedHours: round2(unratedHours),
     };
   }
 }

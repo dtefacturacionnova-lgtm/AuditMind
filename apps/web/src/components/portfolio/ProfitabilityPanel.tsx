@@ -10,6 +10,10 @@ import { formatMoney } from '@/lib/utils';
  *  se listan explícitos por consistencia con `EngagementsTab`. */
 const PROFITABILITY_ROLES = ['CAE', 'ADMIN', 'SUPER_ADMIN'];
 
+const RATE_TYPE_LABELS: Record<string, string> = {
+  COST: 'Costo', TIER1: 'Venta 1', TIER2: 'Venta 2', TIER3: 'Venta 3',
+};
+
 function StatCard({ label, value, sub, muted }: { label: string; value: React.ReactNode; sub?: string; muted?: boolean }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
@@ -108,6 +112,31 @@ export function ProfitabilityPanel({ engagementId }: { engagementId: string }) {
         />
       </div>
 
+      {/* Vista alternativa: horas reales × tarifa pactada por persona (Equipo del Encargo) */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          Rentabilidad por tarifa asignada
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard
+            label="Ingreso por tarifa"
+            value={formatMoney(totales.ingresoPorTarifa)}
+            sub={totales.horasSinTarifa > 0 ? `${totales.horasSinTarifa.toFixed(1)}h sin tarifa asignada` : undefined}
+          />
+          <StatCard label="Costo total" value={formatMoney(totales.costoTotal)} />
+          <StatCard
+            label="Margen"
+            value={totales.margenPorTarifaAbsoluto !== null ? formatMoney(totales.margenPorTarifaAbsoluto) : 'Sin tarifas asignadas'}
+            muted={totales.margenPorTarifaAbsoluto === null}
+          />
+          <StatCard
+            label="Margen %"
+            value={totales.margenPorTarifaPct !== null ? `${totales.margenPorTarifaPct.toFixed(1)}%` : 'Sin tarifas asignadas'}
+            muted={totales.margenPorTarifaPct === null}
+          />
+        </div>
+      </div>
+
       <div>
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
           <Users2 className="w-3.5 h-3.5" /> Desglose por persona
@@ -123,6 +152,8 @@ export function ProfitabilityPanel({ engagementId }: { engagementId: string }) {
                   <th className="text-right font-medium text-gray-500 px-3 py-2">Horas totales</th>
                   <th className="text-right font-medium text-gray-500 px-3 py-2">Costo calculado</th>
                   <th className="text-right font-medium text-gray-500 px-3 py-2">Horas sin costear</th>
+                  <th className="text-left font-medium text-gray-500 px-3 py-2">Tarifa asignada</th>
+                  <th className="text-right font-medium text-gray-500 px-3 py-2">Ingreso por tarifa</th>
                 </tr>
               </thead>
               <tbody>
@@ -139,6 +170,16 @@ export function ProfitabilityPanel({ engagementId }: { engagementId: string }) {
                       {p.horasSinCostear > 0
                         ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold">{p.horasSinCostear.toFixed(1)}h</span>
                         : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">
+                      {p.tarifaTipo
+                        ? <span>{RATE_TYPE_LABELS[p.tarifaTipo] ?? p.tarifaTipo} {p.tarifaPorHora !== null && <span className="text-gray-400">({formatMoney(p.tarifaPorHora)}/hr)</span>}</span>
+                        : <span className="text-gray-300 italic">Sin asignar</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {p.ingresoPorTarifa !== null
+                        ? <span className="text-gray-700">{formatMoney(p.ingresoPorTarifa)}</span>
+                        : <span className="text-gray-400 italic">—</span>}
                     </td>
                   </tr>
                 ))}

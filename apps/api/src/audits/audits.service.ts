@@ -4,6 +4,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
+import { UpdateTeamMemberRateDto } from './dto/team-rate.dto';
+import { AddTeamMemberDto, UpdateTeamMemberDto } from './dto/team.dto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AuditStatus, AuditType, Prisma, UserRole } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -12,6 +14,7 @@ import { AiService } from '../ai/ai.service';
 import { AuditFoldersService } from '../audit-folders/audit-folders.service';
 
 const AUDIT_RISK_TARGET = 0.05;
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 @Injectable()
 export class AuditsService {
@@ -903,5 +906,271 @@ export class AuditsService {
 
     await this.prisma.auditRequestDocument.delete({ where: { id: docId } });
     return { removed: true };
+  }
+
+  // ─── Equipo del encargo — alta, baja y cambio de rol ───────────────────────
+  // Antes de esto, AuditTeam solo se poblaba una vez al crear el encargo
+  // (dto.teamMemberIds) o al aprobar un Engagement de Cartera — no existía
+  // ninguna forma de agregar/quitar gente ni cambiar su rol después.
+
+  async addTeamMember(auditId: string, dto: AddTeamMemberDto, user: AuthUser) {
+    await this.findOne(auditId, user);
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: { id: dto.userId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!targetUser) throw new NotFoundException('Usuario no encontrado en esta organización');
+
+    const existing = await this.prisma.auditTeam.findUnique({
+      where: { auditId_userId: { auditId, userId: dto.userId } },
+    });
+    if (existing) throw new BadRequestException('Este usuario ya es parte del equipo del encargo');
+
+    return this.prisma.auditTeam.create({
+      data: { auditId, userId: dto.userId, role: dto.role ?? 'AUDITOR' },
+      include: { user: { select: { id: true, name: true, role: true, avatarUrl: true } } },
+    });
+  }
+
+  /** Bloquea quitar/degradar al único LEAD del equipo — un encargo sin líder es un estado roto. */
+  private async assertNotLastLead(auditId: string, memberId: string) {
+    const otherLeads = await this.prisma.auditTeam.count({
+      where: { auditId, role: 'LEAD', id: { not: memberId } },
+    });
+    if (otherLeads === 0) {
+      throw new BadRequestException(
+        'No se puede quitar al único Auditor Líder del encargo — asigna otro líder primero',
+      );
+    }
+  }
+
+  async removeTeamMember(auditId: string, memberId: string, user: AuthUser) {
+    await this.findOne(auditId, user);
+    const member = await this.prisma.auditTeam.findFirst({ where: { id: memberId, auditId } });
+    if (!member) throw new NotFoundException('Miembro del equipo no encontrado en este encargo');
+
+    if (member.role === 'LEAD') await this.assertNotLastLead(auditId, memberId);
+
+    await this.prisma.auditTeam.delete({ where: { id: memberId } });
+    return { removed: true };
+  }
+
+  async updateTeamMember(auditId: string, memberId: string, dto: UpdateTeamMemberDto, user: AuthUser) {
+    await this.findOne(auditId, user);
+    const member = await this.prisma.auditTeam.findFirst({ where: { id: memberId, auditId } });
+    if (!member) throw new NotFoundException('Miembro del equipo no encontrado en este encargo');
+
+    if (member.role === 'LEAD' && dto.role !== undefined && dto.role !== 'LEAD') {
+      await this.assertNotLastLead(auditId, memberId);
+    }
+
+    return this.prisma.auditTeam.update({
+      where: { id: memberId },
+      data: {
+        ...(dto.role !== undefined && { role: dto.role }),
+        ...(dto.budgetedHours !== undefined && { budgetedHours: dto.budgetedHours }),
+      },
+      include: { user: { select: { id: true, name: true, role: true, avatarUrl: true } } },
+    });
+  }
+
+  // ─── Presupuesto vs. Real ───────────────────────────────────────────────────
+  /**
+   * Cruza `AuditTeam.budgetedHours` (presupuesto real por persona, editable en
+   * la pestaña Equipo) contra `SUM(TimeEntry.hours)` real de cada persona en
+   * este encargo. Reemplaza la pestaña "Horas" anterior, que leía
+   * `Audit.estimatedHours` — un total suelto nunca desglosado por persona.
+   * Mismo criterio que el resto del sistema: si NADIE del equipo tiene
+   * presupuesto asignado, el total no se muestra como "0" sino como
+   * `null` — nunca se inventa un presupuesto que nadie definió.
+   */
+  async getBudgetReport(auditId: string, user: AuthUser) {
+    const audit = await this.prisma.audit.findFirst({
+      where: { id: auditId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+
+    const [team, entries] = await Promise.all([
+      this.prisma.auditTeam.findMany({
+        where: { auditId },
+        select: {
+          id: true, userId: true, role: true, budgetedHours: true,
+          user: { select: { id: true, name: true } },
+        },
+        orderBy: { assignedAt: 'asc' },
+      }),
+      this.prisma.timeEntry.findMany({
+        where: { auditId },
+        select: { userId: true, workDate: true, hours: true },
+      }),
+    ]);
+
+    // Horas reales por persona, Y por persona+año (el costo por hora depende del
+    // UserCostProfile del año en que se trabajó — mismo criterio que ProfitabilityService).
+    const actualByUser = new Map<string, number>();
+    const actualByUserYear = new Map<string, number>(); // key `${userId}:${year}`
+    for (const e of entries) {
+      const year = e.workDate.getUTCFullYear();
+      actualByUser.set(e.userId, (actualByUser.get(e.userId) ?? 0) + e.hours);
+      const key = `${e.userId}:${year}`;
+      actualByUserYear.set(key, (actualByUserYear.get(key) ?? 0) + e.hours);
+    }
+
+    // Horas cargadas por alguien que ya no está (o nunca estuvo) en AuditTeam —
+    // no se descartan, aparecen aparte para que no "desaparezcan" del reporte.
+    const teamUserIds = new Set(team.map((m) => m.userId));
+    const orphanUserIds = [...actualByUser.keys()].filter((id) => !teamUserIds.has(id));
+    const orphanUsers = orphanUserIds.length > 0
+      ? await this.prisma.user.findMany({ where: { id: { in: orphanUserIds } }, select: { id: true, name: true } })
+      : [];
+    const orphanNameMap = new Map(orphanUsers.map((u) => [u.id, u.name]));
+
+    // Costo real en $ — para el criterio de Interna ("costo vs. presupuesto", sin
+    // tarifas de venta) y como dato complementario para Externa. Mismo criterio
+    // "nunca inventar": una persona+año sin UserCostProfile queda en costoSinCalcular,
+    // nunca se asume $0.
+    const allUserIds = [...new Set(entries.map((e) => e.userId))];
+    const years = [...new Set(entries.map((e) => e.workDate.getUTCFullYear()))];
+    const costProfiles = allUserIds.length > 0 && years.length > 0
+      ? await this.prisma.userCostProfile.findMany({
+          where: { organizationId: user.organizationId, userId: { in: allUserIds }, year: { in: years } },
+          select: { userId: true, year: true, costRatePerHour: true },
+        })
+      : [];
+    const costRateMap = new Map(costProfiles.map((cp) => [`${cp.userId}:${cp.year}`, Number(cp.costRatePerHour)]));
+
+    const costoPorPersona = (userId: string): { costoReal: number | null; horasSinCostear: number } => {
+      let costo = 0;
+      let sinCostear = 0;
+      let algunoCosteado = false;
+      for (const [key, hours] of actualByUserYear.entries()) {
+        if (!key.startsWith(`${userId}:`)) continue;
+        const year = Number(key.split(':')[1]);
+        const rate = costRateMap.get(`${userId}:${year}`);
+        if (rate !== undefined) { costo += hours * rate; algunoCosteado = true; }
+        else sinCostear += hours;
+      }
+      return { costoReal: algunoCosteado ? round2(costo) : null, horasSinCostear: round2(sinCostear) };
+    };
+
+    const porPersona = [
+      ...team.map((m) => {
+        const { costoReal, horasSinCostear } = costoPorPersona(m.userId);
+        return {
+          memberId: m.id,
+          userId: m.userId,
+          userName: m.user.name,
+          role: m.role,
+          horasPresupuestadas: m.budgetedHours ?? null,
+          horasReales: round2(actualByUser.get(m.userId) ?? 0),
+          costoReal,
+          horasSinCostear,
+          enEquipo: true,
+        };
+      }),
+      ...orphanUserIds.map((id) => {
+        const { costoReal, horasSinCostear } = costoPorPersona(id);
+        return {
+          memberId: null,
+          userId: id,
+          userName: orphanNameMap.get(id) ?? id,
+          role: null,
+          horasPresupuestadas: null,
+          horasReales: round2(actualByUser.get(id) ?? 0),
+          costoReal,
+          horasSinCostear,
+          enEquipo: false,
+        };
+      }),
+    ];
+
+    const conPresupuesto = team.filter((m) => m.budgetedHours != null);
+    const totalPresupuestado = conPresupuesto.length > 0
+      ? round2(conPresupuesto.reduce((sum, m) => sum + (m.budgetedHours ?? 0), 0))
+      : null;
+    const totalReal = round2(porPersona.reduce((sum, p) => sum + p.horasReales, 0));
+    const sinPresupuesto = team.filter((m) => m.budgetedHours == null).length + orphanUserIds.length;
+
+    const conCosto = porPersona.filter((p) => p.costoReal !== null);
+    const costoTotal = conCosto.length > 0 ? round2(conCosto.reduce((sum, p) => sum + (p.costoReal ?? 0), 0)) : null;
+
+    const variacionHoras = totalPresupuestado !== null ? round2(totalReal - totalPresupuestado) : null;
+    const variacionPct = totalPresupuestado !== null && totalPresupuestado !== 0
+      ? round2((variacionHoras! / totalPresupuestado) * 100)
+      : null;
+
+    return {
+      totalPresupuestado,
+      totalReal,
+      variacionHoras,
+      variacionPct,
+      sinPresupuesto,
+      costoTotal,
+      porPersona,
+    };
+  }
+
+  // ─── Equipo del encargo — tarifa pactada con el cliente ────────────────────
+  /**
+   * Las 4 tarifas seleccionables para un miembro del equipo, resueltas contra
+   * su UserCostProfile del año EN CURSO (el año en que se pacta la tarifa con
+   * el cliente, no el período fiscal auditado — un encargo de un ejercicio ya
+   * cerrado igual se factibiliza con la estructura de costos vigente hoy).
+   * "Tarifa de Costo" = effectiveOverrideRate ?? suggestedBillingRate del perfil
+   * — la Tarifa Sugerida se trata como la base sobre la que se calculan las 3
+   * tarifas de venta (ver CapacityService.computeSaleTiers).
+   */
+  async getTeamMemberRateOptions(auditId: string, memberId: string, user: AuthUser) {
+    const audit = await this.prisma.audit.findFirst({
+      where: { id: auditId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+
+    const member = await this.prisma.auditTeam.findFirst({
+      where: { id: memberId, auditId },
+      select: { userId: true },
+    });
+    if (!member) throw new NotFoundException('Miembro del equipo no encontrado en este encargo');
+
+    const year = new Date().getUTCFullYear();
+    const profile = await this.prisma.userCostProfile.findFirst({
+      where: { organizationId: user.organizationId, userId: member.userId, year },
+    });
+
+    const costRate = profile ? Number(profile.effectiveOverrideRate ?? profile.suggestedBillingRate) : null;
+    const tierAmount = (v: Prisma.Decimal | null | undefined) => (v != null ? Number(v) : null);
+
+    return {
+      year,
+      hasCostProfile: !!profile,
+      options: [
+        { type: 'COST' as const, label: 'Tarifa de Costo', amount: costRate },
+        { type: 'TIER1' as const, label: profile?.saleTier1Label ?? 'Tarifa de Venta 1', amount: tierAmount(profile?.saleTier1Amount) },
+        { type: 'TIER2' as const, label: profile?.saleTier2Label ?? 'Tarifa de Venta 2', amount: tierAmount(profile?.saleTier2Amount) },
+        { type: 'TIER3' as const, label: profile?.saleTier3Label ?? 'Tarifa de Venta 3', amount: tierAmount(profile?.saleTier3Amount) },
+      ],
+    };
+  }
+
+  /** Asigna qué tarifa se pactó con el cliente para este miembro y congela su
+   *  monto en $ (`agreedRatePerHour`) — para que la rentabilidad ya calculada
+   *  no se mueva si el perfil de costeo cambia después. */
+  async updateTeamMemberRate(auditId: string, memberId: string, dto: UpdateTeamMemberRateDto, user: AuthUser) {
+    const options = await this.getTeamMemberRateOptions(auditId, memberId, user);
+    const chosen = options.options.find((o) => o.type === dto.billingRateType);
+    if (!chosen || chosen.amount === null) {
+      throw new BadRequestException(
+        `No se puede asignar "${dto.billingRateType}" — el perfil de costeo de este usuario para ${options.year} no tiene esa tarifa configurada.`,
+      );
+    }
+
+    return this.prisma.auditTeam.update({
+      where: { id: memberId },
+      data: { billingRateType: dto.billingRateType, agreedRatePerHour: chosen.amount },
+      include: { user: { select: { id: true, name: true, role: true, avatarUrl: true } } },
+    });
   }
 }

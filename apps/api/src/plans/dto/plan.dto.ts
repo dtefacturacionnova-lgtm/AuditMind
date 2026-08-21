@@ -149,6 +149,12 @@ export class CreateTimeEntryDto {
   category?: TimeEntryCategory;
 }
 
+export class LinkAuditDto {
+  @ApiProperty({ example: 'audit_123', description: 'Encargo ya existente de la organización a vincular con este ítem del plan' })
+  @IsString()
+  auditId: string;
+}
+
 export class ImportFromProjectsDto {
   @ApiProperty({
     type: [String],

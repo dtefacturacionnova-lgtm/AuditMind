@@ -17,6 +17,13 @@ export interface PlanItemProject {
   riskCategory?:  string;
 }
 
+export interface PlanItemAudit {
+  id:          string;
+  title:       string;
+  status:      string;
+  actualHours: number;
+}
+
 export interface PlanItem {
   id:                 string;
   planId:             string;
@@ -40,6 +47,18 @@ export interface PlanItem {
     responsible?:      string;
   };
   auditProject?: PlanItemProject;
+  // Vínculo con el encargo real — horas reales viven en audit.actualHours,
+  // sincronizadas desde TimeEntry (ver audit-hours.util.ts). Ausente = ítem
+  // aún no iniciado, no "desconocido".
+  auditId?: string | null;
+  audit?:   PlanItemAudit | null;
+}
+
+export interface LinkableAudit {
+  id:          string;
+  title:       string;
+  status:      string;
+  actualHours: number;
 }
 
 // L2.8 — Timesheet
@@ -91,6 +110,10 @@ export interface AuditPlan {
   allocatedHours: number;
   remainingHours: number;
   utilizationPct: number;
+  // Horas reales — 0 mientras ningún ítem esté vinculado a un encargo, no null
+  // (ver [[fixes_and_lessons]] sobre nunca asumir $0/0h salvo que sea genuinamente 0).
+  realHours:      number;
+  startedItems:   number;
 }
 
 export interface ProjectCandidate {
@@ -229,6 +252,39 @@ export function useRemovePlanItem(planId: string) {
   return useMutation({
     mutationFn: (itemId: string) => apiClient.delete(`/plans/${planId}/items/${itemId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', planId] }),
+  });
+}
+
+// ── Vincular a un encargo real (horas reales) ─────────────────────────────────
+export function useLinkableAudits(planId: string) {
+  return useQuery<LinkableAudit[]>({
+    queryKey:  ['plan-linkable-audits', planId],
+    queryFn:   () => apiClient.get(`/plans/${planId}/linkable-audits`),
+    enabled:   !!planId,
+    staleTime: 15_000,
+  });
+}
+
+export function useLinkAudit(planId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, auditId }: { itemId: string; auditId: string }) =>
+      apiClient.patch<AuditPlan>(`/plans/${planId}/items/${itemId}/link-audit`, { auditId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['plan', planId] });
+      qc.invalidateQueries({ queryKey: ['plan-linkable-audits', planId] });
+    },
+  });
+}
+
+export function useUnlinkAudit(planId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (itemId: string) => apiClient.delete(`/plans/${planId}/items/${itemId}/link-audit`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['plan', planId] });
+      qc.invalidateQueries({ queryKey: ['plan-linkable-audits', planId] });
+    },
   });
 }
 

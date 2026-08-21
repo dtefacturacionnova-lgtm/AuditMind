@@ -5,7 +5,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PlansService } from './plans.service';
 import {
   CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
-  CreateTimeEntryDto,
+  CreateTimeEntryDto, LinkAuditDto,
 } from './dto/plan.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -120,6 +120,36 @@ export class PlansController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.removeItem(planId, itemId, user);
+  }
+
+  @Get(':id/linkable-audits')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Encargos de la organización disponibles para vincular a un ítem del plan' })
+  getLinkableAudits(@Param('id') planId: string, @CurrentUser() user: AuthUser) {
+    return this.service.getLinkableAudits(planId, user);
+  }
+
+  @Patch(':id/items/:itemId/link-audit')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Vincular el ítem a un encargo real ya existente — conecta horas reales' })
+  linkAudit(
+    @Param('id') planId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: LinkAuditDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.linkAudit(planId, itemId, dto, user);
+  }
+
+  @Delete(':id/items/:itemId/link-audit')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Desvincular el ítem de su encargo' })
+  unlinkAudit(
+    @Param('id') planId: string,
+    @Param('itemId') itemId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.unlinkAudit(planId, itemId, user);
   }
 
   // ── L2.8: Timesheet ──────────────────────────────────────────────────────────

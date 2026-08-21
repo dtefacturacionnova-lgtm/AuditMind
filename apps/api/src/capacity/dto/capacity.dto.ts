@@ -120,7 +120,63 @@ export class UpdateAvailabilityProfileDto {
 
 // ─── UserCostProfile ────────────────────────────────────────────────────────
 
-export class CreateCostProfileDto {
+// ─── Tarifas de venta (3 niveles) ──────────────────────────────────────────
+// Campos planos, no un DTO anidado, para seguir la misma convención del resto
+// de este archivo. `percentN`/`amountN` son mutuamente informativos: si llega
+// `amountN`, el backend resuelve el % equivalente y lo persiste como fuente de
+// verdad (ver CapacityService.computeSaleTiers) — enviar solo el que el usuario
+// tecleó, nunca ambos a la vez con valores que no correspondan entre sí.
+class SaleTierFieldsDto {
+  @ApiPropertyOptional({ example: 'Tarifa de Venta 1' })
+  @IsOptional()
+  @IsString()
+  saleTier1Label?: string;
+
+  @ApiPropertyOptional({ example: 25, description: '% extra sobre la Tarifa de Costo' })
+  @IsOptional()
+  @IsNumber()
+  saleTier1Percent?: number;
+
+  @ApiPropertyOptional({ example: 12.5, description: 'Monto en USD/hr — si se envía, el backend recalcula el % equivalente' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  saleTier1Amount?: number;
+
+  @ApiPropertyOptional({ example: 'Tarifa de Venta 2' })
+  @IsOptional()
+  @IsString()
+  saleTier2Label?: string;
+
+  @ApiPropertyOptional({ example: 30 })
+  @IsOptional()
+  @IsNumber()
+  saleTier2Percent?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  saleTier2Amount?: number;
+
+  @ApiPropertyOptional({ example: 'Tarifa de Venta 3' })
+  @IsOptional()
+  @IsString()
+  saleTier3Label?: string;
+
+  @ApiPropertyOptional({ example: 40 })
+  @IsOptional()
+  @IsNumber()
+  saleTier3Percent?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  saleTier3Amount?: number;
+}
+
+export class CreateCostProfileDto extends SaleTierFieldsDto {
   @ApiProperty({ example: 'usr_123' })
   @IsString()
   userId: string;
@@ -184,7 +240,7 @@ export class CreateCostProfileDto {
   netAvailableHoursOverride?: number;
 }
 
-export class UpdateCostProfileDto {
+export class UpdateCostProfileDto extends SaleTierFieldsDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

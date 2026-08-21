@@ -7,10 +7,17 @@ import {
   AlertTriangle, Upload, BadgeCheck, Edit2, ChevronRight, ChevronDown,
   TrendingUp, Target, Shield, Sparkles, Wand2, Loader2, X,
   ClipboardCopy, Check, ListChecks, Plus, Trash2, BarChart3,
-  CheckCircle2, Circle, RotateCcw, Printer, Download, ShieldAlert,
+  CheckCircle2, Circle, RotateCcw, Printer, Download, ShieldAlert, DollarSign,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
-import { useAudit, useUpdateAuditStatus } from '@/hooks/useAudits';
+import {
+  useAudit, useUpdateAuditStatus, useTeamMemberRateOptions, useUpdateTeamMemberRate,
+  useAddTeamMember, useUpdateTeamMember, useRemoveTeamMember, TEAM_ROLE_OPTIONS,
+  useAuditBudgetReport,
+  type BillingRateType,
+} from '@/hooks/useAudits';
+import { useOrgUsersList } from '@/hooks/useCapacity';
+import { useUser } from '@/hooks/useUser';
 import { useAuditTimeEntries, useCreateTimeEntry, useDeleteTimeEntry } from '@/hooks/usePlans';
 import { useFindingsByAudit, SEVERITY_CONFIG, STATUS_CONFIG } from '@/hooks/useFindings';
 import { apiClient } from '@/lib/api-client';
@@ -323,7 +330,7 @@ export default function AuditDetailPage() {
                 <AuditProgressTab audit={audit} progressPct={progressPct} />
               )}
               {activeTab === 'hours' && (
-                <TimesheetTab auditId={id} estimatedHours={audit.estimatedHours ?? 0} />
+                <TimesheetTab auditId={id} />
               )}
               {activeTab === 'expediente' && (
                 <ExpedienteTab
@@ -336,7 +343,7 @@ export default function AuditDetailPage() {
                 />
               )}
               {activeTab === 'team' && (
-                <TeamTab team={audit.team ?? []} />
+                <TeamTab auditId={id} team={audit.team ?? []} />
               )}
               {activeTab === 'findings' && (
                 <FindingsTab auditId={id} />
@@ -1145,42 +1152,255 @@ function FindingsTab({ auditId }: { auditId: string }) {
   );
 }
 
-function TeamTab({ team }: { team: any[] }) {
-  const roleLabels: Record<string, string> = {
-    LEAD: 'Auditor Líder',
-    AUDITOR: 'Auditor',
-    SUPERVISOR: 'Supervisor',
-    EXPERT: 'Experto',
-    OBSERVER: 'Observador',
-  };
+const RATE_TYPE_LABELS: Record<BillingRateType, string> = {
+  COST: 'Tarifa de Costo', TIER1: 'Venta 1', TIER2: 'Venta 2', TIER3: 'Venta 3',
+};
 
-  if (!team.length) {
-    return (
-      <div className="text-center py-12 text-gray-400">
-        <Users className="h-10 w-10 mx-auto mb-2 opacity-50" />
-        <p>No hay miembros en el equipo</p>
-      </div>
-    );
+/** Selector inline de tarifa pactada — solo se monta (y solo dispara la
+ *  consulta CAE-gated con los montos en $) cuando el usuario abre el editor,
+ *  para no exponer el desglose de costeo a nadie que no lo esté editando. */
+function TeamMemberRateEditor({ auditId, memberId, onClose }: { auditId: string; memberId: string; onClose: () => void }) {
+  const { data, isLoading, isError } = useTeamMemberRateOptions(auditId, memberId);
+  const update = useUpdateTeamMemberRate(auditId);
+
+  async function choose(type: BillingRateType) {
+    try {
+      await update.mutateAsync({ memberId, billingRateType: type });
+      onClose();
+    } catch {
+      // el error se refleja abajo vía update.isError
+    }
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {team.map((member) => (
-        <div key={member.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-4">
-          <div className="w-10 h-10 rounded-full bg-[#0F2D4A] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-            {member.user?.name?.charAt(0)?.toUpperCase() ?? '?'}
-          </div>
-          <div className="min-w-0">
-            <p className="font-medium text-gray-800 truncate">{member.user?.name ?? '—'}</p>
-            <p className="text-xs text-gray-500">{roleLabels[member.role] ?? member.role}</p>
-          </div>
-          {member.role === 'LEAD' && (
-            <span className="ml-auto px-2 py-0.5 rounded-full bg-[#0F2D4A] text-white text-xs flex-shrink-0">
-              Líder
-            </span>
-          )}
+    <div className="mt-2 rounded-lg border border-gray-200 bg-white p-2.5 space-y-1.5">
+      {isLoading && (
+        <div className="flex items-center gap-2 text-xs text-gray-400 py-1">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando tarifas…
         </div>
+      )}
+      {isError && (
+        <p className="text-[11px] text-red-600">No se pudo cargar el perfil de costeo de este usuario.</p>
+      )}
+      {data && !data.hasCostProfile && (
+        <p className="text-[11px] text-amber-600">
+          Este usuario no tiene perfil de costeo para {data.year} — configúralo en Costeo y Tarifas primero.
+        </p>
+      )}
+      {data?.options.map((opt) => (
+        <button
+          key={opt.type}
+          disabled={opt.amount === null || update.isPending}
+          onClick={() => choose(opt.type)}
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+        >
+          <span className="text-gray-700">{opt.label}</span>
+          <span className="font-mono font-semibold text-gray-800">
+            {opt.amount !== null ? `${formatMoneyRate(opt.amount)}/hr` : '— no configurada —'}
+          </span>
+        </button>
       ))}
+      {update.isError && (
+        <p className="text-[11px] text-red-600 pt-1">{(update.error as Error)?.message ?? 'Error al asignar la tarifa'}</p>
+      )}
+      <button onClick={onClose} className="w-full text-[11px] text-gray-400 hover:text-gray-600 pt-1">
+        Cancelar
+      </button>
+    </div>
+  );
+}
+
+function formatMoneyRate(n: number): string {
+  return new Intl.NumberFormat('es-SV', { style: 'currency', currency: 'USD' }).format(n);
+}
+
+const roleLabels: Record<string, string> = {
+  LEAD: 'Auditor Líder',
+  AUDITOR: 'Auditor',
+  SUPERVISOR: 'Supervisor',
+  EXPERT: 'Experto',
+  OBSERVER: 'Observador',
+};
+
+/** Formulario para agregar un miembro nuevo — solo lista usuarios de la
+ *  organización que todavía NO están en el equipo de este encargo. */
+function AddTeamMemberForm({ auditId, existingUserIds }: { auditId: string; existingUserIds: Set<string> }) {
+  const { data: orgUsers = [] } = useOrgUsersList();
+  const addMember = useAddTeamMember(auditId);
+  const [userId, setUserId] = useState('');
+  const [role, setRole] = useState('AUDITOR');
+  const [error, setError] = useState('');
+
+  const available = orgUsers.filter(u => !existingUserIds.has(u.id));
+
+  async function handleAdd() {
+    if (!userId) return;
+    setError('');
+    try {
+      await addMember.mutateAsync({ userId, role });
+      setUserId('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al agregar el miembro');
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-dashed border-gray-300 p-4">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Agregar miembro</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={userId}
+          onChange={e => setUserId(e.target.value)}
+          className="flex-1 min-w-[180px] border rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A]"
+        >
+          <option value="">Seleccionar persona…</option>
+          {available.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+        </select>
+        <select
+          value={role}
+          onChange={e => setRole(e.target.value)}
+          className="border rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A]"
+        >
+          {TEAM_ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+        <button
+          onClick={handleAdd}
+          disabled={!userId || addMember.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0F2D4A] text-white text-xs font-semibold rounded-lg hover:bg-[#1a3f5f] disabled:opacity-50 transition-colors"
+        >
+          {addMember.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+          Agregar
+        </button>
+      </div>
+      {available.length === 0 && (
+        <p className="text-[11px] text-gray-400 mt-2">Todas las personas de la organización ya están en el equipo.</p>
+      )}
+      {error && <p className="text-[11px] text-red-600 mt-2">{error}</p>}
+    </div>
+  );
+}
+
+function TeamTab({ auditId, team }: { auditId: string; team: any[] }) {
+  const { hasRole } = useUser();
+  const canManageRates = hasRole(['CAE', 'ADMIN', 'SUPER_ADMIN']);
+  const canManageTeam = hasRole(['AUDIT_MANAGER']);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const updateMember = useUpdateTeamMember(auditId);
+  const removeMember = useRemoveTeamMember(auditId);
+  const [removeError, setRemoveError] = useState('');
+
+  async function handleRemove(memberId: string, memberName: string) {
+    if (!window.confirm(`¿Quitar a "${memberName}" del equipo de este encargo?`)) return;
+    setRemoveError('');
+    try {
+      await removeMember.mutateAsync(memberId);
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : 'Error al quitar al miembro');
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {canManageTeam && (
+        <AddTeamMemberForm auditId={auditId} existingUserIds={new Set(team.map(m => m.userId))} />
+      )}
+      {removeError && (
+        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{removeError}</p>
+      )}
+
+      {!team.length ? (
+        <div className="text-center py-12 text-gray-400">
+          <Users className="h-10 w-10 mx-auto mb-2 opacity-50" />
+          <p>No hay miembros en el equipo</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {team.map((member) => (
+            <div key={member.id} className="bg-gray-50 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#0F2D4A] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                  {member.user?.name?.charAt(0)?.toUpperCase() ?? '?'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-gray-800 truncate">{member.user?.name ?? '—'}</p>
+                  {canManageTeam ? (
+                    <select
+                      value={member.role}
+                      disabled={updateMember.isPending}
+                      onChange={e => updateMember.mutate({ memberId: member.id, role: e.target.value })}
+                      className="mt-0.5 text-xs text-gray-600 border border-gray-200 rounded px-1 py-0.5 -ml-1 focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A]"
+                    >
+                      {TEAM_ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  ) : (
+                    <p className="text-xs text-gray-500">{roleLabels[member.role] ?? member.role}</p>
+                  )}
+                </div>
+                {member.role === 'LEAD' && (
+                  <span className="px-2 py-0.5 rounded-full bg-[#0F2D4A] text-white text-xs flex-shrink-0">
+                    Líder
+                  </span>
+                )}
+                {canManageTeam && (
+                  <button
+                    onClick={() => handleRemove(member.id, member.user?.name ?? 'este miembro')}
+                    disabled={removeMember.isPending}
+                    title="Quitar del equipo"
+                    className="text-gray-300 hover:text-red-600 transition-colors disabled:opacity-50 flex-shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <Clock className="w-3.5 h-3.5" />
+                  Horas presupuestadas
+                </span>
+                {canManageTeam ? (
+                  <input
+                    type="number" min={0} step={0.5}
+                    defaultValue={member.budgetedHours ?? ''}
+                    placeholder="Sin definir"
+                    disabled={updateMember.isPending}
+                    onBlur={e => {
+                      const v = e.target.value.trim();
+                      if (v === '') return;
+                      const n = Number(v);
+                      if (member.budgetedHours === n) return;
+                      updateMember.mutate({ memberId: member.id, budgetedHours: n });
+                    }}
+                    className="w-20 text-right text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A]"
+                  />
+                ) : (
+                  <span className="text-xs font-mono text-gray-700">{member.budgetedHours ?? '—'}</span>
+                )}
+              </div>
+
+              <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  {RATE_TYPE_LABELS[(member.billingRateType as BillingRateType) ?? 'COST']}
+                </span>
+                {canManageRates && editingId !== member.id && (
+                  <button
+                    onClick={() => setEditingId(member.id)}
+                    className="text-[11px] font-medium text-[#0F2D4A] hover:underline"
+                  >
+                    Cambiar tarifa
+                  </button>
+                )}
+              </div>
+
+              {canManageRates && editingId === member.id && (
+                <TeamMemberRateEditor auditId={auditId} memberId={member.id} onClose={() => setEditingId(null)} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1340,16 +1560,115 @@ function AuditProgressTab({ audit, progressPct }: { audit: any; progressPct: num
 }
 
 // ─── L2.8: Timesheet ─────────────────────────────────────────────────────────
-function TimesheetTab({ auditId, estimatedHours }: { auditId: string; estimatedHours: number }) {
+/** Cruza AuditTeam.budgetedHours (editable en la pestaña Equipo) contra las
+ *  horas reales de TimeEntry, por persona — reemplaza el card anterior que
+ *  leía Audit.estimatedHours, un total suelto sin desglose. */
+function BudgetVsActualPanel({ auditId }: { auditId: string }) {
+  const { hasRole } = useUser();
+  const canSeeCost = hasRole(['CAE', 'ADMIN', 'SUPER_ADMIN']);
+  const { data, isLoading } = useAuditBudgetReport(auditId);
+
+  if (isLoading || !data) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-center text-gray-300">
+        <Loader2 className="w-4 h-4 animate-spin" />
+      </div>
+    );
+  }
+
+  const { totalPresupuestado, totalReal, variacionPct, sinPresupuesto, costoTotal, porPersona } = data;
+  const pct = totalPresupuestado && totalPresupuestado > 0
+    ? Math.round((totalReal / totalPresupuestado) * 100) : null;
+  const tone = pct === null ? '' : pct >= 100 ? 'text-red-600' : pct >= 80 ? 'text-amber-600' : 'text-blue-600';
+  const barTone = pct === null ? 'bg-blue-500' : pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-blue-500';
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs font-semibold text-gray-700">Presupuesto vs. Real</p>
+        {sinPresupuesto > 0 && (
+          <span className="text-[11px] text-amber-600">
+            {sinPresupuesto} persona(s) sin presupuesto asignado — defínelo en la pestaña Equipo
+          </span>
+        )}
+      </div>
+
+      {totalPresupuestado !== null ? (
+        <>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600 font-medium">Horas reales vs. presupuestadas</span>
+            <span className={`font-bold ${tone}`}>
+              {totalReal.toFixed(1)}h / {totalPresupuestado.toFixed(1)}h {pct !== null && `(${pct}%)`}
+            </span>
+          </div>
+          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+            <div className={`h-full rounded-full ${barTone}`} style={{ width: `${Math.min(pct ?? 0, 100)}%` }} />
+          </div>
+          {variacionPct !== null && (
+            <p className="text-[11px] text-gray-400">
+              Variación: {variacionPct > 0 ? '+' : ''}{variacionPct}% {variacionPct > 0 ? 'sobre presupuesto' : 'bajo presupuesto'}
+            </p>
+          )}
+          {canSeeCost && (
+            <p className="text-xs text-gray-500 pt-1 border-t border-gray-50">
+              Costo real acumulado:{' '}
+              <span className="font-semibold text-gray-800">
+                {costoTotal !== null ? formatMoneyRate(costoTotal) : '— sin costeo configurado —'}
+              </span>
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-xs text-gray-400">
+          Nadie del equipo tiene horas presupuestadas todavía — defínelas en la pestaña Equipo para ver el avance aquí.
+        </p>
+      )}
+
+      {porPersona.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-gray-100 mt-1">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="text-left px-3 py-2 font-semibold text-gray-500">Persona</th>
+                <th className="text-right px-3 py-2 font-semibold text-gray-500">Presupuestadas</th>
+                <th className="text-right px-3 py-2 font-semibold text-gray-500">Reales</th>
+                {canSeeCost && <th className="text-right px-3 py-2 font-semibold text-gray-500">Costo real</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {porPersona.map(p => (
+                <tr key={p.userId} className="border-b border-gray-50 last:border-0">
+                  <td className="px-3 py-2 text-gray-700">
+                    {p.userName}
+                    {!p.enEquipo && <span className="ml-1.5 text-[10px] text-amber-600">(fuera del equipo)</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right text-gray-600">
+                    {p.horasPresupuestadas !== null ? `${p.horasPresupuestadas.toFixed(1)}h` : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right font-medium text-gray-800">{p.horasReales.toFixed(1)}h</td>
+                  {canSeeCost && (
+                    <td className="px-3 py-2 text-right text-gray-600">
+                      {p.costoReal !== null ? formatMoneyRate(p.costoReal) : <span className="text-gray-300" title="Sin perfil de costeo para el año en que se registraron las horas">—</span>}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimesheetTab({ auditId }: { auditId: string }) {
   const { data: entries = [], isLoading } = useAuditTimeEntries(auditId);
   const createEntry = useCreateTimeEntry();
   const deleteEntry = useDeleteTimeEntry();
   const [date, setDate]   = useState(new Date().toISOString().slice(0, 10));
   const [hours, setHours] = useState('');
   const [desc, setDesc]   = useState('');
-
   const totalHours = entries.reduce((s, e) => s + e.hours, 0);
-  const pct = estimatedHours > 0 ? Math.min(100, Math.round((totalHours / estimatedHours) * 100)) : 0;
 
   const handleAdd = async () => {
     if (!hours || +hours <= 0) return;
@@ -1381,21 +1700,8 @@ function TimesheetTab({ auditId, estimatedHours }: { auditId: string; estimatedH
         </div>
       </div>
 
-      {/* Progress vs estimated */}
-      {estimatedHours > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600 font-medium">Horas registradas vs. planificadas</span>
-            <span className={`font-bold ${pct >= 90 ? 'text-red-600' : pct >= 60 ? 'text-amber-600' : 'text-blue-600'}`}>
-              {totalHours.toFixed(1)}h / {estimatedHours}h ({pct}%)
-            </span>
-          </div>
-          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 60 ? 'bg-amber-500' : 'bg-blue-500'}`}
-              style={{ width: `${Math.min(pct, 100)}%` }} />
-          </div>
-        </div>
-      )}
+      {/* Presupuesto vs. Real — reemplaza el card anterior que leía Audit.estimatedHours */}
+      <BudgetVsActualPanel auditId={auditId} />
 
       {/* Entries list */}
       {isLoading ? (

@@ -259,7 +259,7 @@ export default function PortfolioCapacityPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Planificación Anual Externa" />
+      <Header title="Capacidad del Equipo" breadcrumbs={[{ label: 'Horas y Rentabilidad' }, { label: 'Capacidad del Equipo' }]} />
 
       <div className="flex-1 overflow-auto p-6 space-y-6">
 

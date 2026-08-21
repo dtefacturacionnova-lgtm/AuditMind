@@ -62,6 +62,15 @@ export interface BillingRate {
   effectiveOverrideRate?: number;
 }
 
+/** Un nivel de "Tarifa de Venta" — Percent es la fuente de verdad (Amount
+ *  siempre se recalcula en el backend desde `baseRate * (1 + percent/100)`,
+ *  donde baseRate = effectiveOverrideRate ?? suggestedBillingRate). */
+export interface SaleTier {
+  label:   string | null;
+  percent: number | null;
+  amount:  number | null;
+}
+
 export interface UserCostProfile {
   id:                        string;
   organizationId:            string;
@@ -76,6 +85,15 @@ export interface UserCostProfile {
   targetUtilizationPct:      number;
   effectiveOverrideRate?:    number;
   netAvailableHoursOverride?: number;
+  saleTier1Label:  string | null;
+  saleTier1Percent: number | null;
+  saleTier1Amount: number | null;
+  saleTier2Label:  string | null;
+  saleTier2Percent: number | null;
+  saleTier2Amount: number | null;
+  saleTier3Label:  string | null;
+  saleTier3Percent: number | null;
+  saleTier3Amount: number | null;
   // Calculados por el backend — no editables
   totalAnnualCost:           number;
   costRatePerHour:           number;
@@ -96,6 +114,15 @@ export interface UpsertCostProfileData {
   targetUtilizationPct?:      number;
   effectiveOverrideRate?:     number;
   netAvailableHoursOverride?: number;
+  saleTier1Label?:  string;
+  saleTier1Percent?: number;
+  saleTier1Amount?: number;
+  saleTier2Label?:  string;
+  saleTier2Percent?: number;
+  saleTier2Amount?: number;
+  saleTier3Label?:  string;
+  saleTier3Percent?: number;
+  saleTier3Amount?: number;
 }
 
 export type UpdateCostProfileData = Omit<UpsertCostProfileData, 'userId' | 'year'>;
@@ -244,6 +271,42 @@ export function useUpdateCostProfile() {
       qc.invalidateQueries({ queryKey: ['capacity-cost-profiles'] });
       qc.invalidateQueries({ queryKey: ['capacity-billing-rate'] });
     },
+  });
+}
+
+// ─── Dashboard de la Firma ──────────────────────────────────────────────────
+
+export interface FirmDashboardPerson {
+  userId:           string;
+  userName:         string;
+  horasDisponibles: number;
+  horasReales:      number;
+  utilizacionPct:   number | null;
+}
+
+export interface FirmDashboardEngagement {
+  auditId:             string;
+  auditTitle:          string;
+  horasPresupuestadas: number;
+  horasReales:         number;
+  variacionPct:        number | null;
+}
+
+export interface FirmDashboard {
+  year:                number;
+  utilizacionPorPersona: FirmDashboardPerson[];
+  utilizacionPromedio:   number | null;
+  wipAproximado:         number;
+  horasConTarifa:        number;
+  rankingEncargos:       FirmDashboardEngagement[];
+}
+
+export function useFirmDashboard(year: number) {
+  return useQuery<FirmDashboard>({
+    queryKey: ['capacity-firm-dashboard', year],
+    queryFn:  () => apiClient.get(`/capacity/firm-dashboard?year=${year}`),
+    enabled:  !!year,
+    staleTime: 15_000,
   });
 }
 

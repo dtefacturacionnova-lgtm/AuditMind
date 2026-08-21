@@ -259,3 +259,121 @@ export function useAddTemplatePaper(auditId: string) {
     },
   });
 }
+
+// ─── Equipo del encargo — alta, baja y cambio de rol ──────────────────────────
+
+export const TEAM_ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'LEAD',       label: 'Auditor Líder' },
+  { value: 'SUPERVISOR', label: 'Supervisor' },
+  { value: 'AUDITOR',    label: 'Auditor' },
+  { value: 'OBSERVER',   label: 'Observador' },
+  { value: 'EXPERT',     label: 'Experto' },
+];
+
+export function useAddTeamMember(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role?: string }) =>
+      apiClient.post(`/audits/${auditId}/team`, { userId, role }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['audits', auditId] }),
+  });
+}
+
+export function useUpdateTeamMember(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memberId, role, budgetedHours }: { memberId: string; role?: string; budgetedHours?: number }) =>
+      apiClient.patch(`/audits/${auditId}/team/${memberId}`, { role, budgetedHours }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['audits', auditId] });
+      qc.invalidateQueries({ queryKey: ['audit-budget-report', auditId] });
+    },
+  });
+}
+
+export function useRemoveTeamMember(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (memberId: string) => apiClient.delete(`/audits/${auditId}/team/${memberId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['audits', auditId] });
+      qc.invalidateQueries({ queryKey: ['audit-budget-report', auditId] });
+    },
+  });
+}
+
+// ─── Presupuesto vs. Real ──────────────────────────────────────────────────────
+
+export interface BudgetReportPerson {
+  memberId:            string | null;
+  userId:              string;
+  userName:            string;
+  role:                string | null;
+  horasPresupuestadas: number | null;
+  horasReales:         number;
+  /** null = sin UserCostProfile para ningún año trabajado — nunca se asume $0. */
+  costoReal:           number | null;
+  horasSinCostear:     number;
+  enEquipo:            boolean;
+}
+
+export interface AuditBudgetReport {
+  totalPresupuestado: number | null;
+  totalReal:          number;
+  variacionHoras:     number | null;
+  variacionPct:       number | null;
+  sinPresupuesto:     number;
+  /** Costo real en $ — base del criterio "costo vs. presupuesto" para Auditoría Interna. */
+  costoTotal:          number | null;
+  porPersona:         BudgetReportPerson[];
+}
+
+export function useAuditBudgetReport(auditId: string) {
+  return useQuery<AuditBudgetReport>({
+    queryKey: ['audit-budget-report', auditId],
+    queryFn:  () => apiClient.get(`/audits/${auditId}/budget-report`),
+    enabled:  !!auditId,
+    staleTime: 15_000,
+  });
+}
+
+// ─── Equipo del encargo — tarifa pactada con el cliente ──────────────────────
+
+export type BillingRateType = 'COST' | 'TIER1' | 'TIER2' | 'TIER3';
+
+export interface TeamMemberRateOption {
+  type:   BillingRateType;
+  label:  string;
+  /** null = ese nivel no está configurado en el perfil de costeo de esta persona para el año. */
+  amount: number | null;
+}
+
+export interface TeamMemberRateOptions {
+  year:           number;
+  hasCostProfile: boolean;
+  options:        TeamMemberRateOption[];
+}
+
+/** Las 4 tarifas seleccionables (Costo/Venta 1/2/3) para un miembro del equipo,
+ *  con su monto en $ resuelto del perfil de costeo del año en curso. Rol CAE+. */
+export function useTeamMemberRateOptions(auditId: string, memberId: string, enabled = true) {
+  return useQuery<TeamMemberRateOptions>({
+    queryKey: ['audit-team-rate-options', auditId, memberId],
+    queryFn:  () => apiClient.get(`/audits/${auditId}/team/${memberId}/rate-options`),
+    enabled:  enabled && !!auditId && !!memberId,
+    retry:    false,
+    staleTime: 15_000,
+  });
+}
+
+export function useUpdateTeamMemberRate(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ memberId, billingRateType }: { memberId: string; billingRateType: BillingRateType }) =>
+      apiClient.patch(`/audits/${auditId}/team/${memberId}/rate`, { billingRateType }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['audits', auditId] });
+      qc.invalidateQueries({ queryKey: ['audit-team-rate-options', auditId] });
+    },
+  });
+}

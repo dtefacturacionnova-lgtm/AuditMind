@@ -1044,6 +1044,20 @@ model UserCostProfile {
   breakEvenBillableRate     Decimal  @default(0) @db.Decimal(10, 2)
   suggestedBillingRate      Decimal  @default(0) @db.Decimal(10, 2)
   effectiveOverrideRate     Decimal? @db.Decimal(10, 2)
+  // ─── Tarifas de venta (3 niveles sobre la Tarifa de Costo = effectiveOverrideRate ??
+  // suggestedBillingRate) — Percent es la fuente de verdad; Amount siempre se recalcula
+  // desde Percent × la tarifa de costo vigente (ver CapacityService.computeSaleTiers).
+  // Cuando el usuario edita el monto en vez del %, el backend resuelve el % equivalente
+  // primero y lo persiste, así que Percent nunca queda desactualizado respecto a Amount.
+  saleTier1Label            String?
+  saleTier1Percent          Float?
+  saleTier1Amount           Decimal? @db.Decimal(10, 2)
+  saleTier2Label            String?
+  saleTier2Percent          Float?
+  saleTier2Amount           Decimal? @db.Decimal(10, 2)
+  saleTier3Label            String?
+  saleTier3Percent          Float?
+  saleTier3Amount           Decimal? @db.Decimal(10, 2)
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
@@ -1607,8 +1621,20 @@ model AuditTeam {
   id         String   @id @default(cuid())
   auditId    String
   userId     String
-  role       String   @default("AUDITOR") // LEAD | AUDITOR | SUPERVISOR | OBSERVER
+  role       String   @default("AUDITOR") // LEAD | SUPERVISOR | AUDITOR | OBSERVER | EXPERT (ver TEAM_ROLES en apps/api/src/audits/dto/team.dto.ts)
   assignedAt DateTime @default(now())
+
+  // Tarifa pactada con el cliente para este encargo — snapshot en $ tomado del
+  // UserCostProfile del año del encargo en el momento en que se selecciona, para
+  // que la rentabilidad histórica no se mueva si el perfil de costeo cambia después.
+  billingRateType   String   @default("COST") // COST | TIER1 | TIER2 | TIER3
+  agreedRatePerHour Decimal? @db.Decimal(10, 2)
+
+  // Horas presupuestadas para ESTA persona en ESTE encargo — la fuente real de
+  // "Presupuesto vs. Real" (antes solo existía Audit.estimatedHours, un total
+  // suelto sin desglose por persona). Editable en la pestaña Equipo/Horas del
+  // encargo; se cruza contra SUM(TimeEntry.hours) de esa persona en ese encargo.
+  budgetedHours Float?
 
   audit Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id])

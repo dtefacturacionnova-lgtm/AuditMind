@@ -101,7 +101,7 @@ export default function PortfolioProfitabilityPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Rentabilidad" breadcrumbs={[{ label: 'Cartera' }, { label: 'Rentabilidad' }]} />
+      <Header title="Rentabilidad" breadcrumbs={[{ label: 'Horas y Rentabilidad' }, { label: 'Rentabilidad' }]} />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-3">

@@ -143,4 +143,16 @@ export class CapacityController {
   updateCostProfile(@Param('id') id: string, @Body() dto: UpdateCostProfileDto, @CurrentUser() user: AuthUser) {
     return this.service.updateCostProfile(id, dto, user);
   }
+
+  // ─── Dashboard de la Firma ────────────────────────────────────────────────
+  @Get('firm-dashboard')
+  @Roles(UserRole.CAE)
+  @ApiOperation({ summary: 'Utilización, WIP aproximado y ranking de encargos por variación de presupuesto — firm-wide, ambos perfiles' })
+  @ApiQuery({ name: 'year', required: true, type: Number })
+  getFirmDashboard(
+    @Query('year', new DefaultValuePipe(0), ParseIntPipe) year: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.getFirmDashboard(year || undefined, user);
+  }
 }

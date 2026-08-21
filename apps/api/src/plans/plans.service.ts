@@ -1,11 +1,12 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, ConflictException,
+  Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { recalculateAuditActualHours } from '../audits/audit-hours.util';
 import {
   CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
-  CreateTimeEntryDto,
+  CreateTimeEntryDto, LinkAuditDto,
 } from './dto/plan.dto';
 
 const ITEM_INCLUDE = {
@@ -20,6 +21,12 @@ const ITEM_INCLUDE = {
       riskCategory: true,
     },
   },
+  // Horas reales — solo se llena una vez que el ítem se vincula a un encargo real
+  // vía linkAudit(). `actualHours` ya se mantiene sincronizado con TimeEntry desde
+  // Fase 1 de "Horas y Rentabilidad" (apps/api/src/audits/audit-hours.util.ts).
+  audit: {
+    select: { id: true, title: true, status: true, actualHours: true },
+  },
 } as const;
 
 const PLAN_INCLUDE = {
@@ -31,11 +38,19 @@ export class PlansService {
   constructor(private prisma: PrismaService) {}
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-  private calcCapacity(totalHours: number, items: { estimatedHours: number }[]) {
+  private calcCapacity(
+    totalHours: number,
+    items: { estimatedHours: number; audit?: { actualHours: number } | null }[],
+  ) {
     const allocatedHours = items.reduce((s, i) => s + i.estimatedHours, 0);
     const remainingHours = totalHours - allocatedHours;
     const utilizationPct = totalHours > 0 ? Math.round((allocatedHours / totalHours) * 100) : 0;
-    return { allocatedHours, remainingHours, utilizationPct };
+    // Horas reales: 0 para un ítem que aún no se vincula a un encargo (no es "desconocido"
+    // — genuinamente no se ha trabajado nada todavía), a diferencia de costoReal en
+    // getBudgetReport donde null sí significa "no se puede saber".
+    const startedItems = items.filter((i) => i.audit).length;
+    const realHours = items.reduce((s, i) => s + (i.audit?.actualHours ?? 0), 0);
+    return { allocatedHours, remainingHours, utilizationPct, startedItems, realHours };
   }
 
   private async getPlanOrThrow(id: string, user: AuthUser) {
@@ -209,6 +224,63 @@ export class PlansService {
     return this.findOne(planId, user);
   }
 
+  // ── Vincular a un encargo real — conecta el ítem del plan con horas reales ──
+  // `AuditPlanItem.auditId` tiene @unique en el schema — la constraint de BD ya
+  // evita que dos ítems apunten al mismo encargo, capturado aquí como P2002.
+  async linkAudit(planId: string, itemId: string, dto: LinkAuditDto, user: AuthUser) {
+    const plan = await this.getPlanOrThrow(planId, user);
+    if (plan.status === 'CLOSED') throw new ForbiddenException('No se puede modificar un plan cerrado');
+
+    const item = plan.items.find((i) => i.id === itemId);
+    if (!item) throw new NotFoundException('Item no encontrado en el plan');
+
+    const audit = await this.prisma.audit.findFirst({
+      where: { id: dto.auditId, organizationId: user.organizationId },
+      select: { id: true },
+    });
+    if (!audit) throw new NotFoundException('Encargo no encontrado en esta organización');
+
+    try {
+      await this.prisma.auditPlanItem.update({
+        where: { id: itemId },
+        data: { auditId: dto.auditId },
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        throw new BadRequestException('Ese encargo ya está vinculado a otro ítem del plan');
+      }
+      throw e;
+    }
+
+    return this.findOne(planId, user);
+  }
+
+  async unlinkAudit(planId: string, itemId: string, user: AuthUser) {
+    const plan = await this.getPlanOrThrow(planId, user);
+    if (plan.status === 'CLOSED') throw new ForbiddenException('No se puede modificar un plan cerrado');
+
+    const item = plan.items.find((i) => i.id === itemId);
+    if (!item) throw new NotFoundException('Item no encontrado en el plan');
+
+    await this.prisma.auditPlanItem.update({
+      where: { id: itemId },
+      data: { auditId: null },
+    });
+    return this.findOne(planId, user);
+  }
+
+  /** Encargos de la organización que se pueden vincular a un ítem — sin dueño
+   *  todavía (`planItem` es la relación inversa 1:1 vía @unique en AuditPlanItem.auditId),
+   *  para que el selector no ofrezca uno que ya está tomado por otro ítem del plan. */
+  async getLinkableAudits(planId: string, user: AuthUser) {
+    await this.getPlanOrThrow(planId, user);
+    return this.prisma.audit.findMany({
+      where: { organizationId: user.organizationId, planItem: null },
+      select: { id: true, title: true, status: true, actualHours: true },
+      orderBy: { title: 'asc' },
+    });
+  }
+
   // ── Import from Banco de Proyectos ─────────────────────────────────────────
   async importFromProjects(planId: string, dto: ImportFromProjectsDto, user: AuthUser) {
     const plan = await this.getPlanOrThrow(planId, user);
@@ -290,7 +362,7 @@ export class PlansService {
 
   // ── L2.8: Timesheet — create time entry ──────────────────────────────────────
   async createTimeEntry(dto: CreateTimeEntryDto, user: AuthUser) {
-    return this.prisma.timeEntry.create({
+    const entry = await this.prisma.timeEntry.create({
       data: {
         organizationId: user.organizationId,
         userId:         user.id,
@@ -301,6 +373,8 @@ export class PlansService {
         description:    dto.description,
       },
     });
+    await recalculateAuditActualHours(this.prisma, dto.auditId);
+    return entry;
   }
 
   // ── L2.8: Timesheet — list entries for an audit ──────────────────────────────
@@ -325,6 +399,7 @@ export class PlansService {
     if (!entry || entry.organizationId !== user.organizationId) throw new NotFoundException();
     if (entry.userId !== user.id) throw new ForbiddenException('Solo puedes eliminar tus propias entradas');
     await this.prisma.timeEntry.delete({ where: { id } });
+    await recalculateAuditActualHours(this.prisma, entry.auditId);
     return { deleted: true };
   }
 

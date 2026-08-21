@@ -38,6 +38,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { AuditsService } from './audits.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
+import { UpdateTeamMemberRateDto } from './dto/team-rate.dto';
+import { AddTeamMemberDto, UpdateTeamMemberDto } from './dto/team.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -91,6 +93,13 @@ export class AuditsController {
     return this.service.getProgress(id, user);
   }
 
+  @Get(':id/budget-report')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Presupuesto vs. Real por persona (AuditTeam.budgetedHours vs. TimeEntry real)' })
+  getBudgetReport(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.getBudgetReport(id, user);
+  }
+
   @Patch(':id')
   @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Actualizar auditoría' })
@@ -111,6 +120,57 @@ export class AuditsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.updateStatus(id, dto, user);
+  }
+
+  // ─── Equipo del encargo — alta, baja y cambio de rol ───────────────────────────
+  @Post(':id/team')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Agregar un miembro al equipo del encargo' })
+  addTeamMember(@Param('id') id: string, @Body() dto: AddTeamMemberDto, @CurrentUser() user: AuthUser) {
+    return this.service.addTeamMember(id, dto, user);
+  }
+
+  @Patch(':id/team/:memberId')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Cambiar el rol y/o las horas presupuestadas de un miembro del equipo' })
+  updateTeamMember(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @Body() dto: UpdateTeamMemberDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.updateTeamMember(id, memberId, dto, user);
+  }
+
+  @Delete(':id/team/:memberId')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Quitar un miembro del equipo del encargo' })
+  removeTeamMember(@Param('id') id: string, @Param('memberId') memberId: string, @CurrentUser() user: AuthUser) {
+    return this.service.removeTeamMember(id, memberId, user);
+  }
+
+  // ─── Equipo del encargo — tarifa pactada con el cliente ────────────────────────
+  @Get(':id/team/:memberId/rate-options')
+  @Roles(UserRole.CAE)
+  @ApiOperation({ summary: 'Las 4 tarifas seleccionables (Costo/Venta 1/2/3) para un miembro del equipo, con su monto en $' })
+  getTeamMemberRateOptions(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.getTeamMemberRateOptions(id, memberId, user);
+  }
+
+  @Patch(':id/team/:memberId/rate')
+  @Roles(UserRole.CAE)
+  @ApiOperation({ summary: 'Asignar qué tarifa se pactó con el cliente para este miembro (congela el monto en $)' })
+  updateTeamMemberRate(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @Body() dto: UpdateTeamMemberRateDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.updateTeamMemberRate(id, memberId, dto, user);
   }
 
   // ─── F6.1 Roll-forward ────────────────────────────────────────────────────────

@@ -705,6 +705,28 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       sortOrder:   10,
       aiHint:      'Registro de firmas: Auditor Encargado, Gerente de Auditoría, Socio/CAE con fecha.',
     },
+    {
+      sectionKey:   'S3c',
+      label:        'Conclusión Global de Control Interno (auto desde PT-COSO)',
+      description:  'Resultado de la evaluación COSO 2013 del Sistema de Control Interno y su implicación en el enfoque de auditoría. Generado automáticamente desde PT-COSO S6/S7.',
+      fieldType:    FieldType.REFERENCE,
+      isRequired:   false,
+      isAutoFilled: true,
+      sourceRef:    'PT-COSO::S6,S7',
+      sortOrder:    13,
+      aiHint:       'Referencia automática a PT-COSO: S6 = evaluación global del SCI (EFECTIVO / CON_DEBILIDADES_SIGNIFICATIVAS / INEFECTIVO) y S7 = implicación en el enfoque de auditoría (ENFOQUE_CONTROLES / MIXTO / SUSTANTIVO). Complementa la sección S3b (RMM por área) explicando la causa raíz de esos niveles de riesgo de control. Si PT-COSO no ha sido completado, esta sección aparece vacía — completar PT-COSO antes de aprobar el memorando.',
+    },
+    {
+      sectionKey:   'S4b',
+      label:        'Riesgo Residual e Impacto Potencial en el Dictamen (auto desde PT-MRCI)',
+      description:  'Síntesis de si los riesgos residuales identificados en la Matriz de Riesgo-Control-Impacto (PT-MRCI), después de considerar los controles mitigantes, deben influir en el tipo de opinión a emitir. Generado automáticamente desde PT-MRCI S4.',
+      fieldType:    FieldType.REFERENCE,
+      isRequired:   false,
+      isAutoFilled: true,
+      sourceRef:    'PT-MRCI::S4',
+      sortOrder:    14,
+      aiHint:       'Referencia automática a la Conclusión de PT-MRCI (S4) — el resumen cuantitativo de riesgos residuales por nivel y el detalle de cualquier riesgo con impacto potencial en el dictamen distinto de "Ninguno". Es la síntesis que el Socio/CAE revisa antes de la conclusión final en PT-FIN-DICT; el memorando de planificación debe reflejarla explícitamente. Si PT-MRCI no ha sido completado, esta sección aparece vacía.',
+    },
   ],
 
   // ──────────────────────────────────────────────────────────────────────────

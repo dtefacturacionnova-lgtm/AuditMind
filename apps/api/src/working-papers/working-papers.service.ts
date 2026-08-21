@@ -1148,7 +1148,7 @@ export class WorkingPapersService {
       const discovered = await this.prisma.workingPaper.findMany({
         where: {
           auditId:   wp.auditId,
-          paperCode: { in: ['PT-FIN-A3-KC', 'PT-A1', 'PT-A2', 'PT-A4'] },
+          paperCode: { in: ['PT-FIN-A3-KC', 'PT-A1', 'PT-A2', 'PT-A4', 'PT-A5', 'PT-COSO', 'PT-MRCI'] },
         },
         include: { sections: { orderBy: { sortOrder: 'asc' } } },
       });

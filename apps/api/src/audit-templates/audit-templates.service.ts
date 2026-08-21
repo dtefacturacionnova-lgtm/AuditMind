@@ -2072,6 +2072,10 @@ export class AuditTemplatesService {
           { sourceCode: 'A-05', targetCode: 'A-08', sourceField: 'S4', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Riesgos → Programa' },
           { sourceCode: 'A-06', targetCode: 'A-07', sourceField: 'S3', targetField: 'S4', mappingType: 'DIRECT',       description: 'Materialidad → Memorando' },
           { sourceCode: 'A-06', targetCode: 'A-08', sourceField: 'S4', targetField: 'S2', mappingType: 'AGGREGATED',   description: 'ME → Tamaños de muestra' },
+          // ── A-05B/A-04C/A-08B → A-07: RMM, control interno y riesgo residual → memo ──
+          { sourceCode: 'A-05B', targetCode: 'A-07', sourceField: 'S2,S4', targetField: 'S5b,S3b', mappingType: 'DIRECT',       description: 'RMM por área y riesgos pervasivos → Resumen RMM y respuesta general del Memorando' },
+          { sourceCode: 'A-04C', targetCode: 'A-07', sourceField: 'S6,S7', targetField: 'S3c',      mappingType: 'AI_GENERATED', description: 'Conclusión SCI COSO → Conclusión de Control Interno del Memorando' },
+          { sourceCode: 'A-08B', targetCode: 'A-07', sourceField: 'S4',    targetField: 'S4b',      mappingType: 'AI_GENERATED', description: 'Conclusión de riesgo residual MRCI → Impacto en el dictamen del Memorando' },
           // ── A-06 → B-00 y B-08: materialidad alimenta semáforos ──────────
           { sourceCode: 'A-06', targetCode: 'B-00', sourceField: 'S3', targetField: 'S6', mappingType: 'DIRECT',       description: 'ME y MG → semáforo por cuenta en Clasificador' },
           { sourceCode: 'A-06', targetCode: 'B-08', sourceField: 'S3', targetField: 'S2', mappingType: 'DIRECT',       description: 'UAE y MG → cálculo semáforo de opinión B-08' },

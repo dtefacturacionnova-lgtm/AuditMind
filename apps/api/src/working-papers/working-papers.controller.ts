@@ -432,6 +432,13 @@ export class WorkingPapersController {
     return this.sectionsService.propagateRiesgosToMrci(id, user);
   }
 
+  @Post(':id/propagate-equipo-to-memo')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Propagar el equipo realmente asignado al encargo (AuditTeam) hacia PT-MEMO S6 — filas nuevas ADD-only, horas por fase quedan en blanco para el auditor (determinista, sin IA)' })
+  propagateEquipoToMemo(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sectionsService.propagateEquipoToMemo(id, user);
+  }
+
   @Post(':id/recalculate-coso-component-analysis')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Recalcular conteos de deficiencias por componente COSO en PT-NIA265 S2 a partir de S1 (determinista, preserva juicio del auditor)' })

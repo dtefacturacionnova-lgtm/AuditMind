@@ -1967,6 +1967,88 @@ INSTRUCCIONES DE SALIDA:
     return { added: nuevas.length, enriched, message: partes.join(' · ') + '.' };
   }
 
+  // ─── Propagación: Equipo asignado (AuditTeam) → PT-MEMO S6 ────────────────
+  /**
+   * Trae los miembros REALMENTE asignados al encargo (modelo `AuditTeam`,
+   * poblado al crear la auditoría — nunca alimenta S6 hoy) como filas nuevas
+   * en la tabla manual "Equipo de Auditoría y Presupuesto de Horas". ADD-only
+   * e idempotente (marca `_origen`), igual que el resto de propagaciones de
+   * este archivo: nunca toca filas ya escritas a mano por el auditor, y las
+   * horas por fase quedan en blanco a propósito — eso es planificación, no
+   * algo derivable del solo hecho de estar asignado al equipo.
+   */
+  async propagateEquipoToMemo(paperId: string, user: AuthUser) {
+    const wp = await this.assertPaperAccess(paperId, user);
+
+    if (wp.paperCode !== 'PT-MEMO') {
+      throw new BadRequestException(
+        'Solo un papel PT-MEMO puede recibir la propagación del equipo asignado',
+      );
+    }
+
+    const equipo = await this.prisma.auditTeam.findMany({
+      where:   { auditId: wp.auditId },
+      include: { user: { select: { name: true } } },
+      orderBy: { assignedAt: 'asc' },
+    });
+    if (equipo.length === 0) {
+      return { added: 0, message: 'Este encargo todavía no tiene ningún miembro de equipo asignado (AuditTeam) — nada que propagar.' };
+    }
+
+    const ROL_LABEL: Record<string, string> = {
+      LEAD: 'Encargado del Equipo', SUPERVISOR: 'Supervisor', AUDITOR: 'Auditor', OBSERVER: 'Observador',
+    };
+
+    const s6 = await this.prisma.paperSection.findUnique({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S6' } },
+    });
+    const filasActuales = Array.isArray(s6?.value) ? (s6!.value as Record<string, unknown>[]) : [];
+
+    const MARCA_ORIGEN = 'AUDIT_TEAM';
+    const conservadas = filasActuales.filter(r => r['_origen'] !== MARCA_ORIGEN);
+    const normNombre = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ');
+    const yaRepresentados = conservadas
+      .map(r => normNombre(String(r['Nombre'] ?? '')))
+      .filter(n => n && !n.startsWith('total'));
+
+    const nuevas: Record<string, unknown>[] = [];
+    for (const m of equipo) {
+      const nombreNorm = normNombre(m.user.name ?? '');
+      if (!nombreNorm) continue;
+      const yaExiste = yaRepresentados.some(n => n.includes(nombreNorm) || nombreNorm.includes(n));
+      if (yaExiste) continue;
+      nuevas.push({
+        '_origen': MARCA_ORIGEN,
+        'Rol': ROL_LABEL[m.role] ?? m.role,
+        'Nombre': m.user.name ?? '(sin nombre)',
+        'Fase Planificación': '',
+        'Fase Ejecución': '',
+        'Fase Cierre': '',
+        'Total Horas': '',
+      });
+      yaRepresentados.push(nombreNorm);
+    }
+
+    if (nuevas.length === 0) {
+      return { added: 0, message: `Se revisaron ${equipo.length} miembro(s) del equipo asignado — todos ya están representados en la tabla.` };
+    }
+
+    // Inserta antes de una eventual fila "TOTAL..." para que el resumen quede al final.
+    const totalIdx = conservadas.findIndex(r => normNombre(String(r['Nombre'] ?? '')).startsWith('total'));
+    const value = totalIdx === -1
+      ? [...conservadas, ...nuevas]
+      : [...conservadas.slice(0, totalIdx), ...nuevas, ...conservadas.slice(totalIdx)];
+
+    await this.prisma.paperSection.update({
+      where: { paperId_sectionKey: { paperId, sectionKey: 'S6' } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data:  { value: value as any, isStale: false, staleSince: null, staleReason: null },
+    });
+    await this.graphService.onSectionUpdated(paperId, 'S6', value);
+
+    return { added: nuevas.length, message: `${nuevas.length} miembro(s) del equipo asignado agregado(s) desde AuditTeam. Complete las horas estimadas por fase.` };
+  }
+
   /**
    * Recalcula PT-NIA265 S2 ("Análisis por Componente COSO — Mapa de Debilidades")
    * contando por severidad las deficiencias de S1 para cada uno de los 5

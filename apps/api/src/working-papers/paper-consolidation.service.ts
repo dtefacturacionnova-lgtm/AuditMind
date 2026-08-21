@@ -157,6 +157,24 @@ export class PaperConsolidationService {
 
     const lsConfig = paperCode ? LEAD_SCHEDULE_CONFIG[paperCode] : null;
 
+    // MASTER papers fuera de PT-MEMO/PT-PROG/lead-schedules (PT-MRCI, PT-DIFS,
+    // PT-NIA265, PT-FIN-DICT, etc.) tienen su propio botón de consolidación/
+    // propagación determinista — este flujo genérico no sabe qué significan sus
+    // secciones y NO debe tocarlas. No-op explícito en vez de dejar caer al
+    // prompt "default: PT-MEMO", que escribiría S2..S8 sobre secciones con otro
+    // significado (bug real encontrado 2026-08-20: así se corrompieron PT-MRCI S3/S4).
+    if (!lsConfig && !PaperConsolidationService.GENERIC_CONSOLIDATION_CODES.has(paperCode)) {
+      this.logger.warn(
+        `[Consolidation] "${paperCode}" no tiene un flujo de consolidación genérica — se omite. ` +
+        `Use el botón de propagación específico de este papel.`,
+      );
+      await this.prisma.workingPaper.update({
+        where: { id: paperId },
+        data:  { syncStatus: SyncStatus.SYNCED, lastSyncedAt: new Date() },
+      }).catch(() => { /* ignore secondary failure */ });
+      return;
+    }
+
     try {
       // ── PI.5: capture snapshot of current state BEFORE modifying ────────
       await this.snapshotCurrentState(paperId, sourceData, userId, reason);
@@ -380,6 +398,11 @@ export class PaperConsolidationService {
 
   // ─── Section generation ───────────────────────────────────────────────────
 
+  // paperCodes con un prompt/fallback real en buildPrompt()/templateFallback() más
+  // abajo. Guardado también por handleConsolidate() antes de llegar aquí — único
+  // caller de este método — pero se deja explícito por si se agrega otro caller.
+  static readonly GENERIC_CONSOLIDATION_CODES = new Set<string | null>(['PT-MEMO', 'PT-PROG', null]);
+
   private async generateSections(
     paperCode: string | null,
     sourceData: SourcePaperData[],
@@ -471,15 +494,17 @@ export class PaperConsolidationService {
     }
 
     // NOTA: "Auditoría Financiera Externa v1.0" no usa la nomenclatura genérica
-    // PT-A1..PT-A5 — el entendimiento del cliente es PT-FIN-A3-KC (no "PT-A1"),
-    // y no existe una "Matriz RMM" dedicada (PT-A5) en esta plantilla; A-06B
-    // (PT-STRAT) cubre la estrategia global pero no está vinculado como fuente
-    // de A-07 en el grafo. Mantener también los códigos legacy PT-A1/PT-A5 en el
-    // check por si algún encargo antiguo (plantilla "Auditoría Externa (NIA/ISA)")
-    // sí los usa.
+    // PT-A1 — el entendimiento del cliente es PT-FIN-A3-KC. Sí trae PT-A5 (código de
+    // plantilla A-05B, "Matriz Integrada RMM") y PT-COSO (A-04C) como fuentes reales
+    // de PT-MEMO (corregido 2026-08-20: el comentario anterior decía lo contrario).
+    // Mantener también el código legacy PT-A1 en el check por si algún encargo antiguo
+    // (plantilla "Auditoría Externa (NIA/ISA)") lo usa.
     const hasEntendimiento = sourceData.some(p => p.paperCode === 'PT-FIN-A3-KC' || p.paperCode === 'PT-A1');
     const hasPTA2 = sourceData.some(p => p.paperCode === 'PT-A2');
     const hasPTA4 = sourceData.some(p => p.paperCode === 'PT-A4');
+    const hasPTA5 = sourceData.some(p => p.paperCode === 'PT-A5');
+    const hasPTCOSO = sourceData.some(p => p.paperCode === 'PT-COSO');
+    const hasPTMRCI = sourceData.some(p => p.paperCode === 'PT-MRCI');
 
     if (paperCode === 'PT-PROG') {
       // PT-PROG's real sections (post-rediseño): S1 Objetivo, S2 Alcance/Población/
@@ -511,12 +536,16 @@ Responde EXCLUSIVAMENTE con un JSON (sin markdown extra) con estas claves:
   "S3": "${hasPTA2 ? 'Evaluación del riesgo inherente: 2-3 párrafos con nivel global de RI, riesgos significativos y riesgo de fraude de PT-A2. Incluye presunciones NIA 240 evaluadas.' : 'Evaluación de RI: indica que PT-A2 no está disponible'}. Incluye cita [PT-A2]. Máx. 300 palabras.",
   "S4": "${hasPTA4 ? 'Materialidad NIA 320: 1-2 párrafos con MG, ME, UAE, base y justificación de PT-A4' : 'Materialidad: indica que PT-A4 no está disponible'}. Incluye cita [PT-A4]. Máx. 250 palabras.",
   "S5": "Enfoque de auditoría: describe la estrategia mixta basada en riesgo (controles vs. sustantivo) por área, apoyándote en los riesgos significativos y presunciones NIA 240 documentados en PT-A2. Máx. 200 palabras.",
+  "S3b": "${hasPTA5 ? 'Resumen de la Estrategia de Auditoría Consolidada por Área: para cada área/ciclo con RMM evaluado en PT-A5 (sección de estrategia consolidada), indica el nivel RMM y el enfoque de auditoría resultante (solo sustantivo / controles+sustantivo / 100% sustantivo). Formato de lista breve, un renglón por área.' : 'Indica que PT-A5 (Matriz RMM Integrada) no está disponible para este encargo.'}. Incluye cita [PT-A5]. Máx. 250 palabras.",
+  "S5b": "${hasPTA5 ? 'Respuestas generales a riesgos pervasivos de EEFF identificados en PT-A5, conforme NIA 330.5 (mayor escepticismo, personal más experimentado, imprevisibilidad, procedimientos al cierre en lugar de interino). Si PT-A5 no identificó riesgos pervasivos, indícalo expresamente: "No se identificaron riesgos pervasivos de EEFF que requieran respuesta general".' : 'Indica que PT-A5 no está disponible.'}. Incluye cita [PT-A5]. Máx. 200 palabras.",
+  "S3c": "${hasPTCOSO ? 'Conclusión global de control interno: 1-2 párrafos con el resultado de la evaluación COSO 2013 (EFECTIVO / CON_DEBILIDADES_SIGNIFICATIVAS / INEFECTIVO) de PT-COSO y su implicación directa en el enfoque de auditoría (ENFOQUE_CONTROLES / MIXTO / SUSTANTIVO).' : 'Indica que la evaluación COSO (PT-COSO) aún no está completa.'}. Incluye cita [PT-COSO]. Máx. 200 palabras.",
+  "S4b": "${hasPTMRCI ? 'Riesgo residual e impacto potencial en el dictamen: resume la conclusión de PT-MRCI — cuántos riesgos quedaron con residual Alto/Muy Alto tras considerar los controles, y si alguno tiene impacto potencial distinto de \\"Ninguno\\" en el tipo de opinión.' : 'Indica que la Matriz de Riesgo-Control-Impacto (PT-MRCI) aún no está completa.'}. Incluye cita [PT-MRCI]. Máx. 250 palabras.",
   "S8": "Conclusión integral del memorando: 2 párrafos formales que integren entendimiento del negocio, evaluación de riesgos y materialidad para concluir el enfoque de auditoría de '${auditTitle}'. Lenguaje NIA/ISA profesional. Incluye citas [PT-FIN-A3-KC][PT-A2][PT-A4]."
 }
 
 INSTRUCCIONES:
 - Redacta en español formal de auditoría (NIA/IAASB)
-- Usa citas [PT-FIN-A3-KC], [PT-A2], [PT-A4] al referenciar fuentes — SOLO usa los códigos que efectivamente aparecen en DATOS DE FUENTE arriba, con el contenido real que traen (nunca digas que una fuente "no está disponible" si su bloque aparece en DATOS DE FUENTE)
+- Usa citas [PT-FIN-A3-KC], [PT-A2], [PT-A4], [PT-A5], [PT-COSO], [PT-MRCI] al referenciar fuentes — SOLO usa los códigos que efectivamente aparecen en DATOS DE FUENTE arriba, con el contenido real que traen (nunca digas que una fuente "no está disponible" si su bloque aparece en DATOS DE FUENTE)
 - Sé conciso pero completo
 - Solo el JSON, sin texto fuera del objeto`;
   }
@@ -659,6 +688,49 @@ ${claims.join(',\n')}
     const meSection  = a4?.sections.find(s => s.sectionKey === 'S4');
     const uaeSection = a4?.sections.find(s => s.sectionKey === 'S5');
 
+    const a5    = sourceData.find(p => p.paperCode === 'PT-A5');
+    const coso  = sourceData.find(p => p.paperCode === 'PT-COSO');
+    const mrci  = sourceData.find(p => p.paperCode === 'PT-MRCI');
+
+    const a5S4 = a5?.sections.find(s => s.sectionKey === 'S4');
+    const a5S2 = a5?.sections.find(s => s.sectionKey === 'S2');
+    const cosoS6 = coso?.sections.find(s => s.sectionKey === 'S6');
+    const cosoS7 = coso?.sections.find(s => s.sectionKey === 'S7');
+    const mrciS4 = mrci?.sections.find(s => s.sectionKey === 'S4');
+
+    const humanizeEnum = (v: unknown) => this.valToString(v)
+      .toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    // Renderiza un array MATRIX como lista breve "· Campo clave: valor" (un renglón
+    // por fila, usando la primera columna como etiqueta) — mismo espíritu que
+    // a1Bullets arriba, reutilizable para cualquier sección MATRIX de origen.
+    const matrixBullets = (section: { value: unknown } | undefined, cols: string[], max = 6): string => {
+      const rows = Array.isArray(section?.value) ? (section!.value as Record<string, unknown>[]) : [];
+      if (rows.length === 0) return '';
+      return rows.slice(0, max)
+        .map(r => `• ${cols.map(c => r[c]).filter(v => v !== undefined && v !== '').join(' — ')}`)
+        .join('\n');
+    };
+
+    const s3bText = a5S4
+      ? `Resumen de la Estrategia de Auditoría Consolidada por Área [PT-A5]:\n\n${matrixBullets(a5S4, ['Área/Ciclo', 'RMM', 'Enfoque principal', 'ME específica ($)']) || 'PT-A5 aún no tiene áreas registradas en su Estrategia Consolidada (S4).'}`
+      : 'La Matriz RMM Integrada (PT-A5) no está disponible para este encargo.';
+
+    const s5bBullets = matrixBullets(a5S2, ['Descripción del riesgo pervasivo', 'Respuesta general del auditor (NIA 330.5)']);
+    const s5bText = a5S4
+      ? (s5bBullets
+          ? `Respuestas generales a riesgos pervasivos de EEFF (NIA 330.5) [PT-A5]:\n\n${s5bBullets}`
+          : 'No se identificaron riesgos pervasivos de EEFF que requieran respuesta general [PT-A5].')
+      : 'La Matriz RMM Integrada (PT-A5) no está disponible para este encargo.';
+
+    const s3cText = (cosoS6 || cosoS7)
+      ? `La evaluación COSO 2013 del Sistema de Control Interno [PT-COSO] concluye en un resultado global de **${cosoS6 ? humanizeEnum(cosoS6.value) : 'Sin evaluar'}**, con una implicación en el enfoque de auditoría de **${cosoS7 ? humanizeEnum(cosoS7.value) : 'Sin definir'}**.\n\nEsta conclusión complementa la evaluación de Riesgo de Control (PT-A3) explicando el nivel de confianza depositable en el ambiente de control de la entidad.`
+      : 'La evaluación COSO 2013 del Sistema de Control Interno (PT-COSO) aún no está completa.';
+
+    const s4bText = mrciS4
+      ? `Conclusión de la Matriz de Riesgo-Control-Impacto [PT-MRCI]:\n\n${this.valToString(mrciS4.value)}`
+      : 'La Matriz de Riesgo, Control e Impacto (PT-MRCI) aún no está completa.';
+
     if (paperCode === 'PT-PROG') {
       return {
         S1: `Objetivo general del programa de auditoría para "${auditTitle}": conforme a NIA 330, el programa responde a los riesgos de incorrección material identificados en la evaluación de riesgos [PT-A2], aplicando un enfoque combinado de pruebas de controles y procedimientos sustantivos proporcional al nivel de riesgo de cada área.\n\nGenerado automáticamente el ${now}. El auditor debe revisar y ajustar según las circunstancias específicas de la auditoría.`,
@@ -681,6 +753,11 @@ ${claims.join(',\n')}
         '',
         'Los importes anteriores constituyen la referencia para la identificación de errores materiales durante la ejecución.',
       ].filter(Boolean).join('\n'),
+
+      S3b: s3bText,
+      S5b: s5bText,
+      S3c: s3cText,
+      S4b: s4bText,
 
       S8: `Con base en el entendimiento del negocio [PT-FIN-A3-KC], la evaluación de riesgo inherente (${riLevel}) [PT-A2] y los parámetros de materialidad establecidos [PT-A4], el equipo de auditoría concluye que la planificación de "${auditTitle}" es adecuada y proporciona una base razonable para la ejecución.\n\nEl enfoque combina pruebas de controles en áreas de menor riesgo con procedimientos sustantivos reforzados en áreas de riesgo significativo, en conformidad con NIA/IAASB. Generado automáticamente el ${now}. El auditor debe revisar y validar este párrafo antes de la aprobación del memorando.`,
     };
@@ -749,10 +826,14 @@ ${claims.join(',\n')}
 
     // ── PT-MEMO / generic MASTER ──────────────────────────────────────────
     parts.push(`**${paperCode ?? 'Memorando'} — ${auditTitle}**\n\n`);
-    if (sections.S2) parts.push(`### I. Entendimiento del Negocio\n\n${str(sections.S2)}`);
-    if (sections.S3) parts.push(`\n\n### II. Evaluación de Riesgo Inherente\n\n${str(sections.S3)}`);
-    if (sections.S4) parts.push(`\n\n### III. Materialidad\n\n${str(sections.S4)}`);
-    if (sections.S8) parts.push(`\n\n### IV. Conclusión y Enfoque de Auditoría\n\n${str(sections.S8)}`);
+    if (sections.S2)  parts.push(`### I. Entendimiento del Negocio\n\n${str(sections.S2)}`);
+    if (sections.S3)  parts.push(`\n\n### II. Evaluación de Riesgo Inherente\n\n${str(sections.S3)}`);
+    if (sections.S3c) parts.push(`\n\n### III. Conclusión Global de Control Interno\n\n${str(sections.S3c)}`);
+    if (sections.S4)  parts.push(`\n\n### IV. Materialidad\n\n${str(sections.S4)}`);
+    if (sections.S3b) parts.push(`\n\n### V. Resumen RMM por Área\n\n${str(sections.S3b)}`);
+    if (sections.S5b) parts.push(`\n\n### VI. Respuesta a Riesgos Pervasivos\n\n${str(sections.S5b)}`);
+    if (sections.S4b) parts.push(`\n\n### VII. Riesgo Residual e Impacto en el Dictamen\n\n${str(sections.S4b)}`);
+    if (sections.S8)  parts.push(`\n\n### VIII. Conclusión y Enfoque de Auditoría\n\n${str(sections.S8)}`);
     return parts.join('');
   }
 }

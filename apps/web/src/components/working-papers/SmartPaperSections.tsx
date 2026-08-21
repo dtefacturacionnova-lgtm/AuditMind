@@ -17,6 +17,7 @@ import {
   usePropagateNia530ToMrci,
   usePropagateSegregacionToMrci,
   usePropagateRiesgosToMrci,
+  usePropagateEquipoToMemo,
   useRecalculateCosoComponentAnalysis,
   usePropagateHallazgosToFindings,
   useSeedSubstantiveProcedures,
@@ -460,6 +461,55 @@ function RiesgosPropagateBar({ paperId }: { paperId: string }) {
         >
           <RefreshCw className={`w-3.5 h-3.5 ${propagate.isPending ? 'animate-spin' : ''}`} />
           {propagate.isPending ? 'Propagando…' : 'Propagar Riesgos desde PT-A2/PT-A5'}
+        </button>
+      </div>
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-3 py-2 mt-2 text-xs ${
+          isError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-indigo-50 border border-indigo-200 text-indigo-700'
+        }`}>
+          {isError ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PT-MEMO S6 — botón "Propagar Equipo Asignado" (AuditTeam) ────────────────
+
+function EquipoPropagateBar({ paperId }: { paperId: string }) {
+  const propagate = usePropagateEquipoToMemo();
+  const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  async function handleClick() {
+    setMsg('');
+    setIsError(false);
+    try {
+      const res = await propagate.mutateAsync(paperId);
+      setMsg(res.message);
+      setIsError(false);
+    } catch (err) {
+      setMsg((err as Error).message || 'Error al propagar el equipo asignado');
+      setIsError(true);
+    }
+  }
+
+  return (
+    <div className="pt-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-[11px] text-gray-400">
+          Trae los miembros realmente asignados al encargo (Equipo del Encargo) como filas nuevas — el Rol y el Nombre quedan pre-llenados; complete las horas estimadas por fase.
+        </p>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={propagate.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shrink-0"
+          title="Propagar equipo asignado al encargo"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${propagate.isPending ? 'animate-spin' : ''}`} />
+          {propagate.isPending ? 'Propagando…' : 'Propagar Equipo Asignado'}
         </button>
       </div>
       {msg && (
@@ -1199,6 +1249,36 @@ export function SmartPaperSections({
                   {!readonly && paperId && <RiesgosPropagateBar paperId={paperId} />}
                   {!readonly && paperId && <Nia530PropagateBar paperId={paperId} />}
                   {!readonly && paperId && <SegregacionPropagateBar paperId={paperId} />}
+                  <SectionField
+                    section={section}
+                    allSections={sorted}
+                    readonly={readonly}
+                    onSave={handleSave}
+                    paperId={paperId}
+                    paperCode={paperCode}
+                    auditId={auditId}
+                    mentionItems={mentionItems}
+                    aiDraftConfig={aiDraftConfig}
+                    onMentionSelect={(sectionKey, targetPaperId, targetSectionKey) => {
+                      void createReference.mutateAsync({
+                        paperId,
+                        sourceSectionKey: sectionKey,
+                        targetPaperId,
+                        targetSectionKey,
+                      });
+                    }}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            );
+          }
+
+          // PT-MEMO S6: botón "Propagar Equipo Asignado" (trae AuditTeam del encargo).
+          if (paperCode === 'PT-MEMO' && section.sectionKey === 'S6') {
+            return (
+              <SectionErrorBoundary key="S6" label={section.label}>
+                <div>
+                  {!readonly && paperId && <EquipoPropagateBar paperId={paperId} />}
                   <SectionField
                     section={section}
                     allSections={sorted}

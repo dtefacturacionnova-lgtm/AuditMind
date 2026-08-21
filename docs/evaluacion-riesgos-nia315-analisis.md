@@ -109,7 +109,7 @@ PT-A5 S3 (Significativos + NIA240) ──→ PT-PROG S1 (procedimientos obligato
 
 ## 7. Trabajo pendiente
 
-- [ ] PT-PROG: Implementar grid jerárquico de procedimientos/actividades (propuesta en `docs/programa-auditoria-estructura-big4.md`)
+- [x] PT-PROG: Grid jerárquico 2 niveles (Procedimiento → Actividad) implementado — NIA 230/330 Big 4, 23 columnas ISA. Commit 03d1997 (2026-08-10)
 - [ ] PT-FIN-ENCARGO: Agregar sección de evaluación de continuidad del encargo (NIA 220)
 - [ ] PT-FIN-A3-KC: Evaluar consolidación con PT-A1 para eliminar solapamiento
 - [ ] PT-A5 S1: Considerar auto-carga desde PT-A2 S4 y PT-A3 S5 (requiere frontend custom)

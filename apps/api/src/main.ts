@@ -7,6 +7,12 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Sin esto, Nest nunca dispara los hooks onModuleDestroy (ej. PrismaService)
+  // al recibir SIGTERM/SIGINT — la conexión a Postgres queda huérfana en el
+  // pooler de Supabase (session mode, tope de 15 clientes) cada vez que se
+  // reinicia el proceso. Local y producción comparten ese mismo pool.
+  app.enableShutdownHooks();
+
   // Security headers
   app.use(helmet());
 

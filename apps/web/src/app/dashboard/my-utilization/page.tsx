@@ -6,11 +6,17 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { useMyProfile } from '@/hooks/useUser';
 import { useMyAvailabilityProfile } from '@/hooks/useCapacity';
-import { useTimesheetReport, CATEGORY_LABELS, TimesheetCategory } from '@/hooks/useTimesheet';
+import { useTimesheetReport, useAttendance, CATEGORY_LABELS, TimesheetCategory } from '@/hooks/useTimesheet';
+import { AttendanceCalendar } from '@/components/timesheet/AttendanceCalendar';
 import { cn } from '@/lib/utils';
 
 const CURRENT_YEAR = new Date().getFullYear();
+const CURRENT_MONTH = new Date().getMonth() + 1;
 const YEAR_OPTIONS = Array.from({ length: 4 }, (_, i) => CURRENT_YEAR - 1 + i);
+const MONTH_LABELS = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
 
 const CLIENT_CATEGORIES: TimesheetCategory[] = ['CLIENT_BILLABLE', 'CLIENT_NON_BILLABLE'];
 
@@ -44,11 +50,14 @@ function utilizacionTone(pct: number | null): string {
 export default function MyUtilizationPage() {
   const { data: profile } = useMyProfile();
   const [year, setYear] = useState(CURRENT_YEAR);
+  const [calMonth, setCalMonth] = useState(CURRENT_MONTH);
+  const [calYear, setCalYear] = useState(CURRENT_YEAR);
   const { data: availability, isLoading: loadingAvail } = useMyAvailabilityProfile(year);
   const { data: report, isLoading: loadingReport } = useTimesheetReport(
     { groupBy: 'audit', userId: profile?.id, dateFrom: `${year}-01-01`, dateTo: `${year}-12-31` },
     { enabled: !!profile?.id },
   );
+  const { data: attendance, isLoading: loadingAttendance } = useAttendance(calYear, calMonth);
 
   const { categoryTotals, clienteHours, engagements } = useMemo(() => {
     const catMap = new Map<TimesheetCategory, number>();
@@ -207,6 +216,38 @@ export default function MyUtilizationPage() {
             </div>
           </>
         )}
+
+        {/* Calendario mensual — encargos, administrativas, ausencias y festivos */}
+        <div>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Calendario del mes
+            </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={calMonth}
+                onChange={e => setCalMonth(Number(e.target.value))}
+                className="pl-3 pr-8 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A] font-medium text-gray-700"
+              >
+                {MONTH_LABELS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
+              <select
+                value={calYear}
+                onChange={e => setCalYear(Number(e.target.value))}
+                className="pl-3 pr-8 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A] font-medium text-gray-700"
+              >
+                {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          </div>
+          {loadingAttendance || !attendance ? (
+            <div className="flex items-center justify-center py-10 gap-2 text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin" /> Cargando…
+            </div>
+          ) : (
+            <AttendanceCalendar data={attendance} />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import {
   ServerCrash, Settings, ChevronDown, ChevronRight,
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
-  Clock, CalendarClock, DollarSign, Handshake, CheckSquare, Wallet, Gauge,
+  Clock, CalendarClock, DollarSign, Handshake, CheckSquare, Wallet, Gauge, CalendarCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -90,8 +90,9 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Horas y Rentabilidad',
     icon: Wallet,
     children: [
-      { label: 'Captura Semanal',        href: '/dashboard/timesheet',              icon: Clock },
+      { label: 'Captura Diaria',         href: '/dashboard/timesheet',              icon: Clock },
       { label: 'Reporte Consolidado',    href: '/dashboard/timesheet/report',       icon: BarChart3 },
+      { label: 'Asistencia',             href: '/dashboard/timesheet/attendance',   icon: CalendarCheck },
       { label: 'Mi Utilización',         href: '/dashboard/my-utilization',         icon: Gauge },
       { label: 'Dashboard de la Firma',  href: '/dashboard/firm-hours',             icon: Wallet },
       { label: 'Rentabilidad',           href: '/dashboard/portfolio/profitability', icon: LineChart },

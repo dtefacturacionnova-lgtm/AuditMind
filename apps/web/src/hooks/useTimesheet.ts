@@ -180,6 +180,82 @@ export function useTimesheetReport(query: TimesheetReportQuery, opts?: { enabled
   });
 }
 
+// ─── Asistencia (calendario diario) ────────────────────────────────────────────
+
+export interface AttendanceDay {
+  date:          string; // YYYY-MM-DD
+  dayOfWeek:     number; // 0=Dom … 6=Sáb
+  isWeekend:     boolean;
+  isHoliday:     boolean;
+  holidayLabel:  string | null;
+  isFuture:      boolean; // día posterior a hoy — nunca cuenta como "hueco sin registrar"
+  billableHours: number; // CLIENT_BILLABLE + CLIENT_NON_BILLABLE (horas a encargos)
+  adminHours:    number; // ADMIN + TRAINING + BUSINESS_DEVELOPMENT + OTHER_NON_BILLABLE
+  leaveHours:    number; // VACATION + SICK_LEAVE + PERSONAL_LEAVE
+  totalHours:    number;
+  hasGap:        boolean; // día laboral (no fin de semana ni festivo) sin ninguna hora registrada
+}
+
+export interface AttendanceSummary {
+  totalBillable: number;
+  totalAdmin:    number;
+  totalLeave:    number;
+  holidayDays:   number;
+  weekendDays:   number;
+  gapDays:       number;
+}
+
+export interface Attendance {
+  userId:   string;
+  userName: string;
+  year:     number;
+  month:    number;
+  days:     AttendanceDay[];
+  summary:  AttendanceSummary;
+}
+
+export function useAttendance(year: number, month: number, userId?: string) {
+  const qs = buildQuery({ year: String(year), month: String(month), userId });
+  return useQuery<Attendance>({
+    queryKey:  ['timesheet-attendance', year, month, userId ?? 'me'],
+    queryFn:   () => apiClient.get(`/timesheet/attendance${qs}`),
+    enabled:   !!year && !!month,
+    staleTime: 15_000,
+  });
+}
+
+// ─── Distribución de horas (3 secciones + %) ───────────────────────────────────
+
+export interface TimeDistribution {
+  userId:               string;
+  userName:             string;
+  dateFrom:             string;
+  dateTo:               string;
+  clienteHours:         number;
+  administrativasHours: number;
+  otrasHours:           number;
+  otrasBreakdown: {
+    leaveHours:                number;
+    holidayHours:               number;
+    holidayDays:                number;
+    holidayDaysWithoutProfile:  number;
+  };
+  totalHours:            number;
+  pctCliente:            number | null;
+  pctAdministrativas:    number | null;
+  pctOtras:              number | null;
+}
+
+export function useTimeDistribution(dateFrom: string, dateTo: string, userId?: string, opts?: { enabled?: boolean }) {
+  const qs = buildQuery({ dateFrom, dateTo, userId });
+  return useQuery<TimeDistribution>({
+    queryKey:  ['timesheet-distribution', dateFrom, dateTo, userId ?? 'self'],
+    queryFn:   () => apiClient.get(`/timesheet/distribution${qs}`),
+    enabled:   !!dateFrom && !!dateTo && (opts?.enabled ?? true),
+    staleTime: 15_000,
+  });
+}
+
 // ─── Mutations ────────────────────────────────────────────────────────────────
 export function useCreateTimesheetEntry() {
   const qc = useQueryClient();

@@ -9,6 +9,7 @@ import {
   QueryTimesheetEntriesDto, QueryTimesheetReportDto, TimesheetReportGroupBy,
 } from './dto/timesheet.dto';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
+import { assertDailyHoursCap } from './daily-hours-cap.util';
 
 // Mismo criterio de jerarquía que RolesGuard (apps/api/src/common/guards/roles.guard.ts).
 // Se replica aquí (en vez de importarlo) porque el guard no lo exporta — solo lo usa internamente.
@@ -28,6 +29,15 @@ const AUDIT_LINKED_CATEGORIES = new Set<TimeEntryCategory>([
   TimeEntryCategory.CLIENT_BILLABLE,
   TimeEntryCategory.CLIENT_NON_BILLABLE,
 ]);
+
+// Ausencias — no cuentan como "trabajo administrativo" en la vista de asistencia.
+const LEAVE_CATEGORIES = new Set<TimeEntryCategory>([
+  TimeEntryCategory.VACATION,
+  TimeEntryCategory.SICK_LEAVE,
+  TimeEntryCategory.PERSONAL_LEAVE,
+]);
+
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 @Injectable()
 export class TimesheetService {
@@ -65,6 +75,8 @@ export class TimesheetService {
     const error = this.validateCategoryLinkage(dto);
     if (error) throw new BadRequestException(error);
 
+    await assertDailyHoursCap(this.prisma, user.id, new Map([[dto.workDate, dto.hours]]));
+
     const entry = await this.prisma.timeEntry.create({
       data: {
         organizationId: user.organizationId,
@@ -95,6 +107,12 @@ export class TimesheetService {
         errors,
       });
     }
+
+    const hoursByDate = new Map<string, number>();
+    for (const entry of dto.entries) {
+      hoursByDate.set(entry.workDate, (hoursByDate.get(entry.workDate) ?? 0) + entry.hours);
+    }
+    await assertDailyHoursCap(this.prisma, user.id, hoursByDate);
 
     const result = await this.prisma.timeEntry.createMany({
       data: dto.entries.map((entry) => ({
@@ -295,5 +313,171 @@ export class TimesheetService {
     }
 
     return { groupBy: query.groupBy, breakdown, totals };
+  }
+
+  // ── GET /timesheet/attendance — calendario diario: encargos, administrativas y festivos ──
+  async getAttendance(targetUserId: string | undefined, year: number, month: number, user: AuthUser) {
+    if (!year || !month) throw new BadRequestException('Los parámetros "year" y "month" son requeridos');
+
+    // Igual criterio que getReport: managers+ pueden ver a cualquiera de la org,
+    // el resto solo se ve a sí mismo (se ignora cualquier userId ajeno del query).
+    const isManagerPlus = this.isManagerOrAbove(user);
+    const userId = isManagerPlus && targetUserId ? targetUserId : user.id;
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: { id: userId, organizationId: user.organizationId },
+      select: { id: true, name: true },
+    });
+    if (!targetUser) throw new NotFoundException('Usuario no encontrado en esta organización');
+
+    const monthStart = new Date(Date.UTC(year, month - 1, 1));
+    const monthEnd = new Date(Date.UTC(year, month, 1));
+    const daysInMonth = Math.round((monthEnd.getTime() - monthStart.getTime()) / 86_400_000);
+
+    const [entries, holidays] = await Promise.all([
+      this.prisma.timeEntry.findMany({
+        where: { organizationId: user.organizationId, userId, workDate: { gte: monthStart, lt: monthEnd } },
+        select: { workDate: true, hours: true, category: true },
+      }),
+      this.prisma.holidayConfig.findMany({
+        where: { organizationId: user.organizationId, active: true, date: { gte: monthStart, lt: monthEnd } },
+        select: { date: true, label: true },
+      }),
+    ]);
+
+    const holidayByDate = new Map(holidays.map((h) => [h.date.toISOString().slice(0, 10), h.label]));
+    const entriesByDate = new Map<string, { billable: number; admin: number; leave: number }>();
+    for (const e of entries) {
+      const key = e.workDate.toISOString().slice(0, 10);
+      const bucket = entriesByDate.get(key) ?? { billable: 0, admin: 0, leave: 0 };
+      if (AUDIT_LINKED_CATEGORIES.has(e.category)) bucket.billable += e.hours;
+      else if (LEAVE_CATEGORIES.has(e.category)) bucket.leave += e.hours;
+      else bucket.admin += e.hours;
+      entriesByDate.set(key, bucket);
+    }
+
+    const todayKey = new Date().toISOString().slice(0, 10);
+
+    const days: {
+      date: string; dayOfWeek: number; isWeekend: boolean; isHoliday: boolean; holidayLabel: string | null;
+      isFuture: boolean; billableHours: number; adminHours: number; leaveHours: number; totalHours: number; hasGap: boolean;
+    }[] = [];
+    let totalBillable = 0, totalAdmin = 0, totalLeave = 0, gapDays = 0, holidayDays = 0, weekendDays = 0;
+
+    for (let i = 0; i < daysInMonth; i++) {
+      const d = new Date(Date.UTC(year, month - 1, 1 + i));
+      const dateKey = d.toISOString().slice(0, 10);
+      const dayOfWeek = d.getUTCDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isFuture = dateKey > todayKey;
+      const holidayLabel = holidayByDate.get(dateKey) ?? null;
+      const isHoliday = holidayLabel !== null;
+      const bucket = entriesByDate.get(dateKey) ?? { billable: 0, admin: 0, leave: 0 };
+      const totalHours = bucket.billable + bucket.admin + bucket.leave;
+      const hasGap = !isWeekend && !isHoliday && !isFuture && totalHours === 0;
+
+      totalBillable += bucket.billable;
+      totalAdmin += bucket.admin;
+      totalLeave += bucket.leave;
+      if (isHoliday) holidayDays++;
+      else if (isWeekend) weekendDays++;
+      if (hasGap) gapDays++;
+
+      days.push({
+        date: dateKey, dayOfWeek, isWeekend, isHoliday, holidayLabel, isFuture,
+        billableHours: round2(bucket.billable), adminHours: round2(bucket.admin), leaveHours: round2(bucket.leave),
+        totalHours: round2(totalHours), hasGap,
+      });
+    }
+
+    return {
+      userId: targetUser.id, userName: targetUser.name, year, month,
+      days,
+      summary: {
+        totalBillable: round2(totalBillable), totalAdmin: round2(totalAdmin), totalLeave: round2(totalLeave),
+        holidayDays, weekendDays, gapDays,
+      },
+    };
+  }
+
+  // ── GET /timesheet/distribution — 3 secciones + % para un rango de fechas ───
+  // Sección 1 "A Clientes": AUDIT_LINKED_CATEGORIES. Sección 2 "Administrativas":
+  // ADMIN/TRAINING/BUSINESS_DEVELOPMENT/OTHER_NON_BILLABLE. Sección 3 "Otras":
+  // LEAVE_CATEGORIES + festivos convertidos a horas-equivalente. Mapeo confirmado
+  // explícitamente por el usuario (2026-08-22) — Capacitación y Desarrollo de
+  // Negocio van en Administrativas, no en Otras.
+  async getDistribution(targetUserId: string | undefined, dateFrom: string, dateTo: string, user: AuthUser) {
+    if (!dateFrom || !dateTo) throw new BadRequestException('Los parámetros "dateFrom" y "dateTo" son requeridos');
+
+    const isManagerPlus = this.isManagerOrAbove(user);
+    const userId = isManagerPlus && targetUserId ? targetUserId : user.id;
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: { id: userId, organizationId: user.organizationId },
+      select: { id: true, name: true },
+    });
+    if (!targetUser) throw new NotFoundException('Usuario no encontrado en esta organización');
+
+    const rangeStart = new Date(`${dateFrom}T00:00:00.000Z`);
+    const rangeEnd = new Date(`${dateTo}T00:00:00.000Z`);
+    rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1); // inclusivo del último día
+
+    const [entries, holidays] = await Promise.all([
+      this.prisma.timeEntry.findMany({
+        where: { organizationId: user.organizationId, userId, workDate: { gte: rangeStart, lt: rangeEnd } },
+        select: { hours: true, category: true },
+      }),
+      this.prisma.holidayConfig.findMany({
+        where: { organizationId: user.organizationId, active: true, date: { gte: rangeStart, lt: rangeEnd } },
+        select: { date: true },
+      }),
+    ]);
+
+    let clienteHours = 0, administrativasHours = 0, leaveHours = 0;
+    for (const e of entries) {
+      if (AUDIT_LINKED_CATEGORIES.has(e.category)) clienteHours += e.hours;
+      else if (LEAVE_CATEGORIES.has(e.category)) leaveHours += e.hours;
+      else administrativasHours += e.hours;
+    }
+
+    // Festivos → horas-equivalente, usando standardDailyHours del perfil de
+    // disponibilidad del AÑO de cada festivo. Nunca se inventa un default — un
+    // festivo cuyo año no tiene perfil configurado se cuenta aparte, no se
+    // fuerza a 8h, para no fabricar un número que no está respaldado por datos.
+    const holidayYears = [...new Set(holidays.map((h) => h.date.getUTCFullYear()))];
+    const profiles = holidayYears.length > 0
+      ? await this.prisma.userAvailabilityProfile.findMany({
+          where: { organizationId: user.organizationId, userId, year: { in: holidayYears } },
+          select: { year: true, standardDailyHours: true },
+        })
+      : [];
+    const dailyHoursByYear = new Map(profiles.map((p) => [p.year, p.standardDailyHours]));
+
+    let holidayHours = 0;
+    let holidayDaysWithoutProfile = 0;
+    for (const h of holidays) {
+      const daily = dailyHoursByYear.get(h.date.getUTCFullYear());
+      if (daily !== undefined) holidayHours += daily;
+      else holidayDaysWithoutProfile++;
+    }
+
+    const otrasHours = leaveHours + holidayHours;
+    const totalHours = clienteHours + administrativasHours + otrasHours;
+    const pct = (n: number) => (totalHours > 0 ? round2((n / totalHours) * 100) : null);
+
+    return {
+      userId: targetUser.id, userName: targetUser.name, dateFrom, dateTo,
+      clienteHours: round2(clienteHours),
+      administrativasHours: round2(administrativasHours),
+      otrasHours: round2(otrasHours),
+      otrasBreakdown: {
+        leaveHours: round2(leaveHours), holidayHours: round2(holidayHours),
+        holidayDays: holidays.length, holidayDaysWithoutProfile,
+      },
+      totalHours: round2(totalHours),
+      pctCliente: pct(clienteHours),
+      pctAdministrativas: pct(administrativasHours),
+      pctOtras: pct(otrasHours),
+    };
   }
 }

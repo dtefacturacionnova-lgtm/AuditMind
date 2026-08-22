@@ -59,4 +59,28 @@ export class TimesheetController {
   getReport(@Query() query: QueryTimesheetReportDto, @CurrentUser() user: AuthUser) {
     return this.service.getReport(query, user);
   }
+
+  @Get('distribution')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Distribución de horas de una persona en 3 secciones (a clientes/administrativas/otras) con %, para un rango de fechas' })
+  getDistribution(
+    @Query('userId') userId: string | undefined,
+    @Query('dateFrom') dateFrom: string,
+    @Query('dateTo') dateTo: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.getDistribution(userId, dateFrom, dateTo, user);
+  }
+
+  @Get('attendance')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Calendario diario de un mes: horas a encargos, administrativas, ausencias y festivos' })
+  getAttendance(
+    @Query('userId') userId: string | undefined,
+    @Query('year') year: string,
+    @Query('month') month: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.getAttendance(userId, Number(year), Number(month), user);
+  }
 }

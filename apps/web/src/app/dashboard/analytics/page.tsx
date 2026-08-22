@@ -66,51 +66,92 @@ const ANALYSIS_TYPES: AnalysisType[] = [
 
 // ─── Sample data ──────────────────────────────────────────────────────────────
 
+// Nombres de campo alineados EXACTO con los defaults que espera cada analizador
+// en apps/ai-service/app/services/caats/*.py (ver ai.service.ts→runCaats, que no
+// manda field_mapping — así que estos nombres literales son los que se usan).
+// Cada muestra trae al menos un hallazgo plantado y suficientes registros para
+// pasar los mínimos estadísticos del backend (Benford ≥50, Anomalía/ML ≥10,
+// outliers de nómina >10) — de lo contrario el análisis corre pero no encuentra
+// nada, o se rechaza antes de intentarlo.
 const SAMPLE_DATA: Record<string, unknown> = {
   gl: {
     records: [
-      { date: '2026-01-15', account: '5010', description: 'Gastos operacionales', amount: 45000, user: 'jsmith', time: '09:32' },
-      { date: '2026-01-15', account: '5010', description: 'Gastos operacionales', amount: 45000, user: 'jsmith', time: '09:33' },
-      { date: '2026-01-20', account: '1010', description: 'Ajuste fin de mes',    amount: 1000000, user: 'admin', time: '23:45' },
-      { date: '2026-01-22', account: '2030', description: 'Provisión especial',   amount: 500000,  user: 'admin', time: '22:10' },
-      { date: '2026-02-01', account: '5020', description: 'Servicios profesionales', amount: 75000, user: 'aperez', time: '14:05' },
+      { date: '2026-01-15', account_code: '5010', description: 'Gastos operacionales', amount: 45000, posted_by: 'jsmith', time: '09:32' },
+      { date: '2026-01-15', account_code: '5010', description: 'Gastos operacionales', amount: 45000, posted_by: 'jsmith', time: '09:33' },
+      { date: '2026-01-20', account_code: '1010', description: 'Ajuste fin de mes',    amount: 1000000, posted_by: 'admin', time: '23:45' },
+      { date: '2026-01-22', account_code: '2030', description: 'Provisión especial',   amount: 500000,  posted_by: 'admin', time: '22:10' },
+      { date: '2026-02-01', account_code: '5020', description: 'Servicios profesionales', amount: 75000, posted_by: 'aperez', time: '14:05' },
     ],
   },
   ap: {
     records: [
-      { invoice_id: 'INV-001', vendor: 'Consultores ABC', amount: 120000, date: '2026-01-10', bank_account: '123-456' },
-      { invoice_id: 'INV-002', vendor: 'Consultores ABC', amount: 120000, date: '2026-01-11', bank_account: '123-456' },
-      { invoice_id: 'INV-003', vendor: 'Servicios XYZ',   amount: 45000,  date: '2026-01-12', bank_account: '789-012' },
-      { invoice_id: 'INV-004', vendor: 'Tech Solutions',  amount: 980000, date: '2026-01-13', bank_account: '345-678' },
-      { invoice_id: 'INV-005', vendor: 'Tech Solutions',  amount: 980000, date: '2026-01-14', bank_account: '345-678' },
+      { invoice_number: 'INV-001', vendor_id: 'V-ABC', vendor_name: 'Consultores ABC', amount: 120000, invoice_date: '2026-01-10', bank_account: '123-456' },
+      { invoice_number: 'INV-002', vendor_id: 'V-ABC', vendor_name: 'Consultores ABC', amount: 120000, invoice_date: '2026-01-11', bank_account: '123-456' },
+      { invoice_number: 'INV-003', vendor_id: 'V-XYZ', vendor_name: 'Servicios XYZ',   amount: 45000,  invoice_date: '2026-01-12', bank_account: '789-012' },
+      { invoice_number: 'INV-004', vendor_id: 'V-TEC', vendor_name: 'Tech Solutions',  amount: 980000, invoice_date: '2026-01-13', bank_account: '345-678' },
+      { invoice_number: 'INV-005', vendor_id: 'V-TEC', vendor_name: 'Tech Solutions',  amount: 980000, invoice_date: '2026-01-14', bank_account: '345-678' },
     ],
   },
   payroll: {
+    // >10 registros — habilita la prueba de outliers por Z-score (PAY_OUTLIERS).
+    // E999 con nombre vacío dispara GHOST_EMPLOYEES; Carlos Pérez ($15M vs. ~$2M
+    // del resto) dispara PAY_OUTLIERS.
     records: [
-      { employee_id: 'E001', name: 'Juan González',  salary: 2500000, days_worked: 30, department: 'IT' },
-      { employee_id: 'E002', name: 'María López',    salary: 1800000, days_worked: 30, department: 'Admin' },
-      { employee_id: 'E003', name: 'Carlos Pérez',   salary: 15000000, days_worked: 30, department: 'IT' },
-      { employee_id: 'E999', name: 'empleado_test',  salary: 3200000, days_worked: 30, department: 'NONE' },
-      { employee_id: 'E004', name: 'Ana Rodríguez',  salary: 2100000, days_worked: 25, department: 'Ventas' },
+      { employee_id: 'E001', employee_name: 'Juan González',   gross_pay: 2500000,  days_worked: 30, department: 'IT' },
+      { employee_id: 'E002', employee_name: 'María López',     gross_pay: 1800000,  days_worked: 30, department: 'Admin' },
+      { employee_id: 'E003', employee_name: 'Carlos Pérez',    gross_pay: 15000000, days_worked: 30, department: 'IT' },
+      { employee_id: 'E004', employee_name: 'Ana Rodríguez',   gross_pay: 2100000,  days_worked: 25, department: 'Ventas' },
+      { employee_id: 'E005', employee_name: 'Pedro Martínez',  gross_pay: 1950000,  days_worked: 30, department: 'Ventas' },
+      { employee_id: 'E006', employee_name: 'Lucía Fernández', gross_pay: 2200000,  days_worked: 30, department: 'IT' },
+      { employee_id: 'E007', employee_name: 'Diego Ramírez',   gross_pay: 1750000,  days_worked: 30, department: 'Admin' },
+      { employee_id: 'E008', employee_name: 'Sofía Torres',    gross_pay: 2050000,  days_worked: 30, department: 'Ventas' },
+      { employee_id: 'E009', employee_name: 'Miguel Castro',   gross_pay: 1900000,  days_worked: 28, department: 'IT' },
+      { employee_id: 'E010', employee_name: 'Valeria Ortiz',   gross_pay: 2300000,  days_worked: 30, department: 'Admin' },
+      { employee_id: 'E011', employee_name: 'Roberto Silva',   gross_pay: 2000000,  days_worked: 30, department: 'Ventas' },
+      { employee_id: 'E012', employee_name: 'Camila Vargas',   gross_pay: 1850000,  days_worked: 30, department: 'IT' },
+      { employee_id: 'E013', employee_name: 'Andrés Molina',   gross_pay: 2150000,  days_worked: 30, department: 'Admin' },
+      { employee_id: 'E999', employee_name: '',                gross_pay: 3200000,  days_worked: 30, department: 'NONE' },
+      { employee_id: 'E014', employee_name: 'Gabriela Ríos',   gross_pay: 1980000,  days_worked: 30, department: 'Ventas' },
     ],
   },
   benford: {
+    // 60 montos — el backend exige mínimo 50. 45 "naturales" con distribución
+    // aproximada a Benford + 15 concentrados en dígito inicial 9, justo debajo
+    // de un umbral de $100,000 (indicio clásico de fraccionamiento para evitar
+    // aprobación) — sesga la distribución lo suficiente para disparar
+    // SUSPECT/NON_CONFORMING y demostrar el caso de uso real.
     amounts: [
-      1234, 2456, 3100, 4200, 5678, 6100, 7890, 8234, 9100,
-      1500, 2300, 3400, 4567, 5100, 6789, 7234, 8901, 9500,
-      1100, 2100, 31000, 41000, 5500, 61000, 71000, 81000, 91000,
-      12500, 23400, 34500, 45000, 50000, 60000, 70000, 80000, 90000,
+      1200, 1450, 1890, 1050, 1670, 1320, 1780, 1990, 1120, 1560, 1234, 1099, 1670, 1450, 1990,
+      2340, 2870, 2100, 2560, 2990, 2450, 2780, 2340, 2120,
+      3120, 3450, 3890, 3670, 3230,
+      4560, 4120, 4890, 4340,
+      5670, 5120, 5890,
+      6340, 6780, 6120,
+      7450, 7890,
+      8120, 8670,
+      9340, 9780,
+      91200, 92500, 93800, 94100, 95600, 96900, 97200, 98500, 99100, 91800, 93400, 95000, 96200, 97800, 99900,
     ],
   },
   anomaly: {
+    // 13 registros — el backend exige mínimo 10. Se conservan los 2 outliers
+    // extremos originales (madrugada, sin actividad previa del usuario) sobre
+    // una base más amplia de transacciones "normales" para que Isolation
+    // Forest tenga contra qué comparar.
     records: [
       { amount: 45000, hour: 9,  day_of_week: 1, user_transactions: 12 },
       { amount: 52000, hour: 10, day_of_week: 2, user_transactions: 15 },
       { amount: 48000, hour: 11, day_of_week: 1, user_transactions: 10 },
-      { amount: 960000, hour: 23, day_of_week: 6, user_transactions: 1 },
       { amount: 51000, hour: 14, day_of_week: 3, user_transactions: 18 },
-      { amount: 1200000, hour: 2, day_of_week: 0, user_transactions: 0 },
       { amount: 44000, hour: 9,  day_of_week: 4, user_transactions: 11 },
+      { amount: 49500, hour: 13, day_of_week: 2, user_transactions: 14 },
+      { amount: 47000, hour: 10, day_of_week: 5, user_transactions: 13 },
+      { amount: 53000, hour: 15, day_of_week: 1, user_transactions: 16 },
+      { amount: 46000, hour: 11, day_of_week: 3, user_transactions: 9 },
+      { amount: 50000, hour: 12, day_of_week: 4, user_transactions: 17 },
+      { amount: 960000, hour: 23, day_of_week: 6, user_transactions: 1 },
+      { amount: 1200000, hour: 2, day_of_week: 0, user_transactions: 0 },
+      { amount: 48500, hour: 9,  day_of_week: 2, user_transactions: 12 },
     ],
     numeric_fields: ['amount', 'hour', 'day_of_week', 'user_transactions'],
   },

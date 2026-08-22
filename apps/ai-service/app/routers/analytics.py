@@ -7,6 +7,7 @@ Tareas 2.1–2.5:
   POST /analytics/anomaly     → ML Anomaly Detection
 """
 import dataclasses
+import math
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field
 from typing import Any, Optional
@@ -28,13 +29,24 @@ def verify_internal_key(x_internal_key: str | None) -> None:
 
 
 def _serialize(obj: Any) -> Any:
-    """Recursively convert dataclasses/dataframes to JSON-safe types."""
+    """Recursively convert dataclasses/dataframes to JSON-safe types.
+
+    NaN/Inf surgen cuando un campo esperado (ej. gross_pay) no existe en los
+    datos recibidos — pandas produce columnas vacías y sus estadísticas (mean,
+    std, etc.) son NaN. `json.dumps` no puede serializar NaN/Infinity (no son
+    JSON válido) y esto tumbaba el servicio entero con un 500 en vez de
+    devolver un resultado parcial. Se convierten a `null` aquí, en el borde de
+    salida, para que CUALQUIER análisis con datos incompletos degrade con
+    gracia en vez de crashear — no solo para los datos de muestra del demo.
+    """
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
         return {k: _serialize(v) for k, v in dataclasses.asdict(obj).items()}
     if isinstance(obj, list):
         return [_serialize(i) for i in obj]
     if isinstance(obj, dict):
         return {k: _serialize(v) for k, v in obj.items()}
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
     return obj
 
 

@@ -465,8 +465,14 @@ async def parse_file(
     if truncated:
         df = df.head(MAX_UPLOAD_ROWS)
 
-    # NaN → None (JSON no soporta NaN) antes de convertir a dict.
-    df = df.where(pd.notnull(df), None)
+    # NaN → None (JSON no soporta NaN) antes de convertir a dict. `.where()`
+    # directo sobre un DataFrame con columnas numéricas reintroduce NaN en vez
+    # de None (el dtype float no admite None, pandas lo recasta) — hay que
+    # pasar a dtype object PRIMERO para que None sea un valor válido en TODAS
+    # las columnas. Reproducido en vivo con una columna mixta texto/vacío
+    # (ej. NIT opcional con una fila sin valor) — sin este cast, `/parse-file`
+    # tumbaba con 500 "Out of range float values are not JSON compliant: nan".
+    df = df.astype(object).where(df.notna(), None)
 
     return {
         "columns":            [str(c) for c in df.columns.tolist()],

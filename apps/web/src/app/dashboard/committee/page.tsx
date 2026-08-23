@@ -4,12 +4,14 @@ import { useState } from 'react';
 import {
   AlertTriangle, CheckCircle2, Clock, TrendingUp,
   ShieldAlert, BarChart3, Users2, Lock, Radio, RotateCcw, ListChecks, Repeat,
+  LayoutGrid, Building2, PieChart, Percent,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
   useCommitteeDashboard, useCommitteePeriods, usePublishCommitteeSnapshot,
   type PeriodType, type EngagementState,
 } from '@/hooks/useCommittee';
+import { useCommitteeDashboard as useCommitteeDashboardLegacy } from '@/hooks/useDashboard';
 import { formatDate } from '@/lib/utils';
 
 // ─── Config ────────────────────────────────────────────────────────────────
@@ -45,6 +47,19 @@ const PERIOD_TABS: Array<{ key: PeriodType; label: string }> = [
   { key: 'SEMIANNUAL', label: 'Semestre' },
   { key: 'ANNUAL', label: 'Año' },
 ];
+
+// Vigentes solo en la pestaña "Detalles" — vista clásica (sin recorte por
+// período), restaurada del dashboard original junto a un análisis nuevo
+// (hallazgos por estado de ciclo completo) que usa un dato que el backend
+// ya calculaba (`allByStatus`) pero ninguna vista llegó a mostrar.
+const AUDIT_STATUS_LABEL: Record<string, string> = {
+  PLANNING: 'Planificación', IN_PROGRESS: 'En Progreso',
+  REVIEW: 'En Revisión', CLOSED: 'Cerrada', CANCELLED: 'Cancelada',
+};
+const FINDING_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Borrador', IN_REVIEW: 'En Revisión', APPROVED: 'Aprobado',
+  IN_PROGRESS: 'En Progreso', CLOSED: 'Cerrado', OVERDUE: 'Vencido', ACCEPTED_RISK: 'Riesgo Aceptado',
+};
 
 function daysOverdue(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -86,6 +101,7 @@ function HorizBar({ label, value, max, color }: { label: string; value: number; 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CommitteePage() {
+  const [activeTab, setActiveTab] = useState<'resumen' | 'detalles'>('resumen');
   const [periodType, setPeriodType] = useState<PeriodType>('QUARTERLY');
   const [periodKey, setPeriodKey] = useState<string | undefined>(undefined);
 
@@ -129,6 +145,31 @@ export default function CommitteePage() {
 
       <div className="flex-1 overflow-auto p-6 space-y-6">
 
+        {/* ── Pestañas: resumen ejecutivo vs. detalle histórico completo ────── */}
+        <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+          <button
+            onClick={() => setActiveTab('resumen')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              activeTab === 'resumen' ? 'bg-white text-[#0F2D4A] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            Resumen para Comité
+          </button>
+          <button
+            onClick={() => setActiveTab('detalles')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+              activeTab === 'detalles' ? 'bg-white text-[#0F2D4A] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <PieChart className="w-3.5 h-3.5" />
+            Detalles
+          </button>
+        </div>
+
+        {activeTab === 'detalles' && <DetallesTab />}
+
+        {activeTab === 'resumen' && <>
         {/* ── Barra de período ─────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
@@ -492,8 +533,83 @@ export default function CommitteePage() {
             ? 'Corte congelado — estos números no cambian aunque los encargos avancen.'
             : 'Período en curso — estos números se recalculan en vivo hasta que se cierre el corte.'}
         </div>
+        </>}
 
       </div>
     </div>
+  );
+}
+
+// ─── Pestaña "Detalles" ─────────────────────────────────────────────────────
+// Vista clásica sin recorte por período (siempre "ahora mismo") — restaura
+// dos análisis que el rediseño por período dejó fuera (Portfolio de
+// Auditorías por Estado, Tasa de Resolución YTD) usando el endpoint legado
+// `GET /dashboard/committee` (`useDashboard.ts`), que sigue vivo sin tocar
+// desde antes del rediseño. Suma un tercer análisis nuevo — Hallazgos por
+// Estado de ciclo completo — con un dato que ese mismo endpoint ya
+// calculaba (`allByStatus`) pero ninguna vista mostraba todavía.
+function DetallesTab() {
+  const { data, isLoading } = useCommitteeDashboardLegacy();
+
+  if (isLoading || !data) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const maxAuditStatus = Math.max(...Object.values(data.auditsByStatus), 1);
+  const maxFindingStatus = Math.max(...Object.values(data.allByStatus), 1);
+
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard
+          label="Tasa de Resolución YTD"
+          value={`${data.kpis.resolutionRateYtd}%`}
+          sub="hallazgos cerrados / total del año en curso"
+          icon={Percent}
+          colorClass="bg-emerald-500"
+        />
+        <KpiCard label="Críticos Abiertos" value={data.kpis.criticalOpen} icon={ShieldAlert} colorClass="bg-red-500" />
+        <KpiCard label="Materiales Abiertos" value={data.kpis.materialOpen} icon={BarChart3} colorClass="bg-purple-500" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-blue-500" />
+            Portfolio de Auditorías por Estado
+          </h3>
+          {Object.keys(data.auditsByStatus).length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">Sin auditorías registradas</p>
+          ) : (
+            <div className="space-y-3">
+              {Object.entries(data.auditsByStatus).map(([status, count]) => (
+                <HorizBar key={status} label={AUDIT_STATUS_LABEL[status] ?? status} value={count} max={maxAuditStatus} color="bg-blue-500" />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <PieChart className="w-4 h-4 text-indigo-500" />
+            Hallazgos por Estado (ciclo completo)
+          </h3>
+          <p className="text-[11px] text-gray-400 -mt-2.5 mb-4">Todos los hallazgos, no solo los abiertos por severidad</p>
+          {Object.keys(data.allByStatus).length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">Sin hallazgos registrados</p>
+          ) : (
+            <div className="space-y-3">
+              {Object.entries(data.allByStatus).map(([status, count]) => (
+                <HorizBar key={status} label={FINDING_STATUS_LABEL[status] ?? status} value={count} max={maxFindingStatus} color="bg-indigo-500" />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }

@@ -116,7 +116,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Motor IA — Agentes', href: '/dashboard/ai', icon: Bot },
       { label: 'Reportes', href: '/dashboard/reports', icon: FileText },
       { label: 'Notificaciones', href: '/dashboard/notifications', icon: Bell },
-      { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, phase: 'Fase 2' },
+      { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
     ],
   },
   {

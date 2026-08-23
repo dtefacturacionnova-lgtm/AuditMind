@@ -37,8 +37,11 @@ def analyze_gl(
     user_field: str = "posted_by",
     account_field: str = "account_code",
     description_field: str = "description",
+    time_field: str = "time",
     round_threshold: float = 1000.0,
     end_of_period_days: int = 3,
+    business_hours_start: int = 7,
+    business_hours_end: int = 19,
 ) -> GLReport:
     """
     Analyze general ledger entries for audit risks.
@@ -139,7 +142,33 @@ def analyze_gl(
             ))
 
     # ─────────────────────────────────────────────────────────────────────────
-    # TEST 5 — Unusual users (top poster outlier)
+    # TEST 5 — Off-hours entries (fuera del horario laboral, cualquier día) —
+    # independiente de TEST 4: un asiento sabatino a media mañana y uno entre
+    # semana a las 2am son riesgos distintos, así que se evalúan por separado
+    # en vez de fusionar día y hora en una sola prueba.
+    # ─────────────────────────────────────────────────────────────────────────
+    if time_field in df.columns:
+        parsed_time = pd.to_datetime(df[time_field], format="mixed", errors="coerce")
+        df["_hour"] = parsed_time.dt.hour
+        off_hours_mask = df["_hour"].notna() & (
+            (df["_hour"] < business_hours_start) | (df["_hour"] >= business_hours_end)
+        )
+        off_hours_entries = df[off_hours_mask]
+        if len(off_hours_entries) > 0:
+            pct = len(off_hours_entries) / len(df) * 100
+            risk = "HIGH" if pct > 10 else "MEDIUM"
+            findings.append(GLFinding(
+                test_name="OFF_HOURS_ENTRIES",
+                risk_level=risk,
+                record_count=len(off_hours_entries),
+                description=f"{len(off_hours_entries)} asientos registrados fuera del horario laboral habitual "
+                            f"({business_hours_start:02d}:00–{business_hours_end:02d}:00), {pct:.1f}% del total. "
+                            f"Requieren justificación de negocio — indicio típico de registro manual evitando supervisión.",
+                sample_records=off_hours_entries.head(10).drop(columns=["_amount", "_date", "_hour"], errors="ignore").to_dict("records"),
+            ))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # TEST 6 — Unusual users (top poster outlier)
     # ─────────────────────────────────────────────────────────────────────────
     if user_field in df.columns:
         user_counts = df[user_field].value_counts()

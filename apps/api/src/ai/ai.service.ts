@@ -487,7 +487,8 @@ export class AiService {
   async runCaats(
     analysisType:
       | 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master' | 'related_parties' | 'expenses'
-      | 'revenue_cutoff' | 'bid_rigging' | 'ar_aging' | 'fixed_assets' | 'structuring' | 'missing_trader' | 'tax_haven',
+      | 'revenue_cutoff' | 'bid_rigging' | 'ar_aging' | 'fixed_assets' | 'structuring' | 'missing_trader' | 'tax_haven'
+      | 'dte_validation',
     payload: unknown,
   ): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/analytics/${analysisType}`, {

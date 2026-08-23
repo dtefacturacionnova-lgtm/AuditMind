@@ -5,14 +5,15 @@ import {
   Play, Loader2, AlertCircle, AlertTriangle, CheckCircle2, RotateCcw,
   Upload, FileUp, X, ListChecks, Database, FileSpreadsheet, TrendingUp,
   BarChart3, Cpu, ShieldAlert, Building2, Users, Receipt,
-  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe,
+  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe, FileCheck2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { AnalysisResultView } from '@/components/caats/CaatsResultView';
 import { SecondaryDatasetUpload, type SecondaryDatasetValue } from '@/components/caats/SecondaryDatasetUpload';
+import { DteJsonUpload } from '@/components/caats/DteJsonUpload';
 import {
-  type AnalysisId, type ParsedFile, FIELD_DEFS, SECONDARY_DATASET,
+  type AnalysisId, type ParsedFile, FIELD_DEFS, SECONDARY_DATASET, JSON_UPLOAD_ENGINES,
   autoMatchColumn, autoDetectNumericColumns,
 } from '@/lib/caats-fields';
 
@@ -57,6 +58,7 @@ const ENGINES: { id: AnalysisId; label: string; icon: typeof Database; color: st
   { id: 'structuring', label: 'Pitufeo / Smurfing', icon: Layers, color: 'bg-violet-500' },
   { id: 'missing_trader', label: 'Missing Trader', icon: Ghost, color: 'bg-slate-500' },
   { id: 'tax_haven', label: 'Jurisdicciones de Baja Tributación', icon: Globe, color: 'bg-emerald-500' },
+  { id: 'dte_validation', label: 'Validación DTE', icon: FileCheck2, color: 'bg-blue-700' },
 ];
 
 export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readOnly = false }: Props) {
@@ -74,7 +76,9 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
   const [benfordColumn, setBenfordColumn] = useState(value?.benfordColumn ?? '');
   const [anomalyColumns, setAnomalyColumns] = useState<string[]>(value?.anomalyColumns ?? []);
   const [secondaryData, setSecondaryData] = useState<SecondaryDatasetValue | null>(null);
+  const [dteRecords, setDteRecords] = useState<Record<string, unknown>[] | null>(null);
 
+  const isJsonEngine = !!engine && JSON_UPLOAD_ENGINES.has(engine);
   const fieldDefs = engine ? FIELD_DEFS[engine] : undefined;
   const secondaryConfig = engine ? SECONDARY_DATASET[engine] : undefined;
   const missingRequired = useMemo(() => {
@@ -87,10 +91,13 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
     return secondaryConfig.fieldDefs.some(d => d.required && !secondaryData.fieldMapping[d.key]);
   }, [secondaryConfig, secondaryData]);
 
-  const canRun = !!engine && !!parsed && (
-    engine === 'benford' ? !!benfordColumn
-      : engine === 'anomaly' ? anomalyColumns.length > 0
-        : !missingRequired && !secondaryMissingRequired
+  const canRun = !!engine && (
+    isJsonEngine ? !!dteRecords && dteRecords.length > 0
+      : !!parsed && (
+        engine === 'benford' ? !!benfordColumn
+          : engine === 'anomaly' ? anomalyColumns.length > 0
+            : !missingRequired && !secondaryMissingRequired
+      )
   );
 
   async function parseFile(file: File, headerRow?: number) {
@@ -145,6 +152,8 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
     setResult(null);
     setError('');
     setSecondaryData(null);
+    setDteRecords(null);
+    if (JSON_UPLOAD_ENGINES.has(id)) return;
     if (!parsed) return;
     if (id === 'benford') {
       setBenfordColumn(autoMatchColumn('amount', parsed.columns));
@@ -159,7 +168,12 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
   }
 
   async function runAnalysis() {
-    if (!engine || !parsed) return;
+    if (!engine) return;
+    if (isJsonEngine) {
+      if (!dteRecords || dteRecords.length === 0) return;
+    } else if (!parsed) {
+      return;
+    }
     if (secondaryConfig && !secondaryData) return;
     setRunning(true);
     setResult(null);
@@ -168,33 +182,41 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
     try {
       let payload: unknown;
       let savedMapping: Pick<CaatsAnalysisValue, 'fieldMapping' | 'benfordColumn' | 'anomalyColumns'> = {};
+      let fileNameForSave: string | undefined;
 
-      if (engine === 'benford') {
-        const amounts = parsed.rows
-          .map(r => Number(String(r[benfordColumn] ?? '').replace(/[^0-9.-]/g, '')))
-          .filter(n => Number.isFinite(n) && n !== 0);
-        payload = { amounts };
-        savedMapping = { benfordColumn };
-      } else if (engine === 'anomaly') {
-        payload = { records: parsed.rows, numeric_fields: anomalyColumns };
-        savedMapping = { anomalyColumns };
+      if (isJsonEngine) {
+        payload = { records: dteRecords };
+        fileNameForSave = `${dteRecords!.length} documento(s) DTE`;
       } else {
-        const mapping: Record<string, string> = {};
-        Object.entries(fieldMapping).forEach(([key, col]) => { if (col) mapping[key] = col; });
-        payload = secondaryConfig && secondaryData
-          ? {
-              records: parsed.rows, field_mapping: mapping,
-              reference_records: secondaryData.rows, reference_field_mapping: secondaryData.fieldMapping,
-            }
-          : { records: parsed.rows, field_mapping: mapping };
-        savedMapping = { fieldMapping: mapping };
+        const p = parsed!;
+        fileNameForSave = p.filename;
+        if (engine === 'benford') {
+          const amounts = p.rows
+            .map(r => Number(String(r[benfordColumn] ?? '').replace(/[^0-9.-]/g, '')))
+            .filter(n => Number.isFinite(n) && n !== 0);
+          payload = { amounts };
+          savedMapping = { benfordColumn };
+        } else if (engine === 'anomaly') {
+          payload = { records: p.rows, numeric_fields: anomalyColumns };
+          savedMapping = { anomalyColumns };
+        } else {
+          const mapping: Record<string, string> = {};
+          Object.entries(fieldMapping).forEach(([key, col]) => { if (col) mapping[key] = col; });
+          payload = secondaryConfig && secondaryData
+            ? {
+                records: p.rows, field_mapping: mapping,
+                reference_records: secondaryData.rows, reference_field_mapping: secondaryData.fieldMapping,
+              }
+            : { records: p.rows, field_mapping: mapping };
+          savedMapping = { fieldMapping: mapping };
+        }
       }
 
       const data = await apiClient.post<Record<string, unknown>>(`/ai/analytics/${engine}`, payload);
       setResult(data);
       onChange({
         engine,
-        fileName: parsed.filename,
+        fileName: fileNameForSave,
         result: data,
         ranAt: new Date().toISOString(),
         ...savedMapping,
@@ -251,7 +273,23 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
         ))}
       </div>
 
-      {engine && (
+      {engine && isJsonEngine && (
+        <div className="space-y-3">
+          <DteJsonUpload onChange={setDteRecords} />
+          <div className="flex justify-end">
+            <button
+              onClick={runAnalysis}
+              disabled={running || !canRun}
+              title={!canRun ? 'Sube al menos un documento DTE (.json)' : undefined}
+              className="flex items-center gap-2 px-4 py-2 bg-[#0F2D4A] text-white text-sm font-medium rounded-xl hover:bg-[#1a4a7a] disabled:opacity-60 transition-colors"
+            >
+              {running ? <><Loader2 className="w-4 h-4 animate-spin" /> Analizando…</> : <><Play className="w-4 h-4" /> Ejecutar análisis</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {engine && !isJsonEngine && (
         <div className="space-y-3">
           {!parsed ? (
             <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl py-6 cursor-pointer hover:border-[#0F2D4A]/40 hover:bg-gray-50 transition-colors">

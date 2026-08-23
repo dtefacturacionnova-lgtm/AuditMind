@@ -16,6 +16,7 @@ Tareas 2.1–2.16:
   POST /analytics/structuring      → Pitufeo / Smurfing
   POST /analytics/missing_trader   → Missing Trader / Carrusel de IVA
   POST /analytics/tax_haven        → Concentración en Jurisdicciones de Baja Tributación
+  POST /analytics/dte_validation   → Suite de Validación DTE (esquema, sello, firma)
 """
 import dataclasses
 import math
@@ -40,6 +41,7 @@ from app.services.caats.fixed_assets_analysis import analyze_fixed_assets
 from app.services.caats.structuring_analysis import analyze_structuring
 from app.services.caats.missing_trader_analysis import analyze_missing_trader
 from app.services.caats.tax_haven_analysis import analyze_tax_haven_concentration
+from app.services.caats.dte_validation_analysis import analyze_dte_validation
 
 router = APIRouter()
 
@@ -118,6 +120,7 @@ async def gl_analysis(
             user_field=fm.get("user", "posted_by"),
             account_field=fm.get("account", "account_code"),
             description_field=fm.get("description", "description"),
+            time_field=fm.get("time", "time"),
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -466,6 +469,24 @@ async def tax_haven_analysis(
             jurisdiction_field=fm.get("jurisdiction", "jurisdiction"),
             date_field=fm.get("date", "date"),
         )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _serialize(result)
+
+
+# ─── Suite de Validación DTE ───────────────────────────────────────────────────
+@router.post("/dte_validation")
+async def dte_validation_analysis(
+    request: RecordsRequest,
+    x_internal_key: str | None = Header(default=None),
+):
+    """Tarea 2.17 — Valida un lote de DTEs (JSON completo, no tabular) contra el
+    esquema técnico oficial de Hacienda, el Sello de Recepción, y la integridad
+    de la firma electrónica. No usa field_mapping — la estructura del DTE la
+    define Hacienda, no un mapeo de columnas del auditor."""
+    verify_internal_key(x_internal_key)
+    try:
+        result = analyze_dte_validation(dtes=request.records)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return _serialize(result)

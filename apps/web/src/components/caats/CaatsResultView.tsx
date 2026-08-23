@@ -164,6 +164,7 @@ const RESULT_SPECIAL_KEYS = new Set([
   'top_anomalous_amounts', 'interpretation', 'top_anomalies', 'feature_stats', 'conformity',
   'top_conflicted_users', 'exposure_by_party', 'employee_concentration',
   'daily_amounts', 'bidder_win_rate', 'aging_buckets', 'vendor_activity', 'exposure_by_jurisdiction',
+  'tipo_breakdown',
 ]);
 
 export function AnalysisResultView({ result }: { result: Record<string, unknown> }) {
@@ -180,6 +181,7 @@ export function AnalysisResultView({ result }: { result: Record<string, unknown>
   const vendorActivity = Array.isArray(result.vendor_activity) ? (result.vendor_activity as Record<string, unknown>[]) : null;
   const exposureByJurisdiction = Array.isArray(result.exposure_by_jurisdiction) ? (result.exposure_by_jurisdiction as Record<string, unknown>[]) : null;
   const topAnomalousAmounts = Array.isArray(result.top_anomalous_amounts) ? (result.top_anomalous_amounts as Record<string, unknown>[]) : null;
+  const tipoBreakdown = Array.isArray(result.tipo_breakdown) ? (result.tipo_breakdown as Record<string, unknown>[]) : null;
   const digits = Array.isArray(result.digits) ? (result.digits as Record<string, unknown>[]) : null;
   const payDist = result.pay_distribution && typeof result.pay_distribution === 'object'
     ? result.pay_distribution as Record<string, unknown> : null;
@@ -311,6 +313,12 @@ export function AnalysisResultView({ result }: { result: Record<string, unknown>
       {topAnomalousAmounts && (
         <ResultSection title="Montos Más Atípicos">
           <GenericTable rows={topAnomalousAmounts} />
+        </ResultSection>
+      )}
+
+      {tipoBreakdown && (
+        <ResultSection title="Documentos por Tipo de DTE">
+          <GenericTable rows={tipoBreakdown} />
         </ResultSection>
       )}
 

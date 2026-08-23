@@ -3,7 +3,15 @@
 
 export type AnalysisId =
   | 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master' | 'related_parties' | 'expenses'
-  | 'revenue_cutoff' | 'bid_rigging' | 'ar_aging' | 'fixed_assets' | 'structuring' | 'missing_trader' | 'tax_haven';
+  | 'revenue_cutoff' | 'bid_rigging' | 'ar_aging' | 'fixed_assets' | 'structuring' | 'missing_trader' | 'tax_haven'
+  | 'dte_validation';
+
+// Motores que NO suben CSV/Excel con mapeo de columnas — suben uno o más
+// archivos JSON tal cual (la estructura la define una fuente externa —
+// Hacienda, en el caso de DTE — no un mapeo de columnas del auditor). Hoy
+// solo dte_validation; cualquier motor futuro de la misma familia se agrega
+// aquí sin tocar los componentes que lo consumen.
+export const JSON_UPLOAD_ENGINES: ReadonlySet<AnalysisId> = new Set(['dte_validation']);
 
 export interface FieldDef { key: string; label: string; required?: boolean }
 
@@ -16,6 +24,7 @@ export const FIELD_DEFS: Partial<Record<AnalysisId, FieldDef[]>> = {
   gl: [
     { key: 'amount',      label: 'Monto',                 required: true },
     { key: 'date',        label: 'Fecha' },
+    { key: 'time',        label: 'Hora del asiento (HH:MM)' },
     { key: 'user',        label: 'Usuario que registró' },
     { key: 'account',     label: 'Cuenta contable' },
     { key: 'description', label: 'Descripción' },
@@ -141,6 +150,7 @@ export const SECONDARY_DATASET: Partial<Record<AnalysisId, SecondaryDatasetConfi
 export const FIELD_ALIASES: Record<string, string[]> = {
   amount: ['amount', 'monto', 'importe', 'valor', 'total'],
   date: ['date', 'fecha', 'posting_date', 'fecha_asiento', 'fecha_registro', 'invoice_date', 'fecha_factura'],
+  time: ['time', 'hora', 'hora_asiento', 'hora_registro'],
   user: ['user', 'posted_by', 'usuario', 'registrado_por', 'creado_por'],
   account: ['account', 'account_code', 'cuenta', 'codigo_cuenta', 'cta'],
   description: ['description', 'descripcion', 'detalle', 'concepto', 'glosa'],

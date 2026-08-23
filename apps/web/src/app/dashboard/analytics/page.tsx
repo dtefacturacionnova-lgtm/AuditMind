@@ -10,18 +10,19 @@ import {
   ChevronDown, ChevronUp, Info, Upload, FileUp, X, ListChecks,
   AlertTriangle, RotateCcw, HelpCircle, FileDown, Table2,
   Target, FlaskConical, ScrollText, Save, ShieldAlert, Building2, Users, Receipt,
-  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe,
+  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe, FileCheck2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  fieldLabel, testLabel, formatValue, RISK_LEVEL_LABELS, CONFORMITY_LABELS,
+  fieldLabel, testLabel, formatValue, RISK_LEVEL_LABELS, CONFORMITY_LABELS, AREA_LABELS, AREA_COLORS,
 } from '@/lib/caats-labels';
-import { METHODOLOGY } from '@/lib/caats-methodology';
+import { METHODOLOGY, type AuditArea } from '@/lib/caats-methodology';
 import { AnalysisResultView, type FindingLike } from '@/components/caats/CaatsResultView';
 import { SaveAsWorkingPaperModal } from '@/components/caats/SaveAsWorkingPaperModal';
 import { SecondaryDatasetUpload, type SecondaryDatasetValue } from '@/components/caats/SecondaryDatasetUpload';
+import { DteJsonUpload } from '@/components/caats/DteJsonUpload';
 import {
-  type AnalysisId, type ParsedFile, FIELD_DEFS, SECONDARY_DATASET,
+  type AnalysisId, type ParsedFile, FIELD_DEFS, SECONDARY_DATASET, JSON_UPLOAD_ENGINES,
   normColName, autoMatchColumn, autoDetectNumericColumns,
 } from '@/lib/caats-fields';
 
@@ -164,6 +165,14 @@ const ANALYSIS_TYPES: AnalysisType[] = [
     icon:        Globe,
     color:       'bg-emerald-500',
     sampleKey:   'tax_haven',
+  },
+  {
+    id:          'dte_validation',
+    label:       'Validación DTE',
+    description: 'Valida un lote de Documentos Tributarios Electrónicos contra el esquema técnico de Hacienda, el Sello de Recepción y la integridad de la firma electrónica.',
+    icon:        FileCheck2,
+    color:       'bg-blue-700',
+    sampleKey:   'dte_validation',
   },
 ];
 
@@ -451,6 +460,212 @@ const SAMPLE_DATA: Record<string, unknown> = {
       { vendor_name: 'Trading International Corp',  amount: 35000, jurisdiction: 'Islas Vírgenes Británicas', date: '2025-06-01' },
     ],
   },
+  dte_validation: {
+    // Único motor que NO recibe filas tabulares — cada "registro" es el JSON
+    // completo de un DTE (Factura, tipoDte 01), estructuralmente válido contra
+    // el esquema oficial fe-f-v2.json (verificado con jsonschema.Draft7Validator
+    // antes de escribir esta muestra). Mismo establecimiento/punto de venta
+    // (M001P001) en los 5 documentos para que el correlativo sea comparable:
+    // DTE 1 (...001, válido) → DTE 2 (...003, salta el ...002 → CORRELATIVO_GAP)
+    // → DTE 3 (...004, sin respuestaHacienda/selloRecibido/firma → MISSING_SELLO
+    // + SIGNATURE_INTEGRITY) → DTE 4 (...005, ambiente "00" de Pruebas y
+    // reutiliza el mismo codigoGeneracion del DTE 1 → AMBIENTE_PRUEBAS +
+    // DUPLICATE_CODIGO_GENERACION) → DTE 5 (...006, estado RECHAZADO por
+    // Hacienda y firma cuyo contenido firmado no coincide con el documento
+    // recibido → REJECTED_OR_OBSERVED + SIGNATURE_INTEGRITY).
+    records: [
+      {
+        identificacion: {
+          version: 2, ambiente: '01', tipoDte: '01', numeroControl: 'DTE-01-M001P001-000000000000001',
+          codigoGeneracion: 'AD8AD8E3-04FC-48AA-8098-86D1DAB1F5BF', tipoModelo: 1, tipoOperacion: 1,
+          tipoContingencia: null, motivoContin: null, fecEmi: '2026-03-01', horEmi: '10:10:00', tipoMoneda: 'USD',
+        },
+        documentoRelacionado: null,
+        emisor: {
+          nit: '06140101901012', nrc: '123456', nombre: 'Comercial Demo SA de CV', codActividad: '47190',
+          descActividad: 'Venta al por menor de otros productos en establecimientos no especializados',
+          nombreComercial: 'Comercial Demo',
+          direccion: { departamento: '06', municipio: '23', distrito: '1401', complemento: 'Colonia Escalon, Calle Principal, Local 12, San Salvador' },
+          telefono: '22345678', correo: 'contacto@comercialdemo.com.sv', codEstable: '0001', codPuntoVenta: '0001',
+        },
+        receptor: {
+          tipoDocumento: '36', numDocumento: '06140203990012', nrc: '654321', nombre: 'Distribuidora Ejemplo SA de CV',
+          codActividad: '46900', descActividad: 'Venta al por mayor no especializada',
+          direccion: { departamento: '06', municipio: '23', distrito: '1401', complemento: 'Boulevard Los Proceres, Edificio Torre Azul, Nivel 3, San Salvador' },
+          telefono: '22981234', correo: 'compras@distribuidoraejemplo.com.sv',
+        },
+        otrosDocumentos: null, ventaTercero: null,
+        cuerpoDocumento: [
+          { numItem: 1, tipoItem: 1, numeroDocumento: null, cantidad: 10, codigo: 'SERV-AUD-01', codTributo: null, uniMedida: 59, descripcion: 'Servicio de auditoria de sistemas - Modulo 1', precioUni: 100.0, montoDescu: 0, ventaNoSuj: 0, ventaExenta: 0, ventaGravada: 1000.0, tributos: ['20'], psv: 0, noGravado: 0, ivaItem: 0 },
+          { numItem: 2, tipoItem: 1, numeroDocumento: null, cantidad: 5, codigo: 'LIC-SOFT-02', codTributo: null, uniMedida: 59, descripcion: 'Licencia de software - soporte anual', precioUni: 200.0, montoDescu: 0, ventaNoSuj: 0, ventaExenta: 0, ventaGravada: 1000.0, tributos: ['20'], psv: 0, noGravado: 0, ivaItem: 0 },
+        ],
+        resumen: {
+          totalNoSuj: 0, totalExenta: 0, totalGravada: 2000.0, subTotalVentas: 2000.0, descuNoSuj: 0, descuExenta: 0,
+          descuGravada: 0, porcentajeDescuento: 0, totalDescu: 0,
+          tributos: [{ codigo: '20', descripcion: 'Impuesto al Valor Agregado 13%', valor: 260.0 }],
+          subTotal: 2000.0, ivaRete: 0, montoTotalOperacion: 2260.0, totalNoGravado: 0, totalPagar: 2260.0,
+          totalLetras: 'DOS MIL DOSCIENTOS SESENTA 00/100 DOLARES', totalIva: 260.0, saldoFavor: 0, condicionOperacion: 1,
+          pagos: [{ codigo: '01', montoPago: 2260.0, referencia: null, plazo: null, periodo: null }],
+          numPagoElectronico: null, observaciones: null,
+        },
+        apendice: null,
+        respuestaHacienda: { version: 2, estado: 'PROCESADO', codigoGeneracion: 'AD8AD8E3-04FC-48AA-8098-86D1DAB1F5BF', fhProcesamiento: '01/03/2026 10:15:00', codigoMsg: '001', descripcionMsg: 'RECIBIDO', observaciones: null },
+        selloRecibido: '20269713BF5487CD496CA71F1261285F4A6CTO01',
+        firmaElectronica: 'eyJhbGciOiJSUzUxMiJ9.eyJpZGVudGlmaWNhY2lvbiI6eyJ2ZXJzaW9uIjoyLCJhbWJpZW50ZSI6IjAxIiwidGlwb0R0ZSI6IjAxIiwibnVtZXJvQ29udHJvbCI6IkRURS0wMS1NMDAxUDAwMS0wMDAwMDAwMDAwMDAwMDEiLCJjb2RpZ29HZW5lcmFjaW9uIjoiQUQ4QUQ4RTMtMDRGQy00OEFBLTgwOTgtODZEMURBQjFGNUJGIiwidGlwb01vZGVsbyI6MSwidGlwb09wZXJhY2lvbiI6MSwidGlwb0NvbnRpbmdlbmNpYSI6bnVsbCwibW90aXZvQ29udGluIjpudWxsLCJmZWNFbWkiOiIyMDI2LTAzLTAxIiwiaG9yRW1pIjoiMTA6MTA6MDAiLCJ0aXBvTW9uZWRhIjoiVVNEIn0sImRvY3VtZW50b1JlbGFjaW9uYWRvIjpudWxsLCJlbWlzb3IiOnsibml0IjoiMDYxNDAxMDE5MDEwMTIiLCJucmMiOiIxMjM0NTYiLCJub21icmUiOiJDb21lcmNpYWwgRGVtbyBTQSBkZSBDViIsImNvZEFjdGl2aWRhZCI6IjQ3MTkwIiwiZGVzY0FjdGl2aWRhZCI6IlZlbnRhIGFsIHBvciBtZW5vciBkZSBvdHJvcyBwcm9kdWN0b3MgZW4gZXN0YWJsZWNpbWllbnRvcyBubyBlc3BlY2lhbGl6YWRvcyIsIm5vbWJyZUNvbWVyY2lhbCI6IkNvbWVyY2lhbCBEZW1vIiwiZGlyZWNjaW9uIjp7ImRlcGFydGFtZW50byI6IjA2IiwibXVuaWNpcGlvIjoiMjMiLCJkaXN0cml0byI6IjE0MDEiLCJjb21wbGVtZW50byI6IkNvbG9uaWEgRXNjYWxvbiwgQ2FsbGUgUHJpbmNpcGFsLCBMb2NhbCAxMiwgU2FuIFNhbHZhZG9yIn0sInRlbGVmb25vIjoiMjIzNDU2NzgiLCJjb3JyZW8iOiJjb250YWN0b0Bjb21lcmNpYWxkZW1vLmNvbS5zdiIsImNvZEVzdGFibGUiOiIwMDAxIiwiY29kUHVudG9WZW50YSI6IjAwMDEifSwicmVjZXB0b3IiOnsidGlwb0RvY3VtZW50byI6IjM2IiwibnVtRG9jdW1lbnRvIjoiMDYxNDAyMDM5OTAwMTIiLCJucmMiOiI2NTQzMjEiLCJub21icmUiOiJEaXN0cmlidWlkb3JhIEVqZW1wbG8gU0EgZGUgQ1YiLCJjb2RBY3RpdmlkYWQiOiI0NjkwMCIsImRlc2NBY3RpdmlkYWQiOiJWZW50YSBhbCBwb3IgbWF5b3Igbm8gZXNwZWNpYWxpemFkYSIsImRpcmVjY2lvbiI6eyJkZXBhcnRhbWVudG8iOiIwNiIsIm11bmljaXBpbyI6IjIzIiwiZGlzdHJpdG8iOiIxNDAxIiwiY29tcGxlbWVudG8iOiJCb3VsZXZhcmQgTG9zIFByb2NlcmVzLCBFZGlmaWNpbyBUb3JyZSBBenVsLCBOaXZlbCAzLCBTYW4gU2FsdmFkb3IifSwidGVsZWZvbm8iOiIyMjk4MTIzNCIsImNvcnJlbyI6ImNvbXByYXNAZGlzdHJpYnVpZG9yYWVqZW1wbG8uY29tLnN2In0sIm90cm9zRG9jdW1lbnRvcyI6bnVsbCwidmVudGFUZXJjZXJvIjpudWxsLCJjdWVycG9Eb2N1bWVudG8iOlt7Im51bUl0ZW0iOjEsInRpcG9JdGVtIjoxLCJudW1lcm9Eb2N1bWVudG8iOm51bGwsImNhbnRpZGFkIjoxMCwiY29kaWdvIjoiU0VSVi1BVUQtMDEiLCJjb2RUcmlidXRvIjpudWxsLCJ1bmlNZWRpZGEiOjU5LCJkZXNjcmlwY2lvbiI6IlNlcnZpY2lvIGRlIGF1ZGl0b3JpYSBkZSBzaXN0ZW1hcyAtIE1vZHVsbyAxIiwicHJlY2lvVW5pIjoxMDAuMCwibW9udG9EZXNjdSI6MCwidmVudGFOb1N1aiI6MCwidmVudGFFeGVudGEiOjAsInZlbnRhR3JhdmFkYSI6MTAwMC4wLCJ0cmlidXRvcyI6WyIyMCJdLCJwc3YiOjAsIm5vR3JhdmFkbyI6MCwiaXZhSXRlbSI6MH0seyJudW1JdGVtIjoyLCJ0aXBvSXRlbSI6MSwibnVtZXJvRG9jdW1lbnRvIjpudWxsLCJjYW50aWRhZCI6NSwiY29kaWdvIjoiTElDLVNPRlQtMDIiLCJjb2RUcmlidXRvIjpudWxsLCJ1bmlNZWRpZGEiOjU5LCJkZXNjcmlwY2lvbiI6IkxpY2VuY2lhIGRlIHNvZnR3YXJlIC0gc29wb3J0ZSBhbnVhbCIsInByZWNpb1VuaSI6MjAwLjAsIm1vbnRvRGVzY3UiOjAsInZlbnRhTm9TdWoiOjAsInZlbnRhRXhlbnRhIjowLCJ2ZW50YUdyYXZhZGEiOjEwMDAuMCwidHJpYnV0b3MiOlsiMjAiXSwicHN2IjowLCJub0dyYXZhZG8iOjAsIml2YUl0ZW0iOjB9XSwicmVzdW1lbiI6eyJ0b3RhbE5vU3VqIjowLCJ0b3RhbEV4ZW50YSI6MCwidG90YWxHcmF2YWRhIjoyMDAwLjAsInN1YlRvdGFsVmVudGFzIjoyMDAwLjAsImRlc2N1Tm9TdWoiOjAsImRlc2N1RXhlbnRhIjowLCJkZXNjdUdyYXZhZGEiOjAsInBvcmNlbnRhamVEZXNjdWVudG8iOjAsInRvdGFsRGVzY3UiOjAsInRyaWJ1dG9zIjpbeyJjb2RpZ28iOiIyMCIsImRlc2NyaXBjaW9uIjoiSW1wdWVzdG8gYWwgVmFsb3IgQWdyZWdhZG8gMTMlIiwidmFsb3IiOjI2MC4wfV0sInN1YlRvdGFsIjoyMDAwLjAsIml2YVJldGUiOjAsIm1vbnRvVG90YWxPcGVyYWNpb24iOjIyNjAuMCwidG90YWxOb0dyYXZhZG8iOjAsInRvdGFsUGFnYXIiOjIyNjAuMCwidG90YWxMZXRyYXMiOiJET1MgTUlMIERPU0NJRU5UT1MgU0VTRU5UQSAwMC8xMDAgRE9MQVJFUyIsInRvdGFsSXZhIjoyNjAuMCwic2FsZG9GYXZvciI6MCwiY29uZGljaW9uT3BlcmFjaW9uIjoxLCJwYWdvcyI6W3siY29kaWdvIjoiMDEiLCJtb250b1BhZ28iOjIyNjAuMCwicmVmZXJlbmNpYSI6bnVsbCwicGxhem8iOm51bGwsInBlcmlvZG8iOm51bGx9XSwibnVtUGFnb0VsZWN0cm9uaWNvIjpudWxsLCJvYnNlcnZhY2lvbmVzIjpudWxsfSwiYXBlbmRpY2UiOm51bGx9.y3M1S8yhlI0Uzi7QxGZvzbpkOWUnADdJGnTj6f8NhsSIuMCK9RDn4SeZuzsTVX2fQ0NzXErWj__bsWqMfDK3jw',
+      },
+      {
+        identificacion: {
+          version: 2, ambiente: '01', tipoDte: '01', numeroControl: 'DTE-01-M001P001-000000000000003',
+          codigoGeneracion: '21D44A8C-C107-45F0-B3E9-56430969259E', tipoModelo: 1, tipoOperacion: 1,
+          tipoContingencia: null, motivoContin: null, fecEmi: '2026-03-02', horEmi: '09:40:00', tipoMoneda: 'USD',
+        },
+        documentoRelacionado: null,
+        emisor: {
+          nit: '06140101901012', nrc: '123456', nombre: 'Comercial Demo SA de CV', codActividad: '47190',
+          descActividad: 'Venta al por menor de otros productos en establecimientos no especializados',
+          nombreComercial: 'Comercial Demo',
+          direccion: { departamento: '06', municipio: '23', distrito: '1401', complemento: 'Colonia Escalon, Calle Principal, Local 12, San Salvador' },
+          telefono: '22345678', correo: 'contacto@comercialdemo.com.sv', codEstable: '0001', codPuntoVenta: '0001',
+        },
+        receptor: {
+          tipoDocumento: '36', numDocumento: '01020304950018', nrc: '789012', nombre: 'Inversiones Ficticias SA de CV',
+          codActividad: '41001', descActividad: 'Construccion de edificios residenciales',
+          direccion: { departamento: '14', municipio: '02', distrito: '0203', complemento: 'Km 12 Carretera a Santa Ana, Bodega 4, Santa Ana' },
+          telefono: '24451122', correo: 'finanzas@inversionesficticias.com.sv',
+        },
+        otrosDocumentos: null, ventaTercero: null,
+        cuerpoDocumento: [
+          { numItem: 1, tipoItem: 1, numeroDocumento: null, cantidad: 3, codigo: 'SERV-CONS-03', codTributo: null, uniMedida: 59, descripcion: 'Consultoria de procesos administrativos', precioUni: 500.0, montoDescu: 0, ventaNoSuj: 0, ventaExenta: 0, ventaGravada: 1500.0, tributos: ['20'], psv: 0, noGravado: 0, ivaItem: 0 },
+        ],
+        resumen: {
+          totalNoSuj: 0, totalExenta: 0, totalGravada: 1500.0, subTotalVentas: 1500.0, descuNoSuj: 0, descuExenta: 0,
+          descuGravada: 0, porcentajeDescuento: 0, totalDescu: 0,
+          tributos: [{ codigo: '20', descripcion: 'Impuesto al Valor Agregado 13%', valor: 195.0 }],
+          subTotal: 1500.0, ivaRete: 0, montoTotalOperacion: 1695.0, totalNoGravado: 0, totalPagar: 1695.0,
+          totalLetras: 'MIL SEISCIENTOS NOVENTA Y CINCO 00/100 DOLARES', totalIva: 195.0, saldoFavor: 0, condicionOperacion: 1,
+          pagos: [{ codigo: '01', montoPago: 1695.0, referencia: null, plazo: null, periodo: null }],
+          numPagoElectronico: null, observaciones: null,
+        },
+        apendice: null,
+        respuestaHacienda: { version: 2, estado: 'PROCESADO', codigoGeneracion: '21D44A8C-C107-45F0-B3E9-56430969259E', fhProcesamiento: '02/03/2026 09:45:10', codigoMsg: '001', descripcionMsg: 'RECIBIDO', observaciones: null },
+        selloRecibido: '2026784B3A9F1C2D8E6B0A5F4D7C1E9B2A3F5C7D',
+        firmaElectronica: 'eyJhbGciOiJSUzUxMiJ9.eyJpZGVudGlmaWNhY2lvbiI6eyJ2ZXJzaW9uIjoyLCJhbWJpZW50ZSI6IjAxIiwidGlwb0R0ZSI6IjAxIiwibnVtZXJvQ29udHJvbCI6IkRURS0wMS1NMDAxUDAwMS0wMDAwMDAwMDAwMDAwMDMiLCJjb2RpZ29HZW5lcmFjaW9uIjoiMjFENDRBOEMtQzEwNy00NUYwLUIzRTktNTY0MzA5NjkyNTlFIiwidGlwb01vZGVsbyI6MSwidGlwb09wZXJhY2lvbiI6MSwidGlwb0NvbnRpbmdlbmNpYSI6bnVsbCwibW90aXZvQ29udGluIjpudWxsLCJmZWNFbWkiOiIyMDI2LTAzLTAyIiwiaG9yRW1pIjoiMDk6NDA6MDAiLCJ0aXBvTW9uZWRhIjoiVVNEIn0sImRvY3VtZW50b1JlbGFjaW9uYWRvIjpudWxsLCJlbWlzb3IiOnsibml0IjoiMDYxNDAxMDE5MDEwMTIiLCJucmMiOiIxMjM0NTYiLCJub21icmUiOiJDb21lcmNpYWwgRGVtbyBTQSBkZSBDViIsImNvZEFjdGl2aWRhZCI6IjQ3MTkwIiwiZGVzY0FjdGl2aWRhZCI6IlZlbnRhIGFsIHBvciBtZW5vciBkZSBvdHJvcyBwcm9kdWN0b3MgZW4gZXN0YWJsZWNpbWllbnRvcyBubyBlc3BlY2lhbGl6YWRvcyIsIm5vbWJyZUNvbWVyY2lhbCI6IkNvbWVyY2lhbCBEZW1vIiwiZGlyZWNjaW9uIjp7ImRlcGFydGFtZW50byI6IjA2IiwibXVuaWNpcGlvIjoiMjMiLCJkaXN0cml0byI6IjE0MDEiLCJjb21wbGVtZW50byI6IkNvbG9uaWEgRXNjYWxvbiwgQ2FsbGUgUHJpbmNpcGFsLCBMb2NhbCAxMiwgU2FuIFNhbHZhZG9yIn0sInRlbGVmb25vIjoiMjIzNDU2NzgiLCJjb3JyZW8iOiJjb250YWN0b0Bjb21lcmNpYWxkZW1vLmNvbS5zdiIsImNvZEVzdGFibGUiOiIwMDAxIiwiY29kUHVudG9WZW50YSI6IjAwMDEifSwicmVjZXB0b3IiOnsidGlwb0RvY3VtZW50byI6IjM2IiwibnVtRG9jdW1lbnRvIjoiMDEwMjAzMDQ5NTAwMTgiLCJucmMiOiI3ODkwMTIiLCJub21icmUiOiJJbnZlcnNpb25lcyBGaWN0aWNpYXMgU0EgZGUgQ1YiLCJjb2RBY3RpdmlkYWQiOiI0MTAwMSIsImRlc2NBY3RpdmlkYWQiOiJDb25zdHJ1Y2Npb24gZGUgZWRpZmljaW9zIHJlc2lkZW5jaWFsZXMiLCJkaXJlY2Npb24iOnsiZGVwYXJ0YW1lbnRvIjoiMTQiLCJtdW5pY2lwaW8iOiIwMiIsImRpc3RyaXRvIjoiMDIwMyIsImNvbXBsZW1lbnRvIjoiS20gMTIgQ2FycmV0ZXJhIGEgU2FudGEgQW5hLCBCb2RlZ2EgNCwgU2FudGEgQW5hIn0sInRlbGVmb25vIjoiMjQ0NTExMjIiLCJjb3JyZW8iOiJmaW5hbnphc0BpbnZlcnNpb25lc2ZpY3RpY2lhcy5jb20uc3YifSwib3Ryb3NEb2N1bWVudG9zIjpudWxsLCJ2ZW50YVRlcmNlcm8iOm51bGwsImN1ZXJwb0RvY3VtZW50byI6W3sibnVtSXRlbSI6MSwidGlwb0l0ZW0iOjEsIm51bWVyb0RvY3VtZW50byI6bnVsbCwiY2FudGlkYWQiOjMsImNvZGlnbyI6IlNFUlYtQ09OUy0wMyIsImNvZFRyaWJ1dG8iOm51bGwsInVuaU1lZGlkYSI6NTksImRlc2NyaXBjaW9uIjoiQ29uc3VsdG9yaWEgZGUgcHJvY2Vzb3MgYWRtaW5pc3RyYXRpdm9zIiwicHJlY2lvVW5pIjo1MDAuMCwibW9udG9EZXNjdSI6MCwidmVudGFOb1N1aiI6MCwidmVudGFFeGVudGEiOjAsInZlbnRhR3JhdmFkYSI6MTUwMC4wLCJ0cmlidXRvcyI6WyIyMCJdLCJwc3YiOjAsIm5vR3JhdmFkbyI6MCwiaXZhSXRlbSI6MH1dLCJyZXN1bWVuIjp7InRvdGFsTm9TdWoiOjAsInRvdGFsRXhlbnRhIjowLCJ0b3RhbEdyYXZhZGEiOjE1MDAuMCwic3ViVG90YWxWZW50YXMiOjE1MDAuMCwiZGVzY3VOb1N1aiI6MCwiZGVzY3VFeGVudGEiOjAsImRlc2N1R3JhdmFkYSI6MCwicG9yY2VudGFqZURlc2N1ZW50byI6MCwidG90YWxEZXNjdSI6MCwidHJpYnV0b3MiOlt7ImNvZGlnbyI6IjIwIiwiZGVzY3JpcGNpb24iOiJJbXB1ZXN0byBhbCBWYWxvciBBZ3JlZ2FkbyAxMyUiLCJ2YWxvciI6MTk1LjB9XSwic3ViVG90YWwiOjE1MDAuMCwiaXZhUmV0ZSI6MCwibW9udG9Ub3RhbE9wZXJhY2lvbiI6MTY5NS4wLCJ0b3RhbE5vR3JhdmFkbyI6MCwidG90YWxQYWdhciI6MTY5NS4wLCJ0b3RhbExldHJhcyI6Ik1JTCBTRUlTQ0lFTlRPUyBOT1ZFTlRBIFkgQ0lOQ08gMDAvMTAwIERPTEFSRVMiLCJ0b3RhbEl2YSI6MTk1LjAsInNhbGRvRmF2b3IiOjAsImNvbmRpY2lvbk9wZXJhY2lvbiI6MSwicGFnb3MiOlt7ImNvZGlnbyI6IjAxIiwibW9udG9QYWdvIjoxNjk1LjAsInJlZmVyZW5jaWEiOm51bGwsInBsYXpvIjpudWxsLCJwZXJpb2RvIjpudWxsfV0sIm51bVBhZ29FbGVjdHJvbmljbyI6bnVsbCwib2JzZXJ2YWNpb25lcyI6bnVsbH0sImFwZW5kaWNlIjpudWxsfQ.1nIxIQbjvGKA54zhPojtLrBzvKLDeScqLdWV33eMVScw6YSWdoEfJWb2b5t_PPq9FD_Fis4AGACI0OebLUphKA',
+      },
+      {
+        identificacion: {
+          version: 2, ambiente: '01', tipoDte: '01', numeroControl: 'DTE-01-M001P001-000000000000004',
+          codigoGeneracion: 'BD3B6CB8-8744-45E8-B633-58A55C2C60BC', tipoModelo: 1, tipoOperacion: 1,
+          tipoContingencia: null, motivoContin: null, fecEmi: '2026-03-03', horEmi: '16:20:00', tipoMoneda: 'USD',
+        },
+        documentoRelacionado: null,
+        emisor: {
+          nit: '06140101901012', nrc: '123456', nombre: 'Comercial Demo SA de CV', codActividad: '47190',
+          descActividad: 'Venta al por menor de otros productos en establecimientos no especializados',
+          nombreComercial: 'Comercial Demo',
+          direccion: { departamento: '06', municipio: '23', distrito: '1401', complemento: 'Colonia Escalon, Calle Principal, Local 12, San Salvador' },
+          telefono: '22345678', correo: 'contacto@comercialdemo.com.sv', codEstable: '0001', codPuntoVenta: '0001',
+        },
+        receptor: {
+          tipoDocumento: '36', numDocumento: '05030607880025', nrc: '345678', nombre: 'Servicios Modelo SA de CV',
+          codActividad: '62010', descActividad: 'Actividades de programacion informatica',
+          direccion: { departamento: '05', municipio: '11', distrito: '0508', complemento: 'Calle El Progreso #45, San Miguel' },
+          telefono: '26612233', correo: 'administracion@serviciosmodelo.com.sv',
+        },
+        otrosDocumentos: null, ventaTercero: null,
+        cuerpoDocumento: [
+          { numItem: 1, tipoItem: 1, numeroDocumento: null, cantidad: 8, codigo: 'SERV-SOP-04', codTributo: null, uniMedida: 59, descripcion: 'Soporte tecnico mensual', precioUni: 75.0, montoDescu: 0, ventaNoSuj: 0, ventaExenta: 0, ventaGravada: 600.0, tributos: ['20'], psv: 0, noGravado: 0, ivaItem: 0 },
+        ],
+        resumen: {
+          totalNoSuj: 0, totalExenta: 0, totalGravada: 600.0, subTotalVentas: 600.0, descuNoSuj: 0, descuExenta: 0,
+          descuGravada: 0, porcentajeDescuento: 0, totalDescu: 0,
+          tributos: [{ codigo: '20', descripcion: 'Impuesto al Valor Agregado 13%', valor: 78.0 }],
+          subTotal: 600.0, ivaRete: 0, montoTotalOperacion: 678.0, totalNoGravado: 0, totalPagar: 678.0,
+          totalLetras: 'SEISCIENTOS SETENTA Y OCHO 00/100 DOLARES', totalIva: 78.0, saldoFavor: 0, condicionOperacion: 1,
+          pagos: [{ codigo: '01', montoPago: 678.0, referencia: null, plazo: null, periodo: null }],
+          numPagoElectronico: null, observaciones: null,
+        },
+        apendice: null,
+        // Sin respuestaHacienda / selloRecibido / firmaElectronica — nunca confirmado por Hacienda.
+      },
+      {
+        identificacion: {
+          version: 2, ambiente: '00', tipoDte: '01', numeroControl: 'DTE-01-M001P001-000000000000005',
+          codigoGeneracion: 'AD8AD8E3-04FC-48AA-8098-86D1DAB1F5BF', tipoModelo: 1, tipoOperacion: 1,
+          tipoContingencia: null, motivoContin: null, fecEmi: '2026-03-01', horEmi: '10:10:00', tipoMoneda: 'USD',
+        },
+        documentoRelacionado: null,
+        emisor: {
+          nit: '06140101901012', nrc: '123456', nombre: 'Comercial Demo SA de CV', codActividad: '47190',
+          descActividad: 'Venta al por menor de otros productos en establecimientos no especializados',
+          nombreComercial: 'Comercial Demo',
+          direccion: { departamento: '06', municipio: '23', distrito: '1401', complemento: 'Colonia Escalon, Calle Principal, Local 12, San Salvador' },
+          telefono: '22345678', correo: 'contacto@comercialdemo.com.sv', codEstable: '0001', codPuntoVenta: '0001',
+        },
+        receptor: {
+          tipoDocumento: '36', numDocumento: '06140203990012', nrc: '654321', nombre: 'Distribuidora Ejemplo SA de CV',
+          codActividad: '46900', descActividad: 'Venta al por mayor no especializada',
+          direccion: { departamento: '06', municipio: '23', distrito: '1401', complemento: 'Boulevard Los Proceres, Edificio Torre Azul, Nivel 3, San Salvador' },
+          telefono: '22981234', correo: 'compras@distribuidoraejemplo.com.sv',
+        },
+        otrosDocumentos: null, ventaTercero: null,
+        cuerpoDocumento: [
+          { numItem: 1, tipoItem: 1, numeroDocumento: null, cantidad: 10, codigo: 'SERV-AUD-01', codTributo: null, uniMedida: 59, descripcion: 'Servicio de auditoria de sistemas - Modulo 1', precioUni: 100.0, montoDescu: 0, ventaNoSuj: 0, ventaExenta: 0, ventaGravada: 1000.0, tributos: ['20'], psv: 0, noGravado: 0, ivaItem: 0 },
+          { numItem: 2, tipoItem: 1, numeroDocumento: null, cantidad: 5, codigo: 'LIC-SOFT-02', codTributo: null, uniMedida: 59, descripcion: 'Licencia de software - soporte anual', precioUni: 200.0, montoDescu: 0, ventaNoSuj: 0, ventaExenta: 0, ventaGravada: 1000.0, tributos: ['20'], psv: 0, noGravado: 0, ivaItem: 0 },
+        ],
+        resumen: {
+          totalNoSuj: 0, totalExenta: 0, totalGravada: 2000.0, subTotalVentas: 2000.0, descuNoSuj: 0, descuExenta: 0,
+          descuGravada: 0, porcentajeDescuento: 0, totalDescu: 0,
+          tributos: [{ codigo: '20', descripcion: 'Impuesto al Valor Agregado 13%', valor: 260.0 }],
+          subTotal: 2000.0, ivaRete: 0, montoTotalOperacion: 2260.0, totalNoGravado: 0, totalPagar: 2260.0,
+          totalLetras: 'DOS MIL DOSCIENTOS SESENTA 00/100 DOLARES', totalIva: 260.0, saldoFavor: 0, condicionOperacion: 1,
+          pagos: [{ codigo: '01', montoPago: 2260.0, referencia: null, plazo: null, periodo: null }],
+          numPagoElectronico: null, observaciones: null,
+        },
+        apendice: null,
+        respuestaHacienda: { version: 2, estado: 'PROCESADO', codigoGeneracion: 'AD8AD8E3-04FC-48AA-8098-86D1DAB1F5BF', fhProcesamiento: '01/03/2026 10:22:47', codigoMsg: '001', descripcionMsg: 'RECIBIDO', observaciones: null },
+        selloRecibido: '2026A1E4D8C6B2F0937A5D1C8E4B6F2A0D9C7E5B',
+        firmaElectronica: 'eyJhbGciOiJSUzUxMiJ9.eyJpZGVudGlmaWNhY2lvbiI6eyJ2ZXJzaW9uIjoyLCJhbWJpZW50ZSI6IjAwIiwidGlwb0R0ZSI6IjAxIiwibnVtZXJvQ29udHJvbCI6IkRURS0wMS1NMDAxUDAwMS0wMDAwMDAwMDAwMDAwMDUiLCJjb2RpZ29HZW5lcmFjaW9uIjoiQUQ4QUQ4RTMtMDRGQy00OEFBLTgwOTgtODZEMURBQjFGNUJGIiwidGlwb01vZGVsbyI6MSwidGlwb09wZXJhY2lvbiI6MSwidGlwb0NvbnRpbmdlbmNpYSI6bnVsbCwibW90aXZvQ29udGluIjpudWxsLCJmZWNFbWkiOiIyMDI2LTAzLTAxIiwiaG9yRW1pIjoiMTA6MTA6MDAiLCJ0aXBvTW9uZWRhIjoiVVNEIn0sImRvY3VtZW50b1JlbGFjaW9uYWRvIjpudWxsLCJlbWlzb3IiOnsibml0IjoiMDYxNDAxMDE5MDEwMTIiLCJucmMiOiIxMjM0NTYiLCJub21icmUiOiJDb21lcmNpYWwgRGVtbyBTQSBkZSBDViIsImNvZEFjdGl2aWRhZCI6IjQ3MTkwIiwiZGVzY0FjdGl2aWRhZCI6IlZlbnRhIGFsIHBvciBtZW5vciBkZSBvdHJvcyBwcm9kdWN0b3MgZW4gZXN0YWJsZWNpbWllbnRvcyBubyBlc3BlY2lhbGl6YWRvcyIsIm5vbWJyZUNvbWVyY2lhbCI6IkNvbWVyY2lhbCBEZW1vIiwiZGlyZWNjaW9uIjp7ImRlcGFydGFtZW50byI6IjA2IiwibXVuaWNpcGlvIjoiMjMiLCJkaXN0cml0byI6IjE0MDEiLCJjb21wbGVtZW50byI6IkNvbG9uaWEgRXNjYWxvbiwgQ2FsbGUgUHJpbmNpcGFsLCBMb2NhbCAxMiwgU2FuIFNhbHZhZG9yIn0sInRlbGVmb25vIjoiMjIzNDU2NzgiLCJjb3JyZW8iOiJjb250YWN0b0Bjb21lcmNpYWxkZW1vLmNvbS5zdiIsImNvZEVzdGFibGUiOiIwMDAxIiwiY29kUHVudG9WZW50YSI6IjAwMDEifSwicmVjZXB0b3IiOnsidGlwb0RvY3VtZW50byI6IjM2IiwibnVtRG9jdW1lbnRvIjoiMDYxNDAyMDM5OTAwMTIiLCJucmMiOiI2NTQzMjEiLCJub21icmUiOiJEaXN0cmlidWlkb3JhIEVqZW1wbG8gU0EgZGUgQ1YiLCJjb2RBY3RpdmlkYWQiOiI0NjkwMCIsImRlc2NBY3RpdmlkYWQiOiJWZW50YSBhbCBwb3IgbWF5b3Igbm8gZXNwZWNpYWxpemFkYSIsImRpcmVjY2lvbiI6eyJkZXBhcnRhbWVudG8iOiIwNiIsIm11bmljaXBpbyI6IjIzIiwiZGlzdHJpdG8iOiIxNDAxIiwiY29tcGxlbWVudG8iOiJCb3VsZXZhcmQgTG9zIFByb2NlcmVzLCBFZGlmaWNpbyBUb3JyZSBBenVsLCBOaXZlbCAzLCBTYW4gU2FsdmFkb3IifSwidGVsZWZvbm8iOiIyMjk4MTIzNCIsImNvcnJlbyI6ImNvbXByYXNAZGlzdHJpYnVpZG9yYWVqZW1wbG8uY29tLnN2In0sIm90cm9zRG9jdW1lbnRvcyI6bnVsbCwidmVudGFUZXJjZXJvIjpudWxsLCJjdWVycG9Eb2N1bWVudG8iOlt7Im51bUl0ZW0iOjEsInRpcG9JdGVtIjoxLCJudW1lcm9Eb2N1bWVudG8iOm51bGwsImNhbnRpZGFkIjoxMCwiY29kaWdvIjoiU0VSVi1BVUQtMDEiLCJjb2RUcmlidXRvIjpudWxsLCJ1bmlNZWRpZGEiOjU5LCJkZXNjcmlwY2lvbiI6IlNlcnZpY2lvIGRlIGF1ZGl0b3JpYSBkZSBzaXN0ZW1hcyAtIE1vZHVsbyAxIiwicHJlY2lvVW5pIjoxMDAuMCwibW9udG9EZXNjdSI6MCwidmVudGFOb1N1aiI6MCwidmVudGFFeGVudGEiOjAsInZlbnRhR3JhdmFkYSI6MTAwMC4wLCJ0cmlidXRvcyI6WyIyMCJdLCJwc3YiOjAsIm5vR3JhdmFkbyI6MCwiaXZhSXRlbSI6MH0seyJudW1JdGVtIjoyLCJ0aXBvSXRlbSI6MSwibnVtZXJvRG9jdW1lbnRvIjpudWxsLCJjYW50aWRhZCI6NSwiY29kaWdvIjoiTElDLVNPRlQtMDIiLCJjb2RUcmlidXRvIjpudWxsLCJ1bmlNZWRpZGEiOjU5LCJkZXNjcmlwY2lvbiI6IkxpY2VuY2lhIGRlIHNvZnR3YXJlIC0gc29wb3J0ZSBhbnVhbCIsInByZWNpb1VuaSI6MjAwLjAsIm1vbnRvRGVzY3UiOjAsInZlbnRhTm9TdWoiOjAsInZlbnRhRXhlbnRhIjowLCJ2ZW50YUdyYXZhZGEiOjEwMDAuMCwidHJpYnV0b3MiOlsiMjAiXSwicHN2IjowLCJub0dyYXZhZG8iOjAsIml2YUl0ZW0iOjB9XSwicmVzdW1lbiI6eyJ0b3RhbE5vU3VqIjowLCJ0b3RhbEV4ZW50YSI6MCwidG90YWxHcmF2YWRhIjoyMDAwLjAsInN1YlRvdGFsVmVudGFzIjoyMDAwLjAsImRlc2N1Tm9TdWoiOjAsImRlc2N1RXhlbnRhIjowLCJkZXNjdUdyYXZhZGEiOjAsInBvcmNlbnRhamVEZXNjdWVudG8iOjAsInRvdGFsRGVzY3UiOjAsInRyaWJ1dG9zIjpbeyJjb2RpZ28iOiIyMCIsImRlc2NyaXBjaW9uIjoiSW1wdWVzdG8gYWwgVmFsb3IgQWdyZWdhZG8gMTMlIiwidmFsb3IiOjI2MC4wfV0sInN1YlRvdGFsIjoyMDAwLjAsIml2YVJldGUiOjAsIm1vbnRvVG90YWxPcGVyYWNpb24iOjIyNjAuMCwidG90YWxOb0dyYXZhZG8iOjAsInRvdGFsUGFnYXIiOjIyNjAuMCwidG90YWxMZXRyYXMiOiJET1MgTUlMIERPU0NJRU5UT1MgU0VTRU5UQSAwMC8xMDAgRE9MQVJFUyIsInRvdGFsSXZhIjoyNjAuMCwic2FsZG9GYXZvciI6MCwiY29uZGljaW9uT3BlcmFjaW9uIjoxLCJwYWdvcyI6W3siY29kaWdvIjoiMDEiLCJtb250b1BhZ28iOjIyNjAuMCwicmVmZXJlbmNpYSI6bnVsbCwicGxhem8iOm51bGwsInBlcmlvZG8iOm51bGx9XSwibnVtUGFnb0VsZWN0cm9uaWNvIjpudWxsLCJvYnNlcnZhY2lvbmVzIjpudWxsfSwiYXBlbmRpY2UiOm51bGx9.DsaFJtSKd1wRiHbqTo0YnGw7H4nQ16cO9MBm4etpQ2hHLZvuvN1skwug8QCRR0_Ie9IgZ1lkRl7u9s76vBDpQQ',
+      },
+      {
+        identificacion: {
+          version: 2, ambiente: '01', tipoDte: '01', numeroControl: 'DTE-01-M001P001-000000000000006',
+          codigoGeneracion: 'C8535F77-DC7C-4F4E-A8B5-10D110016362', tipoModelo: 1, tipoOperacion: 1,
+          tipoContingencia: null, motivoContin: null, fecEmi: '2026-03-04', horEmi: '12:05:00', tipoMoneda: 'USD',
+        },
+        documentoRelacionado: null,
+        emisor: {
+          nit: '06140101901012', nrc: '123456', nombre: 'Comercial Demo SA de CV', codActividad: '47190',
+          descActividad: 'Venta al por menor de otros productos en establecimientos no especializados',
+          nombreComercial: 'Comercial Demo',
+          direccion: { departamento: '06', municipio: '23', distrito: '1401', complemento: 'Colonia Escalon, Calle Principal, Local 12, San Salvador' },
+          telefono: '22345678', correo: 'contacto@comercialdemo.com.sv', codEstable: '0001', codPuntoVenta: '0001',
+        },
+        receptor: {
+          tipoDocumento: '36', numDocumento: '06149999999999', nrc: '999999', nombre: 'Cliente Prueba Rechazo SA de CV',
+          codActividad: '47190', descActividad: 'Venta al por menor de productos diversos',
+          direccion: { departamento: '06', municipio: '14', distrito: '0602', complemento: 'Avenida Independencia #10, Mejicanos, San Salvador' },
+          telefono: '22110099', correo: 'contacto@clienterechazo.com.sv',
+        },
+        otrosDocumentos: null, ventaTercero: null,
+        cuerpoDocumento: [
+          { numItem: 1, tipoItem: 1, numeroDocumento: null, cantidad: 4, codigo: 'PROD-005', codTributo: null, uniMedida: 59, descripcion: 'Venta de equipo de oficina', precioUni: 100.0, montoDescu: 0, ventaNoSuj: 0, ventaExenta: 0, ventaGravada: 400.0, tributos: ['20'], psv: 0, noGravado: 0, ivaItem: 0 },
+        ],
+        resumen: {
+          totalNoSuj: 0, totalExenta: 0, totalGravada: 400.0, subTotalVentas: 400.0, descuNoSuj: 0, descuExenta: 0,
+          descuGravada: 0, porcentajeDescuento: 0, totalDescu: 0,
+          tributos: [{ codigo: '20', descripcion: 'Impuesto al Valor Agregado 13%', valor: 52.0 }],
+          subTotal: 400.0, ivaRete: 0, montoTotalOperacion: 452.0, totalNoGravado: 0, totalPagar: 452.0,
+          totalLetras: 'CUATROCIENTOS CINCUENTA Y DOS 00/100 DOLARES', totalIva: 52.0, saldoFavor: 0, condicionOperacion: 1,
+          pagos: [{ codigo: '01', montoPago: 452.0, referencia: null, plazo: null, periodo: null }],
+          numPagoElectronico: null, observaciones: null,
+        },
+        apendice: null,
+        respuestaHacienda: { version: 2, estado: 'RECHAZADO', codigoGeneracion: 'C8535F77-DC7C-4F4E-A8B5-10D110016362', fhProcesamiento: '04/03/2026 12:11:33', codigoMsg: '002', descripcionMsg: 'RECHAZADO', observaciones: ['Error en validacion de NIT del receptor'] },
+        // firma con contenido firmado que NO coincide con este documento (codigoGeneracion del payload firmado es BD3B6CB8..., el real de este documento es C8535F77...) — alteración posterior a la firma.
+        firmaElectronica: 'eyJhbGciOiJSUzUxMiJ9.eyJpZGVudGlmaWNhY2lvbiI6eyJ2ZXJzaW9uIjoyLCJhbWJpZW50ZSI6IjAxIiwidGlwb0R0ZSI6IjAxIiwibnVtZXJvQ29udHJvbCI6IkRURS0wMS1NMDAxUDAwMS0wMDAwMDAwMDAwMDAwMDYiLCJjb2RpZ29HZW5lcmFjaW9uIjoiQkQzQjZDQjgtODc0NC00NUU4LUI2MzMtNThBNTVDMkM2MEJDIiwidGlwb01vZGVsbyI6MSwidGlwb09wZXJhY2lvbiI6MSwidGlwb0NvbnRpbmdlbmNpYSI6bnVsbCwibW90aXZvQ29udGluIjpudWxsLCJmZWNFbWkiOiIyMDI2LTAzLTA0IiwiaG9yRW1pIjoiMTI6MDU6MDAiLCJ0aXBvTW9uZWRhIjoiVVNEIn0sImRvY3VtZW50b1JlbGFjaW9uYWRvIjpudWxsLCJlbWlzb3IiOnsibml0IjoiMDYxNDAxMDE5MDEwMTIiLCJucmMiOiIxMjM0NTYiLCJub21icmUiOiJDb21lcmNpYWwgRGVtbyBTQSBkZSBDViIsImNvZEFjdGl2aWRhZCI6IjQ3MTkwIiwiZGVzY0FjdGl2aWRhZCI6IlZlbnRhIGFsIHBvciBtZW5vciBkZSBvdHJvcyBwcm9kdWN0b3MgZW4gZXN0YWJsZWNpbWllbnRvcyBubyBlc3BlY2lhbGl6YWRvcyIsIm5vbWJyZUNvbWVyY2lhbCI6IkNvbWVyY2lhbCBEZW1vIiwiZGlyZWNjaW9uIjp7ImRlcGFydGFtZW50byI6IjA2IiwibXVuaWNpcGlvIjoiMjMiLCJkaXN0cml0byI6IjE0MDEiLCJjb21wbGVtZW50byI6IkNvbG9uaWEgRXNjYWxvbiwgQ2FsbGUgUHJpbmNpcGFsLCBMb2NhbCAxMiwgU2FuIFNhbHZhZG9yIn0sInRlbGVmb25vIjoiMjIzNDU2NzgiLCJjb3JyZW8iOiJjb250YWN0b0Bjb21lcmNpYWxkZW1vLmNvbS5zdiIsImNvZEVzdGFibGUiOiIwMDAxIiwiY29kUHVudG9WZW50YSI6IjAwMDEifSwicmVjZXB0b3IiOnsidGlwb0RvY3VtZW50byI6IjM2IiwibnVtRG9jdW1lbnRvIjoiMDYxNDk5OTk5OTk5OTkiLCJucmMiOiI5OTk5OTkiLCJub21icmUiOiJDbGllbnRlIFBydWViYSBSZWNoYXpvIFNBIGRlIENWIiwiY29kQWN0aXZpZGFkIjoiNDcxOTAiLCJkZXNjQWN0aXZpZGFkIjoiVmVudGEgYWwgcG9yIG1lbm9yIGRlIHByb2R1Y3RvcyBkaXZlcnNvcyIsImRpcmVjY2lvbiI6eyJkZXBhcnRhbWVudG8iOiIwNiIsIm11bmljaXBpbyI6IjE0IiwiZGlzdHJpdG8iOiIwNjAyIiwiY29tcGxlbWVudG8iOiJBdmVuaWRhIEluZGVwZW5kZW5jaWEgIzEwLCBNZWppY2Fub3MsIFNhbiBTYWx2YWRvciJ9LCJ0ZWxlZm9ubyI6IjIyMTEwMDk5IiwiY29ycmVvIjoiY29udGFjdG9AY2xpZW50ZXJlY2hhem8uY29tLnN2In0sIm90cm9zRG9jdW1lbnRvcyI6bnVsbCwidmVudGFUZXJjZXJvIjpudWxsLCJjdWVycG9Eb2N1bWVudG8iOlt7Im51bUl0ZW0iOjEsInRpcG9JdGVtIjoxLCJudW1lcm9Eb2N1bWVudG8iOm51bGwsImNhbnRpZGFkIjo0LCJjb2RpZ28iOiJQUk9ELTAwNSIsImNvZFRyaWJ1dG8iOm51bGwsInVuaU1lZGlkYSI6NTksImRlc2NyaXBjaW9uIjoiVmVudGEgZGUgZXF1aXBvIGRlIG9maWNpbmEiLCJwcmVjaW9VbmkiOjEwMC4wLCJtb250b0Rlc2N1IjowLCJ2ZW50YU5vU3VqIjowLCJ2ZW50YUV4ZW50YSI6MCwidmVudGFHcmF2YWRhIjo0MDAuMCwidHJpYnV0b3MiOlsiMjAiXSwicHN2IjowLCJub0dyYXZhZG8iOjAsIml2YUl0ZW0iOjB9XSwicmVzdW1lbiI6eyJ0b3RhbE5vU3VqIjowLCJ0b3RhbEV4ZW50YSI6MCwidG90YWxHcmF2YWRhIjo0MDAuMCwic3ViVG90YWxWZW50YXMiOjQwMC4wLCJkZXNjdU5vU3VqIjowLCJkZXNjdUV4ZW50YSI6MCwiZGVzY3VHcmF2YWRhIjowLCJwb3JjZW50YWplRGVzY3VlbnRvIjowLCJ0b3RhbERlc2N1IjowLCJ0cmlidXRvcyI6W3siY29kaWdvIjoiMjAiLCJkZXNjcmlwY2lvbiI6IkltcHVlc3RvIGFsIFZhbG9yIEFncmVnYWRvIDEzJSIsInZhbG9yIjo1Mi4wfV0sInN1YlRvdGFsIjo0MDAuMCwiaXZhUmV0ZSI6MCwibW9udG9Ub3RhbE9wZXJhY2lvbiI6NDUyLjAsInRvdGFsTm9HcmF2YWRvIjowLCJ0b3RhbFBhZ2FyIjo0NTIuMCwidG90YWxMZXRyYXMiOiJDVUFUUk9DSUVOVE9TIENJTkNVRU5UQSBZIERPUyAwMC8xMDAgRE9MQVJFUyIsInRvdGFsSXZhIjo1Mi4wLCJzYWxkb0Zhdm9yIjowLCJjb25kaWNpb25PcGVyYWNpb24iOjEsInBhZ29zIjpbeyJjb2RpZ28iOiIwMSIsIm1vbnRvUGFnbyI6NDUyLjAsInJlZmVyZW5jaWEiOm51bGwsInBsYXpvIjpudWxsLCJwZXJpb2RvIjpudWxsfV0sIm51bVBhZ29FbGVjdHJvbmljbyI6bnVsbCwib2JzZXJ2YWNpb25lcyI6bnVsbH0sImFwZW5kaWNlIjpudWxsfQ.eyEwtSfxrbVn56T4NgQsV6Eu2-E5PwU9fz0jeq8l9_pdrhNgy2H0R1adPiftjN84dNOIuAkWV4xIAcVmqlSUiQ',
+      },
+    ],
+  },
 };
 
 // ─── Subir archivo — mapeo de columnas (sin plantilla fija) ───────────────────
@@ -480,6 +695,10 @@ function MethodologyModal({ analysisId, label, onClose }: { analysisId: Analysis
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-white/60">Metodología del análisis</p>
             <h3 className="text-xl font-bold text-white mt-0.5">{label}</h3>
+            <div className="flex items-center gap-1.5 mt-2">
+              <span className={cn('w-2 h-2 rounded-full', AREA_COLORS[info.area]?.dot ?? 'bg-white/60')} />
+              <span className="text-[11px] font-semibold text-white/90">{AREA_LABELS[info.area] ?? info.area}</span>
+            </div>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white shrink-0">
             <X className="w-5 h-5" />
@@ -536,6 +755,7 @@ function MethodologyModal({ analysisId, label, onClose }: { analysisId: Analysis
 
 export default function AnalyticsPage() {
   const [selected, setSelected] = useState<AnalysisType>(ANALYSIS_TYPES[0]);
+  const [areaFilter, setAreaFilter] = useState<AuditArea | 'all'>('all');
   const [running, setRunning]   = useState(false);
   const [result, setResult]     = useState<Record<string, unknown> | null>(null);
   const [error, setError]       = useState('');
@@ -554,21 +774,25 @@ export default function AnalyticsPage() {
   const [benfordColumn, setBenfordColumn] = useState('');
   const [anomalyColumns, setAnomalyColumns] = useState<string[]>([]);
   const [secondaryData, setSecondaryData] = useState<SecondaryDatasetValue | null>(null);
+  const [dteRecords, setDteRecords] = useState<Record<string, unknown>[] | null>(null);
 
-  // Solo se limpia el dataset secundario al cambiar de MOTOR — un re-upload
+  const isJsonEngine = JSON_UPLOAD_ENGINES.has(selected.id);
+
+  // Solo se limpia el dataset secundario/DTE al cambiar de MOTOR — un re-upload
   // del archivo principal para el mismo motor no debe perder el secundario
   // ya cargado (era un bug real: el efecto de abajo corre también cuando
   // `parsed` cambia por un simple re-upload, y ponerlo ahí borraba el
   // dataset secundario en cada subida del archivo principal).
   useEffect(() => {
     setSecondaryData(null);
+    setDteRecords(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected.id]);
 
   // Al cambiar de tipo de análisis con un archivo ya cargado, re-mapear
   // automáticamente contra las columnas de ESE archivo para el nuevo tipo.
   useEffect(() => {
-    if (dataMode !== 'upload' || !parsed) return;
+    if (dataMode !== 'upload' || !parsed || isJsonEngine) return;
     if (selected.id === 'benford') {
       setBenfordColumn(autoMatchColumn('amount', parsed.columns));
     } else if (selected.id === 'anomaly') {
@@ -620,6 +844,7 @@ export default function AnalyticsPage() {
     setFieldMapping({});
     setBenfordColumn('');
     setAnomalyColumns([]);
+    setDteRecords(null);
     setResult(null);
     setError('');
   }
@@ -638,11 +863,13 @@ export default function AnalyticsPage() {
 
   const canRun = dataMode === 'sample'
     ? true
-    : selected.id === 'benford'
-      ? !!parsed && !!benfordColumn
-      : selected.id === 'anomaly'
-        ? !!parsed && anomalyColumns.length > 0
-        : !!parsed && !missingRequired && !secondaryMissingRequired;
+    : isJsonEngine
+      ? !!dteRecords && dteRecords.length > 0
+      : selected.id === 'benford'
+        ? !!parsed && !!benfordColumn
+        : selected.id === 'anomaly'
+          ? !!parsed && anomalyColumns.length > 0
+          : !!parsed && !missingRequired && !secondaryMissingRequired;
 
   async function runAnalysis() {
     setRunning(true);
@@ -653,6 +880,9 @@ export default function AnalyticsPage() {
       let payload: unknown;
       if (dataMode === 'sample') {
         payload = SAMPLE_DATA[selected.sampleKey];
+      } else if (isJsonEngine) {
+        if (!dteRecords || dteRecords.length === 0) throw new Error('Sube al menos un documento DTE');
+        payload = { records: dteRecords };
       } else if (!parsed) {
         throw new Error('Primero sube un archivo');
       } else if (selected.id === 'benford') {
@@ -756,6 +986,9 @@ export default function AnalyticsPage() {
   }
 
   const payload = SAMPLE_DATA[selected.sampleKey];
+  const visibleTypes = areaFilter === 'all'
+    ? ANALYSIS_TYPES
+    : ANALYSIS_TYPES.filter(t => METHODOLOGY[t.id]?.area === areaFilter);
 
   return (
     <div className="flex flex-col h-full">
@@ -781,19 +1014,59 @@ export default function AnalyticsPage() {
             </p>
           </div>
 
+          {/* Filtro por área de auditoría — mismo criterio que el badge del modal
+              de metodología (caats-methodology.ts::AuditArea), para ubicar rápido
+              qué motores aplican a Fiscal, Financiero, Operativo, o a los tres. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              onClick={() => setAreaFilter('all')}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors',
+                areaFilter === 'all' ? 'bg-[#0F2D4A] text-white border-[#0F2D4A]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300',
+              )}
+            >
+              Todas ({ANALYSIS_TYPES.length})
+            </button>
+            {(['fiscal', 'financiero', 'operativo', 'transversal'] as AuditArea[]).map(area => {
+              const count = ANALYSIS_TYPES.filter(t => METHODOLOGY[t.id]?.area === area).length;
+              const active = areaFilter === area;
+              return (
+                <button
+                  key={area}
+                  onClick={() => setAreaFilter(area)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors',
+                    active ? cn(AREA_COLORS[area]?.bg, AREA_COLORS[area]?.text, 'border-transparent') : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300',
+                  )}
+                >
+                  <span className={cn('w-1.5 h-1.5 rounded-full', AREA_COLORS[area]?.dot)} />
+                  {AREA_LABELS[area]} ({count})
+                </button>
+              );
+            })}
+          </div>
+
           {/* Analysis type selector */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-            {ANALYSIS_TYPES.map(type => (
+            {visibleTypes.map(type => {
+              const area = METHODOLOGY[type.id]?.area;
+              return (
               <button
                 key={type.id}
                 onClick={() => { setSelected(type); setResult(null); setError(''); }}
                 className={cn(
-                  'flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all',
+                  'relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all',
                   selected.id === type.id
                     ? 'border-[#0F2D4A] bg-[#0F2D4A]/5 shadow-sm'
                     : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm',
                 )}
               >
+                {area && (
+                  <span
+                    className={cn('absolute top-2 right-2 w-2 h-2 rounded-full', AREA_COLORS[area]?.dot)}
+                    title={AREA_LABELS[area]}
+                  />
+                )}
                 <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', type.color)}>
                   <type.icon className="w-5 h-5 text-white" />
                 </div>
@@ -806,7 +1079,8 @@ export default function AnalyticsPage() {
                   </p>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
 
           {/* Selected description + data mode + run */}
@@ -883,6 +1157,10 @@ export default function AnalyticsPage() {
                       {JSON.stringify(payload, null, 2)}
                     </pre>
                   )}
+                </div>
+              ) : isJsonEngine ? (
+                <div className="mt-3">
+                  <DteJsonUpload onChange={setDteRecords} />
                 </div>
               ) : (
                 <div className="mt-3 space-y-4">

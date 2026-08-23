@@ -3,16 +3,25 @@
 // qué método y para qué norma/objetivo de auditoría sirve — sin tener que leer
 // el código del backend.
 
+// Clasificación por área de auditoría a la que el motor sirve principalmente
+// — Fiscal (Auditoría Fiscal El Salvador CT/DGII), Financiero (Auditoría
+// Externa/Financiera NIA-ISA), Operativo (Auditoría Interna NOGAI/IIA —
+// control interno, procesos, gobernanza), o Transversal cuando la técnica es
+// genérica y se usa por igual en los tres tipos de encargo.
+export type AuditArea = 'fiscal' | 'financiero' | 'operativo' | 'transversal';
+
 export interface MethodologyInfo {
   objetivo: string;
   metodologia: string;
   normativa?: string;
+  area: AuditArea;
   pruebas: Array<{ nombre: string; descripcion: string }>;
   limitaciones: string;
 }
 
 export const METHODOLOGY: Record<string, MethodologyInfo> = {
   gl: {
+    area: 'transversal',
     objetivo:
       'Identificar asientos del Libro Mayor con características de riesgo — error, manipulación o fraude — que ameriten revisión adicional del auditor. No concluye por sí solo: filtra el universo de transacciones hacia las que sí requieren atención.',
     metodologia:
@@ -22,13 +31,15 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       { nombre: 'Montos Redondos', descripcion: 'Asientos con montos exactos (múltiplos de 1,000+) — indicio de estimación manual o fragmentación en vez de registro real.' },
       { nombre: 'Asientos de Fin de Período', descripcion: 'Registros en los últimos días del período — mayor riesgo de ajustes forzados para maquillar resultados.' },
       { nombre: 'Monto Duplicado por Usuario', descripcion: 'El mismo usuario registra dos o más asientos por el mismo monto — posible doble registro o duplicación deliberada.' },
-      { nombre: 'Asientos en Fin de Semana', descripcion: 'Registros fuera del horario laboral normal — requieren justificación de negocio.' },
+      { nombre: 'Asientos en Fin de Semana', descripcion: 'Registros en sábado o domingo — requieren justificación de negocio.' },
+      { nombre: 'Asientos Fuera de Horario Laboral', descripcion: 'Registros fuera de la ventana horaria habitual (por defecto 07:00–19:00, cualquier día) — indicio típico de registro manual evitando supervisión, evaluado independiente del día de la semana.' },
       { nombre: 'Usuario de Alto Volumen', descripcion: 'Usuarios que concentran un volumen desproporcionado de asientos — posible falta de segregación de funciones.' },
     ],
     limitaciones:
       'Detecta patrones estadísticos y de comportamiento, no confirma fraude ni error por sí mismo. Cada hallazgo requiere corroboración documental del auditor. La calidad depende de que el mapeo de columnas (fecha, monto, usuario) sea correcto.',
   },
   ap: {
+    area: 'financiero',
     objetivo:
       'Detectar riesgo de fraude o error en el ciclo de Cuentas por Pagar — pagos duplicados, proveedores inexistentes, fraccionamiento de compras y concentración excesiva en pocos proveedores.',
     metodologia:
@@ -45,6 +56,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'La detección de "proveedores fantasma" es indicativa (datos incompletos), no una confirmación — requiere verificación externa (RUC/NIT, domicilio real). Depende de que el archivo incluya identificador de proveedor y cuenta bancaria si se quiere probar cuentas compartidas.',
   },
   payroll: {
+    area: 'financiero',
     objetivo:
       'Detectar anomalías en el ciclo de nómina — empleados que no deberían existir en planilla, pagos desproporcionados, y controles débiles en el proceso de aprobación de pagos.',
     metodologia:
@@ -61,6 +73,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'El Z-score requiere una base de comparación razonable (>10 empleados) para ser confiable — con planillas muy pequeñas o muy homogéneas, algunos outliers reales pueden no destacarse estadísticamente.',
   },
   benford: {
+    area: 'transversal',
     objetivo:
       'Screening estadístico de manipulación o invención de montos — la Ley de Benford predice con qué frecuencia debería aparecer cada dígito inicial (1-9) en un conjunto de números "naturales" (no forzados). Desviaciones marcadas son indicio, no prueba, de manipulación.',
     metodologia:
@@ -75,6 +88,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'Requiere un mínimo de 50-100 montos para ser estadísticamente confiable, y funciona mejor sobre conjuntos de datos "naturales" (montos que emergen de transacciones reales, no de rangos artificialmente acotados — ej. precios fijos de catálogo violan Benford sin que haya fraude). Un resultado "No Conforme" señala dónde mirar, no confirma manipulación.',
   },
   anomaly: {
+    area: 'transversal',
     objetivo:
       'Detectar transacciones estadísticamente atípicas sin definir reglas de antemano — útil quando el patrón de riesgo no se conoce todavía o es multivariado (combinación inusual de variables, no una sola fuera de rango).',
     metodologia:
@@ -88,6 +102,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'Es un modelo estadístico, no conoce el contexto de negocio — una anomalía puede ser perfectamente legítima (ej. un bono anual real). Requiere que las columnas seleccionadas sean genuinamente numéricas y comparables entre sí. Con menos de 10 registros el modelo no tiene suficiente base para entrenar.',
   },
   sod: {
+    area: 'operativo',
     objetivo:
       'Detectar usuarios que acumulan permisos incompatibles entre sí sobre los sistemas de la entidad — el mismo usuario con capacidad de ejecutar Y controlar el mismo proceso, sin contrapeso independiente. Es la prueba directa del componente de Actividades de Control de COSO 2013.',
     metodologia:
@@ -101,6 +116,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'El catálogo de conflictos es un punto de partida basado en funciones típicas — cada organización debería revisar y ampliar la lista según su propia matriz de riesgos. El emparejamiento de permisos es por texto (palabras clave), así que nombres de permiso muy distintos a los esperados pueden no matchear — revisar el mapeo de columnas antes de concluir "sin hallazgos".',
   },
   vendor_master: {
+    area: 'operativo',
     objetivo:
       'Verificar la integridad del maestro de proveedores como tal — no de las transacciones que se le imputan — para detectar proveedores duplicados bajo identidades distintas, reactivaciones sin autorización, y proveedores cuya identidad no se puede verificar con los datos registrados.',
     metodologia:
@@ -117,6 +133,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'El emparejamiento de NIT/cuenta/dirección es textual (normalizado) — errores de digitación no detectados como "el mismo valor" pueden esconder un duplicado real. Una dirección compartida NO es prueba de fraude por sí sola. Requiere que el archivo sea el MAESTRO de proveedores (un registro por proveedor), no el historial de transacciones — para eso está el motor de Cuentas por Pagar (AP).',
   },
   related_parties: {
+    area: 'fiscal',
     objetivo:
       'Detectar transacciones con una parte relacionada (accionista, director, familiar, filial o empleado propio) que no fue revelada como tal — el conflicto de interés más citado en el Reporte ACFE a las Naciones, y área de riesgo explícita bajo NIA 550.',
     metodologia:
@@ -131,6 +148,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'La calidad del resultado depende por completo de qué tan completo esté el registro de partes relacionadas que se sube — el motor no puede detectar una parte relacionada que nunca se registró. El match por nombre es especialmente propenso a falsos positivos con nombres comunes; siempre revisar manualmente antes de concluir que hay una transacción no revelada.',
   },
   expenses: {
+    area: 'operativo',
     objetivo:
       'Detectar patrones de riesgo en el ciclo de gastos de representación y viáticos — fraccionamiento para evitar aprobación, gastos duplicados, y concentración desproporcionada en un solo empleado. Uno de los esquemas de fraude ocupacional más comunes según ACFE (expense reimbursement schemes).',
     metodologia:
@@ -147,6 +165,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'El umbral de aprobación usado por defecto ($100) es un valor de referencia — para un resultado preciso debe ajustarse a la política real de la entidad. Un empleado con más viajes/gastos legítimos (ej. ventas, dirección) concentrará naturalmente más gasto sin que eso implique fraude — el hallazgo de concentración es un punto de partida, no una conclusión.',
   },
   revenue_cutoff: {
+    area: 'financiero',
     objetivo:
       'Detectar reconocimiento de ingresos antes de la entrega real del bien o servicio, y patrones de "channel stuffing" (empujar ventas artificialmente antes del cierre) — una de las áreas de riesgo de fraude presuntas por defecto bajo NIA 240.',
     metodologia:
@@ -160,6 +179,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'El cierre de período se infiere de los datos cargados (la fecha más reciente) — si el archivo no cubre exactamente el período a evaluar, el resultado no es confiable. Sin fecha de entrega cargada, la prueba de corte queda incompleta (solo señala qué facturas revisar manualmente).',
   },
   bid_rigging: {
+    area: 'operativo',
     objetivo:
       'Detectar patrones de colusión entre proveedores en procesos de licitación — precios anormalmente uniformes, ofertas perdedoras diseñadas para no competir realmente ("cover bidding"), y proveedores con una tasa de adjudicación desproporcionada.',
     metodologia:
@@ -174,6 +194,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'El fraude en licitaciones no siempre deja un rastro numérico detectable — un proceso genuinamente competitivo entre pocos proveedores especializados puede producir precios similares sin que exista colusión. Cada hallazgo requiere investigación adicional (relaciones societarias entre oferentes, patrones a través de múltiples entidades contratantes) antes de concluir.',
   },
   ar_aging: {
+    area: 'financiero',
     objetivo:
       'Calcular la antigüedad de las cuentas por cobrar por cliente, y detectar notas de crédito de monto alto emitidas cerca del cierre de período (posible reversión de ventas registradas para maquillar el cierre).',
     metodologia:
@@ -188,6 +209,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'La antigüedad se calcula contra la fecha de vencimiento más reciente del archivo cargado, no contra la fecha real de hoy — cargue el universo completo de CxC vigente a la fecha de corte que quiere evaluar. La prueba de notas de crédito no vincula automáticamente cada nota contra su factura original (requiere ese cruce manual si el archivo no lo trae).',
   },
   fixed_assets: {
+    area: 'financiero',
     objetivo:
       'Verificar existencia y depreciación de activos fijos — recalcula la depreciación esperada (línea recta) y la compara contra la registrada, detecta activos totalmente depreciados que siguen en uso, y activos sin verificación física reciente.',
     metodologia:
@@ -202,6 +224,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'Asume depreciación en línea recta — si la entidad usa otro método (unidades producidas, saldos decrecientes), la comparación no es válida sin ajustar el cálculo. La fecha de referencia se infiere de los datos cargados, no es necesariamente la fecha de cierre real del período auditado.',
   },
   structuring: {
+    area: 'operativo',
     objetivo:
       'Detectar el patrón transaccional de "pitufeo" (structuring/smurfing) — fraccionamiento deliberado de depósitos o transacciones en montos menores al umbral de reporte regulatorio, típico de la Fase de Colocación del lavado de activos.',
     metodologia:
@@ -215,6 +238,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'El umbral de reporte usado por defecto ($10,000) es un valor de referencia — debe ajustarse al umbral regulatorio real aplicable (ej. el de la Unidad de Investigación Financiera). Un patrón detectado es un indicio para investigar, no una confirmación de lavado de activos.',
   },
   missing_trader: {
+    area: 'fiscal',
     objetivo:
       'Detectar la firma transaccional del fraude "Missing Trader" (fraude carrusel de IVA) — un proveedor que concentra un volumen de transacciones alto en una ventana corta de actividad, aparece, factura fuerte, y deja de operar.',
     metodologia:
@@ -228,6 +252,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'NO puede confirmar que el IVA facturado no fue enterado a la administración tributaria — ese dato no está disponible en un archivo de transacciones internas, requiere cruce con DGII. Señala el patrón transaccional consistente con el esquema, no una confirmación de fraude.',
   },
   tax_haven: {
+    area: 'fiscal',
     objetivo:
       'Analizar concentración de transacciones hacia jurisdicciones de baja o nula tributación, útil para detectar esquemas de traslado de beneficios hacia sociedades instrumentales o filiales.',
     metodologia:
@@ -239,5 +264,25 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'El catálogo de jurisdicciones es una REFERENCIA GENERAL, NO la lista oficial vigente de "paraísos fiscales" o "sujetos a régimen fiscal preferente" que publica el Ministerio de Hacienda/DGII de El Salvador — esa lista oficial debe verificarse aparte y puede diferir. Este motor es un punto de partida para la revisión, no una determinación legal de precios de transferencia.',
+  },
+  dte_validation: {
+    area: 'fiscal',
+    objetivo:
+      'Validar un lote de Documentos Tributarios Electrónicos (DTE) recibidos o emitidos en El Salvador contra la estructura técnica oficial del Ministerio de Hacienda, confirmar que cuentan con Sello de Recepción, y verificar la integridad de su firma electrónica — para detectar documentos corruptos, no confirmados por Hacienda, o alterados después de firmados antes de que soporten un registro contable.',
+    metodologia:
+      'A diferencia de los demás motores CAATs (que reciben un CSV/Excel tabular), este recibe el JSON completo de cada DTE tal como se emite/recibe. Cada documento se valida contra el esquema oficial JSON Schema (Draft-07) del Ministerio de Hacienda correspondiente a su tipo de documento (Factura, Crédito Fiscal, Nota de Crédito/Débito, etc.), se verifica la presencia y estado del Sello de Recepción, y se decodifica la firma electrónica (JWS) para confirmar que su contenido coincide con el documento recibido — sin necesitar el certificado público de Hacienda para cada documento.',
+    normativa: 'Ley y Reglamento de Emisión de Documentos Tributarios Electrónicos, Manual de Firma Electrónica y esquemas técnicos oficiales del Ministerio de Hacienda (DGII)',
+    pruebas: [
+      { nombre: 'Estructura Inválida (Esquema Oficial MH)', descripcion: 'El documento no cumple el esquema técnico oficial para su tipo de DTE — posible corrupción, edición manual, o sistema emisor no homologado.' },
+      { nombre: 'Tipo de DTE No Soportado por el Validador', descripcion: 'El tipo de documento no está entre los esquemas cargados en este motor — no es un hallazgo, es una limitación de cobertura.' },
+      { nombre: 'Sin Sello de Recepción de Hacienda', descripcion: 'El documento no tiene evidencia de haber sido recibido/validado por Hacienda.' },
+      { nombre: 'Rechazado, Invalidado u Observado por Hacienda', descripcion: 'El estado de la respuesta de Hacienda es distinto de PROCESADO.' },
+      { nombre: 'Firma Electrónica Ausente o Alterada', descripcion: 'Falta la firma, está malformada, o su contenido firmado no coincide con el documento recibido — posible alteración posterior a la firma.' },
+      { nombre: 'Código de Generación Duplicado', descripcion: 'El mismo identificador único (codigoGeneracion) aparece en más de un documento del lote — posible doble registro contable.' },
+      { nombre: 'Brecha en la Numeración Correlativa', descripcion: 'Faltan números de control consecutivos dentro del mismo establecimiento/punto de venta — posible ingreso no registrado o documento anulado sin nota de invalidación.' },
+      { nombre: 'Documento en Ambiente de Pruebas', descripcion: 'El documento fue generado en ambiente de Pruebas (00) — no debería mezclarse con transacciones reales de producción.' },
+    ],
+    limitaciones:
+      'La firma electrónica se decodifica y se compara contra el documento recibido, pero NO se verifica criptográficamente contra el certificado público de Hacienda — eso requeriría obtener el certificado vigente de cada emisor por separado. Tampoco se verifica en línea el Sello de Recepción contra el servicio público de consulta de Hacienda (admin.factura.gob.sv) ni se reconcilian aritméticamente los totales del resumen — el cálculo varía por tipo de documento, tasas de retención y percepciones aplicables, y debe verificarse aparte. Este motor cubre 11 de los 14 tipos de documento/evento definidos por Hacienda (no incluye eventos de contingencia ni invalidación).',
   },
 };

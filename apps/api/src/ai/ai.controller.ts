@@ -86,11 +86,12 @@ export class AiController {
 
   // ─── CAATs ─────────────────────────────────────────────────────────────────
   @Post('analytics/:type')
-  @ApiOperation({ summary: 'Ejecutar análisis CAATs (gl, ap, payroll, benford, anomaly, sod, vendor_master, related_parties, expenses, revenue_cutoff, bid_rigging, ar_aging, fixed_assets, structuring, missing_trader, tax_haven)' })
+  @ApiOperation({ summary: 'Ejecutar análisis CAATs (gl, ap, payroll, benford, anomaly, sod, vendor_master, related_parties, expenses, revenue_cutoff, bid_rigging, ar_aging, fixed_assets, structuring, missing_trader, tax_haven, dte_validation)' })
   async runCaats(
     @Param('type') type:
       | 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master' | 'related_parties' | 'expenses'
-      | 'revenue_cutoff' | 'bid_rigging' | 'ar_aging' | 'fixed_assets' | 'structuring' | 'missing_trader' | 'tax_haven',
+      | 'revenue_cutoff' | 'bid_rigging' | 'ar_aging' | 'fixed_assets' | 'structuring' | 'missing_trader' | 'tax_haven'
+      | 'dte_validation',
     // Body sin tipar a un DTO con class-validator a propósito — igual patrón
     // que calculateSampling/selectSample más abajo. Un DTO con `records?:
     // unknown[]` (sin @Type()) hacía que class-transformer, con

@@ -121,6 +121,14 @@ export const FIELD_LABELS: Record<string, string> = {
   // Jurisdicciones de Baja Tributación
   flagged_amount: 'Monto en Jurisdicciones de Riesgo', flagged_pct: '% en Jurisdicciones de Riesgo',
   exposure_by_jurisdiction: 'Exposición por Jurisdicción', jurisdiccion: 'Jurisdicción', jurisdiction: 'País / Jurisdicción',
+  // Suite de Validación DTE
+  total_dtes: 'Documentos DTE Analizados', valid_structure_count: 'Con Estructura Válida',
+  tipo_breakdown: 'Documentos por Tipo de DTE', tipo: 'Tipo de Documento', codigo: 'Código',
+  documento: 'Documento', error: 'Error', errores: 'Errores', total_errores: 'Total de Errores',
+  estado: 'Estado de Hacienda', observaciones: 'Observaciones', problema: 'Problema',
+  tipoDte: 'Tipo de DTE', codigoGeneracion: 'Código de Generación', documentos: 'Documentos',
+  establecimiento_punto_venta: 'Establecimiento / Punto de Venta',
+  correlativos_faltantes: 'Correlativos Faltantes', total_faltantes: 'Total Faltante',
 };
 
 export const TEST_NAME_LABELS: Record<string, string> = {
@@ -128,6 +136,7 @@ export const TEST_NAME_LABELS: Record<string, string> = {
   END_OF_PERIOD: 'Asientos de Fin de Período',
   DUPLICATE_AMOUNT_USER: 'Monto Duplicado por Usuario',
   WEEKEND_ENTRIES: 'Asientos en Fin de Semana',
+  OFF_HOURS_ENTRIES: 'Asientos Fuera de Horario Laboral',
   HIGH_VOLUME_USER: 'Usuario de Alto Volumen',
   DUPLICATE_INVOICES: 'Facturas Duplicadas',
   INVOICE_SPLITTING: 'Fraccionamiento de Facturas',
@@ -191,6 +200,15 @@ export const TEST_NAME_LABELS: Record<string, string> = {
   // Jurisdicciones de Baja Tributación
   LOW_TAX_JURISDICTION_TRANSACTIONS: 'Transacciones a Jurisdicción de Baja Tributación',
   HIGH_HAVEN_CONCENTRATION: 'Alta Concentración en Jurisdicciones de Riesgo',
+  // Suite de Validación DTE
+  STRUCTURAL_SCHEMA: 'Estructura Inválida (Esquema Oficial MH)',
+  UNSUPPORTED_DTE_TYPE: 'Tipo de DTE No Soportado por el Validador',
+  MISSING_SELLO: 'Sin Sello de Recepción de Hacienda',
+  REJECTED_OR_OBSERVED: 'Rechazado, Invalidado u Observado por Hacienda',
+  SIGNATURE_INTEGRITY: 'Firma Electrónica Ausente o Alterada',
+  DUPLICATE_CODIGO_GENERACION: 'Código de Generación Duplicado',
+  CORRELATIVO_GAP: 'Brecha en la Numeración Correlativa',
+  AMBIENTE_PRUEBAS: 'Documento en Ambiente de Pruebas',
 };
 
 export const RISK_LEVEL_LABELS: Record<string, string> = {
@@ -214,6 +232,23 @@ export const CONFORMITY_COLORS: Record<string, { bg: string; text: string }> = {
   ACCEPTABLE:     { bg: 'bg-blue-50',    text: 'text-blue-700' },
   SUSPECT:        { bg: 'bg-amber-50',   text: 'text-amber-700' },
   NON_CONFORMING: { bg: 'bg-red-50',     text: 'text-red-700' },
+};
+
+// ─── Clasificación por área de auditoría (AuditArea en caats-methodology.ts) ──
+// Fiscal / Financiero / Operativo son las 3 líneas de encargo del propio
+// AuditMind (plantillas "Auditoría Fiscal El Salvador", "Auditoría Financiera
+// Externa", "Auditoría Interna NOGAI/IIA"); Transversal marca las técnicas
+// genéricas que sirven por igual a las tres.
+export const AREA_LABELS: Record<string, string> = {
+  fiscal: 'Auditoría Fiscal', financiero: 'Análisis Financiero',
+  operativo: 'Análisis Operativo', transversal: 'Transversal (aplica a todas)',
+};
+
+export const AREA_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  fiscal:      { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
+  financiero:  { bg: 'bg-blue-50',   text: 'text-blue-700',   dot: 'bg-blue-500' },
+  operativo:   { bg: 'bg-amber-50',  text: 'text-amber-700',  dot: 'bg-amber-500' },
+  transversal: { bg: 'bg-slate-100', text: 'text-slate-700',  dot: 'bg-slate-500' },
 };
 
 export function fieldLabel(key: string): string {

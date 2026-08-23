@@ -377,9 +377,9 @@ export class AuditTemplatesService {
           AuditType.BCP_DRP,
         ],
         sections: [
-          // Archivo Permanente es documentación paralela (no una fase secuencial
-          // del encargo) — weight 0, no cuenta para el avance ante el comité.
-          { ref: 'APE', name: 'Archivo Permanente', phaseType: 'PLANNING', weight: 0,
+          // Pesos 5/25/45/10/15 (suma 100) — esfuerzo típico sugerido, decisión
+          // explícita del usuario, ya reseeded en la organización de desarrollo.
+          { ref: 'APE', name: 'Archivo Permanente', phaseType: 'PLANNING', weight: 5,
             children: [
               { ref: 'APE-01', name: 'Información Legal y Estatutos' },
               { ref: 'APE-02', name: 'Estructura Organizacional' },
@@ -389,10 +389,10 @@ export class AuditTemplatesService {
               { ref: 'APE-06', name: 'Políticas y Manuales de Control Interno' },
             ],
           },
-          { ref: 'A', name: 'Planificación y Entendimiento del Negocio', phaseType: 'PLANNING',  weight: 15 },
-          { ref: 'B', name: 'Ejecución y Pruebas de Campo',              phaseType: 'FIELDWORK',  weight: 50 },
-          { ref: 'D', name: 'Hallazgos y Comunicaciones',                phaseType: 'REPORTING',  weight: 15 },
-          { ref: 'E', name: 'Cierre e Informe de Auditoría',             phaseType: 'REPORTING',  weight: 20 },
+          { ref: 'A', name: 'Planificación y Entendimiento del Negocio', phaseType: 'PLANNING',  weight: 25 },
+          { ref: 'B', name: 'Ejecución y Pruebas de Campo',              phaseType: 'FIELDWORK',  weight: 45 },
+          { ref: 'D', name: 'Hallazgos y Comunicaciones',                phaseType: 'REPORTING',  weight: 10 },
+          { ref: 'E', name: 'Cierre e Informe de Auditoría',             phaseType: 'REPORTING',  weight: 15 },
         ],
         papers: [
           // ── APE — Archivo Permanente ────────────────────────────────────

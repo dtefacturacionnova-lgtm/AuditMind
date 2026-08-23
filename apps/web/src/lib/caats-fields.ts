@@ -1,7 +1,7 @@
 // ─── Mapeo de columnas CAATs — compartido entre la pantalla standalone de ────
 // Analytics y el panel embebido en el papel de trabajo PT-B4.
 
-export type AnalysisId = 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod';
+export type AnalysisId = 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master';
 
 export interface FieldDef { key: string; label: string; required?: boolean }
 
@@ -42,6 +42,15 @@ export const FIELD_DEFS: Partial<Record<AnalysisId, FieldDef[]>> = {
     { key: 'user_name',  label: 'Nombre completo del usuario' },
     { key: 'department', label: 'Departamento' },
   ],
+  vendor_master: [
+    { key: 'vendor_id',           label: 'ID de Proveedor',        required: true },
+    { key: 'vendor_name',         label: 'Nombre del Proveedor',   required: true },
+    { key: 'tax_id',              label: 'NIT / RUC' },
+    { key: 'bank_account',        label: 'Cuenta Bancaria' },
+    { key: 'address',             label: 'Dirección' },
+    { key: 'status',              label: 'Estado (Activo/Inactivo)' },
+    { key: 'last_activity_date',  label: 'Fecha de Última Actividad' },
+  ],
 };
 
 // Claves iguales a las de FIELD_DEFS (el nombre que field_mapping espera),
@@ -66,6 +75,10 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   bank_account: ['bank_account', 'cuenta_bancaria', 'cuenta', 'numero_cuenta'],
   permission: ['permission', 'permiso', 'role', 'rol', 'funcion', 'función', 'access', 'acceso', 'perfil'],
   user_name: ['user_name', 'nombre_usuario', 'nombre_completo', 'nombre', 'empleado'],
+  tax_id: ['tax_id', 'nit', 'ruc', 'rut', 'identificacion_tributaria', 'numero_identificacion'],
+  address: ['address', 'direccion', 'domicilio'],
+  status: ['status', 'estado', 'estatus'],
+  last_activity_date: ['last_activity_date', 'ultima_actividad', 'fecha_ultima_actividad', 'ultimo_movimiento'],
 };
 
 export function normColName(c: string): string {

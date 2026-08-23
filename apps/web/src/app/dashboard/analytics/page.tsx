@@ -9,7 +9,7 @@ import {
   TrendingUp, Search, Database, FileSpreadsheet, Cpu,
   ChevronDown, ChevronUp, Info, Upload, FileUp, X, ListChecks,
   AlertTriangle, RotateCcw, HelpCircle, FileDown, Table2,
-  Target, FlaskConical, ScrollText, Save, ShieldAlert,
+  Target, FlaskConical, ScrollText, Save, ShieldAlert, Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -82,6 +82,14 @@ const ANALYSIS_TYPES: AnalysisType[] = [
     icon:        ShieldAlert,
     color:       'bg-amber-500',
     sampleKey:   'sod',
+  },
+  {
+    id:          'vendor_master',
+    label:       'Maestro de Proveedores',
+    description: 'Detecta proveedores duplicados (mismo NIT o cuenta bancaria), reactivaciones no autorizadas e identidad débil.',
+    icon:        Building2,
+    color:       'bg-teal-500',
+    sampleKey:   'vendor_master',
   },
 ];
 
@@ -196,6 +204,24 @@ const SAMPLE_DATA: Record<string, unknown> = {
       { user: 'U006', user_name: 'Jorge Díaz',      permission: 'Aprobar Orden de Compra',     department: 'Compras' },
       { user: 'U007', user_name: 'Sofía Reyes',     permission: 'Crear Cliente',               department: 'Ventas' },
       { user: 'U007', user_name: 'Sofía Reyes',     permission: 'Aplicar Nota de Crédito',      department: 'Ventas' },
+    ],
+  },
+  vendor_master: {
+    // 10 proveedores — V003/V004 comparten NIT (nombres distintos), V005/V006
+    // comparten cuenta bancaria, V007 tiene identidad débil (nombre genérico
+    // + sin NIT/dirección), V008 está "Inactivo" pero con actividad muy
+    // reciente, V009/V010 comparten dirección (señal más débil).
+    records: [
+      { vendor_id: 'V001', vendor_name: 'Importadora Continental SA',   tax_id: 'NIT-0614-010101-001-1', bank_account: '123-456789-0', address: 'Blvd. del Ejército #100, San Salvador', status: 'Activo',   last_activity_date: '2025-08-10' },
+      { vendor_id: 'V002', vendor_name: 'Distribuciones del Norte SA',  tax_id: 'NIT-0614-020202-002-2', bank_account: '234-567890-1', address: 'Calle Nueva #45, Santa Ana',            status: 'Activo',   last_activity_date: '2025-07-22' },
+      { vendor_id: 'V003', vendor_name: 'Comercial Rivas SA',           tax_id: 'NIT-0614-030303-003-3', bank_account: '345-678901-2', address: 'Av. Los Próceres #12, San Salvador',    status: 'Activo',   last_activity_date: '2025-08-01' },
+      { vendor_id: 'V004', vendor_name: 'Rivas Import Export SA',       tax_id: 'NIT-0614-030303-003-3', bank_account: '456-789012-3', address: 'Colonia Escalón #78, San Salvador',     status: 'Activo',   last_activity_date: '2025-06-15' },
+      { vendor_id: 'V005', vendor_name: 'Servicios XYZ',                tax_id: 'NIT-0614-050505-005-5', bank_account: '567-890123-4', address: 'Zona Industrial #5, Soyapango',         status: 'Activo',   last_activity_date: '2025-05-10' },
+      { vendor_id: 'V006', vendor_name: 'Consultores ABC',              tax_id: 'NIT-0614-060606-006-6', bank_account: '567-890123-4', address: 'Torre Futura Piso 3, San Salvador',     status: 'Activo',   last_activity_date: '2025-04-18' },
+      { vendor_id: 'V007', vendor_name: 'Proveedor Temporal',           tax_id: '',                      bank_account: '901-234567-8', address: '',                                       status: 'Activo',   last_activity_date: '2025-03-01' },
+      { vendor_id: 'V008', vendor_name: 'Suministros del Este SA',      tax_id: 'NIT-0614-080808-008-8', bank_account: '678-901234-5', address: 'Carretera a San Miguel Km 30',           status: 'Inactivo', last_activity_date: '2025-08-20' },
+      { vendor_id: 'V009', vendor_name: 'Tech Solutions SA',            tax_id: 'NIT-0614-090909-009-9', bank_account: '789-012345-6', address: 'Plaza Mundo Local 45, San Salvador',    status: 'Activo',   last_activity_date: '2025-06-01' },
+      { vendor_id: 'V010', vendor_name: 'Soluciones Tecnológicas SA',   tax_id: 'NIT-0614-101010-010-0', bank_account: '890-123456-7', address: 'Plaza Mundo Local 45, San Salvador',    status: 'Activo',   last_activity_date: '2025-05-20' },
     ],
   },
 };
@@ -507,7 +533,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Analysis type selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {ANALYSIS_TYPES.map(type => (
               <button
                 key={type.id}

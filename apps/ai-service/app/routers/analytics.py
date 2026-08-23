@@ -1,11 +1,12 @@
 """Analytics router — CAATs (Computer-Assisted Audit Techniques).
-Tareas 2.1–2.6:
-  POST /analytics/gl          → Diario Mayor
-  POST /analytics/ap          → Cuentas por Pagar
-  POST /analytics/payroll     → Nómina
-  POST /analytics/benford     → Ley de Benford
-  POST /analytics/anomaly     → ML Anomaly Detection
-  POST /analytics/sod         → Segregación de Funciones
+Tareas 2.1–2.7:
+  POST /analytics/gl              → Diario Mayor
+  POST /analytics/ap              → Cuentas por Pagar
+  POST /analytics/payroll         → Nómina
+  POST /analytics/benford         → Ley de Benford
+  POST /analytics/anomaly         → ML Anomaly Detection
+  POST /analytics/sod             → Segregación de Funciones
+  POST /analytics/vendor_master   → Integridad de Maestro de Proveedores
 """
 import dataclasses
 import math
@@ -20,6 +21,7 @@ from app.services.caats.payroll_analysis import analyze_payroll
 from app.services.caats.benford import analyze_benford
 from app.services.caats.anomaly_detection import detect_anomalies
 from app.services.caats.sod_analysis import analyze_sod
+from app.services.caats.vendor_master_analysis import analyze_vendor_master
 
 router = APIRouter()
 
@@ -198,6 +200,31 @@ async def sod_analysis(
             permission_field=fm.get("permission", "permission"),
             user_name_field=fm.get("user_name", "user_name"),
             department_field=fm.get("department", "department"),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _serialize(result)
+
+
+# ─── Integridad de Maestro de Proveedores ─────────────────────────────────────
+@router.post("/vendor_master")
+async def vendor_master_analysis(
+    request: RecordsRequest,
+    x_internal_key: str | None = Header(default=None),
+):
+    """Tarea 2.7 — Integridad de Maestro de Proveedores."""
+    verify_internal_key(x_internal_key)
+    fm = request.field_mapping or {}
+    try:
+        result = analyze_vendor_master(
+            vendors=request.records,
+            vendor_id_field=fm.get("vendor_id", "vendor_id"),
+            vendor_name_field=fm.get("vendor_name", "vendor_name"),
+            tax_id_field=fm.get("tax_id", "tax_id"),
+            bank_account_field=fm.get("bank_account", "bank_account"),
+            address_field=fm.get("address", "address"),
+            status_field=fm.get("status", "status"),
+            last_activity_field=fm.get("last_activity_date", "last_activity_date"),
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

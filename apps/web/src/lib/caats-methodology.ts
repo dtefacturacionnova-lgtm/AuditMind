@@ -100,4 +100,20 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     limitaciones:
       'El catálogo de conflictos es un punto de partida basado en funciones típicas — cada organización debería revisar y ampliar la lista según su propia matriz de riesgos. El emparejamiento de permisos es por texto (palabras clave), así que nombres de permiso muy distintos a los esperados pueden no matchear — revisar el mapeo de columnas antes de concluir "sin hallazgos".',
   },
+  vendor_master: {
+    objetivo:
+      'Verificar la integridad del maestro de proveedores como tal — no de las transacciones que se le imputan — para detectar proveedores duplicados bajo identidades distintas, reactivaciones sin autorización, y proveedores cuya identidad no se puede verificar con los datos registrados.',
+    metodologia:
+      'Compara cada proveedor contra el resto del maestro por NIT/RUC, cuenta bancaria y dirección normalizados (sin acentos, mayúsculas, ni puntuación), y evalúa el estado de cada proveedor contra su fecha de última actividad.',
+    normativa: 'ACFE — billing schemes (esquemas de facturación fraudulenta), COSO 2013 Principio 12 (implementación de actividades de control)',
+    pruebas: [
+      { nombre: 'NIT/RUC Duplicado', descripcion: 'Mismo NIT/RUC registrado bajo más de un proveedor — posible fraccionamiento o encubrimiento de identidad. Señal crítica.' },
+      { nombre: 'Cuenta Bancaria Duplicada', descripcion: 'Misma cuenta bancaria registrada para más de un proveedor — señal aún más fuerte que el NIT de que un mismo beneficiario controla proveedores "independientes".' },
+      { nombre: 'Dirección Duplicada', descripcion: 'Misma dirección para más de un proveedor — señal más débil (puede ser un edificio/centro comercial compartido legítimamente), amerita revisión pero no es concluyente por sí sola.' },
+      { nombre: 'Proveedor Inactivo con Actividad Reciente', descripcion: 'Proveedor marcado como inactivo/suspendido con movimientos recientes — verificar quién autorizó la reactivación.' },
+      { nombre: 'Identidad Débil', descripcion: 'Proveedor con nombre genérico/sospechoso, o sin NIT ni dirección — no hay forma de verificar que existe legalmente con los datos del maestro.' },
+    ],
+    limitaciones:
+      'El emparejamiento de NIT/cuenta/dirección es textual (normalizado) — errores de digitación no detectados como "el mismo valor" pueden esconder un duplicado real. Una dirección compartida NO es prueba de fraude por sí sola. Requiere que el archivo sea el MAESTRO de proveedores (un registro por proveedor), no el historial de transacciones — para eso está el motor de Cuentas por Pagar (AP).',
+  },
 };

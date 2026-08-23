@@ -78,6 +78,11 @@ export const FIELD_LABELS: Record<string, string> = {
   user_name: 'Nombre', conflicto: 'Conflicto', permisos_en_conflicto: 'Permisos en Conflicto',
   categorias_sensibles: 'Categorías Sensibles', total_permisos: 'Total de Permisos',
   conflictos: 'Conflictos', total_conflictos: 'Cantidad de Conflictos',
+  // Maestro de Proveedores
+  total_vendors: 'Proveedores Analizados', active_count: 'Proveedores Activos',
+  nit: 'NIT / RUC', cuenta_bancaria: 'Cuenta Bancaria', direccion: 'Dirección',
+  proveedores: 'Proveedores Involucrados', tax_id: 'NIT / RUC', address: 'Dirección',
+  status: 'Estado', last_activity_date: 'Última Actividad',
 };
 
 export const TEST_NAME_LABELS: Record<string, string> = {
@@ -107,6 +112,12 @@ export const TEST_NAME_LABELS: Record<string, string> = {
   'SOD_Procesar nómina + Aprobar nómina': 'Procesar Nómina + Aprobar Nómina',
   'SOD_Administración de usuarios + Aprobación de transacciones': 'Administración de Usuarios + Aprobación de Transacciones',
   ACCESS_CONCENTRATION: 'Concentración de Accesos Sensibles',
+  // Maestro de Proveedores
+  DUPLICATE_TAX_ID: 'NIT/RUC Duplicado',
+  DUPLICATE_BANK_ACCOUNT: 'Cuenta Bancaria Duplicada',
+  DUPLICATE_ADDRESS: 'Dirección Duplicada',
+  INACTIVE_WITH_RECENT_ACTIVITY: 'Proveedor Inactivo con Actividad Reciente',
+  WEAK_IDENTITY: 'Identidad Débil del Proveedor',
 };
 
 export const RISK_LEVEL_LABELS: Record<string, string> = {

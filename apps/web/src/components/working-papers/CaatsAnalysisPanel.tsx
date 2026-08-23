@@ -4,13 +4,14 @@ import { useMemo, useState } from 'react';
 import {
   Play, Loader2, AlertCircle, AlertTriangle, CheckCircle2, RotateCcw,
   Upload, FileUp, X, ListChecks, Database, FileSpreadsheet, TrendingUp,
-  BarChart3, Cpu, ShieldAlert, Building2,
+  BarChart3, Cpu, ShieldAlert, Building2, Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { AnalysisResultView } from '@/components/caats/CaatsResultView';
+import { SecondaryDatasetUpload, type SecondaryDatasetValue } from '@/components/caats/SecondaryDatasetUpload';
 import {
-  type AnalysisId, type ParsedFile, FIELD_DEFS,
+  type AnalysisId, type ParsedFile, FIELD_DEFS, SECONDARY_DATASET,
   autoMatchColumn, autoDetectNumericColumns,
 } from '@/lib/caats-fields';
 
@@ -46,6 +47,7 @@ const ENGINES: { id: AnalysisId; label: string; icon: typeof Database; color: st
   { id: 'anomaly', label: 'Anomalías (ML)',     icon: Cpu,             color: 'bg-red-500' },
   { id: 'sod',     label: 'Segregación de Funciones', icon: ShieldAlert, color: 'bg-amber-500' },
   { id: 'vendor_master', label: 'Maestro de Proveedores', icon: Building2, color: 'bg-teal-500' },
+  { id: 'related_parties', label: 'Partes Relacionadas', icon: Users, color: 'bg-rose-500' },
 ];
 
 export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readOnly = false }: Props) {
@@ -62,17 +64,24 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>(value?.fieldMapping ?? {});
   const [benfordColumn, setBenfordColumn] = useState(value?.benfordColumn ?? '');
   const [anomalyColumns, setAnomalyColumns] = useState<string[]>(value?.anomalyColumns ?? []);
+  const [secondaryData, setSecondaryData] = useState<SecondaryDatasetValue | null>(null);
 
   const fieldDefs = engine ? FIELD_DEFS[engine] : undefined;
+  const secondaryConfig = engine ? SECONDARY_DATASET[engine] : undefined;
   const missingRequired = useMemo(() => {
     if (!fieldDefs) return false;
     return fieldDefs.some(d => d.required && !fieldMapping[d.key]);
   }, [fieldDefs, fieldMapping]);
+  const secondaryMissingRequired = useMemo(() => {
+    if (!secondaryConfig) return false;
+    if (!secondaryData) return true;
+    return secondaryConfig.fieldDefs.some(d => d.required && !secondaryData.fieldMapping[d.key]);
+  }, [secondaryConfig, secondaryData]);
 
   const canRun = !!engine && !!parsed && (
     engine === 'benford' ? !!benfordColumn
       : engine === 'anomaly' ? anomalyColumns.length > 0
-        : !missingRequired
+        : !missingRequired && !secondaryMissingRequired
   );
 
   async function parseFile(file: File, headerRow?: number) {
@@ -126,6 +135,7 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
     setEngine(id);
     setResult(null);
     setError('');
+    setSecondaryData(null);
     if (!parsed) return;
     if (id === 'benford') {
       setBenfordColumn(autoMatchColumn('amount', parsed.columns));
@@ -141,6 +151,7 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
 
   async function runAnalysis() {
     if (!engine || !parsed) return;
+    if (secondaryConfig && !secondaryData) return;
     setRunning(true);
     setResult(null);
     setError('');
@@ -161,7 +172,12 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
       } else {
         const mapping: Record<string, string> = {};
         Object.entries(fieldMapping).forEach(([key, col]) => { if (col) mapping[key] = col; });
-        payload = { records: parsed.rows, field_mapping: mapping };
+        payload = secondaryConfig && secondaryData
+          ? {
+              records: parsed.rows, field_mapping: mapping,
+              reference_records: secondaryData.rows, reference_field_mapping: secondaryData.fieldMapping,
+            }
+          : { records: parsed.rows, field_mapping: mapping };
         savedMapping = { fieldMapping: mapping };
       }
 
@@ -203,7 +219,7 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
   return (
     <div className="space-y-4" data-section-key={sectionKey} data-paper-id={paperId}>
       {/* Selector de motor */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
         {ENGINES.map(e => (
           <button
             key={e.id}
@@ -376,6 +392,14 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
                 </div>
               )}
             </div>
+          )}
+
+          {secondaryConfig && (
+            <SecondaryDatasetUpload
+              label={secondaryConfig.label}
+              fieldDefs={secondaryConfig.fieldDefs}
+              onChange={setSecondaryData}
+            />
           )}
 
           <div className="flex justify-end">

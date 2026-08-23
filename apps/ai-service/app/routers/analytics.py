@@ -1,12 +1,13 @@
 """Analytics router — CAATs (Computer-Assisted Audit Techniques).
-Tareas 2.1–2.7:
-  POST /analytics/gl              → Diario Mayor
-  POST /analytics/ap              → Cuentas por Pagar
-  POST /analytics/payroll         → Nómina
-  POST /analytics/benford         → Ley de Benford
-  POST /analytics/anomaly         → ML Anomaly Detection
-  POST /analytics/sod             → Segregación de Funciones
-  POST /analytics/vendor_master   → Integridad de Maestro de Proveedores
+Tareas 2.1–2.8:
+  POST /analytics/gl               → Diario Mayor
+  POST /analytics/ap               → Cuentas por Pagar
+  POST /analytics/payroll          → Nómina
+  POST /analytics/benford          → Ley de Benford
+  POST /analytics/anomaly          → ML Anomaly Detection
+  POST /analytics/sod              → Segregación de Funciones
+  POST /analytics/vendor_master    → Integridad de Maestro de Proveedores
+  POST /analytics/related_parties  → Partes Relacionadas y Conflicto de Interés (único motor de 2 datasets)
 """
 import dataclasses
 import math
@@ -22,6 +23,7 @@ from app.services.caats.benford import analyze_benford
 from app.services.caats.anomaly_detection import detect_anomalies
 from app.services.caats.sod_analysis import analyze_sod
 from app.services.caats.vendor_master_analysis import analyze_vendor_master
+from app.services.caats.related_parties_analysis import analyze_related_parties
 
 router = APIRouter()
 
@@ -72,6 +74,15 @@ class AnomalyRequest(BaseModel):
     records: list[dict[str, Any]] = Field(..., description="Lista de registros")
     numeric_fields: list[str] = Field(..., description="Campos numéricos a usar como features")
     contamination: float = Field(0.05, ge=0.01, le=0.5, description="Fracción esperada de anomalías")
+
+
+class DualRecordsRequest(BaseModel):
+    """Único motor CAATs que necesita DOS datasets — transacciones a analizar
+    más un registro de referencia (partes relacionadas) contra el cual cruzarlas."""
+    records: list[dict[str, Any]] = Field(..., description="Transacciones a analizar")
+    field_mapping: Optional[dict[str, str]] = Field(None, description="Mapeo de campos de las transacciones")
+    reference_records: list[dict[str, Any]] = Field(..., description="Registro de partes relacionadas/nómina")
+    reference_field_mapping: Optional[dict[str, str]] = Field(None, description="Mapeo de campos del registro de referencia")
 
 
 # ─── GL ───────────────────────────────────────────────────────────────────────
@@ -225,6 +236,34 @@ async def vendor_master_analysis(
             address_field=fm.get("address", "address"),
             status_field=fm.get("status", "status"),
             last_activity_field=fm.get("last_activity_date", "last_activity_date"),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _serialize(result)
+
+
+# ─── Partes Relacionadas y Conflicto de Interés ───────────────────────────────
+@router.post("/related_parties")
+async def related_parties_analysis(
+    request: DualRecordsRequest,
+    x_internal_key: str | None = Header(default=None),
+):
+    """Tarea 2.8 — Cruce de transacciones contra el registro de partes relacionadas."""
+    verify_internal_key(x_internal_key)
+    fm = request.field_mapping or {}
+    rfm = request.reference_field_mapping or {}
+    try:
+        result = analyze_related_parties(
+            transactions=request.records,
+            related_parties=request.reference_records,
+            vendor_id_field=fm.get("vendor_id", "vendor_id"),
+            vendor_name_field=fm.get("vendor_name", "vendor_name"),
+            tax_id_field=fm.get("tax_id", "tax_id"),
+            amount_field=fm.get("amount", "amount"),
+            date_field=fm.get("date", "date"),
+            party_name_field=rfm.get("party_name", "party_name"),
+            party_tax_id_field=rfm.get("tax_id", "tax_id"),
+            relationship_field=rfm.get("relationship", "relationship"),
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

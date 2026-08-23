@@ -9,7 +9,7 @@ import {
   TrendingUp, Search, Database, FileSpreadsheet, Cpu,
   ChevronDown, ChevronUp, Info, Upload, FileUp, X, ListChecks,
   AlertTriangle, RotateCcw, HelpCircle, FileDown, Table2,
-  Target, FlaskConical, ScrollText, Save, ShieldAlert, Building2,
+  Target, FlaskConical, ScrollText, Save, ShieldAlert, Building2, Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -18,8 +18,9 @@ import {
 import { METHODOLOGY } from '@/lib/caats-methodology';
 import { AnalysisResultView, type FindingLike } from '@/components/caats/CaatsResultView';
 import { SaveAsWorkingPaperModal } from '@/components/caats/SaveAsWorkingPaperModal';
+import { SecondaryDatasetUpload, type SecondaryDatasetValue } from '@/components/caats/SecondaryDatasetUpload';
 import {
-  type AnalysisId, type ParsedFile, FIELD_DEFS,
+  type AnalysisId, type ParsedFile, FIELD_DEFS, SECONDARY_DATASET,
   normColName, autoMatchColumn, autoDetectNumericColumns,
 } from '@/lib/caats-fields';
 
@@ -90,6 +91,14 @@ const ANALYSIS_TYPES: AnalysisType[] = [
     icon:        Building2,
     color:       'bg-teal-500',
     sampleKey:   'vendor_master',
+  },
+  {
+    id:          'related_parties',
+    label:       'Partes Relacionadas',
+    description: 'Cruza transacciones contra un registro de partes relacionadas/nómina para detectar conflictos de interés no revelados.',
+    icon:        Users,
+    color:       'bg-rose-500',
+    sampleKey:   'related_parties',
   },
 ];
 
@@ -224,6 +233,26 @@ const SAMPLE_DATA: Record<string, unknown> = {
       { vendor_id: 'V010', vendor_name: 'Soluciones Tecnológicas SA',   tax_id: 'NIT-0614-101010-010-0', bank_account: '890-123456-7', address: 'Plaza Mundo Local 45, San Salvador',    status: 'Activo',   last_activity_date: '2025-05-20' },
     ],
   },
+  related_parties: {
+    // Único motor con DOS datasets: records = transacciones, reference_records
+    // = registro de partes relacionadas. "Comercial Familiar SA" y "Carlos
+    // Ramírez Servicios" matchean por NIT exacto (señal fuerte); "Juan Pérez
+    // Consultores" matchea solo por nombre contra "Juan Pérez" (señal débil,
+    // sin NIT); "Distribuidora Zeta" y "Proveedor Externo SA" quedan limpios.
+    records: [
+      { vendor_name: 'Comercial Familiar SA',    amount: 85000, tax_id: 'CF-004', date: '2025-04-12' },
+      { vendor_name: 'Distribuidora Zeta',       amount: 22000, tax_id: 'DZ-999', date: '2025-05-03' },
+      { vendor_name: 'Juan Pérez Consultores',   amount: 15000, tax_id: '',       date: '2025-03-20' },
+      { vendor_name: 'Carlos Ramírez Servicios', amount: 9000,  tax_id: 'CR-003', date: '2025-06-08' },
+      { vendor_name: 'Proveedor Externo SA',     amount: 30000, tax_id: 'PE-100', date: '2025-06-15' },
+    ],
+    reference_records: [
+      { party_name: 'Juan Pérez',           relationship: 'Director',   tax_id: 'JP-001' },
+      { party_name: 'María López',          relationship: 'Accionista', tax_id: 'ML-002' },
+      { party_name: 'Carlos Ramírez',       relationship: 'Empleado',   tax_id: 'CR-003' },
+      { party_name: 'Comercial Familiar SA', relationship: 'Filial',    tax_id: 'CF-004' },
+    ],
+  },
 };
 
 // ─── Subir archivo — mapeo de columnas (sin plantilla fija) ───────────────────
@@ -326,6 +355,17 @@ export default function AnalyticsPage() {
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
   const [benfordColumn, setBenfordColumn] = useState('');
   const [anomalyColumns, setAnomalyColumns] = useState<string[]>([]);
+  const [secondaryData, setSecondaryData] = useState<SecondaryDatasetValue | null>(null);
+
+  // Solo se limpia el dataset secundario al cambiar de MOTOR — un re-upload
+  // del archivo principal para el mismo motor no debe perder el secundario
+  // ya cargado (era un bug real: el efecto de abajo corre también cuando
+  // `parsed` cambia por un simple re-upload, y ponerlo ahí borraba el
+  // dataset secundario en cada subida del archivo principal).
+  useEffect(() => {
+    setSecondaryData(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected.id]);
 
   // Al cambiar de tipo de análisis con un archivo ya cargado, re-mapear
   // automáticamente contra las columnas de ESE archivo para el nuevo tipo.
@@ -387,10 +427,16 @@ export default function AnalyticsPage() {
   }
 
   const fieldDefs = FIELD_DEFS[selected.id];
+  const secondaryConfig = SECONDARY_DATASET[selected.id];
   const missingRequired = useMemo(() => {
     if (dataMode !== 'upload' || !fieldDefs) return false;
     return fieldDefs.some(d => d.required && !fieldMapping[d.key]);
   }, [dataMode, fieldDefs, fieldMapping]);
+  const secondaryMissingRequired = useMemo(() => {
+    if (dataMode !== 'upload' || !secondaryConfig) return false;
+    if (!secondaryData) return true;
+    return secondaryConfig.fieldDefs.some(d => d.required && !secondaryData.fieldMapping[d.key]);
+  }, [dataMode, secondaryConfig, secondaryData]);
 
   const canRun = dataMode === 'sample'
     ? true
@@ -398,7 +444,7 @@ export default function AnalyticsPage() {
       ? !!parsed && !!benfordColumn
       : selected.id === 'anomaly'
         ? !!parsed && anomalyColumns.length > 0
-        : !!parsed && !missingRequired;
+        : !!parsed && !missingRequired && !secondaryMissingRequired;
 
   async function runAnalysis() {
     setRunning(true);
@@ -421,7 +467,12 @@ export default function AnalyticsPage() {
       } else {
         const mapping: Record<string, string> = {};
         Object.entries(fieldMapping).forEach(([key, col]) => { if (col) mapping[key] = col; });
-        payload = { records: parsed.rows, field_mapping: mapping };
+        payload = secondaryConfig && secondaryData
+          ? {
+              records: parsed.rows, field_mapping: mapping,
+              reference_records: secondaryData.rows, reference_field_mapping: secondaryData.fieldMapping,
+            }
+          : { records: parsed.rows, field_mapping: mapping };
       }
 
       const data = await apiClient.post<Record<string, unknown>>(
@@ -533,7 +584,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Analysis type selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 lg:grid-cols-8 gap-3">
             {ANALYSIS_TYPES.map(type => (
               <button
                 key={type.id}
@@ -799,6 +850,14 @@ export default function AnalyticsPage() {
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {secondaryConfig && (
+                    <SecondaryDatasetUpload
+                      label={secondaryConfig.label}
+                      fieldDefs={secondaryConfig.fieldDefs}
+                      onChange={setSecondaryData}
+                    />
                   )}
                 </div>
               )}

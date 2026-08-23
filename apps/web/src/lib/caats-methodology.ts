@@ -116,4 +116,18 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     limitaciones:
       'El emparejamiento de NIT/cuenta/dirección es textual (normalizado) — errores de digitación no detectados como "el mismo valor" pueden esconder un duplicado real. Una dirección compartida NO es prueba de fraude por sí sola. Requiere que el archivo sea el MAESTRO de proveedores (un registro por proveedor), no el historial de transacciones — para eso está el motor de Cuentas por Pagar (AP).',
   },
+  related_parties: {
+    objetivo:
+      'Detectar transacciones con una parte relacionada (accionista, director, familiar, filial o empleado propio) que no fue revelada como tal — el conflicto de interés más citado en el Reporte ACFE a las Naciones, y área de riesgo explícita bajo NIA 550.',
+    metodologia:
+      'Único motor CAATs que cruza DOS fuentes de datos: las transacciones a analizar contra un registro separado de partes relacionadas (que incluye accionistas, directores, familiares, filiales, y la nómina propia como filas con relación "Empleado"). El cruce se hace primero por NIT/RUC exacto (señal fuerte) y, si no hay NIT, por coincidencia de nombre (señal más débil, sujeta a falsos positivos).',
+    normativa: 'NIA 550 (Partes Relacionadas), ACFE Report to the Nations 2024 (conflicto de interés — categoría más común de esquema de corrupción)',
+    pruebas: [
+      { nombre: 'Coincidencia por NIT/RUC', descripcion: 'Transacción cuya contraparte comparte NIT/RUC exacto con una parte relacionada registrada — evidencia fuerte, no depende de que los nombres coincidan.' },
+      { nombre: 'Coincidencia por Nombre', descripcion: 'Transacción cuya contraparte coincide por nombre (sin NIT que lo confirme) con una parte relacionada — señal más débil, requiere confirmación manual.' },
+      { nombre: 'Empleado como Contraparte', descripcion: 'Un empleado de la nómina propia aparece como proveedor o cliente — el escenario específico de "participación oculta" que más preocupa en auditoría de conflicto de interés.' },
+    ],
+    limitaciones:
+      'La calidad del resultado depende por completo de qué tan completo esté el registro de partes relacionadas que se sube — el motor no puede detectar una parte relacionada que nunca se registró. El match por nombre es especialmente propenso a falsos positivos con nombres comunes; siempre revisar manualmente antes de concluir que hay una transacción no revelada.',
+  },
 };

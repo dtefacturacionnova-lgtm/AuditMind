@@ -83,6 +83,12 @@ export const FIELD_LABELS: Record<string, string> = {
   nit: 'NIT / RUC', cuenta_bancaria: 'Cuenta Bancaria', direccion: 'Dirección',
   proveedores: 'Proveedores Involucrados', tax_id: 'NIT / RUC', address: 'Dirección',
   status: 'Estado', last_activity_date: 'Última Actividad',
+  // Partes Relacionadas
+  total_transactions: 'Transacciones Analizadas', total_related_parties: 'Partes Relacionadas Registradas',
+  matched_transaction_count: 'Transacciones Vinculadas', matched_amount: 'Monto Vinculado',
+  exposure_by_party: 'Exposición por Parte Relacionada', parte_relacionada: 'Parte Relacionada',
+  relacion: 'Relación', transacciones: 'Transacciones', monto_total: 'Monto Total',
+  party_name: 'Nombre de la Parte Relacionada', relationship: 'Relación',
 };
 
 export const TEST_NAME_LABELS: Record<string, string> = {
@@ -118,6 +124,10 @@ export const TEST_NAME_LABELS: Record<string, string> = {
   DUPLICATE_ADDRESS: 'Dirección Duplicada',
   INACTIVE_WITH_RECENT_ACTIVITY: 'Proveedor Inactivo con Actividad Reciente',
   WEAK_IDENTITY: 'Identidad Débil del Proveedor',
+  // Partes Relacionadas
+  RELATED_PARTY_MATCH_TAX_ID: 'Transacción con Parte Relacionada (por NIT)',
+  RELATED_PARTY_MATCH_NAME: 'Transacción con Parte Relacionada (por Nombre)',
+  EMPLOYEE_AS_COUNTERPARTY: 'Empleado como Contraparte',
 };
 
 export const RISK_LEVEL_LABELS: Record<string, string> = {

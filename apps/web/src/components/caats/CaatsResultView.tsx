@@ -162,7 +162,7 @@ function GenericTable({ rows }: { rows: Record<string, unknown>[] }) {
 const RESULT_SPECIAL_KEYS = new Set([
   'findings', 'summary', 'vendor_concentration', 'pay_distribution', 'digits',
   'top_anomalous_amounts', 'interpretation', 'top_anomalies', 'feature_stats', 'conformity',
-  'top_conflicted_users',
+  'top_conflicted_users', 'exposure_by_party',
 ]);
 
 export function AnalysisResultView({ result }: { result: Record<string, unknown> }) {
@@ -171,6 +171,7 @@ export function AnalysisResultView({ result }: { result: Record<string, unknown>
   const topAnomalies = Array.isArray(result.top_anomalies) ? (result.top_anomalies as Array<Record<string, unknown>>) : null;
   const vendorConcentration = Array.isArray(result.vendor_concentration) ? (result.vendor_concentration as Record<string, unknown>[]) : null;
   const topConflictedUsers = Array.isArray(result.top_conflicted_users) ? (result.top_conflicted_users as Record<string, unknown>[]) : null;
+  const exposureByParty = Array.isArray(result.exposure_by_party) ? (result.exposure_by_party as Record<string, unknown>[]) : null;
   const topAnomalousAmounts = Array.isArray(result.top_anomalous_amounts) ? (result.top_anomalous_amounts as Record<string, unknown>[]) : null;
   const digits = Array.isArray(result.digits) ? (result.digits as Record<string, unknown>[]) : null;
   const payDist = result.pay_distribution && typeof result.pay_distribution === 'object'
@@ -255,6 +256,12 @@ export function AnalysisResultView({ result }: { result: Record<string, unknown>
       {topConflictedUsers && (
         <ResultSection title="Usuarios con Más Conflictos de Segregación">
           <GenericTable rows={topConflictedUsers} />
+        </ResultSection>
+      )}
+
+      {exposureByParty && (
+        <ResultSection title="Exposición por Parte Relacionada">
+          <GenericTable rows={exposureByParty} />
         </ResultSection>
       )}
 

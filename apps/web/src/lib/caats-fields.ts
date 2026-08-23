@@ -1,7 +1,7 @@
 // ─── Mapeo de columnas CAATs — compartido entre la pantalla standalone de ────
 // Analytics y el panel embebido en el papel de trabajo PT-B4.
 
-export type AnalysisId = 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master';
+export type AnalysisId = 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master' | 'related_parties';
 
 export interface FieldDef { key: string; label: string; required?: boolean }
 
@@ -51,6 +51,30 @@ export const FIELD_DEFS: Partial<Record<AnalysisId, FieldDef[]>> = {
     { key: 'status',              label: 'Estado (Activo/Inactivo)' },
     { key: 'last_activity_date',  label: 'Fecha de Última Actividad' },
   ],
+  related_parties: [
+    { key: 'vendor_name', label: 'Nombre de la Contraparte (Proveedor/Cliente)', required: true },
+    { key: 'amount',      label: 'Monto',                                       required: true },
+    { key: 'vendor_id',   label: 'ID de Contraparte' },
+    { key: 'tax_id',      label: 'NIT / RUC de la Contraparte' },
+    { key: 'date',        label: 'Fecha' },
+  ],
+};
+
+// ─── Motores que necesitan un SEGUNDO dataset de referencia (hoy solo
+// related_parties) — configuración del archivo secundario: label del
+// bloque de subida y sus propios campos/alias, independientes del dataset
+// principal (mismo mecanismo, dos instancias).
+export interface SecondaryDatasetConfig { label: string; fieldDefs: FieldDef[] }
+
+export const SECONDARY_DATASET: Partial<Record<AnalysisId, SecondaryDatasetConfig>> = {
+  related_parties: {
+    label: 'Registro de Partes Relacionadas / Nómina',
+    fieldDefs: [
+      { key: 'party_name',    label: 'Nombre de la Parte Relacionada',                       required: true },
+      { key: 'relationship',  label: 'Relación (Accionista/Director/Familiar/Empleado/Filial)', required: true },
+      { key: 'tax_id',        label: 'NIT / RUC (si está disponible)' },
+    ],
+  },
 };
 
 // Claves iguales a las de FIELD_DEFS (el nombre que field_mapping espera),
@@ -79,6 +103,8 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   address: ['address', 'direccion', 'domicilio'],
   status: ['status', 'estado', 'estatus'],
   last_activity_date: ['last_activity_date', 'ultima_actividad', 'fecha_ultima_actividad', 'ultimo_movimiento'],
+  party_name: ['party_name', 'nombre', 'nombre_completo', 'parte_relacionada', 'nombre_parte'],
+  relationship: ['relationship', 'relacion', 'relación', 'tipo_relacion', 'vinculo', 'vínculo'],
 };
 
 export function normColName(c: string): string {

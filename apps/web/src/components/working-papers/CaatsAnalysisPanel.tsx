@@ -5,6 +5,7 @@ import {
   Play, Loader2, AlertCircle, AlertTriangle, CheckCircle2, RotateCcw,
   Upload, FileUp, X, ListChecks, Database, FileSpreadsheet, TrendingUp,
   BarChart3, Cpu, ShieldAlert, Building2, Users, Receipt,
+  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
@@ -49,6 +50,13 @@ const ENGINES: { id: AnalysisId; label: string; icon: typeof Database; color: st
   { id: 'vendor_master', label: 'Maestro de Proveedores', icon: Building2, color: 'bg-teal-500' },
   { id: 'related_parties', label: 'Partes Relacionadas', icon: Users, color: 'bg-rose-500' },
   { id: 'expenses', label: 'Gastos de Representación', icon: Receipt, color: 'bg-cyan-500' },
+  { id: 'revenue_cutoff', label: 'Corte de Ingresos', icon: CalendarClock, color: 'bg-lime-500' },
+  { id: 'bid_rigging', label: 'Licitación Colusoria', icon: Gavel, color: 'bg-orange-500' },
+  { id: 'ar_aging', label: 'Antigüedad de CxC', icon: Clock, color: 'bg-sky-500' },
+  { id: 'fixed_assets', label: 'Activo Fijo', icon: Package, color: 'bg-fuchsia-500' },
+  { id: 'structuring', label: 'Pitufeo / Smurfing', icon: Layers, color: 'bg-violet-500' },
+  { id: 'missing_trader', label: 'Missing Trader', icon: Ghost, color: 'bg-slate-500' },
+  { id: 'tax_haven', label: 'Jurisdicciones de Baja Tributación', icon: Globe, color: 'bg-emerald-500' },
 ];
 
 export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readOnly = false }: Props) {
@@ -220,7 +228,7 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
   return (
     <div className="space-y-4" data-section-key={sectionKey} data-paper-id={paperId}>
       {/* Selector de motor */}
-      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-9 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-2">
         {ENGINES.map(e => (
           <button
             key={e.id}

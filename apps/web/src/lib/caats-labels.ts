@@ -94,6 +94,33 @@ export const FIELD_LABELS: Record<string, string> = {
   employee_concentration: 'Concentración por Empleado', empleado: 'Empleado',
   pct_del_total: '% del Total', category: 'Categoría',
   semana: 'Semana', suma_gastos: 'Suma de Gastos', cantidad_gastos: 'Cantidad de Gastos',
+  // Corte de Ingresos
+  customer_name: 'Nombre del Cliente', delivery_date: 'Fecha de Entrega', daily_amounts: 'Montos Diarios',
+  // Licitación Colusoria
+  total_bids: 'Ofertas Analizadas', total_tenders: 'Licitaciones Analizadas', bidder_count: 'Oferentes',
+  bidder_win_rate: 'Tasa de Adjudicación por Proveedor', licitacion: 'Licitación', num_ofertas: 'N° de Ofertas',
+  monto_promedio: 'Monto Promedio', coef_variacion_pct: 'Coef. de Variación (%)', oferta: 'Oferta',
+  oferta_ganadora: 'Oferta Ganadora', diferencia_pct: 'Diferencia (%)', proveedor: 'Proveedor',
+  participaciones: 'Participaciones', adjudicaciones: 'Adjudicaciones', tasa_adjudicacion_pct: 'Tasa de Adjudicación (%)',
+  tender_id: 'Licitación', bidder_name: 'Oferente', is_winner: '¿Ganador?',
+  // Antigüedad de CxC
+  total_outstanding: 'Saldo Total Pendiente', customer_count: 'Clientes con Saldo', aging_buckets: 'Antigüedad de Saldos',
+  rango: 'Rango', facturas: 'Facturas', monto: 'Monto', cliente: 'Cliente', saldo: 'Saldo', due_date: 'Fecha de Vencimiento',
+  is_credit_note: '¿Es Nota de Crédito?',
+  // Activo Fijo
+  total_assets: 'Activos Analizados', total_cost: 'Costo Total', total_accumulated_depreciation: 'Depreciación Acumulada Total',
+  asset_id: 'ID del Activo', asset_name: 'Nombre del Activo', depreciacion_registrada: 'Depreciación Registrada',
+  depreciacion_esperada: 'Depreciación Esperada', acquisition_date: 'Fecha de Adquisición', cost: 'Costo',
+  useful_life_years: 'Vida Útil (años)', accumulated_depreciation: 'Depreciación Acumulada',
+  last_physical_check_date: 'Última Verificación Física',
+  // Pitufeo / Smurfing
+  account_count: 'Titulares Analizados', account_holder: 'Titular', ventana: 'Ventana', suma: 'Suma', cantidad: 'Cantidad',
+  // Missing Trader
+  vendor_activity: 'Actividad por Proveedor', dias_actividad: 'Días de Actividad',
+  primera_transaccion: 'Primera Transacción', ultima_transaccion: 'Última Transacción',
+  // Jurisdicciones de Baja Tributación
+  flagged_amount: 'Monto en Jurisdicciones de Riesgo', flagged_pct: '% en Jurisdicciones de Riesgo',
+  exposure_by_jurisdiction: 'Exposición por Jurisdicción', jurisdiccion: 'Jurisdicción', jurisdiction: 'País / Jurisdicción',
 };
 
 export const TEST_NAME_LABELS: Record<string, string> = {
@@ -139,6 +166,31 @@ export const TEST_NAME_LABELS: Record<string, string> = {
   WEEKEND_EXPENSES: 'Gastos en Fin de Semana',
   DUPLICATE_EXPENSES: 'Gastos Duplicados',
   EMPLOYEE_CONCENTRATION: 'Concentración en un Empleado',
+  // Corte de Ingresos
+  CUTOFF_DELIVERY_MISMATCH: 'Corte — Factura sin Entrega Confirmada',
+  CUTOFF_NO_DELIVERY_DATA: 'Corte — Sin Datos de Entrega',
+  CUTOFF_CONCENTRATION: 'Concentración de Facturación al Cierre',
+  // Licitación Colusoria
+  BID_UNIFORMITY: 'Uniformidad de Precios',
+  CLOSE_LOSING_BIDS: 'Ofertas Perdedoras Cercanas al Ganador',
+  DISPROPORTIONATE_WIN_RATE: 'Tasa de Adjudicación Desproporcionada',
+  // Antigüedad de CxC
+  SEVERELY_OVERDUE: 'Saldo Severamente Vencido (90+ días)',
+  CUSTOMER_CONCENTRATION: 'Concentración por Cliente',
+  POST_PERIOD_CREDIT_NOTES: 'Notas de Crédito Cerca del Cierre',
+  // Activo Fijo
+  DEPRECIATION_MISMATCH: 'Depreciación Registrada vs. Esperada',
+  FULLY_DEPRECIATED_STILL_ACTIVE: 'Totalmente Depreciado y Aún Activo',
+  STALE_PHYSICAL_CHECK: 'Sin Verificación Física Reciente',
+  // Pitufeo / Smurfing
+  NEAR_REPORTING_THRESHOLD: 'Transacción Cerca del Umbral de Reporte',
+  STRUCTURING_PATTERN: 'Patrón de Fraccionamiento (Pitufeo)',
+  // Missing Trader
+  BURST_ACTIVITY: 'Actividad Concentrada (Missing Trader)',
+  WEAK_IDENTITY_HIGH_VALUE: 'Identidad Débil con Monto Alto',
+  // Jurisdicciones de Baja Tributación
+  LOW_TAX_JURISDICTION_TRANSACTIONS: 'Transacciones a Jurisdicción de Baja Tributación',
+  HIGH_HAVEN_CONCENTRATION: 'Alta Concentración en Jurisdicciones de Riesgo',
 };
 
 export const RISK_LEVEL_LABELS: Record<string, string> = {

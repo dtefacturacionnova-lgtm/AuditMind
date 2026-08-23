@@ -1,7 +1,9 @@
 // ─── Mapeo de columnas CAATs — compartido entre la pantalla standalone de ────
 // Analytics y el panel embebido en el papel de trabajo PT-B4.
 
-export type AnalysisId = 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master' | 'related_parties' | 'expenses';
+export type AnalysisId =
+  | 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master' | 'related_parties' | 'expenses'
+  | 'revenue_cutoff' | 'bid_rigging' | 'ar_aging' | 'fixed_assets' | 'structuring' | 'missing_trader' | 'tax_haven';
 
 export interface FieldDef { key: string; label: string; required?: boolean }
 
@@ -66,6 +68,55 @@ export const FIELD_DEFS: Partial<Record<AnalysisId, FieldDef[]>> = {
     { key: 'category',      label: 'Categoría de Gasto' },
     { key: 'approved_by',   label: 'Aprobado por' },
   ],
+  revenue_cutoff: [
+    { key: 'vendor_name',      label: 'Nombre del Cliente',          required: true },
+    { key: 'amount',           label: 'Monto',                       required: true },
+    { key: 'date',             label: 'Fecha de Factura',            required: true },
+    { key: 'invoice_number',   label: 'Número de Factura' },
+    { key: 'delivery_date',    label: 'Fecha de Guía de Despacho/Entrega' },
+  ],
+  bid_rigging: [
+    { key: 'tender_id',   label: 'ID de Licitación / Proceso',  required: true },
+    { key: 'vendor_name', label: 'Nombre del Proveedor/Oferente', required: true },
+    { key: 'amount',      label: 'Monto Ofertado',              required: true },
+    { key: 'is_winner',   label: '¿Ganador? (Sí/No)',           required: true },
+  ],
+  ar_aging: [
+    { key: 'vendor_name',      label: 'Nombre del Cliente',   required: true },
+    { key: 'due_date',         label: 'Fecha de Vencimiento', required: true },
+    { key: 'amount',           label: 'Monto',                required: true },
+    { key: 'invoice_number',   label: 'Número de Factura' },
+    { key: 'is_credit_note',   label: '¿Es Nota de Crédito? (Sí/No)' },
+    { key: 'date',             label: 'Fecha de Factura/Nota' },
+  ],
+  fixed_assets: [
+    { key: 'asset_name',                label: 'Nombre del Activo',           required: true },
+    { key: 'cost',                      label: 'Costo de Adquisición',        required: true },
+    { key: 'acquisition_date',          label: 'Fecha de Adquisición',        required: true },
+    { key: 'useful_life_years',         label: 'Vida Útil (años)',            required: true },
+    { key: 'asset_id',                  label: 'ID del Activo' },
+    { key: 'accumulated_depreciation',  label: 'Depreciación Acumulada Registrada' },
+    { key: 'status',                    label: 'Estado (Activo/Dado de Baja)' },
+    { key: 'last_physical_check_date',  label: 'Fecha de Última Verificación Física' },
+  ],
+  structuring: [
+    { key: 'account_holder', label: 'Titular de la Cuenta/Depositante', required: true },
+    { key: 'amount',         label: 'Monto',                            required: true },
+    { key: 'date',           label: 'Fecha',                            required: true },
+  ],
+  missing_trader: [
+    { key: 'vendor_name', label: 'Nombre del Proveedor', required: true },
+    { key: 'amount',      label: 'Monto',                required: true },
+    { key: 'date',        label: 'Fecha',                required: true },
+    { key: 'tax_id',      label: 'NIT / RUC' },
+    { key: 'address',     label: 'Dirección' },
+  ],
+  tax_haven: [
+    { key: 'vendor_name',   label: 'Nombre de la Contraparte', required: true },
+    { key: 'amount',        label: 'Monto',                    required: true },
+    { key: 'jurisdiction',  label: 'País / Jurisdicción',       required: true },
+    { key: 'date',          label: 'Fecha' },
+  ],
 };
 
 // ─── Motores que necesitan un SEGUNDO dataset de referencia (hoy solo
@@ -114,6 +165,20 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   party_name: ['party_name', 'nombre', 'nombre_completo', 'parte_relacionada', 'nombre_parte'],
   relationship: ['relationship', 'relacion', 'relación', 'tipo_relacion', 'vinculo', 'vínculo'],
   category: ['category', 'categoria', 'categoría', 'tipo_gasto', 'tipo', 'rubro'],
+  delivery_date: ['delivery_date', 'fecha_entrega', 'fecha_despacho', 'guia_despacho', 'fecha_guia'],
+  tender_id: ['tender_id', 'licitacion', 'proceso', 'id_licitacion', 'id_proceso'],
+  is_winner: ['is_winner', 'ganador', 'adjudicado', 'winner'],
+  due_date: ['due_date', 'fecha_vencimiento', 'vencimiento', 'fecha_vence'],
+  is_credit_note: ['is_credit_note', 'nota_credito', 'nota_de_credito', 'es_nota_credito'],
+  asset_id: ['asset_id', 'id_activo', 'codigo_activo'],
+  asset_name: ['asset_name', 'nombre_activo', 'descripcion_activo', 'activo'],
+  acquisition_date: ['acquisition_date', 'fecha_adquisicion', 'fecha_compra'],
+  cost: ['cost', 'costo', 'costo_adquisicion', 'valor_adquisicion'],
+  useful_life_years: ['useful_life_years', 'vida_util', 'vida_util_anos', 'años_vida_util'],
+  accumulated_depreciation: ['accumulated_depreciation', 'depreciacion_acumulada', 'deprec_acumulada'],
+  last_physical_check_date: ['last_physical_check_date', 'ultima_verificacion', 'fecha_verificacion', 'ultimo_conteo'],
+  account_holder: ['account_holder', 'titular', 'depositante', 'cuentahabiente', 'cliente'],
+  jurisdiction: ['jurisdiction', 'jurisdiccion', 'pais', 'país', 'country'],
 };
 
 export function normColName(c: string): string {

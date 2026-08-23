@@ -146,4 +146,98 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     limitaciones:
       'El umbral de aprobación usado por defecto ($100) es un valor de referencia — para un resultado preciso debe ajustarse a la política real de la entidad. Un empleado con más viajes/gastos legítimos (ej. ventas, dirección) concentrará naturalmente más gasto sin que eso implique fraude — el hallazgo de concentración es un punto de partida, no una conclusión.',
   },
+  revenue_cutoff: {
+    objetivo:
+      'Detectar reconocimiento de ingresos antes de la entrega real del bien o servicio, y patrones de "channel stuffing" (empujar ventas artificialmente antes del cierre) — una de las áreas de riesgo de fraude presuntas por defecto bajo NIA 240.',
+    metodologia:
+      'El cierre de período se infiere como la fecha más reciente del universo de facturas cargado — cargue exactamente el período que quiere evaluar. Cruza cada factura emitida en los últimos días del período contra su fecha de guía de despacho/entrega, y compara el promedio diario de facturación de esos últimos días contra el resto del período.',
+    normativa: 'NIIF 15 (Reconocimiento de Ingresos), NIA 240 (fraude — área de riesgo presunta)',
+    pruebas: [
+      { nombre: 'Factura sin Entrega Confirmada', descripcion: 'Facturas cerca del cierre sin guía de despacho registrada, o con entrega varios días después de la factura.' },
+      { nombre: 'Concentración de Facturación al Cierre', descripcion: 'El promedio diario de facturación en los últimos días del período es anormalmente más alto que el resto — patrón de "channel stuffing".' },
+    ],
+    limitaciones:
+      'El cierre de período se infiere de los datos cargados (la fecha más reciente) — si el archivo no cubre exactamente el período a evaluar, el resultado no es confiable. Sin fecha de entrega cargada, la prueba de corte queda incompleta (solo señala qué facturas revisar manualmente).',
+  },
+  bid_rigging: {
+    objetivo:
+      'Detectar patrones de colusión entre proveedores en procesos de licitación — precios anormalmente uniformes, ofertas perdedoras diseñadas para no competir realmente ("cover bidding"), y proveedores con una tasa de adjudicación desproporcionada.',
+    metodologia:
+      'Agrupa las ofertas por proceso de licitación y calcula el coeficiente de variación de los montos ofertados, la cercanía de cada oferta perdedora a la ganadora, y la tasa histórica de adjudicación por proveedor frente a cuántas veces participa.',
+    normativa: 'ACFE — bid rigging schemes, OCDE Guidelines for Fighting Bid Rigging in Public Procurement',
+    pruebas: [
+      { nombre: 'Uniformidad de Precios', descripcion: 'Ofertas de un mismo proceso con variación menor al 3% entre sí — señal fuerte de acuerdo previo de precios.' },
+      { nombre: 'Ofertas Perdedoras Cercanas al Ganador', descripcion: 'Ofertas perdedoras dentro del 5% por encima de la ganadora — patrón de "cover bidding".' },
+      { nombre: 'Tasa de Adjudicación Desproporcionada', descripcion: 'Proveedor adjudicado en el 50% o más de las licitaciones en que participa (con 3+ participaciones).' },
+    ],
+    limitaciones:
+      'El fraude en licitaciones no siempre deja un rastro numérico detectable — un proceso genuinamente competitivo entre pocos proveedores especializados puede producir precios similares sin que exista colusión. Cada hallazgo requiere investigación adicional (relaciones societarias entre oferentes, patrones a través de múltiples entidades contratantes) antes de concluir.',
+  },
+  ar_aging: {
+    objetivo:
+      'Calcular la antigüedad de las cuentas por cobrar por cliente, y detectar notas de crédito de monto alto emitidas cerca del cierre de período (posible reversión de ventas registradas para maquillar el cierre).',
+    metodologia:
+      'Calcula días vencidos de cada factura contra la fecha de vencimiento más reciente del universo cargado, clasifica en 4 rangos de antigüedad (0-30/31-60/61-90/90+ días), y evalúa concentración de saldo por cliente.',
+    normativa: 'NIA 540 (estimaciones contables — deterioro de cuentas por cobrar), NIA 315',
+    pruebas: [
+      { nombre: 'Saldo Severamente Vencido', descripcion: 'Facturas con más de 90 días de vencidas — evaluar deterioro/estimación de incobrables.' },
+      { nombre: 'Concentración por Cliente', descripcion: 'Los 3 clientes con mayor saldo concentran más del 50% de las cuentas por cobrar totales.' },
+      { nombre: 'Notas de Crédito Cerca del Cierre', descripcion: 'Notas de crédito emitidas en los últimos 15 días con datos cargados — revisar si reversan ventas de cierre.' },
+    ],
+    limitaciones:
+      'La antigüedad se calcula contra la fecha de vencimiento más reciente del archivo cargado, no contra la fecha real de hoy — cargue el universo completo de CxC vigente a la fecha de corte que quiere evaluar. La prueba de notas de crédito no vincula automáticamente cada nota contra su factura original (requiere ese cruce manual si el archivo no lo trae).',
+  },
+  fixed_assets: {
+    objetivo:
+      'Verificar existencia y depreciación de activos fijos — recalcula la depreciación esperada (línea recta) y la compara contra la registrada, detecta activos totalmente depreciados que siguen en uso, y activos sin verificación física reciente.',
+    metodologia:
+      'Depreciación línea recta: (años transcurridos ÷ vida útil) × costo, comparado contra la depreciación acumulada registrada. La fecha de referencia se infiere como la adquisición más reciente del universo cargado.',
+    normativa: 'NIA 500 (evidencia de auditoría — existencia), NIC 16 (Propiedad, Planta y Equipo)',
+    pruebas: [
+      { nombre: 'Depreciación Registrada vs. Esperada', descripcion: 'Activos donde la depreciación registrada difiere de la esperada (línea recta) en más del 10% del costo.' },
+      { nombre: 'Totalmente Depreciado y Aún Activo', descripcion: 'Activos con 98%+ del costo depreciado pero marcados como en uso — evaluar baja, revaluación o extensión formal de vida útil.' },
+      { nombre: 'Sin Verificación Física Reciente', descripcion: 'Activos sin conteo físico en los últimos 2 años (o nunca verificados) — riesgo de existencia.' },
+    ],
+    limitaciones:
+      'Asume depreciación en línea recta — si la entidad usa otro método (unidades producidas, saldos decrecientes), la comparación no es válida sin ajustar el cálculo. La fecha de referencia se infiere de los datos cargados, no es necesariamente la fecha de cierre real del período auditado.',
+  },
+  structuring: {
+    objetivo:
+      'Detectar el patrón transaccional de "pitufeo" (structuring/smurfing) — fraccionamiento deliberado de depósitos o transacciones en montos menores al umbral de reporte regulatorio, típico de la Fase de Colocación del lavado de activos.',
+    metodologia:
+      'Identifica transacciones individuales justo bajo el umbral de reporte, y agrupa transacciones del mismo titular en ventanas cortas de tiempo (por defecto 3 días) para detectar si, sumadas, superan el umbral.',
+    normativa: 'GAFI Recomendación 20 (Reporte de Operaciones Sospechosas), LCDA / NRP-36 (BCR/SSF El Salvador)',
+    pruebas: [
+      { nombre: 'Transacción Cerca del Umbral', descripcion: 'Transacciones individuales dentro del 10% por debajo del umbral de reporte.' },
+      { nombre: 'Patrón de Fraccionamiento', descripcion: 'Mismo titular con 2+ transacciones en una ventana corta que suman igual o más que el umbral — firma clásica del pitufeo.' },
+    ],
+    limitaciones:
+      'El umbral de reporte usado por defecto ($10,000) es un valor de referencia — debe ajustarse al umbral regulatorio real aplicable (ej. el de la Unidad de Investigación Financiera). Un patrón detectado es un indicio para investigar, no una confirmación de lavado de activos.',
+  },
+  missing_trader: {
+    objetivo:
+      'Detectar la firma transaccional del fraude "Missing Trader" (fraude carrusel de IVA) — un proveedor que concentra un volumen de transacciones alto en una ventana corta de actividad, aparece, factura fuerte, y deja de operar.',
+    metodologia:
+      'Calcula por proveedor su ventana de actividad (días entre primera y última transacción) y volumen total. Marca proveedores con actividad concentrada en pocos días Y volumen entre los más altos del universo cargado; cuando hay datos de identidad, cruza con NIT/dirección ausente.',
+    normativa: 'GAFI, doctrina europea de fraude carrusel de IVA (aplicable por analogía)',
+    pruebas: [
+      { nombre: 'Actividad Concentrada', descripcion: 'Proveedor con actividad en 30 días o menos y volumen entre el 25% más alto del universo — patrón de aparece/factura/desaparece.' },
+      { nombre: 'Identidad Débil con Monto Alto', descripcion: 'Proveedor sin NIT ni dirección registrada, con monto total igual o superior a la mediana.' },
+    ],
+    limitaciones:
+      'NO puede confirmar que el IVA facturado no fue enterado a la administración tributaria — ese dato no está disponible en un archivo de transacciones internas, requiere cruce con DGII. Señala el patrón transaccional consistente con el esquema, no una confirmación de fraude.',
+  },
+  tax_haven: {
+    objetivo:
+      'Analizar concentración de transacciones hacia jurisdicciones de baja o nula tributación, útil para detectar esquemas de traslado de beneficios hacia sociedades instrumentales o filiales.',
+    metodologia:
+      'Compara la jurisdicción de cada transacción contra un catálogo de referencia de jurisdicciones citadas de forma recurrente en literatura OCDE/BEPS, y calcula qué porcentaje del monto total transaccionado se dirige a esas jurisdicciones.',
+    normativa: 'Art. 199-A Código Tributario (Precios de Transferencia), OCDE/BEPS',
+    pruebas: [
+      { nombre: 'Transacciones a Jurisdicción de Baja Tributación', descripcion: 'Transacciones individuales hacia una jurisdicción del catálogo de referencia.' },
+      { nombre: 'Alta Concentración en Jurisdicciones de Riesgo', descripcion: 'Más del 15% del monto total transaccionado se dirige a jurisdicciones de baja tributación.' },
+    ],
+    limitaciones:
+      'El catálogo de jurisdicciones es una REFERENCIA GENERAL, NO la lista oficial vigente de "paraísos fiscales" o "sujetos a régimen fiscal preferente" que publica el Ministerio de Hacienda/DGII de El Salvador — esa lista oficial debe verificarse aparte y puede diferir. Este motor es un punto de partida para la revisión, no una determinación legal de precios de transferencia.',
+  },
 };

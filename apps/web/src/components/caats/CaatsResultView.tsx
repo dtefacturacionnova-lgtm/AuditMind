@@ -163,6 +163,7 @@ const RESULT_SPECIAL_KEYS = new Set([
   'findings', 'summary', 'vendor_concentration', 'pay_distribution', 'digits',
   'top_anomalous_amounts', 'interpretation', 'top_anomalies', 'feature_stats', 'conformity',
   'top_conflicted_users', 'exposure_by_party', 'employee_concentration',
+  'daily_amounts', 'bidder_win_rate', 'aging_buckets', 'vendor_activity', 'exposure_by_jurisdiction',
 ]);
 
 export function AnalysisResultView({ result }: { result: Record<string, unknown> }) {
@@ -173,6 +174,11 @@ export function AnalysisResultView({ result }: { result: Record<string, unknown>
   const topConflictedUsers = Array.isArray(result.top_conflicted_users) ? (result.top_conflicted_users as Record<string, unknown>[]) : null;
   const exposureByParty = Array.isArray(result.exposure_by_party) ? (result.exposure_by_party as Record<string, unknown>[]) : null;
   const employeeConcentration = Array.isArray(result.employee_concentration) ? (result.employee_concentration as Record<string, unknown>[]) : null;
+  const dailyAmounts = Array.isArray(result.daily_amounts) ? (result.daily_amounts as Record<string, unknown>[]) : null;
+  const bidderWinRate = Array.isArray(result.bidder_win_rate) ? (result.bidder_win_rate as Record<string, unknown>[]) : null;
+  const agingBuckets = Array.isArray(result.aging_buckets) ? (result.aging_buckets as Record<string, unknown>[]) : null;
+  const vendorActivity = Array.isArray(result.vendor_activity) ? (result.vendor_activity as Record<string, unknown>[]) : null;
+  const exposureByJurisdiction = Array.isArray(result.exposure_by_jurisdiction) ? (result.exposure_by_jurisdiction as Record<string, unknown>[]) : null;
   const topAnomalousAmounts = Array.isArray(result.top_anomalous_amounts) ? (result.top_anomalous_amounts as Record<string, unknown>[]) : null;
   const digits = Array.isArray(result.digits) ? (result.digits as Record<string, unknown>[]) : null;
   const payDist = result.pay_distribution && typeof result.pay_distribution === 'object'
@@ -269,6 +275,36 @@ export function AnalysisResultView({ result }: { result: Record<string, unknown>
       {employeeConcentration && (
         <ResultSection title="Concentración por Empleado">
           <GenericTable rows={employeeConcentration} />
+        </ResultSection>
+      )}
+
+      {dailyAmounts && (
+        <ResultSection title="Montos Diarios" defaultOpen={false}>
+          <GenericTable rows={dailyAmounts} />
+        </ResultSection>
+      )}
+
+      {bidderWinRate && (
+        <ResultSection title="Tasa de Adjudicación por Proveedor">
+          <GenericTable rows={bidderWinRate} />
+        </ResultSection>
+      )}
+
+      {agingBuckets && (
+        <ResultSection title="Antigüedad de Saldos">
+          <GenericTable rows={agingBuckets} />
+        </ResultSection>
+      )}
+
+      {vendorActivity && (
+        <ResultSection title="Actividad por Proveedor">
+          <GenericTable rows={vendorActivity} />
+        </ResultSection>
+      )}
+
+      {exposureByJurisdiction && (
+        <ResultSection title="Exposición por Jurisdicción">
+          <GenericTable rows={exposureByJurisdiction} />
         </ResultSection>
       )}
 

@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, Info, Upload, FileUp, X, ListChecks,
   AlertTriangle, RotateCcw, HelpCircle, FileDown, Table2,
   Target, FlaskConical, ScrollText, Save, ShieldAlert, Building2, Users, Receipt,
+  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -107,6 +108,62 @@ const ANALYSIS_TYPES: AnalysisType[] = [
     icon:        Receipt,
     color:       'bg-cyan-500',
     sampleKey:   'expenses',
+  },
+  {
+    id:          'revenue_cutoff',
+    label:       'Corte de Ingresos',
+    description: 'Cruza facturas cerca del cierre de período contra la fecha de entrega para detectar reconocimiento anticipado de ingresos.',
+    icon:        CalendarClock,
+    color:       'bg-lime-500',
+    sampleKey:   'revenue_cutoff',
+  },
+  {
+    id:          'bid_rigging',
+    label:       'Licitación Colusoria',
+    description: 'Detecta precios uniformes entre oferentes, ofertas perdedoras sospechosamente cercanas y tasas de adjudicación desproporcionadas.',
+    icon:        Gavel,
+    color:       'bg-orange-500',
+    sampleKey:   'bid_rigging',
+  },
+  {
+    id:          'ar_aging',
+    label:       'Antigüedad de CxC',
+    description: 'Calcula antigüedad de saldos por cliente y detecta notas de crédito de monto alto emitidas cerca del cierre.',
+    icon:        Clock,
+    color:       'bg-sky-500',
+    sampleKey:   'ar_aging',
+  },
+  {
+    id:          'fixed_assets',
+    label:       'Activo Fijo',
+    description: 'Recalcula depreciación esperada vs. registrada, activos totalmente depreciados aún en uso, y sin verificación física reciente.',
+    icon:        Package,
+    color:       'bg-fuchsia-500',
+    sampleKey:   'fixed_assets',
+  },
+  {
+    id:          'structuring',
+    label:       'Pitufeo / Smurfing',
+    description: 'Detecta transacciones cerca del umbral de reporte y patrones de fraccionamiento del mismo titular en ventanas cortas.',
+    icon:        Layers,
+    color:       'bg-violet-500',
+    sampleKey:   'structuring',
+  },
+  {
+    id:          'missing_trader',
+    label:       'Missing Trader',
+    description: 'Detecta proveedores con actividad concentrada en una ventana corta y volumen alto — firma transaccional del fraude carrusel de IVA.',
+    icon:        Ghost,
+    color:       'bg-slate-500',
+    sampleKey:   'missing_trader',
+  },
+  {
+    id:          'tax_haven',
+    label:       'Jurisdicciones de Baja Tributación',
+    description: 'Analiza concentración de transacciones hacia jurisdicciones de baja tributación (referencia, no lista oficial de Hacienda).',
+    icon:        Globe,
+    color:       'bg-emerald-500',
+    sampleKey:   'tax_haven',
   },
 ];
 
@@ -280,6 +337,118 @@ const SAMPLE_DATA: Record<string, unknown> = {
       { employee_name: 'Sofía Lima',   amount: 1500, date: '2025-06-14', category: 'Viaje Internacional', approved_by: 'Dirección' },
       { employee_name: 'Luis Vega',    amount: 300,  date: '2025-02-15', category: 'Combustible',    approved_by: 'Jefe Operaciones' },
       { employee_name: 'Marta Cruz',   amount: 250,  date: '2025-06-01', category: 'Comidas',        approved_by: 'Jefe Comercial' },
+    ],
+  },
+  revenue_cutoff: {
+    // 5 facturas repartidas en el período (línea base) + 4 en los últimos días
+    // del cierre (2025-06-27..30): 2 sin guía de despacho, 1 con entrega 7 días
+    // después (mismatch), 1 con entrega el mismo día (limpia). El volumen de
+    // esos 4 días también dispara la prueba de concentración.
+    records: [
+      { customer_name: 'Cliente A', amount: 5000,  date: '2025-01-15', delivery_date: '2025-01-16', invoice_number: 'F-001' },
+      { customer_name: 'Cliente B', amount: 4500,  date: '2025-02-20', delivery_date: '2025-02-21', invoice_number: 'F-002' },
+      { customer_name: 'Cliente C', amount: 6000,  date: '2025-03-10', delivery_date: '2025-03-11', invoice_number: 'F-003' },
+      { customer_name: 'Cliente A', amount: 5500,  date: '2025-04-05', delivery_date: '2025-04-06', invoice_number: 'F-004' },
+      { customer_name: 'Cliente D', amount: 4800,  date: '2025-05-12', delivery_date: '2025-05-13', invoice_number: 'F-005' },
+      { customer_name: 'Cliente E', amount: 12000, date: '2025-06-27', delivery_date: '',           invoice_number: 'F-006' },
+      { customer_name: 'Cliente F', amount: 11000, date: '2025-06-28', delivery_date: '2025-07-05',  invoice_number: 'F-007' },
+      { customer_name: 'Cliente A', amount: 9000,  date: '2025-06-29', delivery_date: '2025-06-29', invoice_number: 'F-008' },
+      { customer_name: 'Cliente G', amount: 13000, date: '2025-06-30', delivery_date: '',           invoice_number: 'F-009' },
+    ],
+  },
+  bid_rigging: {
+    // T-001: 4 oferentes con precios casi idénticos (uniformidad) y 3 ofertas
+    // perdedoras muy cerca del ganador. T-002: proceso competitivo normal
+    // (sin patrón). T-003: normal. Proveedor D gana 2 de 3 procesos en los que
+    // participa → tasa de adjudicación desproporcionada.
+    records: [
+      { tender_id: 'T-001', bidder_name: 'Proveedor D', amount: 99500,  is_winner: 'Sí' },
+      { tender_id: 'T-001', bidder_name: 'Proveedor A', amount: 100000, is_winner: 'No' },
+      { tender_id: 'T-001', bidder_name: 'Proveedor B', amount: 100800, is_winner: 'No' },
+      { tender_id: 'T-001', bidder_name: 'Proveedor C', amount: 101200, is_winner: 'No' },
+      { tender_id: 'T-002', bidder_name: 'Proveedor E', amount: 50000,  is_winner: 'Sí' },
+      { tender_id: 'T-002', bidder_name: 'Proveedor F', amount: 65000,  is_winner: 'No' },
+      { tender_id: 'T-002', bidder_name: 'Proveedor G', amount: 72000,  is_winner: 'No' },
+      { tender_id: 'T-002', bidder_name: 'Proveedor D', amount: 68000,  is_winner: 'No' },
+      { tender_id: 'T-003', bidder_name: 'Proveedor D', amount: 30000,  is_winner: 'Sí' },
+      { tender_id: 'T-003', bidder_name: 'Proveedor H', amount: 34000,  is_winner: 'No' },
+      { tender_id: 'T-003', bidder_name: 'Proveedor I', amount: 36000,  is_winner: 'No' },
+    ],
+  },
+  ar_aging: {
+    // Cliente D concentra 2 facturas 90+ días vencidas ($27,000 de $49,000
+    // total — >50%). Cliente F también 90+. Cliente A tiene una nota de
+    // crédito emitida cerca del cierre de período.
+    records: [
+      { customer_name: 'Cliente A', amount: 3000,  due_date: '2025-06-20', date: '2025-05-20' },
+      { customer_name: 'Cliente B', amount: 4000,  due_date: '2025-05-15', date: '2025-04-15' },
+      { customer_name: 'Cliente C', amount: 5000,  due_date: '2025-04-20', date: '2025-03-20' },
+      { customer_name: 'Cliente D', amount: 15000, due_date: '2025-02-01', date: '2025-01-01' },
+      { customer_name: 'Cliente D', amount: 12000, due_date: '2025-01-15', date: '2024-12-15' },
+      { customer_name: 'Cliente E', amount: 2000,  due_date: '2025-06-30', date: '2025-05-30' },
+      { customer_name: 'Cliente F', amount: 8000,  due_date: '2025-03-10', date: '2025-02-10' },
+      { customer_name: 'Cliente A', amount: 1500,  due_date: '2025-06-22', date: '2025-06-22', is_credit_note: 'Sí' },
+    ],
+  },
+  fixed_assets: {
+    // Vehículo: totalmente depreciado pero sigue "Activo" + sin verificación
+    // física reciente. Computadoras: depreciación registrada muy por debajo
+    // de la esperada. Mobiliario: correcta pero nunca verificada físicamente.
+    // Maquinaria: recién adquirida (fija la fecha de referencia). Equipo
+    // Descontinuado: dado de baja, correcto, no dispara nada.
+    records: [
+      { asset_id: 'AF-001', asset_name: 'Vehículo de Reparto 1', cost: 25000, acquisition_date: '2019-01-15', useful_life_years: 5,  accumulated_depreciation: 25000, status: 'Activo',        last_physical_check_date: '2021-01-01' },
+      { asset_id: 'AF-002', asset_name: 'Computadoras Oficina',  cost: 12000, acquisition_date: '2023-06-01', useful_life_years: 3,  accumulated_depreciation: 2000,  status: 'Activo',        last_physical_check_date: '2025-01-01' },
+      { asset_id: 'AF-003', asset_name: 'Mobiliario',            cost: 8000,  acquisition_date: '2022-03-01', useful_life_years: 10, accumulated_depreciation: 2600,  status: 'Activo',        last_physical_check_date: '' },
+      { asset_id: 'AF-004', asset_name: 'Maquinaria Industrial', cost: 50000, acquisition_date: '2025-06-01', useful_life_years: 8,  accumulated_depreciation: 0,     status: 'Activo',        last_physical_check_date: '2025-06-01' },
+      { asset_id: 'AF-005', asset_name: 'Equipo Descontinuado',  cost: 6000,  acquisition_date: '2015-01-01', useful_life_years: 5,  accumulated_depreciation: 6000,  status: 'Dado de Baja',  last_physical_check_date: '2024-01-01' },
+    ],
+  },
+  structuring: {
+    // Juan Pérez: 3 depósitos de $3,500 en 3 días consecutivos (suman
+    // $10,500 — fraccionamiento clásico). María Gómez: un depósito de $9,500
+    // (95% del umbral de $10,000). Carlos Ruiz y Ana Torres quedan limpios.
+    records: [
+      { account_holder: 'Juan Pérez',   amount: 3500, date: '2025-03-01' },
+      { account_holder: 'Juan Pérez',   amount: 3500, date: '2025-03-02' },
+      { account_holder: 'Juan Pérez',   amount: 3500, date: '2025-03-03' },
+      { account_holder: 'María Gómez',  amount: 9500, date: '2025-04-10' },
+      { account_holder: 'Carlos Ruiz',  amount: 2000, date: '2025-05-01' },
+      { account_holder: 'Ana Torres',   amount: 1500, date: '2025-05-15' },
+    ],
+  },
+  missing_trader: {
+    // Suministros Rápidos SA e Import Fugaz SA concentran su actividad en
+    // menos de 30 días con volumen alto (burst). Import Fugaz además no tiene
+    // NIT ni dirección registrada. Proveedor Histórico/Distribuidora
+    // Central/Comercial del Sur tienen actividad larga — quedan limpios.
+    records: [
+      { vendor_name: 'Suministros Rápidos SA', amount: 30000, date: '2025-05-01', tax_id: 'SR-001', address: 'Zona Industrial, San Salvador' },
+      { vendor_name: 'Suministros Rápidos SA', amount: 25000, date: '2025-05-10', tax_id: 'SR-001', address: 'Zona Industrial, San Salvador' },
+      { vendor_name: 'Suministros Rápidos SA', amount: 25000, date: '2025-05-20', tax_id: 'SR-001', address: 'Zona Industrial, San Salvador' },
+      { vendor_name: 'Proveedor Histórico SA',  amount: 8000,  date: '2025-01-15', tax_id: 'PH-002', address: 'Col. Escalón, San Salvador' },
+      { vendor_name: 'Proveedor Histórico SA',  amount: 12000, date: '2025-03-10', tax_id: 'PH-002', address: 'Col. Escalón, San Salvador' },
+      { vendor_name: 'Proveedor Histórico SA',  amount: 20000, date: '2025-06-01', tax_id: 'PH-002', address: 'Col. Escalón, San Salvador' },
+      { vendor_name: 'Distribuidora Central',   amount: 15000, date: '2025-02-05', tax_id: 'DC-003', address: 'Merliot, Santa Tecla' },
+      { vendor_name: 'Distribuidora Central',   amount: 15000, date: '2025-05-25', tax_id: 'DC-003', address: 'Merliot, Santa Tecla' },
+      { vendor_name: 'Comercial del Sur',       amount: 12000, date: '2025-01-20', tax_id: 'CS-004', address: 'San Miguel' },
+      { vendor_name: 'Comercial del Sur',       amount: 13000, date: '2025-06-05', tax_id: 'CS-004', address: 'San Miguel' },
+      { vendor_name: 'Import Fugaz SA',         amount: 45000, date: '2025-06-10', tax_id: '',       address: '' },
+      { vendor_name: 'Import Fugaz SA',         amount: 45000, date: '2025-06-25', tax_id: '',       address: '' },
+    ],
+  },
+  tax_haven: {
+    // Holding Internacional (Panamá), Servicios Offshore (Islas Caimán) y
+    // Trading International (Islas Vírgenes Británicas) concentran el 75.7%
+    // del monto total — dispara tanto las transacciones puntuales como la
+    // concentración general.
+    records: [
+      { vendor_name: 'Proveedor Local SA',          amount: 20000, jurisdiction: 'El Salvador',              date: '2025-02-01' },
+      { vendor_name: 'Distribuidora Regional',      amount: 15000, jurisdiction: 'Guatemala',                date: '2025-03-01' },
+      { vendor_name: 'Holding Internacional SA',    amount: 45000, jurisdiction: 'Panamá',                   date: '2025-04-01' },
+      { vendor_name: 'Servicios Offshore Ltd',      amount: 60000, jurisdiction: 'Islas Caimán',             date: '2025-05-01' },
+      { vendor_name: 'Consultora Global',           amount: 10000, jurisdiction: 'Estados Unidos',           date: '2025-05-15' },
+      { vendor_name: 'Trading International Corp',  amount: 35000, jurisdiction: 'Islas Vírgenes Británicas', date: '2025-06-01' },
     ],
   },
 };
@@ -613,7 +782,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Analysis type selector */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
             {ANALYSIS_TYPES.map(type => (
               <button
                 key={type.id}

@@ -329,35 +329,132 @@ async def upload_csv(
 
 # ─── Parseo genérico (sin normalizar) — para Analytics/CAATs con mapeo manual ──
 
+MAX_HEADER_SCAN_ROWS = 15
+
+
+def _looks_numeric(s: str) -> bool:
+    if not s:
+        return False
+    try:
+        float(s.replace(",", "").replace("$", "").replace("%", ""))
+        return True
+    except ValueError:
+        return False
+
+
+def _score_header_row(cells: list) -> tuple:
+    """Qué tan probable es que esta fila sea el encabezado real (vs. título de
+    reporte, fila vacía, o fila de datos). Devuelve (score, celdas_llenas)."""
+    vals = [c for c in cells if c]
+    filled = len(vals)
+    ncols = len(cells)
+    if filled == 0 or ncols == 0:
+        return 0.0, filled
+    filled_ratio = filled / ncols
+    str_ratio = sum(1 for v in vals if not _looks_numeric(v)) / filled
+    uniq_ratio = len(set(vals)) / filled
+    return filled_ratio * 0.5 + str_ratio * 0.3 + uniq_ratio * 0.2, filled
+
+
+def _detect_header_row(raw_rows: list) -> tuple:
+    """raw_rows: filas crudas (listas de strings ya trimeadas). Encuentra la fila
+    que mejor parece un encabezado de columnas dentro de las primeras filas —
+    así se saltan títulos de reporte ('Reporte de Libro Mayor - Enero 2026',
+    filas en blanco, etc.) que muchos exports reales anteponen a los datos.
+    Devuelve (índice_0based, score)."""
+    scan = raw_rows[:MAX_HEADER_SCAN_ROWS]
+    ncols = max((len(r) for r in scan), default=0)
+    best_idx, best_score = 0, -1.0
+    for i, row in enumerate(scan):
+        cells = list(row) + [""] * (ncols - len(row))
+        score, filled = _score_header_row(cells)
+        # Exigir al menos 2 celdas llenas — una sola celda (típico de un título
+        # de reporte en la columna A) nunca debe ganarle a un encabezado real.
+        if filled >= 2 and score > best_score:
+            best_score, best_idx = score, i
+    return best_idx, best_score
+
+
+def _clean_col(c: Any, idx: int) -> str:
+    s = "" if c is None else str(c).strip()
+    if s == "" or s.lower().startswith("unnamed"):
+        return f"(Columna {idx + 1})"
+    if s.endswith(".0") and s[:-2].lstrip("-").isdigit():
+        s = s[:-2]
+    return s
+
+
+def _clean_row(row: list) -> list:
+    return [("" if c is None else str(c).strip()) for c in row]
+
+
 @router.post("/parse")
-async def parse_file(file: UploadFile = File(...)):
+async def parse_file(
+    file: UploadFile = File(...),
+    header_row: Optional[int] = Form(default=None),
+):
     """
     Lee un CSV o Excel TAL CUAL viene — sin forzar ningún esquema de columnas.
-    Devuelve las columnas detectadas y las filas crudas; el mapeo a los campos
-    que cada análisis CAATs espera (amount, vendor_id, gross_pay, etc.) lo hace
-    el usuario en el frontend, vía el parámetro `field_mapping` que los
-    analizadores ya soportan (ver analytics.py) — así funciona con cualquier
-    exportación real, sin exigir una plantilla fija de antemano.
+    Antes de asumir que la primera fila es el encabezado, detecta si el archivo
+    trae filas de título/reporte por delante (patrón común en exports reales:
+    'Reporte de Libro Mayor', filas en blanco, y recién en la fila 3 o 4 las
+    columnas) y usa esa fila como encabezado real. Si `header_row` viene
+    explícito (0-based), se respeta tal cual — así el usuario puede corregir
+    manualmente desde el frontend si la detección automática se equivocó.
+    El mapeo a los campos que cada análisis CAATs espera (amount, vendor_id,
+    gross_pay, etc.) lo hace el usuario en el frontend vía `field_mapping`
+    (ver analytics.py) — esto solo resuelve dónde empiezan las columnas.
     """
     filename = file.filename or ""
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    if ext not in ("csv", "xlsx", "xls"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .csv, .xlsx o .xls")
 
     content = await file.read()
+    text = None
     try:
         if ext == "csv":
             text = content.decode("utf-8-sig")  # utf-8-sig maneja BOM de Excel
-            df = pd.read_csv(io.StringIO(text))
-        elif ext in ("xlsx", "xls"):
-            df = pd.read_excel(io.BytesIO(content))
+            raw_rows = [_clean_row(r) for r in csv.reader(io.StringIO(text))]
         else:
-            raise HTTPException(status_code=400, detail="Solo se aceptan archivos .csv, .xlsx o .xls")
-    except HTTPException:
-        raise
+            raw_df = pd.read_excel(io.BytesIO(content), header=None, dtype=str)
+            raw_df = raw_df.where(pd.notnull(raw_df), "")
+            raw_rows = [_clean_row(r) for r in raw_df.values.tolist()]
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"No se pudo leer el archivo: {str(e)[:200]}")
 
-    if df.empty:
+    raw_rows = [r for r in raw_rows if any(c for c in r)]  # descarta filas totalmente vacías
+    if not raw_rows:
         raise HTTPException(status_code=422, detail="El archivo no tiene filas de datos")
+
+    auto_idx, auto_score = _detect_header_row(raw_rows)
+    header_auto_detected = header_row is None
+    idx = header_row if header_row is not None else auto_idx
+    idx = max(0, min(idx, len(raw_rows) - 1))
+
+    try:
+        if ext == "csv":
+            lines = text.splitlines(keepends=True)
+            # Reconstruye el texto SOLO desde la fila de encabezado en adelante —
+            # así pandas nunca ve las filas de título, que suelen tener menos
+            # columnas que los datos y hacen fallar el parser si se le pasan.
+            remaining = "".join(lines[idx:]) if idx < len(lines) else lines[-1]
+            df = pd.read_csv(io.StringIO(remaining))
+        else:
+            df = pd.read_excel(io.BytesIO(content), skiprows=idx)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No se pudo leer el archivo desde la fila {idx + 1}: {str(e)[:200]}",
+        )
+
+    if df.empty:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No se encontraron filas de datos después de la fila {idx + 1}",
+        )
+
+    df.columns = [_clean_col(c, i) for i, c in enumerate(df.columns)]
 
     total_rows = len(df)
     truncated = total_rows > MAX_UPLOAD_ROWS
@@ -368,10 +465,15 @@ async def parse_file(file: UploadFile = File(...)):
     df = df.where(pd.notnull(df), None)
 
     return {
-        "columns":   [str(c) for c in df.columns.tolist()],
-        "rows":      df.to_dict("records"),
-        "rowCount":  len(df),
-        "totalRows": total_rows,
-        "truncated": truncated,
-        "filename":  filename,
+        "columns":            [str(c) for c in df.columns.tolist()],
+        "rows":               df.to_dict("records"),
+        "rowCount":           len(df),
+        "totalRows":          total_rows,
+        "truncated":          truncated,
+        "filename":           filename,
+        "headerRowIndex":     idx,
+        "headerAutoDetected": header_auto_detected,
+        "headerConfidence":   "high" if auto_score >= 0.55 else "low",
+        "skippedRows":        raw_rows[:idx] if idx > 0 else [],
+        "rawPreview":         raw_rows[:10],
     }

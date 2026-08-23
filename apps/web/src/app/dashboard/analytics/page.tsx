@@ -7,6 +7,7 @@ import {
   BarChart3, Play, Loader2, AlertCircle, CheckCircle2,
   TrendingUp, Search, Database, FileSpreadsheet, Cpu,
   ChevronDown, ChevronUp, Info, Upload, FileUp, X, ListChecks,
+  AlertTriangle, RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -252,12 +253,17 @@ function autoDetectNumericColumns(columns: string[], rows: Record<string, unknow
 }
 
 interface ParsedFile {
-  columns:   string[];
-  rows:      Record<string, unknown>[];
-  rowCount:  number;
-  totalRows: number;
-  truncated: boolean;
-  filename:  string;
+  columns:            string[];
+  rows:               Record<string, unknown>[];
+  rowCount:           number;
+  totalRows:          number;
+  truncated:          boolean;
+  filename:           string;
+  headerRowIndex:     number;
+  headerAutoDetected: boolean;
+  headerConfidence:   'high' | 'low';
+  skippedRows:        string[][];
+  rawPreview:         string[][];
 }
 
 // ─── Result renderer ──────────────────────────────────────────────────────────
@@ -406,6 +412,8 @@ export default function AnalyticsPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [showRowPicker, setShowRowPicker] = useState(false);
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
   const [benfordColumn, setBenfordColumn] = useState('');
   const [anomalyColumns, setAnomalyColumns] = useState<string[]>([]);
@@ -429,11 +437,7 @@ export default function AnalyticsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected.id, dataMode, parsed]);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // permite re-subir el mismo archivo si se corrige algo
-    if (!file) return;
-
+  async function parseFile(file: File, headerRow?: number) {
     setUploading(true);
     setUploadError('');
     setResult(null);
@@ -441,8 +445,10 @@ export default function AnalyticsPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
+      if (headerRow !== undefined) fd.append('headerRow', String(headerRow));
       const data = await apiClient.postForm<ParsedFile>('/ai/parse-file', fd);
       setParsed(data);
+      setShowRowPicker(false);
     } catch (err) {
       setParsed(null);
       setUploadError(err instanceof Error ? err.message : 'No se pudo leer el archivo');
@@ -451,8 +457,18 @@ export default function AnalyticsPage() {
     }
   }
 
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite re-subir el mismo archivo si se corrige algo
+    if (!file) return;
+    setUploadedFile(file);
+    await parseFile(file);
+  }
+
   function clearUpload() {
     setParsed(null);
+    setUploadedFile(null);
+    setShowRowPicker(false);
     setUploadError('');
     setFieldMapping({});
     setBenfordColumn('');
@@ -658,6 +674,59 @@ export default function AnalyticsPage() {
                       <button onClick={clearUpload} className="text-emerald-600 hover:text-emerald-800 shrink-0" title="Quitar archivo">
                         <X className="w-4 h-4" />
                       </button>
+                    </div>
+                  )}
+
+                  {/* Validación del encabezado: avisa si el archivo trae título/filas
+                      antes de las columnas, y deja elegir la fila correcta a mano. */}
+                  {parsed && (parsed.headerRowIndex > 0 || parsed.headerConfidence === 'low') && (
+                    <div className={cn(
+                      'rounded-lg px-3 py-2 text-xs space-y-2',
+                      parsed.headerConfidence === 'low'
+                        ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                        : 'bg-blue-50 border border-blue-200 text-blue-800',
+                    )}>
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>
+                          {parsed.headerRowIndex > 0
+                            ? `El archivo trae ${parsed.headerRowIndex} fila(s) antes de los encabezados (título de reporte, filas vacías, etc.) — se usó la fila ${parsed.headerRowIndex + 1} como encabezado.`
+                            : 'No estamos completamente seguros de que la fila 1 sea el encabezado correcto.'}
+                          {parsed.headerConfidence === 'low' && ' Revisa que las columnas de abajo se vean correctas.'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setShowRowPicker(s => !s)}
+                        className="flex items-center gap-1 font-semibold hover:underline"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        {showRowPicker ? 'Ocultar filas originales' : '¿No es correcto? Elegir la fila de encabezado'}
+                      </button>
+                      {showRowPicker && (
+                        <div className="overflow-x-auto bg-white border border-gray-200 rounded-lg">
+                          <table className="w-full text-[11px]">
+                            <tbody className="divide-y divide-gray-100">
+                              {parsed.rawPreview.map((row, i) => (
+                                <tr key={i} className={i === parsed.headerRowIndex ? 'bg-emerald-50' : undefined}>
+                                  <td className="px-2 py-1 text-gray-400 whitespace-nowrap">Fila {i + 1}</td>
+                                  <td className="px-2 py-1 text-gray-700 font-mono whitespace-nowrap">
+                                    {row.filter(Boolean).join(' | ') || <span className="text-gray-300">(vacía)</span>}
+                                  </td>
+                                  <td className="px-2 py-1 text-right">
+                                    <button
+                                      onClick={() => uploadedFile && parseFile(uploadedFile, i)}
+                                      disabled={uploading}
+                                      className="text-[#0F2D4A] font-semibold hover:underline disabled:opacity-40"
+                                    >
+                                      Usar esta fila
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   )}
 

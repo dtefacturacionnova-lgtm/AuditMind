@@ -101,9 +101,15 @@ export class AiController {
   @ApiOperation({ summary: 'Leer un CSV/Excel subido para CAATs — sin normalizar, columnas tal cual vienen' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
-  async parseFile(@UploadedFile() file: Express.Multer.File) {
+  async parseFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { headerRow?: string },
+  ) {
     if (!file) throw new Error('No se subió ningún archivo');
-    return this.aiService.parseFile(file.buffer, file.originalname);
+    const headerRow = body?.headerRow !== undefined && body.headerRow !== ''
+      ? Number(body.headerRow)
+      : undefined;
+    return this.aiService.parseFile(file.buffer, file.originalname, headerRow);
   }
 
   // ─── PI.7a — Muestreo estadístico NIA 530 ─────────────────────────────────

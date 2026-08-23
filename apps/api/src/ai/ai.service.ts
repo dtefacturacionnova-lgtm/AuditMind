@@ -510,10 +510,13 @@ export class AiService {
   /** Lee un CSV/Excel subido — devuelve columnas + filas SIN normalizar, para
    *  que el usuario mapee sus propias columnas a lo que cada análisis CAATs
    *  espera (ver runCaats/field_mapping) en vez de exigir una plantilla fija. */
-  async parseFile(fileBuffer: Buffer, filename: string): Promise<unknown> {
+  async parseFile(fileBuffer: Buffer, filename: string, headerRow?: number): Promise<unknown> {
     const formData = new FormData();
     const blob = new Blob([new Uint8Array(fileBuffer)]);
     formData.append('file', blob, filename);
+    if (headerRow !== undefined && !Number.isNaN(headerRow)) {
+      formData.append('header_row', String(headerRow));
+    }
 
     const res = await fetch(`${this.aiServiceUrl}/connectors/parse`, {
       method: 'POST',

@@ -423,9 +423,13 @@ async def parse_file(
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"No se pudo leer el archivo: {str(e)[:200]}")
 
-    raw_rows = [r for r in raw_rows if any(c for c in r)]  # descarta filas totalmente vacías
     if not raw_rows:
         raise HTTPException(status_code=422, detail="El archivo no tiene filas de datos")
+    # OJO: no se filtran filas vacías aquí — los índices de raw_rows deben
+    # coincidir exactamente con las filas físicas del archivo original, porque
+    # más abajo se usan tal cual para re-parsear desde la fila de encabezado
+    # (skiprows / slice de líneas). _score_header_row ya descarta las filas
+    # vacías por su cuenta (exige >=2 celdas llenas), así que no hace falta.
 
     auto_idx, auto_score = _detect_header_row(raw_rows)
     header_auto_detected = header_row is None

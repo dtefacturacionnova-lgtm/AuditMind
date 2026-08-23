@@ -507,6 +507,27 @@ export class AiService {
     return res.json() as Promise<unknown>;
   }
 
+  /** Lee un CSV/Excel subido — devuelve columnas + filas SIN normalizar, para
+   *  que el usuario mapee sus propias columnas a lo que cada análisis CAATs
+   *  espera (ver runCaats/field_mapping) en vez de exigir una plantilla fija. */
+  async parseFile(fileBuffer: Buffer, filename: string): Promise<unknown> {
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(fileBuffer)]);
+    formData.append('file', blob, filename);
+
+    const res = await fetch(`${this.aiServiceUrl}/connectors/parse`, {
+      method: 'POST',
+      headers: { 'x-internal-key': this.internalKey },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`No se pudo leer el archivo: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json() as Promise<unknown>;
+  }
+
   // ─── PI.7a — Muestreo estadístico NIA 530 ────────────────────────────────────
   async calculateSampling(
     method: 'mus' | 'attribute',

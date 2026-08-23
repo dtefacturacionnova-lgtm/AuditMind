@@ -1,19 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Header } from '@/components/layout/Header';
 import { apiClient } from '@/lib/api-client';
 import {
   BarChart3, Play, Loader2, AlertCircle, CheckCircle2,
   TrendingUp, Search, Database, FileSpreadsheet, Cpu,
-  ChevronDown, ChevronUp, Info,
+  ChevronDown, ChevronUp, Info, Upload, FileUp, X, ListChecks,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Analysis types ───────────────────────────────────────────────────────────
 
+type AnalysisId = 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly';
+
 interface AnalysisType {
-  id:          'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly';
+  id:          AnalysisId;
   label:       string;
   description: string;
   icon:        React.ElementType;
@@ -157,6 +159,90 @@ const SAMPLE_DATA: Record<string, unknown> = {
   },
 };
 
+// ─── Subir archivo — mapeo de columnas (sin plantilla fija) ───────────────────
+// El usuario sube CUALQUIER CSV/Excel con SUS propios nombres de columna; acá
+// solo se define qué campos entiende cada analizador (los mismos que ya
+// aceptan amount_field/vendor_field/etc. en el backend) para que el frontend
+// arme el `field_mapping` correcto — nunca se exige renombrar el archivo.
+
+interface FieldDef { key: string; label: string; required?: boolean }
+
+const FIELD_DEFS: Partial<Record<AnalysisId, FieldDef[]>> = {
+  gl: [
+    { key: 'amount',       label: 'Monto',                 required: true },
+    { key: 'date',         label: 'Fecha' },
+    { key: 'posted_by',    label: 'Usuario que registró' },
+    { key: 'account_code', label: 'Cuenta contable' },
+    { key: 'description',  label: 'Descripción' },
+  ],
+  ap: [
+    { key: 'amount',         label: 'Monto',                required: true },
+    { key: 'vendor_id',      label: 'Proveedor (ID o nombre)' },
+    { key: 'vendor_name',    label: 'Nombre del proveedor (detecta fantasmas)' },
+    { key: 'invoice_number', label: 'Número de factura' },
+    { key: 'invoice_date',   label: 'Fecha de factura' },
+    { key: 'payment_date',   label: 'Fecha de pago' },
+  ],
+  payroll: [
+    { key: 'gross_pay',      label: 'Salario bruto',        required: true },
+    { key: 'employee_id',    label: 'ID de empleado' },
+    { key: 'employee_name',  label: 'Nombre de empleado' },
+    { key: 'net_pay',        label: 'Salario neto' },
+    { key: 'department',     label: 'Departamento' },
+    { key: 'approved_by',    label: 'Aprobado por' },
+    { key: 'bank_account',   label: 'Cuenta bancaria' },
+  ],
+};
+
+const FIELD_ALIASES: Record<string, string[]> = {
+  amount: ['amount', 'monto', 'importe', 'valor', 'total'],
+  date: ['date', 'fecha', 'posting_date', 'fecha_asiento', 'fecha_registro'],
+  posted_by: ['posted_by', 'user', 'usuario', 'registrado_por', 'creado_por'],
+  account_code: ['account_code', 'account', 'cuenta', 'codigo_cuenta', 'cta'],
+  description: ['description', 'descripcion', 'detalle', 'concepto', 'glosa'],
+  vendor_id: ['vendor_id', 'vendor', 'proveedor', 'supplier', 'nombre_proveedor'],
+  vendor_name: ['vendor_name', 'nombre_proveedor', 'proveedor', 'supplier_name'],
+  invoice_number: ['invoice_number', 'invoice_id', 'numero_factura', 'factura', 'no_factura'],
+  invoice_date: ['invoice_date', 'fecha_factura'],
+  payment_date: ['payment_date', 'fecha_pago', 'fecha_de_pago'],
+  gross_pay: ['gross_pay', 'salary', 'salario', 'sueldo', 'sueldo_bruto', 'salario_bruto'],
+  employee_id: ['employee_id', 'id_empleado', 'rut', 'legajo', 'codigo_empleado'],
+  employee_name: ['employee_name', 'name', 'nombre', 'nombre_empleado', 'empleado'],
+  net_pay: ['net_pay', 'sueldo_neto', 'neto', 'salario_neto'],
+  department: ['department', 'departamento', 'depto', 'area', 'gerencia'],
+  approved_by: ['approved_by', 'aprobado_por', 'aprobador', 'autorizado_por'],
+  bank_account: ['bank_account', 'cuenta_bancaria', 'cuenta', 'numero_cuenta'],
+};
+
+function normColName(c: string): string {
+  return c.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\s_-]/g, '');
+}
+
+function autoMatchColumn(fieldKey: string, columns: string[]): string {
+  const aliases = (FIELD_ALIASES[fieldKey] ?? [fieldKey]).map(normColName);
+  const found = columns.find(c => aliases.includes(normColName(c)));
+  return found ?? '';
+}
+
+function autoDetectNumericColumns(columns: string[], rows: Record<string, unknown>[]): string[] {
+  if (rows.length === 0) return [];
+  const sample = rows.slice(0, Math.min(10, rows.length));
+  return columns.filter(c => {
+    const values = sample.map(r => r[c]).filter(v => v !== null && v !== undefined && v !== '');
+    if (values.length === 0) return false;
+    return values.every(v => !Number.isNaN(Number(v)));
+  });
+}
+
+interface ParsedFile {
+  columns:   string[];
+  rows:      Record<string, unknown>[];
+  rowCount:  number;
+  totalRows: number;
+  truncated: boolean;
+  filename:  string;
+}
+
 // ─── Result renderer ──────────────────────────────────────────────────────────
 
 function ResultSection({
@@ -299,13 +385,103 @@ export default function AnalyticsPage() {
   const [error, setError]       = useState('');
   const [showPayload, setShowPayload] = useState(false);
 
+  const [dataMode, setDataMode] = useState<'sample' | 'upload'>('sample');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [parsed, setParsed] = useState<ParsedFile | null>(null);
+  const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
+  const [benfordColumn, setBenfordColumn] = useState('');
+  const [anomalyColumns, setAnomalyColumns] = useState<string[]>([]);
+
+  // Al cambiar de tipo de análisis con un archivo ya cargado, re-mapear
+  // automáticamente contra las columnas de ESE archivo para el nuevo tipo.
+  useEffect(() => {
+    if (dataMode !== 'upload' || !parsed) return;
+    if (selected.id === 'benford') {
+      setBenfordColumn(autoMatchColumn('amount', parsed.columns));
+    } else if (selected.id === 'anomaly') {
+      setAnomalyColumns(autoDetectNumericColumns(parsed.columns, parsed.rows));
+    } else {
+      const defs = FIELD_DEFS[selected.id] ?? [];
+      const mapping: Record<string, string> = {};
+      defs.forEach(d => { mapping[d.key] = autoMatchColumn(d.key, parsed.columns); });
+      setFieldMapping(mapping);
+    }
+    setResult(null);
+    setError('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected.id, dataMode, parsed]);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite re-subir el mismo archivo si se corrige algo
+    if (!file) return;
+
+    setUploading(true);
+    setUploadError('');
+    setResult(null);
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const data = await apiClient.postForm<ParsedFile>('/ai/parse-file', fd);
+      setParsed(data);
+    } catch (err) {
+      setParsed(null);
+      setUploadError(err instanceof Error ? err.message : 'No se pudo leer el archivo');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function clearUpload() {
+    setParsed(null);
+    setUploadError('');
+    setFieldMapping({});
+    setBenfordColumn('');
+    setAnomalyColumns([]);
+    setResult(null);
+    setError('');
+  }
+
+  const fieldDefs = FIELD_DEFS[selected.id];
+  const missingRequired = useMemo(() => {
+    if (dataMode !== 'upload' || !fieldDefs) return false;
+    return fieldDefs.some(d => d.required && !fieldMapping[d.key]);
+  }, [dataMode, fieldDefs, fieldMapping]);
+
+  const canRun = dataMode === 'sample'
+    ? true
+    : selected.id === 'benford'
+      ? !!parsed && !!benfordColumn
+      : selected.id === 'anomaly'
+        ? !!parsed && anomalyColumns.length > 0
+        : !!parsed && !missingRequired;
+
   async function runAnalysis() {
     setRunning(true);
     setResult(null);
     setError('');
 
     try {
-      const payload = SAMPLE_DATA[selected.sampleKey];
+      let payload: unknown;
+      if (dataMode === 'sample') {
+        payload = SAMPLE_DATA[selected.sampleKey];
+      } else if (!parsed) {
+        throw new Error('Primero sube un archivo');
+      } else if (selected.id === 'benford') {
+        const amounts = parsed.rows
+          .map(r => Number(String(r[benfordColumn] ?? '').replace(/[^0-9.-]/g, '')))
+          .filter(n => Number.isFinite(n) && n !== 0);
+        payload = { amounts };
+      } else if (selected.id === 'anomaly') {
+        payload = { records: parsed.rows, numeric_fields: anomalyColumns };
+      } else {
+        const mapping: Record<string, string> = {};
+        Object.entries(fieldMapping).forEach(([key, col]) => { if (col) mapping[key] = col; });
+        payload = { records: parsed.rows, field_mapping: mapping };
+      }
+
       const data = await apiClient.post<Record<string, unknown>>(
         `/ai/analytics/${selected.id}`,
         payload,
@@ -339,8 +515,8 @@ export default function AnalyticsPage() {
             <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
             <p className="text-sm text-blue-700">
               <strong>Computer-Assisted Audit Techniques (CAATs)</strong> — Motor de análisis con IA integrado.
-              Selecciona el tipo de análisis, revisa la muestra de datos y ejecuta. En producción, los datos
-              provendrán de los conectores SAP/REST configurados.
+              Prueba con datos de muestra, o sube tu propio CSV/Excel — no necesita un formato predefinido,
+              tú decides qué columna de tu archivo corresponde a cada campo antes de ejecutar.
             </p>
           </div>
 
@@ -372,9 +548,9 @@ export default function AnalyticsPage() {
             ))}
           </div>
 
-          {/* Selected description + run */}
+          {/* Selected description + data mode + run */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex items-start gap-4">
                 <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shrink-0', selected.color)}>
                   <selected.icon className="w-6 h-6 text-white" />
@@ -387,7 +563,8 @@ export default function AnalyticsPage() {
 
               <button
                 onClick={runAnalysis}
-                disabled={running}
+                disabled={running || !canRun}
+                title={!canRun ? 'Completa el mapeo de columnas requerido antes de ejecutar' : undefined}
                 className="flex items-center gap-2 px-5 py-2.5 bg-[#0F2D4A] text-white text-sm font-medium rounded-xl hover:bg-[#1a4a7a] disabled:opacity-60 shrink-0 transition-colors"
               >
                 {running
@@ -397,20 +574,156 @@ export default function AnalyticsPage() {
               </button>
             </div>
 
-            {/* Sample data toggle */}
-            <div className="mt-4 border-t border-gray-100 pt-4">
-              <button
-                onClick={() => setShowPayload(!showPayload)}
-                className="text-xs text-[#0F2D4A] font-medium flex items-center gap-1 hover:underline"
-              >
-                <Search className="w-3 h-3" />
-                {showPayload ? 'Ocultar' : 'Ver'} datos de muestra
-                {showPayload ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              </button>
-              {showPayload && (
-                <pre className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600 overflow-x-auto max-h-56">
-                  {JSON.stringify(payload, null, 2)}
-                </pre>
+            {/* Data mode toggle */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+                {([
+                  { key: 'sample' as const, label: 'Datos de muestra', icon: Search },
+                  { key: 'upload' as const, label: 'Subir archivo',    icon: Upload },
+                ]).map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => { setDataMode(key); setResult(null); setError(''); }}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                      dataMode === key ? 'bg-white text-[#0F2D4A] shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                    )}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {dataMode === 'sample' ? (
+                <div className="mt-3">
+                  <button
+                    onClick={() => setShowPayload(!showPayload)}
+                    className="text-xs text-[#0F2D4A] font-medium flex items-center gap-1 hover:underline"
+                  >
+                    <Search className="w-3 h-3" />
+                    {showPayload ? 'Ocultar' : 'Ver'} datos de muestra
+                    {showPayload ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                  {showPayload && (
+                    <pre className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600 overflow-x-auto max-h-56">
+                      {JSON.stringify(payload, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-3 space-y-4">
+                  {!parsed ? (
+                    <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl py-8 cursor-pointer hover:border-[#0F2D4A]/40 hover:bg-gray-50 transition-colors">
+                      <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFileChange} disabled={uploading} />
+                      {uploading ? (
+                        <>
+                          <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+                          <span className="text-xs text-gray-500">Leyendo archivo…</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileUp className="w-6 h-6 text-gray-300" />
+                          <span className="text-sm font-medium text-gray-600">Haz clic para elegir un archivo</span>
+                          <span className="text-[11px] text-gray-400">CSV o Excel (.xlsx, .xls) — cualquier nombre de columna</span>
+                        </>
+                      )}
+                    </label>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2 text-xs text-emerald-700">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>
+                          <strong>{parsed.filename}</strong> — {parsed.rowCount} filas, {parsed.columns.length} columnas detectadas
+                          {parsed.truncated && ` (de ${parsed.totalRows} totales — se usarán solo las primeras ${parsed.rowCount})`}
+                        </span>
+                      </div>
+                      <button onClick={clearUpload} className="text-emerald-600 hover:text-emerald-800 shrink-0" title="Quitar archivo">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {uploadError && (
+                    <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-600">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      {uploadError}
+                    </div>
+                  )}
+
+                  {/* Column mapping */}
+                  {parsed && (
+                    <div className="border-t border-gray-100 pt-3">
+                      <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5 mb-2">
+                        <ListChecks className="w-3.5 h-3.5" />
+                        Indica qué columna de tu archivo corresponde a cada campo
+                      </p>
+
+                      {selected.id === 'benford' ? (
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs text-gray-600 w-40 shrink-0">Columna de montos <span className="text-red-500">*</span></label>
+                          <select
+                            value={benfordColumn}
+                            onChange={e => setBenfordColumn(e.target.value)}
+                            className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">— selecciona —</option>
+                            {parsed.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                      ) : selected.id === 'anomaly' ? (
+                        <div>
+                          <p className="text-[11px] text-gray-400 mb-2">
+                            Selecciona las columnas numéricas que el modelo debe evaluar (mínimo 1).
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {parsed.columns.map(c => {
+                              const active = anomalyColumns.includes(c);
+                              return (
+                                <button
+                                  key={c}
+                                  type="button"
+                                  onClick={() => setAnomalyColumns(prev =>
+                                    active ? prev.filter(x => x !== c) : [...prev, c],
+                                  )}
+                                  className={cn(
+                                    'px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+                                    active
+                                      ? 'bg-[#0F2D4A] text-white border-[#0F2D4A]'
+                                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300',
+                                  )}
+                                >
+                                  {c}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
+                          {(fieldDefs ?? []).map(field => (
+                            <div key={field.key} className="flex items-center gap-2">
+                              <label className="text-xs text-gray-600 w-40 shrink-0 truncate" title={field.label}>
+                                {field.label} {field.required && <span className="text-red-500">*</span>}
+                              </label>
+                              <select
+                                value={fieldMapping[field.key] ?? ''}
+                                onChange={e => setFieldMapping(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                className={cn(
+                                  'flex-1 rounded-lg border px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500',
+                                  field.required && !fieldMapping[field.key] ? 'border-red-200' : 'border-gray-200',
+                                )}
+                              >
+                                <option value="">— no usar —</option>
+                                {parsed.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>

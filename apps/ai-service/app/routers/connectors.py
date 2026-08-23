@@ -10,12 +10,15 @@ import httpx
 import io
 import csv
 import json
+import pandas as pd
 from datetime import datetime
 from typing import Optional, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
 router = APIRouter()
+
+MAX_UPLOAD_ROWS = 5000
 
 
 # ─── Modelos ──────────────────────────────────────────────────────────────────
@@ -321,4 +324,54 @@ async def upload_csv(
             "columns":        reader.fieldnames or [],
             "imported_at":    datetime.utcnow().isoformat(),
         },
+    }
+
+
+# ─── Parseo genérico (sin normalizar) — para Analytics/CAATs con mapeo manual ──
+
+@router.post("/parse")
+async def parse_file(file: UploadFile = File(...)):
+    """
+    Lee un CSV o Excel TAL CUAL viene — sin forzar ningún esquema de columnas.
+    Devuelve las columnas detectadas y las filas crudas; el mapeo a los campos
+    que cada análisis CAATs espera (amount, vendor_id, gross_pay, etc.) lo hace
+    el usuario en el frontend, vía el parámetro `field_mapping` que los
+    analizadores ya soportan (ver analytics.py) — así funciona con cualquier
+    exportación real, sin exigir una plantilla fija de antemano.
+    """
+    filename = file.filename or ""
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+
+    content = await file.read()
+    try:
+        if ext == "csv":
+            text = content.decode("utf-8-sig")  # utf-8-sig maneja BOM de Excel
+            df = pd.read_csv(io.StringIO(text))
+        elif ext in ("xlsx", "xls"):
+            df = pd.read_excel(io.BytesIO(content))
+        else:
+            raise HTTPException(status_code=400, detail="Solo se aceptan archivos .csv, .xlsx o .xls")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"No se pudo leer el archivo: {str(e)[:200]}")
+
+    if df.empty:
+        raise HTTPException(status_code=422, detail="El archivo no tiene filas de datos")
+
+    total_rows = len(df)
+    truncated = total_rows > MAX_UPLOAD_ROWS
+    if truncated:
+        df = df.head(MAX_UPLOAD_ROWS)
+
+    # NaN → None (JSON no soporta NaN) antes de convertir a dict.
+    df = df.where(pd.notnull(df), None)
+
+    return {
+        "columns":   [str(c) for c in df.columns.tolist()],
+        "rows":      df.to_dict("records"),
+        "rowCount":  len(df),
+        "totalRows": total_rows,
+        "truncated": truncated,
+        "filename":  filename,
     }

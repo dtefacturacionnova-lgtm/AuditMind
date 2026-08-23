@@ -97,6 +97,15 @@ export class AiController {
     return this.aiService.runCaats(type, payload);
   }
 
+  @Post('parse-file')
+  @ApiOperation({ summary: 'Leer un CSV/Excel subido para CAATs — sin normalizar, columnas tal cual vienen' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async parseFile(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new Error('No se subió ningún archivo');
+    return this.aiService.parseFile(file.buffer, file.originalname);
+  }
+
   // ─── PI.7a — Muestreo estadístico NIA 530 ─────────────────────────────────
   @Post('sampling/calculate/:method')
   @ApiOperation({ summary: 'Calcular tamaño muestra (mus | attribute)' })

@@ -1,7 +1,7 @@
 // ─── Mapeo de columnas CAATs — compartido entre la pantalla standalone de ────
 // Analytics y el panel embebido en el papel de trabajo PT-B4.
 
-export type AnalysisId = 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master' | 'related_parties';
+export type AnalysisId = 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master' | 'related_parties' | 'expenses';
 
 export interface FieldDef { key: string; label: string; required?: boolean }
 
@@ -58,6 +58,14 @@ export const FIELD_DEFS: Partial<Record<AnalysisId, FieldDef[]>> = {
     { key: 'tax_id',      label: 'NIT / RUC de la Contraparte' },
     { key: 'date',        label: 'Fecha' },
   ],
+  expenses: [
+    { key: 'employee_name', label: 'Nombre de Empleado',  required: true },
+    { key: 'amount',        label: 'Monto',                required: true },
+    { key: 'employee_id',   label: 'ID de Empleado' },
+    { key: 'date',          label: 'Fecha del Gasto' },
+    { key: 'category',      label: 'Categoría de Gasto' },
+    { key: 'approved_by',   label: 'Aprobado por' },
+  ],
 };
 
 // ─── Motores que necesitan un SEGUNDO dataset de referencia (hoy solo
@@ -105,6 +113,7 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   last_activity_date: ['last_activity_date', 'ultima_actividad', 'fecha_ultima_actividad', 'ultimo_movimiento'],
   party_name: ['party_name', 'nombre', 'nombre_completo', 'parte_relacionada', 'nombre_parte'],
   relationship: ['relationship', 'relacion', 'relación', 'tipo_relacion', 'vinculo', 'vínculo'],
+  category: ['category', 'categoria', 'categoría', 'tipo_gasto', 'tipo', 'rubro'],
 };
 
 export function normColName(c: string): string {

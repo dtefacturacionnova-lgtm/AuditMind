@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import {
   Play, Loader2, AlertCircle, AlertTriangle, CheckCircle2, RotateCcw,
   Upload, FileUp, X, ListChecks, Database, FileSpreadsheet, TrendingUp,
-  BarChart3, Cpu, ShieldAlert, Building2, Users,
+  BarChart3, Cpu, ShieldAlert, Building2, Users, Receipt,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
@@ -48,6 +48,7 @@ const ENGINES: { id: AnalysisId; label: string; icon: typeof Database; color: st
   { id: 'sod',     label: 'Segregación de Funciones', icon: ShieldAlert, color: 'bg-amber-500' },
   { id: 'vendor_master', label: 'Maestro de Proveedores', icon: Building2, color: 'bg-teal-500' },
   { id: 'related_parties', label: 'Partes Relacionadas', icon: Users, color: 'bg-rose-500' },
+  { id: 'expenses', label: 'Gastos de Representación', icon: Receipt, color: 'bg-cyan-500' },
 ];
 
 export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readOnly = false }: Props) {
@@ -219,7 +220,7 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
   return (
     <div className="space-y-4" data-section-key={sectionKey} data-paper-id={paperId}>
       {/* Selector de motor */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-9 gap-2">
         {ENGINES.map(e => (
           <button
             key={e.id}

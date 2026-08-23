@@ -1,5 +1,5 @@
 """Analytics router — CAATs (Computer-Assisted Audit Techniques).
-Tareas 2.1–2.8:
+Tareas 2.1–2.9:
   POST /analytics/gl               → Diario Mayor
   POST /analytics/ap               → Cuentas por Pagar
   POST /analytics/payroll          → Nómina
@@ -8,6 +8,7 @@ Tareas 2.1–2.8:
   POST /analytics/sod              → Segregación de Funciones
   POST /analytics/vendor_master    → Integridad de Maestro de Proveedores
   POST /analytics/related_parties  → Partes Relacionadas y Conflicto de Interés (único motor de 2 datasets)
+  POST /analytics/expenses         → Gastos de Representación / Viáticos (T&E)
 """
 import dataclasses
 import math
@@ -24,6 +25,7 @@ from app.services.caats.anomaly_detection import detect_anomalies
 from app.services.caats.sod_analysis import analyze_sod
 from app.services.caats.vendor_master_analysis import analyze_vendor_master
 from app.services.caats.related_parties_analysis import analyze_related_parties
+from app.services.caats.expenses_analysis import analyze_expenses
 
 router = APIRouter()
 
@@ -264,6 +266,30 @@ async def related_parties_analysis(
             party_name_field=rfm.get("party_name", "party_name"),
             party_tax_id_field=rfm.get("tax_id", "tax_id"),
             relationship_field=rfm.get("relationship", "relationship"),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _serialize(result)
+
+
+# ─── Gastos de Representación / Viáticos (T&E) ────────────────────────────────
+@router.post("/expenses")
+async def expenses_analysis(
+    request: RecordsRequest,
+    x_internal_key: str | None = Header(default=None),
+):
+    """Tarea 2.9 — Análisis de Gastos de Representación / Viáticos."""
+    verify_internal_key(x_internal_key)
+    fm = request.field_mapping or {}
+    try:
+        result = analyze_expenses(
+            records=request.records,
+            amount_field=fm.get("amount", "amount"),
+            employee_id_field=fm.get("employee_id", "employee_id"),
+            employee_name_field=fm.get("employee_name", "employee_name"),
+            date_field=fm.get("date", "date"),
+            category_field=fm.get("category", "category"),
+            approver_field=fm.get("approved_by", "approved_by"),
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

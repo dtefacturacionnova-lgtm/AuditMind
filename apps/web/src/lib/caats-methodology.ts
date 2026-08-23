@@ -130,4 +130,20 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     limitaciones:
       'La calidad del resultado depende por completo de qué tan completo esté el registro de partes relacionadas que se sube — el motor no puede detectar una parte relacionada que nunca se registró. El match por nombre es especialmente propenso a falsos positivos con nombres comunes; siempre revisar manualmente antes de concluir que hay una transacción no revelada.',
   },
+  expenses: {
+    objetivo:
+      'Detectar patrones de riesgo en el ciclo de gastos de representación y viáticos — fraccionamiento para evitar aprobación, gastos duplicados, y concentración desproporcionada en un solo empleado. Uno de los esquemas de fraude ocupacional más comunes según ACFE (expense reimbursement schemes).',
+    metodologia:
+      'Análisis basado en reglas sobre el 100% de los gastos cargados: umbral de aprobación configurable (según la política de la entidad), agrupación por empleado/semana para detectar fraccionamiento, y comparación de fecha contra fin de semana.',
+    normativa: 'ACFE — expense reimbursement schemes, COSO 2013 (actividades de control sobre gastos)',
+    pruebas: [
+      { nombre: 'Gasto Cerca del Umbral', descripcion: 'Gastos individuales dentro del 10% por debajo del umbral de aprobación — patrón típico de ajuste deliberado.' },
+      { nombre: 'Fraccionamiento de Gastos', descripcion: 'Mismo empleado con varios gastos en la misma semana, cada uno bajo el umbral, que suman por encima de él.' },
+      { nombre: 'Gastos en Fin de Semana', descripcion: 'Gastos registrados sábado o domingo — requieren justificación de negocio (viaje, evento con cliente).' },
+      { nombre: 'Gastos Duplicados', descripcion: 'Mismo empleado, monto y fecha repetidos — posible reembolso doble.' },
+      { nombre: 'Concentración por Empleado', descripcion: 'Los 3 empleados con más gasto concentran más del 50% del total — puede ser legítimo (rol ejecutivo/comercial) pero amerita revisión.' },
+    ],
+    limitaciones:
+      'El umbral de aprobación usado por defecto ($100) es un valor de referencia — para un resultado preciso debe ajustarse a la política real de la entidad. Un empleado con más viajes/gastos legítimos (ej. ventas, dirección) concentrará naturalmente más gasto sin que eso implique fraude — el hallazgo de concentración es un punto de partida, no una conclusión.',
+  },
 };

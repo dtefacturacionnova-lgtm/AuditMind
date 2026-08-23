@@ -89,6 +89,11 @@ export const FIELD_LABELS: Record<string, string> = {
   exposure_by_party: 'Exposición por Parte Relacionada', parte_relacionada: 'Parte Relacionada',
   relacion: 'Relación', transacciones: 'Transacciones', monto_total: 'Monto Total',
   party_name: 'Nombre de la Parte Relacionada', relationship: 'Relación',
+  // Gastos de Representación (T&E)
+  total_expenses: 'Gastos Analizados', employee_count: 'Empleados con Gastos',
+  employee_concentration: 'Concentración por Empleado', empleado: 'Empleado',
+  pct_del_total: '% del Total', category: 'Categoría',
+  semana: 'Semana', suma_gastos: 'Suma de Gastos', cantidad_gastos: 'Cantidad de Gastos',
 };
 
 export const TEST_NAME_LABELS: Record<string, string> = {
@@ -128,6 +133,12 @@ export const TEST_NAME_LABELS: Record<string, string> = {
   RELATED_PARTY_MATCH_TAX_ID: 'Transacción con Parte Relacionada (por NIT)',
   RELATED_PARTY_MATCH_NAME: 'Transacción con Parte Relacionada (por Nombre)',
   EMPLOYEE_AS_COUNTERPARTY: 'Empleado como Contraparte',
+  // Gastos de Representación (T&E)
+  NEAR_APPROVAL_THRESHOLD: 'Gasto Cerca del Umbral de Aprobación',
+  SPLIT_EXPENSES: 'Fraccionamiento de Gastos',
+  WEEKEND_EXPENSES: 'Gastos en Fin de Semana',
+  DUPLICATE_EXPENSES: 'Gastos Duplicados',
+  EMPLOYEE_CONCENTRATION: 'Concentración en un Empleado',
 };
 
 export const RISK_LEVEL_LABELS: Record<string, string> = {

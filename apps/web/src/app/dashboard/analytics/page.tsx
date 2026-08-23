@@ -9,7 +9,7 @@ import {
   TrendingUp, Search, Database, FileSpreadsheet, Cpu,
   ChevronDown, ChevronUp, Info, Upload, FileUp, X, ListChecks,
   AlertTriangle, RotateCcw, HelpCircle, FileDown, Table2,
-  Target, FlaskConical, ScrollText, Save, ShieldAlert, Building2, Users,
+  Target, FlaskConical, ScrollText, Save, ShieldAlert, Building2, Users, Receipt,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -99,6 +99,14 @@ const ANALYSIS_TYPES: AnalysisType[] = [
     icon:        Users,
     color:       'bg-rose-500',
     sampleKey:   'related_parties',
+  },
+  {
+    id:          'expenses',
+    label:       'Gastos de Representación',
+    description: 'Detecta fraccionamiento, gastos en fin de semana, duplicados y concentración en gastos de viáticos/representación.',
+    icon:        Receipt,
+    color:       'bg-cyan-500',
+    sampleKey:   'expenses',
   },
 ];
 
@@ -251,6 +259,27 @@ const SAMPLE_DATA: Record<string, unknown> = {
       { party_name: 'María López',          relationship: 'Accionista', tax_id: 'ML-002' },
       { party_name: 'Carlos Ramírez',       relationship: 'Empleado',   tax_id: 'CR-003' },
       { party_name: 'Comercial Familiar SA', relationship: 'Filial',    tax_id: 'CF-004' },
+    ],
+  },
+  expenses: {
+    // Ana Gómez: $92 (justo bajo el umbral de $100) + dos gastos el mismo día
+    // que suman $105 (fraccionamiento). Carlos Ruiz: gasto en sábado. Diego
+    // Paz: mismo monto/fecha dos veces (duplicado). Sofía Lima: concentra la
+    // mayoría del gasto total (ejecutiva con viajes frecuentes, legítimo pero
+    // amerita revisión). Luis Vega y Marta Cruz quedan limpios.
+    records: [
+      { employee_name: 'Ana Gómez',    amount: 92,   date: '2025-03-03', category: 'Comidas',        approved_by: 'Jefe Comercial' },
+      { employee_name: 'Ana Gómez',    amount: 55,   date: '2025-03-04', category: 'Transporte',     approved_by: 'Jefe Comercial' },
+      { employee_name: 'Ana Gómez',    amount: 50,   date: '2025-03-04', category: 'Transporte',     approved_by: 'Jefe Comercial' },
+      { employee_name: 'Carlos Ruiz',  amount: 150,  date: '2025-04-12', category: 'Hospedaje',      approved_by: 'Jefe Operaciones' },
+      { employee_name: 'Diego Paz',    amount: 200,  date: '2025-05-10', category: 'Cena con Cliente', approved_by: 'Gerente Ventas' },
+      { employee_name: 'Diego Paz',    amount: 200,  date: '2025-05-10', category: 'Cena con Cliente', approved_by: 'Gerente Ventas' },
+      { employee_name: 'Sofía Lima',   amount: 1500, date: '2025-02-05', category: 'Viaje Internacional', approved_by: 'Dirección' },
+      { employee_name: 'Sofía Lima',   amount: 1500, date: '2025-03-18', category: 'Viaje Internacional', approved_by: 'Dirección' },
+      { employee_name: 'Sofía Lima',   amount: 1500, date: '2025-04-22', category: 'Viaje Internacional', approved_by: 'Dirección' },
+      { employee_name: 'Sofía Lima',   amount: 1500, date: '2025-06-14', category: 'Viaje Internacional', approved_by: 'Dirección' },
+      { employee_name: 'Luis Vega',    amount: 300,  date: '2025-02-15', category: 'Combustible',    approved_by: 'Jefe Operaciones' },
+      { employee_name: 'Marta Cruz',   amount: 250,  date: '2025-06-01', category: 'Comidas',        approved_by: 'Jefe Comercial' },
     ],
   },
 };
@@ -584,7 +613,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Analysis type selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3">
             {ANALYSIS_TYPES.map(type => (
               <button
                 key={type.id}

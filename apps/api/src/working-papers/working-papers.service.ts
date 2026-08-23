@@ -18,10 +18,26 @@ async function generateWpCode(
   auditId: string,
   indexSection: string,
 ): Promise<string> {
-  const count = await prisma.workingPaper.count({
-    where: { auditId, indexSection },
+  // NO se puede confiar en `count + 1`: un papel legado/huérfano fuera de
+  // secuencia dentro de la misma indexSection (ej. un "B-10" viejo sin
+  // relación con la plantilla actual) hace que el conteo total ya no
+  // coincida con el siguiente número realmente libre, y el código generado
+  // termina colisionando con uno ya existente (reproducido en vivo — ver
+  // Fix #27 en memoria de proyecto). En su lugar, se toma el mayor número
+  // de secuencia YA USADO entre los códigos existentes con el patrón
+  // "INDEXSECTION-NN" y se genera el siguiente — nunca puede colisionar,
+  // sin importar qué huecos haya.
+  const existing = await prisma.workingPaper.findMany({
+    where:  { auditId, indexSection },
+    select: { code: true },
   });
-  return `${indexSection}-${String(count + 1).padStart(2, '0')}`;
+  const prefix = `${indexSection}-`;
+  const maxSeq = existing.reduce((max, { code }) => {
+    if (!code.startsWith(prefix)) return max;
+    const n = Number(code.slice(prefix.length));
+    return Number.isInteger(n) && n > max ? n : max;
+  }, 0);
+  return `${indexSection}-${String(maxSeq + 1).padStart(2, '0')}`;
 }
 
 const INCLUDE_FULL = {

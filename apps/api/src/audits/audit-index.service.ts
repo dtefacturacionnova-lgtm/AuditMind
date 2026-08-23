@@ -12,6 +12,7 @@ export interface PaperDef {
   type:         WorkingPaperType;
   wpKind:       WpKind;
   paperCode?:   string;           // template key → auto-init sections
+  isCompletionTrigger?: boolean;  // Comité de Auditoría: marca el encargo 100% al firmarse
 }
 
 // ─── Index definitions ────────────────────────────────────────────────────────
@@ -875,6 +876,7 @@ export class AuditIndexService {
         type:         def.type,
         wpKind:       def.wpKind,
         paperCode:    def.paperCode ?? null,
+        isCompletionTrigger: def.isCompletionTrigger ?? false,
         preparedById,
       },
     });

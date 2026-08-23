@@ -1513,6 +1513,11 @@ model AuditFolder {
   name        String // "Planificación", "Comunicación de Auditoría"
   description String?
   sortOrder   Int      @default(0)
+  // % que representa esta sección de nivel raíz dentro del avance total del
+  // encargo (Comité de Auditoría) — null = sin configurar (fallback a reparto
+  // equitativo entre secciones con papeles). Solo aplica a carpetas raíz
+  // (parentId null); una carpeta hija hereda el peso de su ancestro raíz.
+  weight      Int?
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1712,6 +1717,11 @@ model WorkingPaper {
   reviewedAt        DateTime? // Fecha firma revisor
   // ─── F6.4 Retención y bloqueo ─────────────────────────────────────────────
   retentionUntil    DateTime? // Fecha hasta la que debe conservarse
+  // ─── Comité de Auditoría — disparador de cierre ───────────────────────────
+  // true = cuando este papel llega a estado terminal (SIGNED_OFF/CLOSED/
+  // REVIEWED/APPROVED/ARCHIVED), el encargo se reporta 100% ejecutado al
+  // comité independientemente del avance ponderado por fase.
+  isCompletionTrigger Boolean                @default(false)
   // ─── Campos existentes ───────────────────────────────────────────────────
   content           Json                    @default("{}")
   conclusion        String?
@@ -2453,6 +2463,7 @@ model CommitteeReport {
   organization Organization      @relation(fields: [organizationId], references: [id])
   session      CommitteeSession? @relation(fields: [sessionId], references: [id])
 
+  @@unique([organizationId, period, type])
   @@index([organizationId])
   @@map("committee_reports")
 }

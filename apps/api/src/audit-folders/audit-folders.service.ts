@@ -151,6 +151,7 @@ export class AuditFoldersService {
       ref: string; name: string;
       phaseType?: string;
       children?: Array<{ ref: string; name: string }>;
+      weight?: number; // Comité de Auditoría — % de avance que representa esta sección raíz
     }
 
     // 1. Try to get sections from the AuditTemplate
@@ -214,6 +215,7 @@ export class AuditFoldersService {
             auditId, phaseId: phase.id,
             ref: section.ref, name: section.name,
             sortOrder: si, createdById: user.id,
+            weight: section.weight ?? null,
           },
         });
         folderCount++;

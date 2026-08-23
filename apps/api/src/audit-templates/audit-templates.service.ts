@@ -21,6 +21,9 @@ interface PaperDef {
   type: WorkingPaperType;
   wpKind: WpKind;
   paperCode?: string;
+  // Comité de Auditoría: este papel, al llegar a estado terminal, marca el
+  // encargo como 100% ejecutado (ver isCompletionTrigger en WorkingPaper).
+  isCompletionTrigger?: boolean;
 }
 
 // ─── SectionDef — folder/subfolder structure ─────────────────────────────────
@@ -30,6 +33,11 @@ interface SectionDef {
   name: string;
   phaseType: 'PLANNING' | 'FIELDWORK' | 'REPORTING' | 'FOLLOWUP';
   children?: Array<{ ref: string; name: string }>;
+  // % que representa esta sección dentro del avance total del encargo para
+  // el Comité de Auditoría (0-100, las secciones de una plantilla deberían
+  // sumar 100). Omitir = no cuenta para el avance ponderado (ej. archivo
+  // permanente, que es documentación paralela, no una fase secuencial).
+  weight?: number;
 }
 
 // ─── PaperLinkDef — directed edge between papers in the knowledge graph ─────
@@ -369,7 +377,9 @@ export class AuditTemplatesService {
           AuditType.BCP_DRP,
         ],
         sections: [
-          { ref: 'APE', name: 'Archivo Permanente', phaseType: 'PLANNING',
+          // Archivo Permanente es documentación paralela (no una fase secuencial
+          // del encargo) — weight 0, no cuenta para el avance ante el comité.
+          { ref: 'APE', name: 'Archivo Permanente', phaseType: 'PLANNING', weight: 0,
             children: [
               { ref: 'APE-01', name: 'Información Legal y Estatutos' },
               { ref: 'APE-02', name: 'Estructura Organizacional' },
@@ -379,10 +389,10 @@ export class AuditTemplatesService {
               { ref: 'APE-06', name: 'Políticas y Manuales de Control Interno' },
             ],
           },
-          { ref: 'A', name: 'Planificación y Entendimiento del Negocio', phaseType: 'PLANNING' },
-          { ref: 'B', name: 'Ejecución y Pruebas de Campo',              phaseType: 'FIELDWORK' },
-          { ref: 'D', name: 'Hallazgos y Comunicaciones',                phaseType: 'REPORTING' },
-          { ref: 'E', name: 'Cierre e Informe de Auditoría',             phaseType: 'REPORTING' },
+          { ref: 'A', name: 'Planificación y Entendimiento del Negocio', phaseType: 'PLANNING',  weight: 15 },
+          { ref: 'B', name: 'Ejecución y Pruebas de Campo',              phaseType: 'FIELDWORK',  weight: 50 },
+          { ref: 'D', name: 'Hallazgos y Comunicaciones',                phaseType: 'REPORTING',  weight: 15 },
+          { ref: 'E', name: 'Cierre e Informe de Auditoría',             phaseType: 'REPORTING',  weight: 20 },
         ],
         papers: [
           // ── APE — Archivo Permanente ────────────────────────────────────
@@ -495,7 +505,8 @@ export class AuditTemplatesService {
             paperCode: 'PT-MEMO' },
           { code: 'E-03', indexSection: 'E',
             title:  'Informe Final Aprobado con Firma Digital',
-            type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },
+            type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD,
+            paperCode: 'PT-INFORME-FINAL', isCompletionTrigger: true },
           { code: 'E-04', indexSection: 'E',
             title:  'Plan de Seguimiento de Recomendaciones',
             type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.STANDARD },

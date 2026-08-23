@@ -16,6 +16,7 @@ import { FindingsModule } from './findings/findings.module';
 import { PbcModule } from './pbc/pbc.module';
 import { ConfirmationsModule } from './confirmations/confirmations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { CommitteeModule } from './committee/committee.module';
 import { PlansModule } from './plans/plans.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReportsModule } from './reports/reports.module';
@@ -63,6 +64,7 @@ import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
     FiscalModule,
     ReportsModule,
     DashboardModule,
+    CommitteeModule,
     AiModule,
     DataSourcesModule,
     RisksModule,

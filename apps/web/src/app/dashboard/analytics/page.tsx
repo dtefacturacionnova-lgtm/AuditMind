@@ -228,8 +228,17 @@ function normColName(c: string): string {
 
 function autoMatchColumn(fieldKey: string, columns: string[]): string {
   const aliases = (FIELD_ALIASES[fieldKey] ?? [fieldKey]).map(normColName);
-  const found = columns.find(c => aliases.includes(normColName(c)));
-  return found ?? '';
+  // 1) match exacto (ej. columna literal "amount")
+  const exact = columns.find(c => aliases.includes(normColName(c)));
+  if (exact) return exact;
+  // 2) match parcial — columnas reales rara vez son EXACTAS ("Monto_Transaccion"
+  // no es igual a "monto", pero lo contiene). Se compara en ambos sentidos por
+  // si el alias es más largo que la columna o viceversa.
+  const partial = columns.find(c => {
+    const nc = normColName(c);
+    return aliases.some(a => nc.includes(a) || a.includes(nc));
+  });
+  return partial ?? '';
 }
 
 function autoDetectNumericColumns(columns: string[], rows: Record<string, unknown>[]): string[] {

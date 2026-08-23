@@ -15,8 +15,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import {
-  IsString, IsArray, IsOptional, IsNumber,
-  ValidateNested, IsObject, IsNotEmpty, Min, Max, ArrayMinSize, ArrayMaxSize,
+  IsString, IsArray, IsOptional,
+  ValidateNested, IsObject, IsNotEmpty, ArrayMinSize, ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -36,14 +36,6 @@ class ChatDto {
   @IsArray() @ValidateNested({ each: true }) @Type(() => MessageDto)
   history!: MessageDto[];
   @IsOptional() @IsObject() context?: Record<string, unknown>;
-}
-
-class CaatsDto {
-  @IsOptional() @IsArray() records?: unknown[];
-  @IsOptional() @IsArray() amounts?: number[];
-  @IsOptional() @IsArray() @IsString({ each: true }) numeric_fields?: string[];
-  @IsOptional() @IsObject() field_mapping?: Record<string, string>;
-  @IsOptional() @IsNumber() @Min(0.01) @Max(0.5) contamination?: number;
 }
 
 class MultiYearAnalysisDto {
@@ -92,7 +84,15 @@ export class AiController {
   @ApiOperation({ summary: 'Ejecutar análisis CAATs (gl, ap, payroll, benford, anomaly)' })
   async runCaats(
     @Param('type') type: 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly',
-    @Body() payload: CaatsDto,
+    // Body sin tipar a un DTO con class-validator a propósito — igual patrón
+    // que calculateSampling/selectSample más abajo. Un DTO con `records?:
+    // unknown[]` (sin @Type()) hacía que class-transformer, con
+    // enableImplicitConversion activo en main.ts, convirtiera cada objeto del
+    // arreglo en un arreglo VACÍO antes de llegar al servicio — el ai-service
+    // recibía `records: [[], [], ...]` y rechazaba todo con 422. No es un bug
+    // de esta feature — afectaba CUALQUIER llamada a este endpoint desde el
+    // navegador (verificado también con los datos de muestra ya existentes).
+    @Body() payload: Record<string, unknown>,
   ) {
     return this.aiService.runCaats(type, payload);
   }

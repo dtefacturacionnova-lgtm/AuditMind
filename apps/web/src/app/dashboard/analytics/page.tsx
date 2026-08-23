@@ -167,49 +167,57 @@ const SAMPLE_DATA: Record<string, unknown> = {
 
 interface FieldDef { key: string; label: string; required?: boolean }
 
+// IMPORTANTE: `key` debe ser EXACTO al nombre que cada endpoint de
+// apps/ai-service/app/routers/analytics.py lee de `field_mapping` (ej. GL usa
+// `fm.get("user", "posted_by")` — la clave del mapeo es "user", "posted_by" es
+// solo el default cuando no se manda mapeo). No son necesariamente el mismo
+// texto que el nombre de campo final — verificado en vivo contra cada endpoint.
 const FIELD_DEFS: Partial<Record<AnalysisId, FieldDef[]>> = {
   gl: [
-    { key: 'amount',       label: 'Monto',                 required: true },
-    { key: 'date',         label: 'Fecha' },
-    { key: 'posted_by',    label: 'Usuario que registró' },
-    { key: 'account_code', label: 'Cuenta contable' },
-    { key: 'description',  label: 'Descripción' },
+    { key: 'amount',      label: 'Monto',                 required: true },
+    { key: 'date',        label: 'Fecha' },
+    { key: 'user',        label: 'Usuario que registró' },
+    { key: 'account',     label: 'Cuenta contable' },
+    { key: 'description', label: 'Descripción' },
   ],
   ap: [
     { key: 'amount',         label: 'Monto',                required: true },
     { key: 'vendor_id',      label: 'Proveedor (ID o nombre)' },
     { key: 'vendor_name',    label: 'Nombre del proveedor (detecta fantasmas)' },
     { key: 'invoice_number', label: 'Número de factura' },
-    { key: 'invoice_date',   label: 'Fecha de factura' },
+    { key: 'date',           label: 'Fecha de factura' },
     { key: 'payment_date',   label: 'Fecha de pago' },
   ],
   payroll: [
-    { key: 'gross_pay',      label: 'Salario bruto',        required: true },
-    { key: 'employee_id',    label: 'ID de empleado' },
-    { key: 'employee_name',  label: 'Nombre de empleado' },
-    { key: 'net_pay',        label: 'Salario neto' },
-    { key: 'department',     label: 'Departamento' },
-    { key: 'approved_by',    label: 'Aprobado por' },
-    { key: 'bank_account',   label: 'Cuenta bancaria' },
+    { key: 'gross_pay',     label: 'Salario bruto',        required: true },
+    { key: 'employee_id',   label: 'ID de empleado' },
+    { key: 'employee_name', label: 'Nombre de empleado' },
+    { key: 'net_pay',       label: 'Salario neto' },
+    { key: 'department',    label: 'Departamento' },
+    { key: 'position',      label: 'Cargo' },
+    { key: 'approved_by',   label: 'Aprobado por' },
+    { key: 'bank_account',  label: 'Cuenta bancaria' },
   ],
 };
 
+// Claves iguales a las de FIELD_DEFS (el nombre que field_mapping espera),
+// NO necesariamente el nombre "final" del campo — ver nota arriba.
 const FIELD_ALIASES: Record<string, string[]> = {
   amount: ['amount', 'monto', 'importe', 'valor', 'total'],
-  date: ['date', 'fecha', 'posting_date', 'fecha_asiento', 'fecha_registro'],
-  posted_by: ['posted_by', 'user', 'usuario', 'registrado_por', 'creado_por'],
-  account_code: ['account_code', 'account', 'cuenta', 'codigo_cuenta', 'cta'],
+  date: ['date', 'fecha', 'posting_date', 'fecha_asiento', 'fecha_registro', 'invoice_date', 'fecha_factura'],
+  user: ['user', 'posted_by', 'usuario', 'registrado_por', 'creado_por'],
+  account: ['account', 'account_code', 'cuenta', 'codigo_cuenta', 'cta'],
   description: ['description', 'descripcion', 'detalle', 'concepto', 'glosa'],
   vendor_id: ['vendor_id', 'vendor', 'proveedor', 'supplier', 'nombre_proveedor'],
   vendor_name: ['vendor_name', 'nombre_proveedor', 'proveedor', 'supplier_name'],
   invoice_number: ['invoice_number', 'invoice_id', 'numero_factura', 'factura', 'no_factura'],
-  invoice_date: ['invoice_date', 'fecha_factura'],
   payment_date: ['payment_date', 'fecha_pago', 'fecha_de_pago'],
   gross_pay: ['gross_pay', 'salary', 'salario', 'sueldo', 'sueldo_bruto', 'salario_bruto'],
   employee_id: ['employee_id', 'id_empleado', 'rut', 'legajo', 'codigo_empleado'],
   employee_name: ['employee_name', 'name', 'nombre', 'nombre_empleado', 'empleado'],
   net_pay: ['net_pay', 'sueldo_neto', 'neto', 'salario_neto'],
   department: ['department', 'departamento', 'depto', 'area', 'gerencia'],
+  position: ['position', 'cargo', 'puesto'],
   approved_by: ['approved_by', 'aprobado_por', 'aprobador', 'autorizado_por'],
   bank_account: ['bank_account', 'cuenta_bancaria', 'cuenta', 'numero_cuenta'],
 };

@@ -82,13 +82,25 @@ def analyze_ap(
             grouped = below_threshold.groupby([vendor_field, "_week"])["_amount"].agg(["sum", "count"])
             splits = grouped[(grouped["sum"] >= approval_threshold * splitting_threshold) & (grouped["count"] >= 2)]
             if len(splits) > 0:
+                # El índice de `_week` es un pandas Period — no es JSON-serializable
+                # de forma legible (se filtraba como objeto opaco al frontend, ver
+                # el mismo fix aplicado en expenses_analysis.py::SPLIT_EXPENSES).
+                split_rows = [
+                    {
+                        vendor_field:      v,
+                        "semana":          f"{week.start_time.date()} a {week.end_time.date()}",
+                        "suma_gastos":     round(float(row["sum"]), 2),
+                        "cantidad_gastos": int(row["count"]),
+                    }
+                    for (v, week), row in splits.iterrows()
+                ]
                 findings.append(APFinding(
                     test_name="INVOICE_SPLITTING",
                     risk_level="HIGH",
                     record_count=int(splits["count"].sum()),
                     description=f"Posible fraccionamiento detectado en {len(splits)} combinaciones proveedor/semana. "
                                 f"Múltiples facturas individuales < ${approval_threshold:,.0f} que suman ≥ umbral de aprobación.",
-                    sample_records=splits.reset_index().head(10).to_dict("records"),
+                    sample_records=split_rows[:10],
                 ))
 
     # ─────────────────────────────────────────────────────────────────────────

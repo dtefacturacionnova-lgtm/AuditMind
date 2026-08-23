@@ -1665,6 +1665,36 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
+  // PT-B4: Análisis de Datos CAATs [SMART] — motor único referenciado por 19
+  // papeles distintos en 5 plantillas (B-03 NOGAI, B-CAA-02/03/04+B-TXN-01
+  // Forense, ISR-07/IVA-07/OF-03/OF-05+AF-01..05 Fiscal, B-INC-02 IT Security,
+  // B-MON-02 AML). El motor a usar (GL/AP/Nómina/Benford/Anomalías) lo elige
+  // el auditor en el panel — no depende de la plantilla que lo invoca.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-B4': [
+    {
+      sectionKey:  'S1',
+      label:       'Análisis de Datos CAATs',
+      description: 'Motor de análisis asistido por computadora: suba el archivo fuente, mapee sus columnas y ejecute la prueba (Libro Mayor, Cuentas por Pagar, Nómina, Ley de Benford o Detección de Anomalías).',
+      fieldType:   FieldType.CAATS_ANALYSIS,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Sección interactiva — no se redacta con IA. El resultado calculado (hallazgos, KPIs, distribución de dígitos, etc.) queda guardado como evidencia de la prueba ejecutada.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      description: 'Interpretación profesional de los resultados del análisis: hallazgos relevantes, procedimientos adicionales sugeridos y efecto sobre la conclusión de auditoría.',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Con base en los resultados de S1: resuma los hallazgos de mayor riesgo, indique si ameritan ampliar la muestra o aplicar procedimientos sustantivos adicionales, y concluya sobre el efecto en la aserción/cuenta evaluada.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
   // PT-BIA: Análisis de Impacto en el Negocio — ISO 22301:2019 [SMART]
   // ──────────────────────────────────────────────────────────────────────────
   'PT-BIA': [

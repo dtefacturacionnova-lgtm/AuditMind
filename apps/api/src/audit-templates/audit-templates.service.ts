@@ -1984,6 +1984,9 @@ export class AuditTemplatesService {
           { code: 'B-09', indexSection: 'B-09',
             title: 'Libro de AJEs — Asientos de Ajuste con Base Técnica NIIF (NIA 450)',
             type: WorkingPaperType.SUBSTANTIVE_TEST, wpKind: WpKind.SMART, paperCode: 'PT-FIN-B09' },
+          { code: 'B-10', indexSection: 'B-10',
+            title: 'Análisis de Datos CAATs sobre el Libro Mayor (Benford, Anomalías, Duplicados)',
+            type: WorkingPaperType.DATA_ANALYSIS, wpKind: WpKind.SMART, paperCode: 'PT-B4' },
           // ── C — Pruebas Sustantivas ────────────────────────────────────────
           { code: 'C-01', indexSection: 'C-01',
             title: 'Caja y Bancos — Conciliaciones Bancarias y Arqueo (NIA 505)',
@@ -2107,6 +2110,8 @@ export class AuditTemplatesService {
           { sourceCode: 'C-03', targetCode: 'B-08', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Diferencias Inventarios → Cédula consolidada' },
           { sourceCode: 'C-04', targetCode: 'B-08', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Diferencias Activo Fijo → Cédula consolidada' },
           { sourceCode: 'C-07', targetCode: 'B-08', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Diferencias CxP → Cédula consolidada' },
+          // ── B-10 → C-07: análisis CAATs (duplicados/proveedores) como evidencia complementaria ──
+          { sourceCode: 'B-10', targetCode: 'C-07', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Análisis CAATs del Libro Mayor/CxP → evidencia complementaria para circularización de Cuentas por Pagar' },
           { sourceCode: 'C-08', targetCode: 'B-08', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Diferencias Obligaciones/Impuestos → Cédula consolidada' },
           { sourceCode: 'C-11', targetCode: 'B-08', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Diferencias Ingresos → Cédula consolidada' },
           { sourceCode: 'C-12', targetCode: 'B-08', sourceField: 'S1', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'Diferencias Costos/Gastos → Cédula consolidada' },

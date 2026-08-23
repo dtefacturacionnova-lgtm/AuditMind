@@ -1,10 +1,11 @@
 """Analytics router — CAATs (Computer-Assisted Audit Techniques).
-Tareas 2.1–2.5:
+Tareas 2.1–2.6:
   POST /analytics/gl          → Diario Mayor
   POST /analytics/ap          → Cuentas por Pagar
   POST /analytics/payroll     → Nómina
   POST /analytics/benford     → Ley de Benford
   POST /analytics/anomaly     → ML Anomaly Detection
+  POST /analytics/sod         → Segregación de Funciones
 """
 import dataclasses
 import math
@@ -18,6 +19,7 @@ from app.services.caats.ap_analysis import analyze_ap
 from app.services.caats.payroll_analysis import analyze_payroll
 from app.services.caats.benford import analyze_benford
 from app.services.caats.anomaly_detection import detect_anomalies
+from app.services.caats.sod_analysis import analyze_sod
 
 router = APIRouter()
 
@@ -174,6 +176,28 @@ async def anomaly_detection(
             records=request.records,
             numeric_fields=request.numeric_fields,
             contamination=request.contamination,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _serialize(result)
+
+
+# ─── Segregación de Funciones (SoD) ───────────────────────────────────────────
+@router.post("/sod")
+async def sod_analysis(
+    request: RecordsRequest,
+    x_internal_key: str | None = Header(default=None),
+):
+    """Tarea 2.6 — Segregación de Funciones sobre matriz usuario-permiso."""
+    verify_internal_key(x_internal_key)
+    fm = request.field_mapping or {}
+    try:
+        result = analyze_sod(
+            records=request.records,
+            user_field=fm.get("user", "user"),
+            permission_field=fm.get("permission", "permission"),
+            user_name_field=fm.get("user_name", "user_name"),
+            department_field=fm.get("department", "department"),
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

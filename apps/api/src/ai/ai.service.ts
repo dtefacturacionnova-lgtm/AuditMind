@@ -485,7 +485,7 @@ export class AiService {
 
   // ─── Análisis CAATs ───────────────────────────────────────────────────────────
   async runCaats(
-    analysisType: 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly',
+    analysisType: 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod',
     payload: unknown,
   ): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/analytics/${analysisType}`, {

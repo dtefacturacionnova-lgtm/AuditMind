@@ -27,7 +27,8 @@ export type SectionFieldType =
   | 'PROCEDURE_GRID'
   | 'SAMPLE_ITEM_REGISTER'
   | 'SAMPLING_EVALUATION'
-  | 'FLOWCHART';
+  | 'FLOWCHART'
+  | 'CAATS_ANALYSIS';
 
 export interface PaperSection {
   id: string;

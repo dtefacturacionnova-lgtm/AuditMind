@@ -150,6 +150,7 @@ enum FieldType {
   SAMPLE_ITEM_REGISTER // Grid de ítems de muestra con valor en libros/auditado, diferencia y tainting % por fila
   SAMPLING_EVALUATION // Panel computado: extrapolación de errores MUS (MLE/Precisión Básica/UEL) + semáforo, derivado de SAMPLE_ITEM_REGISTER
   FLOWCHART // Editor de flujograma de proceso (nodos/aristas), con nodos vinculables a otro papel/sección
+  CAATS_ANALYSIS // Panel de análisis de datos CAATs embebido: motor (GL/AP/Nómina/Benford/Anomalías) + origen de datos + resultado calculado (PT-B4)
 }
 
 // Tipo de mapeo entre papeles en el grafo

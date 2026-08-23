@@ -26,6 +26,8 @@ import type { SamplingEvaluationValue } from './SamplingEvaluationPanel';
 import { ExcelTemplateBar } from './ExcelTemplateBar';
 import { FlowchartPanel } from './FlowchartPanel';
 import type { FlowchartValue } from './FlowchartPanel';
+import { CaatsAnalysisPanel } from './CaatsAnalysisPanel';
+import type { CaatsAnalysisValue } from './CaatsAnalysisPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -584,7 +586,8 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
     section.fieldType === 'ACCOUNT_SCHEDULE' ||
     section.fieldType === 'SAMPLE_ITEM_REGISTER' ||
     section.fieldType === 'SAMPLING_EVALUATION' ||
-    section.fieldType === 'FLOWCHART';
+    section.fieldType === 'FLOWCHART' ||
+    section.fieldType === 'CAATS_ANALYSIS';
 
   const isAutoAndLocked = section.isAutoFilled && !overriding && !editing;
 
@@ -938,6 +941,22 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
+            {/* Análisis de Datos CAATs (PT-B4) — motor GL/AP/Nómina/Benford/Anomalías embebido */}
+            {section.fieldType === 'CAATS_ANALYSIS' && paperId && (
+              <CaatsAnalysisPanel
+                paperId={paperId}
+                auditId={auditId}
+                sectionKey={section.sectionKey}
+                value={
+                  effectiveValue && typeof effectiveValue === 'object' && !Array.isArray(effectiveValue)
+                    ? (effectiveValue as CaatsAnalysisValue)
+                    : null
+                }
+                onChange={value => onSave(section.sectionKey, value)}
+                readOnly={readonly}
+              />
+            )}
+
             {/* Conciliación Bancaria (EXC-10/11) — solo en Diferencias Identificadas (S1) de PT-FIN-C-SUST */}
             {section.fieldType === 'MATRIX' && paperId && paperCode === 'PT-FIN-C-SUST' && section.sectionKey === 'S1' && !readonly && (
               <ExcelTemplateBar
@@ -1057,7 +1076,7 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
             )}
 
             {/* All text-like */}
-            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG', 'PROCEDURE_GRID', 'SAMPLE_ITEM_REGISTER', 'SAMPLING_EVALUATION', 'FLOWCHART'].includes(section.fieldType) && (
+            {!['MATRIX', 'REFERENCE', 'RISK_REF', 'ATTACHMENT', 'BOOLEAN', 'ACCOUNT_SCHEDULE', 'DECLARATIONS', 'LEGAL_MATRIX', 'AUDIT_REPORTS', 'CHECKLIST', 'COMMUNICATION_LOG', 'PROCEDURE_GRID', 'SAMPLE_ITEM_REGISTER', 'SAMPLING_EVALUATION', 'FLOWCHART', 'CAATS_ANALYSIS'].includes(section.fieldType) && (
               <p className={`text-sm leading-relaxed whitespace-pre-wrap ${
                 effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== ''
                   ? 'text-gray-700'

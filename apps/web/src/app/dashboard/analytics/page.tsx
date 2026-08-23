@@ -8,19 +8,22 @@ import {
   BarChart3, Play, Loader2, AlertCircle, CheckCircle2,
   TrendingUp, Search, Database, FileSpreadsheet, Cpu,
   ChevronDown, ChevronUp, Info, Upload, FileUp, X, ListChecks,
-  AlertTriangle, RotateCcw, HelpCircle, FileDown, Table2, ShieldCheck,
-  Target, FlaskConical, ScrollText,
+  AlertTriangle, RotateCcw, HelpCircle, FileDown, Table2,
+  Target, FlaskConical, ScrollText, Save, ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  fieldLabel, testLabel, formatValue,
-  RISK_LEVEL_LABELS, RISK_LEVEL_COLORS, CONFORMITY_LABELS, CONFORMITY_COLORS,
+  fieldLabel, testLabel, formatValue, RISK_LEVEL_LABELS, CONFORMITY_LABELS,
 } from '@/lib/caats-labels';
 import { METHODOLOGY } from '@/lib/caats-methodology';
+import { AnalysisResultView, type FindingLike } from '@/components/caats/CaatsResultView';
+import { SaveAsWorkingPaperModal } from '@/components/caats/SaveAsWorkingPaperModal';
+import {
+  type AnalysisId, type ParsedFile, FIELD_DEFS,
+  normColName, autoMatchColumn, autoDetectNumericColumns,
+} from '@/lib/caats-fields';
 
 // ─── Analysis types ───────────────────────────────────────────────────────────
-
-type AnalysisId = 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly';
 
 interface AnalysisType {
   id:          AnalysisId;
@@ -71,6 +74,14 @@ const ANALYSIS_TYPES: AnalysisType[] = [
     icon:        Cpu,
     color:       'bg-red-500',
     sampleKey:   'anomaly',
+  },
+  {
+    id:          'sod',
+    label:       'Segregación de Funciones',
+    description: 'Detecta usuarios con permisos incompatibles (crear proveedor + aprobar pago, etc.) sobre la matriz de accesos.',
+    icon:        ShieldAlert,
+    color:       'bg-amber-500',
+    sampleKey:   'sod',
   },
 ];
 
@@ -165,6 +176,28 @@ const SAMPLE_DATA: Record<string, unknown> = {
     ],
     numeric_fields: ['amount', 'hour', 'day_of_week', 'user_transactions'],
   },
+  sod: {
+    // Un registro por permiso asignado. U001/U002/U004/U007 disparan un
+    // conflicto puntual del catálogo; U005 (admin) dispara un conflicto Y la
+    // prueba de concentración (4 categorías sensibles); U003/U006 quedan
+    // limpios para mostrar que el motor no marca todo indiscriminadamente.
+    records: [
+      { user: 'U001', user_name: 'Carlos Ramírez', permission: 'Crear Proveedor',            department: 'Compras' },
+      { user: 'U001', user_name: 'Carlos Ramírez', permission: 'Aprobar Pago',                department: 'Compras' },
+      { user: 'U002', user_name: 'Ana Torres',      permission: 'Registrar Asiento Contable',  department: 'Contabilidad' },
+      { user: 'U002', user_name: 'Ana Torres',      permission: 'Conciliación Bancaria',       department: 'Contabilidad' },
+      { user: 'U003', user_name: 'Luis Pérez',      permission: 'Crear Orden de Compra',       department: 'Compras' },
+      { user: 'U004', user_name: 'María Gómez',     permission: 'Procesar Nómina',             department: 'RRHH' },
+      { user: 'U004', user_name: 'María Gómez',     permission: 'Aprobar Nómina',              department: 'RRHH' },
+      { user: 'U005', user_name: 'admin',           permission: 'Crear Proveedor',             department: 'TI' },
+      { user: 'U005', user_name: 'admin',           permission: 'Aprobar Pago',                department: 'TI' },
+      { user: 'U005', user_name: 'admin',           permission: 'Registrar Asiento Contable',  department: 'TI' },
+      { user: 'U005', user_name: 'admin',           permission: 'Administración de Accesos',   department: 'TI' },
+      { user: 'U006', user_name: 'Jorge Díaz',      permission: 'Aprobar Orden de Compra',     department: 'Compras' },
+      { user: 'U007', user_name: 'Sofía Reyes',     permission: 'Crear Cliente',               department: 'Ventas' },
+      { user: 'U007', user_name: 'Sofía Reyes',     permission: 'Aplicar Nota de Crédito',      department: 'Ventas' },
+    ],
+  },
 };
 
 // ─── Subir archivo — mapeo de columnas (sin plantilla fija) ───────────────────
@@ -173,406 +206,11 @@ const SAMPLE_DATA: Record<string, unknown> = {
 // aceptan amount_field/vendor_field/etc. en el backend) para que el frontend
 // arme el `field_mapping` correcto — nunca se exige renombrar el archivo.
 
-interface FieldDef { key: string; label: string; required?: boolean }
+// FieldDef/FIELD_DEFS/FIELD_ALIASES/normColName/autoMatchColumn/autoDetectNumericColumns/
+// ParsedFile extraídos a lib/caats-fields.ts (compartido con el panel embebido PT-B4).
 
-// IMPORTANTE: `key` debe ser EXACTO al nombre que cada endpoint de
-// apps/ai-service/app/routers/analytics.py lee de `field_mapping` (ej. GL usa
-// `fm.get("user", "posted_by")` — la clave del mapeo es "user", "posted_by" es
-// solo el default cuando no se manda mapeo). No son necesariamente el mismo
-// texto que el nombre de campo final — verificado en vivo contra cada endpoint.
-const FIELD_DEFS: Partial<Record<AnalysisId, FieldDef[]>> = {
-  gl: [
-    { key: 'amount',      label: 'Monto',                 required: true },
-    { key: 'date',        label: 'Fecha' },
-    { key: 'user',        label: 'Usuario que registró' },
-    { key: 'account',     label: 'Cuenta contable' },
-    { key: 'description', label: 'Descripción' },
-  ],
-  ap: [
-    { key: 'amount',         label: 'Monto',                required: true },
-    { key: 'vendor_id',      label: 'Proveedor (ID o nombre)' },
-    { key: 'vendor_name',    label: 'Nombre del proveedor (detecta fantasmas)' },
-    { key: 'invoice_number', label: 'Número de factura' },
-    { key: 'date',           label: 'Fecha de factura' },
-    { key: 'payment_date',   label: 'Fecha de pago' },
-  ],
-  payroll: [
-    { key: 'gross_pay',     label: 'Salario bruto',        required: true },
-    { key: 'employee_id',   label: 'ID de empleado' },
-    { key: 'employee_name', label: 'Nombre de empleado' },
-    { key: 'net_pay',       label: 'Salario neto' },
-    { key: 'department',    label: 'Departamento' },
-    { key: 'position',      label: 'Cargo' },
-    { key: 'approved_by',   label: 'Aprobado por' },
-    { key: 'bank_account',  label: 'Cuenta bancaria' },
-  ],
-};
-
-// Claves iguales a las de FIELD_DEFS (el nombre que field_mapping espera),
-// NO necesariamente el nombre "final" del campo — ver nota arriba.
-const FIELD_ALIASES: Record<string, string[]> = {
-  amount: ['amount', 'monto', 'importe', 'valor', 'total'],
-  date: ['date', 'fecha', 'posting_date', 'fecha_asiento', 'fecha_registro', 'invoice_date', 'fecha_factura'],
-  user: ['user', 'posted_by', 'usuario', 'registrado_por', 'creado_por'],
-  account: ['account', 'account_code', 'cuenta', 'codigo_cuenta', 'cta'],
-  description: ['description', 'descripcion', 'detalle', 'concepto', 'glosa'],
-  vendor_id: ['vendor_id', 'vendor', 'proveedor', 'supplier', 'nombre_proveedor'],
-  vendor_name: ['vendor_name', 'nombre_proveedor', 'proveedor', 'supplier_name'],
-  invoice_number: ['invoice_number', 'invoice_id', 'numero_factura', 'factura', 'no_factura'],
-  payment_date: ['payment_date', 'fecha_pago', 'fecha_de_pago'],
-  gross_pay: ['gross_pay', 'salary', 'salario', 'sueldo', 'sueldo_bruto', 'salario_bruto'],
-  employee_id: ['employee_id', 'id_empleado', 'rut', 'legajo', 'codigo_empleado'],
-  employee_name: ['employee_name', 'name', 'nombre', 'nombre_empleado', 'empleado'],
-  net_pay: ['net_pay', 'sueldo_neto', 'neto', 'salario_neto'],
-  department: ['department', 'departamento', 'depto', 'area', 'gerencia'],
-  position: ['position', 'cargo', 'puesto'],
-  approved_by: ['approved_by', 'aprobado_por', 'aprobador', 'autorizado_por'],
-  bank_account: ['bank_account', 'cuenta_bancaria', 'cuenta', 'numero_cuenta'],
-};
-
-function normColName(c: string): string {
-  return c.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\s_-]/g, '');
-}
-
-function autoMatchColumn(fieldKey: string, columns: string[]): string {
-  const aliases = (FIELD_ALIASES[fieldKey] ?? [fieldKey]).map(normColName);
-  // 1) match exacto (ej. columna literal "amount")
-  const exact = columns.find(c => aliases.includes(normColName(c)));
-  if (exact) return exact;
-  // 2) match parcial — columnas reales rara vez son EXACTAS ("Monto_Transaccion"
-  // no es igual a "monto", pero lo contiene). Se compara en ambos sentidos por
-  // si el alias es más largo que la columna o viceversa.
-  const partial = columns.find(c => {
-    const nc = normColName(c);
-    return aliases.some(a => nc.includes(a) || a.includes(nc));
-  });
-  return partial ?? '';
-}
-
-function autoDetectNumericColumns(columns: string[], rows: Record<string, unknown>[]): string[] {
-  if (rows.length === 0) return [];
-  const sample = rows.slice(0, Math.min(10, rows.length));
-  return columns.filter(c => {
-    const values = sample.map(r => r[c]).filter(v => v !== null && v !== undefined && v !== '');
-    if (values.length === 0) return false;
-    return values.every(v => !Number.isNaN(Number(v)));
-  });
-}
-
-interface ParsedFile {
-  columns:            string[];
-  rows:               Record<string, unknown>[];
-  rowCount:           number;
-  totalRows:          number;
-  truncated:          boolean;
-  filename:           string;
-  headerRowIndex:     number;
-  headerAutoDetected: boolean;
-  headerConfidence:   'high' | 'low';
-  skippedRows:        string[][];
-  rawPreview:         string[][];
-}
-
-// ─── Result renderer ──────────────────────────────────────────────────────────
-
-function ResultSection({
-  title,
-  children,
-  defaultOpen = true,
-}: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-      >
-        <span className="text-sm font-semibold text-gray-700">{title}</span>
-        {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-      </button>
-      {open && <div className="px-4 py-3">{children}</div>}
-    </div>
-  );
-}
-
-function KpiStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-gray-50 rounded-xl px-4 py-3">
-      <p className="text-[11px] text-gray-500 font-medium leading-tight">{label}</p>
-      <p className="text-lg font-bold text-gray-900 mt-1 leading-tight">{value}</p>
-    </div>
-  );
-}
-
-function SeverityBadge({ level }: { level: string }) {
-  const c = RISK_LEVEL_COLORS[level] ?? RISK_LEVEL_COLORS.LOW;
-  return (
-    <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0', c.bg, c.text)}>
-      <span className={cn('w-1.5 h-1.5 rounded-full', c.dot)} />
-      {RISK_LEVEL_LABELS[level] ?? level}
-    </span>
-  );
-}
-
-interface FindingLike {
-  test_name: string; risk_level: string; record_count: number;
-  description: string; sample_records?: Record<string, unknown>[];
-}
-
-function SeverityBarChart({ findings }: { findings: FindingLike[] }) {
-  const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
-  const counts: Record<string, number> = {};
-  findings.forEach(f => { counts[f.risk_level] = (counts[f.risk_level] ?? 0) + 1; });
-  const max = Math.max(...order.map(k => counts[k] ?? 0), 1);
-  const active = order.filter(k => counts[k] > 0);
-  if (active.length === 0) return null;
-  return (
-    <div className="flex items-end gap-4 h-24 px-2">
-      {active.map(k => {
-        const c = RISK_LEVEL_COLORS[k];
-        const h = Math.max(((counts[k] ?? 0) / max) * 100, 12);
-        return (
-          <div key={k} className="flex flex-col items-center justify-end h-full gap-1.5 flex-1 max-w-[64px]">
-            <span className="text-xs font-bold text-gray-700">{counts[k]}</span>
-            <div className="w-full rounded-t-md overflow-hidden bg-gray-100" style={{ height: '100%' }}>
-              <div className={cn('w-full rounded-t-md', c.dot)} style={{ height: `${h}%`, marginTop: 'auto' }} />
-            </div>
-            <span className="text-[10px] text-gray-400">{RISK_LEVEL_LABELS[k]}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function SampleRecordsTable({ rows }: { rows: Record<string, unknown>[] }) {
-  if (!rows || rows.length === 0) return null;
-  const cols = Object.keys(rows[0]);
-  return (
-    <div className="mt-2.5 overflow-x-auto border border-gray-100 rounded-lg">
-      <table className="w-full text-[11px]">
-        <thead>
-          <tr className="bg-gray-50">
-            {cols.map(c => (
-              <th key={c} className="text-left px-2 py-1.5 text-gray-400 font-semibold whitespace-nowrap">{fieldLabel(c)}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-50">
-          {rows.slice(0, 5).map((row, i) => (
-            <tr key={i}>
-              {cols.map(c => (
-                <td key={c} className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{formatValue(row[c], c)}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function FindingCard({ finding }: { finding: FindingLike }) {
-  return (
-    <div className="border border-gray-200 rounded-xl p-4">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h4 className="font-semibold text-sm text-gray-900">{testLabel(finding.test_name)}</h4>
-        <SeverityBadge level={finding.risk_level} />
-      </div>
-      <p className="text-xs text-gray-500 mt-1.5">{finding.description}</p>
-      <SampleRecordsTable rows={finding.sample_records ?? []} />
-    </div>
-  );
-}
-
-function GenericTable({ rows }: { rows: Record<string, unknown>[] }) {
-  if (!rows || rows.length === 0) return <p className="text-xs text-gray-400 py-3 text-center">Sin datos.</p>;
-  const cols = Object.keys(rows[0]);
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr>
-            {cols.map(c => (
-              <th key={c} className="text-left px-2 py-1.5 bg-gray-50 text-gray-500 font-semibold border-b border-gray-200 whitespace-nowrap">
-                {fieldLabel(c)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {rows.slice(0, 20).map((row, i) => (
-            <tr key={i} className="hover:bg-gray-50">
-              {cols.map(c => (
-                <td key={c} className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{formatValue(row[c], c)}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {rows.length > 20 && <p className="text-xs text-gray-400 mt-2 text-center">Mostrando 20 de {rows.length} registros</p>}
-    </div>
-  );
-}
-
-// Claves que ya se muestran en secciones dedicadas — se excluyen de los KPI
-// escalares genéricos para no duplicar la información.
-const RESULT_SPECIAL_KEYS = new Set([
-  'findings', 'summary', 'vendor_concentration', 'pay_distribution', 'digits',
-  'top_anomalous_amounts', 'interpretation', 'top_anomalies', 'feature_stats', 'conformity',
-]);
-
-function AnalysisResultView({ result }: { result: Record<string, unknown> }) {
-  const kpiEntries = Object.entries(result).filter(([k, v]) => !RESULT_SPECIAL_KEYS.has(k) && typeof v !== 'object');
-  const findings = Array.isArray(result.findings) ? (result.findings as FindingLike[]) : null;
-  const topAnomalies = Array.isArray(result.top_anomalies) ? (result.top_anomalies as Array<Record<string, unknown>>) : null;
-  const vendorConcentration = Array.isArray(result.vendor_concentration) ? (result.vendor_concentration as Record<string, unknown>[]) : null;
-  const topAnomalousAmounts = Array.isArray(result.top_anomalous_amounts) ? (result.top_anomalous_amounts as Record<string, unknown>[]) : null;
-  const digits = Array.isArray(result.digits) ? (result.digits as Record<string, unknown>[]) : null;
-  const payDist = result.pay_distribution && typeof result.pay_distribution === 'object'
-    ? result.pay_distribution as Record<string, unknown> : null;
-  const featureStats = result.feature_stats && typeof result.feature_stats === 'object'
-    ? result.feature_stats as Record<string, unknown> : null;
-  const conformity = typeof result.conformity === 'string' ? result.conformity : null;
-
-  return (
-    <div className="space-y-5">
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {kpiEntries.map(([k, v]) => (
-          <KpiStat key={k} label={fieldLabel(k)} value={formatValue(v, k)} />
-        ))}
-      </div>
-
-      {conformity && (
-        <div className={cn('rounded-xl px-4 py-3 flex items-center gap-3', CONFORMITY_COLORS[conformity]?.bg ?? 'bg-gray-50')}>
-          <ShieldCheck className={cn('w-5 h-5 shrink-0', CONFORMITY_COLORS[conformity]?.text ?? 'text-gray-600')} />
-          <div>
-            <p className="text-[11px] font-medium text-gray-500">Conformidad con Ley de Benford</p>
-            <p className={cn('text-sm font-bold', CONFORMITY_COLORS[conformity]?.text ?? 'text-gray-800')}>
-              {CONFORMITY_LABELS[conformity] ?? conformity}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {typeof result.interpretation === 'string' && (
-        <div className="bg-blue-50 border-l-4 border-blue-400 rounded-r-lg px-4 py-3">
-          <p className="text-sm text-blue-800 italic">{result.interpretation}</p>
-        </div>
-      )}
-
-      {findings && findings.length > 0 && (
-        <div>
-          <h3 className="text-sm font-bold text-gray-800 mb-3">Hallazgos ({findings.length})</h3>
-          <SeverityBarChart findings={findings} />
-          <div className="space-y-2.5 mt-3">
-            {findings.map((f, i) => <FindingCard key={i} finding={f} />)}
-          </div>
-        </div>
-      )}
-      {findings && findings.length === 0 && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-700 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4" /> No se detectaron hallazgos de riesgo en los datos analizados.
-        </div>
-      )}
-
-      {topAnomalies && topAnomalies.length > 0 && (
-        <ResultSection title={`Principales Anomalías (${topAnomalies.length})`}>
-          <div className="space-y-2.5">
-            {topAnomalies.map((a, i) => (
-              <div key={i} className="border border-gray-200 rounded-xl p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-700">Registro #{String(a.index)}</span>
-                  <span className="text-[11px] text-gray-400">Puntaje: {formatValue(a.anomaly_score)}</span>
-                </div>
-                {Array.isArray(a.flags) && a.flags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {(a.flags as string[]).map((flag, j) => (
-                      <span key={j} className="text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-medium">{flag}</span>
-                    ))}
-                  </div>
-                )}
-                {a.record && typeof a.record === 'object'
-                  ? <SampleRecordsTable rows={[a.record as Record<string, unknown>]} />
-                  : null}
-              </div>
-            ))}
-          </div>
-        </ResultSection>
-      )}
-
-      {vendorConcentration && (
-        <ResultSection title="Concentración por Proveedor">
-          <GenericTable rows={vendorConcentration} />
-        </ResultSection>
-      )}
-
-      {topAnomalousAmounts && (
-        <ResultSection title="Montos Más Atípicos">
-          <GenericTable rows={topAnomalousAmounts} />
-        </ResultSection>
-      )}
-
-      {digits && (
-        <ResultSection title="Distribución de Dígitos (Observado vs. Esperado)">
-          <div className="flex items-end gap-2 h-32 px-2">
-            {digits.map((d) => {
-              const obs = Number(d.observed_pct ?? 0);
-              const exp = Number(d.expected_pct ?? 0);
-              const max = Math.max(...digits.map(x => Math.max(Number(x.observed_pct ?? 0), Number(x.expected_pct ?? 0))), 1);
-              return (
-                <div key={String(d.digit)} className="flex flex-col items-center justify-end h-full flex-1 gap-1">
-                  <div className="w-full flex items-end justify-center gap-0.5" style={{ height: '100%' }}>
-                    <div className={cn('w-1/2 rounded-t', d.is_anomalous ? 'bg-red-400' : 'bg-blue-500')}
-                      style={{ height: `${Math.max((obs / max) * 100, 3)}%`, marginTop: 'auto' }} title={`Observado ${obs}%`} />
-                    <div className="w-1/2 rounded-t bg-gray-300" style={{ height: `${Math.max((exp / max) * 100, 3)}%`, marginTop: 'auto' }} title={`Esperado ${exp}%`} />
-                  </div>
-                  <span className="text-[10px] text-gray-400">{String(d.digit)}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-4 mt-2 justify-center text-[11px] text-gray-500">
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500" />Observado</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-gray-300" />Esperado (Benford)</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-400" />Observado — anómalo</span>
-          </div>
-        </ResultSection>
-      )}
-
-      {payDist && (
-        <ResultSection title="Distribución Salarial">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-            {Object.entries(payDist).filter(([k]) => k !== 'by_department').map(([k, v]) => (
-              <KpiStat key={k} label={fieldLabel(k)} value={formatValue(v, k)} />
-            ))}
-          </div>
-          {payDist.by_department && typeof payDist.by_department === 'object'
-            ? (
-              <GenericTable rows={Object.entries(payDist.by_department as Record<string, unknown>).map(([dept, stats]) => ({
-                departamento: dept, ...(stats as Record<string, unknown>),
-              }))} />
-            )
-            : null}
-        </ResultSection>
-      )}
-
-      {featureStats && (
-        <ResultSection title="Estadísticas de Variables">
-          <GenericTable rows={Object.entries(featureStats).map(([field, stats]) => ({
-            variable: field,
-            ...(typeof stats === 'object' && stats !== null ? stats as Record<string, unknown> : { valor: stats }),
-          }))} />
-        </ResultSection>
-      )}
-    </div>
-  );
-}
+// ─── Result renderer — extraído a components/caats/CaatsResultView.tsx ───────
+// (compartido con el panel embebido en el papel de trabajo PT-B4)
 
 // ─── Modal de metodología ──────────────────────────────────────────────────────
 
@@ -651,6 +289,7 @@ export default function AnalyticsPage() {
   const [showPayload, setShowPayload] = useState(false);
   const [showMethodology, setShowMethodology] = useState(false);
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
+  const [showSaveAsPaper, setShowSaveAsPaper] = useState(false);
 
   const [dataMode, setDataMode] = useState<'sample' | 'upload'>('sample');
   const [uploading, setUploading] = useState(false);
@@ -868,7 +507,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Analysis type selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {ANALYSIS_TYPES.map(type => (
               <button
                 key={type.id}
@@ -1163,6 +802,13 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => setShowSaveAsPaper(true)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    Guardar como papel de trabajo
+                  </button>
+                  <button
                     onClick={exportExcel}
                     disabled={exporting !== null}
                     className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
@@ -1182,6 +828,19 @@ export default function AnalyticsPage() {
               </div>
               <AnalysisResultView result={result} />
             </div>
+          )}
+
+          {showSaveAsPaper && result && (
+            <SaveAsWorkingPaperModal
+              engine={selected.id}
+              label={selected.label}
+              result={result}
+              fileName={dataMode === 'upload' ? parsed?.filename : 'Datos de muestra'}
+              fieldMapping={dataMode === 'upload' && selected.id !== 'benford' && selected.id !== 'anomaly' ? fieldMapping : undefined}
+              benfordColumn={dataMode === 'upload' && selected.id === 'benford' ? benfordColumn : undefined}
+              anomalyColumns={dataMode === 'upload' && selected.id === 'anomaly' ? anomalyColumns : undefined}
+              onClose={() => setShowSaveAsPaper(false)}
+            />
           )}
 
           {/* Empty state before running */}

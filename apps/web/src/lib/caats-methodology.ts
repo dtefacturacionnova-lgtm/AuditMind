@@ -87,4 +87,17 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     limitaciones:
       'Es un modelo estadístico, no conoce el contexto de negocio — una anomalía puede ser perfectamente legítima (ej. un bono anual real). Requiere que las columnas seleccionadas sean genuinamente numéricas y comparables entre sí. Con menos de 10 registros el modelo no tiene suficiente base para entrenar.',
   },
+  sod: {
+    objetivo:
+      'Detectar usuarios que acumulan permisos incompatibles entre sí sobre los sistemas de la entidad — el mismo usuario con capacidad de ejecutar Y controlar el mismo proceso, sin contrapeso independiente. Es la prueba directa del componente de Actividades de Control de COSO 2013.',
+    metodologia:
+      'Compara la lista de permisos de cada usuario contra un catálogo curado de pares de funciones incompatibles (ej. crear proveedor + aprobar pago), y adicionalmente marca usuarios que acumulan permisos en 3 o más categorías sensibles aunque ninguna combinación puntual esté en el catálogo.',
+    normativa: 'COSO 2013 — Principios 10 y 11 (Actividades de Control), NIA 315 (entendimiento de controles), IIA GTAG 8 (Auditing Application Controls)',
+    pruebas: [
+      { nombre: 'Conflictos del catálogo', descripcion: 'Un hallazgo por cada par de funciones incompatibles detectado (ej. Crear Proveedor + Aprobar Pago, Registrar Asientos + Conciliar Banco, Procesar Nómina + Aprobar Nómina).' },
+      { nombre: 'Concentración de Accesos Sensibles', descripcion: 'Usuarios con permisos en 3 o más categorías sensibles distintas — riesgo de control total sin contrapeso, aunque ninguna combinación puntual esté catalogada.' },
+    ],
+    limitaciones:
+      'El catálogo de conflictos es un punto de partida basado en funciones típicas — cada organización debería revisar y ampliar la lista según su propia matriz de riesgos. El emparejamiento de permisos es por texto (palabras clave), así que nombres de permiso muy distintos a los esperados pueden no matchear — revisar el mapeo de columnas antes de concluir "sin hallazgos".',
+  },
 };

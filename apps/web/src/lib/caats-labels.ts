@@ -72,6 +72,12 @@ export const FIELD_LABELS: Record<string, string> = {
   // Estadísticas
   mean: 'Media', median: 'Mediana', std: 'Desv. Estándar', min: 'Mínimo', max: 'Máximo',
   p25: 'Percentil 25', p75: 'Percentil 75', p95: 'Percentil 95', count: 'Cantidad', sum: 'Suma',
+  // SoD (Segregación de Funciones)
+  total_users: 'Usuarios Analizados', total_assignments: 'Permisos Asignados',
+  conflict_count: 'Usuarios con Conflicto', usuario: 'Usuario', permission: 'Permiso',
+  user_name: 'Nombre', conflicto: 'Conflicto', permisos_en_conflicto: 'Permisos en Conflicto',
+  categorias_sensibles: 'Categorías Sensibles', total_permisos: 'Total de Permisos',
+  conflictos: 'Conflictos', total_conflictos: 'Cantidad de Conflictos',
 };
 
 export const TEST_NAME_LABELS: Record<string, string> = {
@@ -91,6 +97,16 @@ export const TEST_NAME_LABELS: Record<string, string> = {
   NET_EXCEEDS_GROSS: 'Neto Excede al Bruto',
   SHARED_BANK_ACCOUNTS: 'Cuentas Bancarias Compartidas',
   APPROVER_CONCENTRATION: 'Concentración de Aprobadores',
+  // SoD (Segregación de Funciones) — test_name es dinámico ("SOD_" + nombre
+  // del par incompatible), se mapea 1:1 contra los pares definidos en
+  // apps/ai-service/app/services/caats/sod_analysis.py::INCOMPATIBLE_PAIRS
+  'SOD_Crear proveedor + Aprobar pago': 'Crear Proveedor + Aprobar Pago',
+  'SOD_Crear cliente + Aplicar nota de crédito': 'Crear Cliente + Aplicar Nota de Crédito',
+  'SOD_Registrar asientos + Conciliar banco': 'Registrar Asientos + Conciliar Banco',
+  'SOD_Crear orden de compra + Recibir/Aprobar la misma orden': 'Crear Orden de Compra + Recibir/Aprobar la Misma Orden',
+  'SOD_Procesar nómina + Aprobar nómina': 'Procesar Nómina + Aprobar Nómina',
+  'SOD_Administración de usuarios + Aprobación de transacciones': 'Administración de Usuarios + Aprobación de Transacciones',
+  ACCESS_CONCENTRATION: 'Concentración de Accesos Sensibles',
 };
 
 export const RISK_LEVEL_LABELS: Record<string, string> = {

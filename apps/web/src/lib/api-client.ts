@@ -101,4 +101,27 @@ export const apiClient = {
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     return res.headers;
   },
+  /** Igual que `downloadFile`, pero POST con body JSON (ej. exportar un
+   *  resultado ya calculado en el cliente, sin volver a persistirlo). */
+  postDownload: async (path: string, body: unknown, filename: string): Promise<void> => {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => 'Download failed');
+      throw new Error(`Download error ${res.status}: ${err.slice(0, 120)}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
 };

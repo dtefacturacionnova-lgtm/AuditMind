@@ -6,6 +6,7 @@ import {
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -19,11 +20,14 @@ import {
   ValidateNested, IsObject, IsNotEmpty, ArrayMinSize, ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AiService } from './ai.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PdfService } from '../pdf/pdf.service';
+import { renderCaatsPdfBody } from '../pdf/caats-pdf';
 
 class MessageDto {
   @IsString() role!: string;
@@ -54,6 +58,7 @@ export class AiController {
   constructor(
     private readonly aiService: AiService,
     private readonly prisma: PrismaService,
+    private readonly pdfService: PdfService,
   ) {}
 
   // ─── Chat ──────────────────────────────────────────────────────────────────
@@ -95,6 +100,26 @@ export class AiController {
     @Body() payload: Record<string, unknown>,
   ) {
     return this.aiService.runCaats(type, payload);
+  }
+
+  @Post('analytics/:type/pdf')
+  @ApiOperation({ summary: 'Exportar resultados de un análisis CAATs ya calculado a PDF' })
+  async exportCaatsPdf(
+    @Param('type') type: string,
+    @Body() body: { result: Record<string, unknown>; label: string },
+    @Res() res: Response,
+  ) {
+    const html = this.pdfService.renderBrandedLayout({
+      title: `Análisis CAATs — ${body.label}`,
+      subtitle: 'Computer-Assisted Audit Techniques — generado con AuditMind Intelligence Platform',
+      body: renderCaatsPdfBody(type, body.result, body.label),
+    });
+    const pdf = await this.pdfService.generateFromHtml(html, { printPageNumbers: true, footerNote: `Analytics CAATs — ${body.label}` });
+    const filename = `auditmind_caats_${type}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
   }
 
   @Post('parse-file')

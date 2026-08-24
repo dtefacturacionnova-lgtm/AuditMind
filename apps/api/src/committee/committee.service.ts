@@ -1,10 +1,12 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { ProfitabilityService } from '../portfolio/profitability.service';
 import {
   PeriodType, getPeriodKey, getPeriodRange, getPeriodYear, getPeriodLabel,
   lastNPeriods, isPeriodType,
 } from './period.util';
+import { COSO_COMPONENTS, computeCosoAuditScore, cosoBandFor } from './coso-score.util';
 
 // Papel/fase "terminado" para efectos de avance ponderado.
 const PROGRESS_DONE = new Set(['REVIEWED', 'SIGNED_OFF', 'CLOSED', 'APPROVED', 'ARCHIVED']);
@@ -24,7 +26,7 @@ function daysBetween(a: Date, b: Date): number {
 
 @Injectable()
 export class CommitteeService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private profitability: ProfitabilityService) {}
 
   // ─── Configuración de frecuencia de corte (Organization.settings) ─────────
 
@@ -115,7 +117,7 @@ export class CommitteeService {
 
   // ─── Clasificación de un ítem del plan (encargo) para el comité ───────────
 
-  private async classifyPlanItem(item: any, periodEnd: Date, today: Date) {
+  private async classifyPlanItem(item: any, periodEnd: Date, today: Date, orgId: string) {
     const start: Date | null = item.tentativeStartDate;
     const end: Date | null = item.tentativeEndDate;
 
@@ -127,6 +129,8 @@ export class CommitteeService {
         currentPhaseLabel: null,
         hoursReal: 0,
         hoursPlanned: item.estimatedHours ?? 0,
+        auditStatus: null as string | null,
+        financials: null as Awaited<ReturnType<ProfitabilityService['getAuditFinancialSummary']>> | null,
         dateNote: notStarted
           ? (start ? `Inicio previsto ${start.toLocaleDateString('es')}` : 'Sin fecha planificada')
           : `Planificado desde hace ${daysBetween(today, start!)} días, sin iniciar`,
@@ -135,7 +139,7 @@ export class CommitteeService {
     }
 
     const auditId = item.audit.id as string;
-    const [progress, triggerPaper, findings, hoursAgg] = await Promise.all([
+    const [progress, triggerPaper, findings, hoursAgg, financials] = await Promise.all([
       this.computeEngagementProgress(auditId),
       this.prisma.workingPaper.findFirst({
         where: { auditId, isCompletionTrigger: true },
@@ -154,6 +158,11 @@ export class CommitteeService {
         },
         _sum: { hours: true },
       }),
+      // Costo/ingreso/margen cortados al cierre del período — misma semántica
+      // que `hoursAgg` de arriba (no reemplaza esa consulta: se deja intacta
+      // para no arriesgar el cálculo de estado/atraso ya verificado, esto es
+      // un dato adicional en paralelo).
+      this.profitability.getAuditFinancialSummary(auditId, orgId, periodEnd),
     ]);
 
     const bySeverity = Object.fromEntries(findings.map(f => [f.severity, f._count.id]));
@@ -164,6 +173,7 @@ export class CommitteeService {
     const isDone = !!triggerPaper && TRIGGER_DONE.has(triggerPaper.status);
     const hoursReal = hoursAgg._sum.hours ?? 0;
     const hoursPlanned = item.estimatedHours || item.audit.estimatedHours || 0;
+    const auditStatus = item.audit.status as string;
 
     if (isDone) {
       const signOffDate: Date = triggerPaper!.signedOffAt ?? triggerPaper!.updatedAt;
@@ -172,7 +182,7 @@ export class CommitteeService {
         state: (onTime ? 'DONE_ON_TIME' : 'DONE_LATE') as EngagementState,
         pct: 100,
         currentPhaseLabel: null,
-        hoursReal, hoursPlanned,
+        hoursReal, hoursPlanned, auditStatus, financials,
         dateNote: onTime
           ? `Informe final firmado ${signOffDate.toLocaleDateString('es')}`
           : `Firmado con ${daysBetween(signOffDate, end!)} días de atraso`,
@@ -203,8 +213,100 @@ export class CommitteeService {
 
     return {
       state, pct: progress.pct, currentPhaseLabel: progress.currentPhaseLabel,
-      hoursReal, hoursPlanned, dateNote,
+      hoursReal, hoursPlanned, auditStatus, financials, dateNote,
       findings: { total: findingsTotal, bySeverity, highest },
+    };
+  }
+
+  // ─── Control Interno Global (COSO 2013) — rollup a nivel de organización ──
+  // A diferencia del resto del dashboard, esto no está cortado por período:
+  // el resultado COSO es una conclusión puntual por auditoría (no tiene una
+  // fecha de "trabajo" como TimeEntry), así que el "corte" es simplemente el
+  // estado actual de las auditorías activas de la organización. Reutiliza el
+  // mismo algoritmo de ponderación 25/25/20/15/15 que ya usa el panel del
+  // papel PT-COSO (`coso-score.util.ts`, puerto server-side de
+  // `CosoScorePanel.tsx::computeComponent` — mismos pesos, misma fórmula de
+  // riesgo, mismas bandas 100-400).
+  private async computeControlInternoGlobal(orgId: string) {
+    const [papers, totalAuditsOrg] = await Promise.all([
+      this.prisma.workingPaper.findMany({
+        where: { paperCode: 'PT-COSO', audit: { organizationId: orgId, status: { not: 'CANCELLED' } } },
+        select: {
+          auditId: true,
+          audit: { select: { title: true } },
+          sections: {
+            where: { sectionKey: { in: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7'] } },
+            select: { sectionKey: true, value: true },
+          },
+        },
+      }),
+      this.prisma.audit.count({ where: { organizationId: orgId, status: { not: 'CANCELLED' } } }),
+    ]);
+
+    const scores = papers.map(p => {
+      const byKey = new Map(p.sections.map(s => [s.sectionKey, s.value]));
+      const score = computeCosoAuditScore(p.auditId as string, byKey);
+      return { ...score, auditTitle: p.audit.title };
+    });
+    const evaluated = scores.filter(s => s.totalScore !== null);
+
+    const distribution: Record<string, number> = {};
+    for (const s of scores) {
+      if (s.conclusionGlobal) distribution[s.conclusionGlobal] = (distribution[s.conclusionGlobal] ?? 0) + 1;
+    }
+
+    const avgScore = evaluated.length > 0
+      ? Math.round((evaluated.reduce((s, a) => s + (a.totalScore ?? 0), 0) / evaluated.length) * 10) / 10
+      : null;
+    const globalBand = avgScore !== null ? cosoBandFor(avgScore).label : null;
+
+    // Componentes — promedio de confianza a través de todas las auditorías
+    // evaluadas. Es el "bajar a componentes" que pide el auditor/director
+    // para saber DÓNDE está débil el control interno a nivel de organización,
+    // no solo el resultado global de una auditoría puntual.
+    const perComponent = COSO_COMPONENTS.map(meta => {
+      const values = evaluated
+        .map(s => s.components.find(c => c.sectionKey === meta.sectionKey)?.confidencePct)
+        .filter((v): v is number => v !== null && v !== undefined);
+      return {
+        sectionKey: meta.sectionKey, label: meta.label, weight: meta.weight,
+        avgConfidencePct: values.length > 0 ? Math.round(values.reduce((s, v) => s + v, 0) / values.length) : null,
+        auditsWithData: values.length,
+      };
+    });
+
+    // Sub-componentes (principios) — el nivel más granular, ordenado del más
+    // débil al más fuerte para que el director vea de inmediato dónde
+    // priorizar remediación a nivel de organización.
+    const principleMap = new Map<string, { componentShort: string; label: string; values: number[] }>();
+    for (const s of evaluated) {
+      for (const c of s.components) {
+        for (const p of c.principles) {
+          if (p.confidencePct === null) continue;
+          if (!principleMap.has(p.short)) principleMap.set(p.short, { componentShort: c.short, label: p.principio, values: [] });
+          principleMap.get(p.short)!.values.push(p.confidencePct);
+        }
+      }
+    }
+    const perPrinciple = [...principleMap.entries()]
+      .map(([short, v]) => ({
+        short, label: v.label, componentShort: v.componentShort,
+        avgConfidencePct: Math.round(v.values.reduce((s, x) => s + x, 0) / v.values.length),
+        auditsWithData: v.values.length,
+      }))
+      .sort((a, b) => a.avgConfidencePct - b.avgConfidencePct);
+
+    return {
+      auditsEvaluated: evaluated.length,
+      auditsTotal: totalAuditsOrg,
+      avgScore, globalBand,
+      distribution,
+      perComponent,
+      perPrinciple,
+      byAudit: scores.map(s => ({
+        auditId: s.auditId, auditTitle: s.auditTitle, totalScore: s.totalScore, band: s.band,
+        conclusionGlobal: s.conclusionGlobal, conclusionEnfoque: s.conclusionEnfoque,
+      })),
     };
   }
 
@@ -289,7 +391,7 @@ export class CommitteeService {
     });
 
     const planExecution = await Promise.all(itemsInPeriod.map(async item => {
-      const cls = await this.classifyPlanItem(item, periodEnd, today);
+      const cls = await this.classifyPlanItem(item, periodEnd, today, orgId);
       const name = item.audit?.title ?? item.auditProject?.name ?? item.auditEntity?.name
         ?? item.auditableUnit?.name ?? 'Encargo sin nombre';
       return {
@@ -351,6 +453,8 @@ export class CommitteeService {
         }),
       ]);
 
+    const controlInternoGlobal = await this.computeControlInternoGlobal(orgId);
+
     const openSevSet = new Set(openBySeverity.map((f: any) => f.severity));
     const riskPosture = openSevSet.has('CRITICAL') ? 'CRITICAL'
       : openSevSet.has('HIGH') ? 'HIGH'
@@ -397,6 +501,7 @@ export class CommitteeService {
         resolutionRateYtd: totalFindingsYear > 0 ? Math.round((closedFindingsYear / totalFindingsYear) * 100) : 0,
       },
       openBySeverity: Object.fromEntries(openBySeverity.map((f: any) => [f.severity, f._count.id])),
+      controlInternoGlobal,
       planExecution,
       trend,
       overdueActions,

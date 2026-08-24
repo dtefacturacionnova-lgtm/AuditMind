@@ -4,12 +4,12 @@ import { useState } from 'react';
 import {
   AlertTriangle, CheckCircle2, Clock, TrendingUp,
   ShieldAlert, BarChart3, Users2, Lock, Radio, RotateCcw, ListChecks, Repeat,
-  LayoutGrid, Building2, PieChart, Percent,
+  LayoutGrid, Building2, PieChart, Percent, DollarSign, ShieldCheck,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
   useCommitteeDashboard, useCommitteePeriods, usePublishCommitteeSnapshot,
-  type PeriodType, type EngagementState,
+  type PeriodType, type EngagementState, type PlanExecutionItem, type ControlInternoGlobal,
 } from '@/hooks/useCommittee';
 import { useCommitteeDashboard as useCommitteeDashboardLegacy } from '@/hooks/useDashboard';
 import { formatDate } from '@/lib/utils';
@@ -61,9 +61,30 @@ const FINDING_STATUS_LABEL: Record<string, string> = {
   IN_PROGRESS: 'En Progreso', CLOSED: 'Cerrado', OVERDUE: 'Vencido', ACCEPTED_RISK: 'Riesgo Aceptado',
 };
 
+// Control Interno Global (COSO 2013) — mismas 4 bandas y mismo criterio de
+// color que el panel del papel PT-COSO (`CosoScorePanel.tsx`), para que un
+// auditor que ya conoce esa pantalla reconozca el mismo semáforo acá.
+const COSO_BAND_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
+  'Efectivo':      { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+  'Confiable':     { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-400' },
+  'Poco Confiable':{ bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200',  dot: 'bg-orange-500' },
+  'No Confiable':  { bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',     dot: 'bg-red-500' },
+};
+const COSO_CONCLUSION_LABEL: Record<string, string> = {
+  EFECTIVO: 'Efectivo', CON_DEBILIDADES_SIGNIFICATIVAS: 'Con Debilidades Significativas', INEFECTIVO: 'Inefectivo',
+};
+const COSO_CONCLUSION_COLOR: Record<string, string> = {
+  EFECTIVO: 'bg-emerald-500', CON_DEBILIDADES_SIGNIFICATIVAS: 'bg-amber-400', INEFECTIVO: 'bg-red-500',
+};
+
 function daysOverdue(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
   return Math.max(0, Math.floor(diff / 86_400_000));
+}
+
+function money(n: number | null): string {
+  if (n === null) return '—';
+  return `$${n.toLocaleString('es', { maximumFractionDigits: 0 })}`;
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -94,6 +115,49 @@ function HorizBar({ label, value, max, color }: { label: string; value: number; 
         <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
       <span className="w-6 text-right text-xs font-semibold text-gray-700">{value}</span>
+    </div>
+  );
+}
+
+// Banner del Resumen — el usuario notó que una versión anterior del dashboard
+// mostraba el resultado de Control Interno Global al corte; se restaura acá
+// como su propio bloque (mismo peso visual que la Postura de Riesgo) porque es
+// gobierno corporativo de primer nivel, no un detalle operativo.
+function ControlInternoGlobalBanner({ cig }: { cig: ControlInternoGlobal }) {
+  const colors = cig.globalBand ? COSO_BAND_COLORS[cig.globalBand] : null;
+  if (cig.auditsEvaluated === 0) {
+    return (
+      <div className="rounded-2xl p-5 flex items-center gap-4 bg-gray-50 border border-gray-200 text-gray-400">
+        <ShieldCheck className="w-8 h-8 shrink-0 opacity-40" />
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest">Control Interno Global (COSO 2013)</p>
+          <p className="text-sm mt-0.5">
+            Ninguna auditoría de la organización tiene todavía una evaluación PT-COSO completada — se calculará automáticamente en cuanto haya datos.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={`rounded-2xl p-5 flex flex-wrap items-center gap-5 ${colors?.bg ?? 'bg-gray-50'} border ${colors?.border ?? 'border-gray-200'}`}>
+      <ShieldCheck className={`w-10 h-10 shrink-0 ${colors?.text ?? 'text-gray-500'}`} />
+      <div className="flex-1 min-w-[220px]">
+        <p className={`text-xs font-semibold uppercase tracking-widest ${colors?.text ?? 'text-gray-500'} opacity-80`}>
+          Control Interno Global (COSO 2013) — al corte
+        </p>
+        <p className={`text-3xl font-extrabold leading-tight ${colors?.text ?? 'text-gray-700'}`}>{cig.globalBand ?? '—'}</p>
+        <p className={`text-sm mt-0.5 ${colors?.text ?? 'text-gray-500'} opacity-80`}>
+          Puntaje promedio {cig.avgScore?.toFixed(0)} (100–400) sobre {cig.auditsEvaluated} de {cig.auditsTotal} auditorías con PT-COSO evaluado.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {Object.entries(cig.distribution).map(([key, count]) => (
+          <span key={key} className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-white/70 text-gray-700">
+            <span className={`w-2 h-2 rounded-full ${COSO_CONCLUSION_COLOR[key] ?? 'bg-gray-400'}`} />
+            {count} {COSO_CONCLUSION_LABEL[key] ?? key}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -167,7 +231,9 @@ export default function CommitteePage() {
           </button>
         </div>
 
-        {activeTab === 'detalles' && <DetallesTab />}
+        {activeTab === 'detalles' && (
+          <DetallesTab planExecution={data.planExecution} controlInternoGlobal={data.controlInternoGlobal} />
+        )}
 
         {activeTab === 'resumen' && <>
         {/* ── Barra de período ─────────────────────────────────────────────── */}
@@ -236,6 +302,9 @@ export default function CommitteePage() {
             </p>
           </div>
         </div>
+
+        {/* ── Control Interno Global (COSO 2013) — al corte ────────────────── */}
+        <ControlInternoGlobalBanner cig={data.controlInternoGlobal} />
 
         {/* ── KPI cards ───────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -548,7 +617,264 @@ export default function CommitteePage() {
 // desde antes del rediseño. Suma un tercer análisis nuevo — Hallazgos por
 // Estado de ciclo completo — con un dato que ese mismo endpoint ya
 // calculaba (`allByStatus`) pero ninguna vista mostraba todavía.
-function DetallesTab() {
+interface StatusGroup {
+  status: string;
+  count: number;
+  hoursPlanned: number;
+  hoursReal: number;
+  cost: number;
+  revenue: number;
+  revenueKnown: number;
+  margin: number;
+  marginKnown: number;
+}
+
+function groupByAuditStatus(items: PlanExecutionItem[]): StatusGroup[] {
+  const groups = new Map<string, StatusGroup>();
+  for (const item of items) {
+    const key = item.auditStatus ?? 'SIN_AUDITORIA';
+    if (!groups.has(key)) {
+      groups.set(key, { status: key, count: 0, hoursPlanned: 0, hoursReal: 0, cost: 0, revenue: 0, revenueKnown: 0, margin: 0, marginKnown: 0 });
+    }
+    const g = groups.get(key)!;
+    g.count++;
+    g.hoursPlanned += item.hoursPlanned;
+    g.hoursReal += item.hoursReal;
+    if (item.financials) {
+      g.cost += item.financials.cost;
+      if (item.financials.revenue !== null) { g.revenue += item.financials.revenue; g.revenueKnown++; }
+      if (item.financials.margin !== null) { g.margin += item.financials.margin; g.marginKnown++; }
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count);
+}
+
+function DetallesTab({ planExecution, controlInternoGlobal: cig }: {
+  planExecution: PlanExecutionItem[];
+  controlInternoGlobal: ControlInternoGlobal;
+}) {
+  const statusGroups = groupByAuditStatus(planExecution);
+
+  return (
+    <>
+      {/* ── Detalle Financiero por Auditoría ─────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-emerald-600" />
+            Detalle Financiero por Auditoría — {planExecution.length > 0 ? 'período seleccionado en Resumen' : ''}
+          </h3>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            Horas y costo cortados a la fecha de cierre del período · ingreso/utilidad según honorario de la Propuesta (cuando existe)
+          </p>
+        </div>
+        {planExecution.length === 0 ? (
+          <p className="text-sm text-gray-400 py-8 text-center">No hay encargos planificados en el período seleccionado (pestaña Resumen).</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 text-left">
+                  <th className="px-4 py-2.5 font-semibold">Auditoría</th>
+                  <th className="px-4 py-2.5 font-semibold">Estado</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Horas Prog.</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Horas Real</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">% Cumpl.</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Costo</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Ingreso</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Utilidad</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Margen %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {planExecution.map(item => {
+                  const hoursPct = item.hoursPlanned > 0 ? Math.round((item.hoursReal / item.hoursPlanned) * 100) : 0;
+                  const f = item.financials;
+                  return (
+                    <tr key={item.planItemId} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 max-w-[220px]"><p className="truncate font-medium text-gray-800">{item.name}</p></td>
+                      <td className="px-4 py-3 text-gray-500">{item.auditStatus ? (AUDIT_STATUS_LABEL[item.auditStatus] ?? item.auditStatus) : 'Sin auditoría'}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{Math.round(item.hoursPlanned)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{Math.round(item.hoursReal)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        <span className={hoursPct > 110 ? 'text-red-600 font-semibold' : 'text-gray-600'}>{hoursPct}%</span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+                        {money(f?.cost ?? null)}{f && f.uncostedHours > 0 && <span title={`${f.uncostedHours} h sin tarifa de costo cargada`} className="text-amber-500">*</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-700">{money(f?.revenue ?? null)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                        <span className={f?.margin !== null && f?.margin !== undefined && f.margin < 0 ? 'text-red-600' : 'text-gray-800'}>
+                          {money(f?.margin ?? null)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-500">{f?.marginPct !== null && f?.marginPct !== undefined ? `${f.marginPct.toFixed(0)}%` : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Detalle por Estado de Auditoría ──────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-blue-500" />
+            Detalle por Estado de Auditoría
+          </h3>
+          <p className="text-[11px] text-gray-400 mt-0.5">Mismas auditorías del período, subtotalizadas por estado del ciclo de vida</p>
+        </div>
+        {statusGroups.length === 0 ? (
+          <p className="text-sm text-gray-400 py-8 text-center">Sin datos para el período seleccionado.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 text-left">
+                  <th className="px-4 py-2.5 font-semibold">Estado</th>
+                  <th className="px-4 py-2.5 font-semibold text-right"># Auditorías</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Horas Prog.</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Horas Real</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Costo Total</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Ingreso Total</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Utilidad Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {statusGroups.map(g => (
+                  <tr key={g.status} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-800">{g.status === 'SIN_AUDITORIA' ? 'Sin auditoría creada' : (AUDIT_STATUS_LABEL[g.status] ?? g.status)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{g.count}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{Math.round(g.hoursPlanned)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{Math.round(g.hoursReal)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-700">{money(g.cost)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+                      {money(g.revenue)}{g.revenueKnown < g.count && <span className="text-[10px] text-amber-500 ml-1" title="Algunas auditorías de este grupo no tienen honorario definido">({g.revenueKnown}/{g.count})</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-800">
+                      {money(g.margin)}{g.marginKnown < g.count && <span className="text-[10px] text-amber-500 ml-1">({g.marginKnown}/{g.count})</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Control Interno Global — Componentes y Sub-componentes ──────────── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-violet-500" />
+            Control Interno Global — Componentes y Sub-componentes
+          </h3>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            Confianza promedio (%) entre las {cig.auditsEvaluated} auditorías con PT-COSO evaluado — mismo modelo 25/25/20/15/15 del papel PT-COSO
+          </p>
+        </div>
+        {cig.auditsEvaluated === 0 ? (
+          <p className="text-sm text-gray-400 py-8 text-center">Ninguna auditoría tiene todavía una evaluación PT-COSO completada.</p>
+        ) : (
+          <div className="p-5 space-y-5">
+            <div>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Por Componente (5)</p>
+              <div className="space-y-2.5">
+                {cig.perComponent.map(c => (
+                  <div key={c.sectionKey} className="flex items-center gap-3">
+                    <span className="w-40 shrink-0 text-xs text-gray-600 truncate" title={c.label}>{c.label} <span className="text-gray-400">({c.weight}%)</span></span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${c.avgConfidencePct === null ? 'bg-gray-200' : c.avgConfidencePct >= 75 ? 'bg-emerald-500' : c.avgConfidencePct >= 50 ? 'bg-amber-400' : c.avgConfidencePct >= 25 ? 'bg-orange-500' : 'bg-red-500'}`}
+                        style={{ width: `${c.avgConfidencePct ?? 0}%` }}
+                      />
+                    </div>
+                    <span className="w-24 text-right text-xs font-semibold text-gray-700">
+                      {c.avgConfidencePct !== null ? `${c.avgConfidencePct}%` : '—'} <span className="text-gray-400 font-normal">({c.auditsWithData})</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Por Sub-componente (Principio) — más débil primero</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-gray-400 border-b border-gray-100 text-left">
+                      <th className="font-medium py-1.5 pr-2">Principio</th>
+                      <th className="font-medium py-1.5 pr-2">Componente</th>
+                      <th className="font-medium py-1.5 text-right">Confianza</th>
+                      <th className="font-medium py-1.5 text-right pl-2"># Auditorías</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cig.perPrinciple.map(p => (
+                      <tr key={p.short} className="border-b border-gray-50 last:border-0">
+                        <td className="py-1.5 pr-2 text-gray-700 max-w-[280px] truncate" title={p.label}>{p.label}</td>
+                        <td className="py-1.5 pr-2 text-gray-400">{p.componentShort}</td>
+                        <td className={`py-1.5 text-right tabular-nums font-semibold ${p.avgConfidencePct >= 75 ? 'text-emerald-600' : p.avgConfidencePct >= 50 ? 'text-amber-600' : p.avgConfidencePct >= 25 ? 'text-orange-600' : 'text-red-600'}`}>
+                          {p.avgConfidencePct}%
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-gray-400 pl-2">{p.auditsWithData}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-3">Por Auditoría</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-gray-400 border-b border-gray-100 text-left">
+                      <th className="font-medium py-1.5 pr-2">Auditoría</th>
+                      <th className="font-medium py-1.5 pr-2 text-right">Puntaje</th>
+                      <th className="font-medium py-1.5 pr-2">Resultado</th>
+                      <th className="font-medium py-1.5">Conclusión del Auditor (S6)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cig.byAudit.map(a => {
+                      const bandColors = a.band ? COSO_BAND_COLORS[a.band] : null;
+                      return (
+                        <tr key={a.auditId} className="border-b border-gray-50 last:border-0">
+                          <td className="py-1.5 pr-2 text-gray-700 max-w-[220px] truncate">{a.auditTitle}</td>
+                          <td className="py-1.5 pr-2 text-right tabular-nums text-gray-600">{a.totalScore?.toFixed(0) ?? '—'}</td>
+                          <td className="py-1.5 pr-2">
+                            {a.band ? (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${bandColors?.bg} ${bandColors?.text}`}>{a.band}</span>
+                            ) : <span className="text-gray-300">Sin datos</span>}
+                          </td>
+                          <td className="py-1.5 text-gray-500">{a.conclusionGlobal ? (COSO_CONCLUSION_LABEL[a.conclusionGlobal] ?? a.conclusionGlobal) : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Restaurado del dashboard anterior (endpoint legado) ─────────────── */}
+      <LegacyDetalles />
+    </>
+  );
+}
+
+// Vigente solo dentro de "Detalles" — vista clásica (sin recorte por período),
+// restaurada del dashboard original junto a un análisis nuevo (hallazgos por
+// estado de ciclo completo) que usa un dato que el backend ya calculaba
+// (`allByStatus`) pero ninguna vista llegó a mostrar.
+function LegacyDetalles() {
   const { data, isLoading } = useCommitteeDashboardLegacy();
 
   if (isLoading || !data) {

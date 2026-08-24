@@ -42,6 +42,6 @@ import { ProfitabilityService } from './profitability.service';
     EngagementsService,
     ProfitabilityService,
   ],
-  exports: [ClientsService, EngagementsService],
+  exports: [ClientsService, EngagementsService, ProfitabilityService],
 })
 export class PortfolioModule {}

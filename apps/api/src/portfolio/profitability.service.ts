@@ -207,6 +207,39 @@ export class ProfitabilityService {
     });
   }
 
+  // ── Resumen financiero de un encargo, para consumo de otros módulos (Comité) ──
+  // Combina costo + ingreso + margen en un solo objeto liviano — a diferencia de
+  // `getEngagementProfitability` (que expone el desglose completo por persona
+  // para la pantalla de Cartera), esto es lo mínimo que un consumidor externo
+  // necesita para una tabla de "horas/costo/utilidad por auditoría". `asOf`
+  // permite cortar las horas a una fecha (ej. el cierre del período del
+  // Comité) — sin él, se comportan igual que los métodos existentes (todo el
+  // historial de TimeEntry del encargo).
+  async getAuditFinancialSummary(auditId: string, organizationId: string, asOf?: Date): Promise<{
+    hoursTotal: number; cost: number; uncostedHours: number;
+    revenue: number | null; feeCurrency: string | null;
+    margin: number | null; marginPct: number | null;
+  }> {
+    const engagement = await this.prisma.engagement.findFirst({
+      where: { auditId, organizationId },
+      select: { engagementLetter: { select: { proposalId: true } } },
+    });
+    const [revenue, summary] = await Promise.all([
+      this.resolveRevenue(engagement?.engagementLetter?.proposalId ?? null),
+      this.computeAuditCostSummary(auditId, organizationId, asOf),
+    ]);
+    const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
+    return {
+      hoursTotal: summary.totalHours,
+      cost: summary.totalCost,
+      uncostedHours: summary.uncostedHours,
+      revenue: revenue.feeAmount,
+      feeCurrency: revenue.feeCurrency,
+      margin: margin.marginAmount,
+      marginPct: margin.marginPercent,
+    };
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   /** Ingreso conocido del encargo, resuelto vía EngagementLetter → Proposal. null si no hay honorario definido. */
@@ -249,9 +282,12 @@ export class ProfitabilityService {
    * un valor fijo). Horas de una persona+año sin UserCostProfile cargado
    * quedan explícitamente en `uncostedHours` — NUNCA se asumen a costo $0.
    */
-  private async computeAuditCostSummary(auditId: string, organizationId: string): Promise<AuditCostSummary> {
+  private async computeAuditCostSummary(auditId: string, organizationId: string, asOf?: Date): Promise<AuditCostSummary> {
     const entries = await this.prisma.timeEntry.findMany({
-      where: { organizationId, auditId, category: { in: BILLABLE_CATEGORIES } },
+      where: {
+        organizationId, auditId, category: { in: BILLABLE_CATEGORIES },
+        ...(asOf ? { workDate: { lte: asOf } } : {}),
+      },
       select: { userId: true, workDate: true, hours: true },
     });
 

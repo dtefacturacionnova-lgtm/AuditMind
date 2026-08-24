@@ -486,6 +486,14 @@ model User {
   createdAt              DateTime               @default(now())
   updatedAt              DateTime               @updatedAt
 
+  // Firma digital real (sello de integridad interno, no firma con validez legal
+  // externa — ver memoria de sesión "project_pdf_tools_stirling"). Certificado
+  // autofirmado emitido por AuditMind la primera vez que el usuario firma algo;
+  // certPem es público, keyEncrypted va cifrado (AES-256-GCM, ver
+  // common/crypto/signing-key.util.ts) con ENCRYPTION_KEY como llave maestra.
+  signingCertPem      String?
+  signingKeyEncrypted String?
+
   organization               Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   certifications             UserCertification[]
   competencies               UserCompetency[]

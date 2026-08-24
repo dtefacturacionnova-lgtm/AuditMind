@@ -8,7 +8,7 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- 2. Tabla de documentos normativos
-CREATE TABLE IF NOT EXISTS knowledge_documents (
+CREATE TABLE IF NOT EXISTS rag_documents (
   id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   title           TEXT NOT NULL,
   rag_base        TEXT NOT NULL,
@@ -18,12 +18,12 @@ CREATE TABLE IF NOT EXISTS knowledge_documents (
 );
 
 CREATE INDEX IF NOT EXISTS idx_docs_org_rag
-  ON knowledge_documents (organization_id, rag_base);
+  ON rag_documents (organization_id, rag_base);
 
 -- 3. Tabla de chunks + embeddings Gemini (3072 dims)
-CREATE TABLE IF NOT EXISTS knowledge_chunks (
+CREATE TABLE IF NOT EXISTS rag_chunks (
   id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  doc_id          TEXT NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+  doc_id          TEXT NOT NULL REFERENCES rag_documents(id) ON DELETE CASCADE,
   organization_id TEXT,
   rag_base        TEXT NOT NULL,
   content         TEXT NOT NULL,
@@ -44,10 +44,10 @@ DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'knowledge_chunks' AND column_name = 'embedding'
+    WHERE table_name = 'rag_chunks' AND column_name = 'embedding'
   ) THEN
     BEGIN
-      ALTER TABLE knowledge_chunks ALTER COLUMN embedding TYPE vector(3072);
+      ALTER TABLE rag_chunks ALTER COLUMN embedding TYPE vector(3072);
     EXCEPTION WHEN others THEN
       -- Ya era vector(3072) o algún otro error no crítico
       NULL;
@@ -55,17 +55,20 @@ BEGIN
   END IF;
 END $$;
 
--- 5. Índice HNSW (mucho más rápido que ivfflat para < 1 M vectores)
-CREATE INDEX IF NOT EXISTS idx_chunks_embedding
-  ON knowledge_chunks USING hnsw (embedding vector_cosine_ops)
-  WITH (m = 16, ef_construction = 64);
+-- 5. Índice HNSW — OMITIDO A PROPÓSITO: pgvector limita HNSW/ivfflat sobre el
+--    tipo `vector` a 2000 dimensiones, pero Gemini gemini-embedding-001 produce
+--    3072. Migrar a `halfvec` (soporta hasta 4000 dims en HNSW) es la solución
+--    correcta a futuro, pero para el tamaño de esta base de conocimiento (unos
+--    pocos miles de chunks — decenas de normas, no millones de documentos) un
+--    escaneo secuencial de <=> es instantáneo; no vale el riesgo de migrar el
+--    tipo de columna ahora. Revisar si la base crece a >50k chunks.
 
 CREATE INDEX IF NOT EXISTS idx_chunks_org_rag
-  ON knowledge_chunks (organization_id, rag_base);
+  ON rag_chunks (organization_id, rag_base);
 
 -- Full-text search index (español)
 CREATE INDEX IF NOT EXISTS idx_chunks_content_fts
-  ON knowledge_chunks USING gin (to_tsvector('spanish', content));
+  ON rag_chunks USING gin (to_tsvector('spanish', content));
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 6. Función de búsqueda vectorial pura
@@ -102,7 +105,7 @@ BEGIN
     kc.section_title,
     kc.metadata,
     1 - (kc.embedding <=> query_embedding) AS similarity
-  FROM knowledge_chunks kc
+  FROM rag_chunks kc
   WHERE
     (p_org_id IS NULL OR kc.organization_id IS NULL OR kc.organization_id = p_org_id)
     AND (p_rag_bases IS NULL OR kc.rag_base = ANY(p_rag_bases))
@@ -153,7 +156,7 @@ BEGIN
       to_tsvector('spanish', kc.content),
       plainto_tsquery('spanish', query_text)
     )::FLOAT AS text_rank
-  FROM knowledge_chunks kc
+  FROM rag_chunks kc
   WHERE
     (p_org_id IS NULL OR kc.organization_id IS NULL OR kc.organization_id = p_org_id)
     AND (p_rag_bases IS NULL OR kc.rag_base = ANY(p_rag_bases))
@@ -176,6 +179,6 @@ $$;
 -- Verificar instalación:
 --   SELECT * FROM pg_extension WHERE extname = 'vector';
 --   SELECT column_name, udt_name FROM information_schema.columns
---     WHERE table_name = 'knowledge_chunks' AND column_name = 'embedding';
+--     WHERE table_name = 'rag_chunks' AND column_name = 'embedding';
 --   -- Debería mostrar udt_name = 'vector' con typmod 3072
 -- ═══════════════════════════════════════════════════════════════════════

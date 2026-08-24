@@ -21,6 +21,7 @@ Uso:
 """
 import asyncio
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -96,14 +97,37 @@ def _chunk_text(
 # ─── Embedding ────────────────────────────────────────────────────────────────
 
 def _embed_batch(texts: list[str]) -> list[list[float]]:
-    """Generate Gemini embeddings for a batch of texts (sync, for ingestion)."""
+    """Generate Gemini embeddings for a batch of texts (sync, for ingestion).
+
+    El free tier de Gemini limita embed_content a ~100 req/min — cualquier
+    documento normativo real (NACOT, Codigo Tributario, etc.) supera esto
+    facilmente en chunks de 800 caracteres. Reintenta con backoff en 429
+    en vez de fallar toda la ingesta a mitad de camino.
+    """
     embeddings: list[list[float]] = []
-    for text in texts:
-        result = _gemini_client.models.embed_content(
-            model=settings.EMBEDDING_MODEL,
-            contents=text,
-        )
-        embeddings.append(list(result.embeddings[0].values))
+    for i, text in enumerate(texts):
+        attempt = 0
+        while True:
+            try:
+                result = _gemini_client.models.embed_content(
+                    model=settings.EMBEDDING_MODEL,
+                    contents=text,
+                )
+                embeddings.append(list(result.embeddings[0].values))
+                break
+            except Exception as e:
+                msg = str(e)
+                is_rate_limit = "RESOURCE_EXHAUSTED" in msg or "429" in msg
+                if not is_rate_limit or attempt >= 5:
+                    raise
+                attempt += 1
+                wait = min(60, 2 ** attempt)
+                print(f"  ⏳ Rate limit en embedding {i + 1}/{len(texts)} — reintento {attempt}/5 en {wait}s")
+                time.sleep(wait)
+        # Throttle proactivo: el free tier es ~100/min → ~0.6s entre llamadas
+        # deja margen para no gatillar el 429 en la mayoria de los casos.
+        if i < len(texts) - 1:
+            time.sleep(0.65)
     return embeddings
 
 
@@ -114,7 +138,7 @@ async def _ensure_pgvector_tables(conn: asyncpg.Connection) -> None:
     await conn.execute("""
         CREATE EXTENSION IF NOT EXISTS vector;
 
-        CREATE TABLE IF NOT EXISTS knowledge_documents (
+        CREATE TABLE IF NOT EXISTS rag_documents (
             id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
             title           TEXT NOT NULL,
             rag_base        TEXT NOT NULL,
@@ -123,9 +147,9 @@ async def _ensure_pgvector_tables(conn: asyncpg.Connection) -> None:
             created_at      TIMESTAMPTZ DEFAULT NOW()
         );
 
-        CREATE TABLE IF NOT EXISTS knowledge_chunks (
+        CREATE TABLE IF NOT EXISTS rag_chunks (
             id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-            doc_id          TEXT NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+            doc_id          TEXT NOT NULL REFERENCES rag_documents(id) ON DELETE CASCADE,
             content         TEXT NOT NULL,
             rag_base        TEXT NOT NULL,
             section_title   TEXT,
@@ -136,23 +160,16 @@ async def _ensure_pgvector_tables(conn: asyncpg.Connection) -> None:
             created_at      TIMESTAMPTZ DEFAULT NOW()
         );
 
-        CREATE INDEX IF NOT EXISTS knowledge_chunks_rag_base_idx
-            ON knowledge_chunks(rag_base);
+        CREATE INDEX IF NOT EXISTS rag_chunks_rag_base_idx
+            ON rag_chunks(rag_base);
 
-        CREATE INDEX IF NOT EXISTS knowledge_chunks_org_idx
-            ON knowledge_chunks(organization_id);
+        CREATE INDEX IF NOT EXISTS rag_chunks_org_idx
+            ON rag_chunks(organization_id);
     """)
-    # HNSW index requires a separate non-transactional CREATE INDEX
-    # (ivfflat needs data first; HNSW works on empty tables)
-    try:
-        await conn.execute("""
-            CREATE INDEX IF NOT EXISTS knowledge_chunks_embedding_idx
-                ON knowledge_chunks
-                USING hnsw (embedding vector_cosine_ops)
-                WITH (m = 16, ef_construction = 64);
-        """)
-    except Exception:
-        pass  # Index may already exist; non-fatal
+    # No se crea indice HNSW/ivfflat sobre embedding: pgvector los limita a 2000
+    # dimensiones y gemini-embedding-001 produce 3072. Ver nota en
+    # infrastructure/scripts/pgvector_setup.sql — un scan secuencial de <=> es
+    # instantaneo al tamano actual de esta base de conocimiento.
 
 
 async def _upsert_document(
@@ -165,14 +182,14 @@ async def _upsert_document(
     """Insert or update a knowledge document and return its ID."""
     doc_id = str(uuid.uuid4())
     await conn.execute("""
-        INSERT INTO knowledge_documents (id, title, rag_base, organization_id, source_url)
+        INSERT INTO rag_documents (id, title, rag_base, organization_id, source_url)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT DO NOTHING
     """, doc_id, title, rag_base, org_id, source_url)
 
     # If title already exists for this rag_base + org_id, return existing id
     existing = await conn.fetchval("""
-        SELECT id FROM knowledge_documents
+        SELECT id FROM rag_documents
         WHERE title = $1 AND rag_base = $2
           AND (organization_id = $3 OR (organization_id IS NULL AND $3 IS NULL))
         ORDER BY created_at DESC LIMIT 1
@@ -192,11 +209,14 @@ async def _insert_chunks(
 ) -> int:
     """Bulk insert chunks with embeddings."""
     # Delete existing chunks for this doc
-    await conn.execute("DELETE FROM knowledge_chunks WHERE doc_id = $1", doc_id)
+    await conn.execute("DELETE FROM rag_chunks WHERE doc_id = $1", doc_id)
 
     rows = []
     for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
         section = section_titles[i] if section_titles and i < len(section_titles) else None
+        # asyncpg no serializa list[float] -> pgvector automaticamente; el cast
+        # $8::vector espera el literal de texto '[0.1,0.2,...]', no una lista Python.
+        emb_literal = '[' + ','.join(str(x) for x in emb) + ']'
         rows.append((
             str(uuid.uuid4()),
             doc_id,
@@ -205,11 +225,11 @@ async def _insert_chunks(
             section,
             org_id,
             i,       # chunk_index
-            emb,
+            emb_literal,
         ))
 
     await conn.executemany("""
-        INSERT INTO knowledge_chunks
+        INSERT INTO rag_chunks
             (id, doc_id, content, rag_base, section_title, organization_id, chunk_index, embedding)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector)
     """, rows)
@@ -345,8 +365,8 @@ async def search_knowledge(
             kc.rag_base,
             kd.title AS doc_title,
             1 - (kc.embedding <=> $1::vector) AS similarity
-        FROM knowledge_chunks kc
-        LEFT JOIN knowledge_documents kd ON kd.id = kc.doc_id
+        FROM rag_chunks kc
+        LEFT JOIN rag_documents kd ON kd.id = kc.doc_id
         WHERE {where_clause}
         ORDER BY kc.embedding <=> $1::vector
         LIMIT {top_k}

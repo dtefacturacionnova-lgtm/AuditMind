@@ -295,6 +295,35 @@ export class AiService {
     return res.json();
   }
 
+  // ─── RAG — Búsqueda semántica en la base de conocimiento normativo ──────────
+  // Usado por los flujos de asistencia IA de papeles de trabajo (PI.3, consolidación)
+  // para inyectar normativa real recuperada (no memorizada por el modelo) antes de
+  // generar contenido. Nunca lanza — si el servicio RAG falla o no hay resultados,
+  // retorna [] silenciosamente; el llamador debe seguir funcionando sin contexto.
+  async searchRag(
+    query: string,
+    ragBases: string[],
+    limit = 6,
+  ): Promise<Array<{ content: string; sectionTitle: string | null; similarity: number }>> {
+    try {
+      const res = await fetch(`${this.aiServiceUrl}/rag/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, rag_bases: ragBases, limit, threshold: 0.65 }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`[RAG search] HTTP ${res.status} — continuando sin contexto normativo`);
+        return [];
+      }
+      const rows = await res.json() as Array<{ content: string; section_title: string | null; similarity: number }>;
+      return rows.map(r => ({ content: r.content, sectionTitle: r.section_title, similarity: r.similarity }));
+    } catch (err) {
+      this.logger.warn('[RAG search] Falló, continuando sin contexto normativo', String(err));
+      return [];
+    }
+  }
+
   // ─── RAG — Subir PDF normativo ──────────────────────────────────────────────
   async ingestPdf(
     fileBuffer: Buffer,

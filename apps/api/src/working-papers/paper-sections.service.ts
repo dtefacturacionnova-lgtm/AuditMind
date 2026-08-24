@@ -288,6 +288,23 @@ export class PaperSectionsService {
       select: { title: true, scope: true, type: true, subtype: true },
     });
 
+    // Especialista Tributario (PI.3 fiscal): para encargos de tipo FISCAL, recupera
+    // normativa real (NACOT/CT/LISR/Ley IVA) de la base de conocimiento RAG antes de
+    // generar la sugerencia — nunca depende de que el modelo "recuerde" la ley de
+    // memoria. Guardado por auditType === 'FISCAL': un encargo Financiero/Interno
+    // jamás dispara esta búsqueda ni recibe este contexto, así que no hay riesgo de
+    // mezclar la normativa de una plantilla con otra.
+    let fiscalRagContext = '';
+    if (audit?.type === 'FISCAL') {
+      const query = [section.label, section.aiHint, wp.title].filter(Boolean).join(' — ');
+      const hits = await this.aiService.searchRag(query, ['FISCAL_SV'], 6);
+      if (hits.length > 0) {
+        fiscalRagContext = hits
+          .map(h => `${h.sectionTitle ? `[${h.sectionTitle}] ` : ''}${h.content}`)
+          .join('\n---\n');
+      }
+    }
+
     const baseCtx = {
       paperTitle:   wp.title,
       paperCode:    wp.paperCode ?? wp.code,
@@ -306,6 +323,7 @@ export class PaperSectionsService {
       auditType:    audit?.type ?? '',
       auditSubtype: audit?.subtype ?? '',
       userPrompt:   userPrompt ?? '',
+      fiscalRagContext,
     };
 
     const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
@@ -516,7 +534,7 @@ export class PaperSectionsService {
     currentValue: string; aiHint: string;
     siblings: Array<{ key: string; label: string; value: string }>;
     auditTitle: string; auditScope: string; auditType: string; auditSubtype: string;
-    userPrompt: string;
+    userPrompt: string; fiscalRagContext?: string;
   }): string {
     const siblingsText = ctx.siblings
       .filter(s => s.value.trim())
@@ -524,7 +542,12 @@ export class PaperSectionsService {
       .map(s => `[${s.key}] ${s.label}: ${s.value.slice(0, 300)}`)
       .join('\n');
 
-    return `Eres un experto en auditoría (NIA/IAASB/COSO). Estás asistiendo al auditor a redactar UNA sección específica de un papel de trabajo.
+    const isFiscal = !!ctx.fiscalRagContext;
+    const persona = isFiscal
+      ? 'Eres un Especialista Tributario experto en la normativa fiscal de El Salvador: NACOT, Código Tributario, Ley de ISR, Ley de IVA y Código de Comercio.'
+      : 'Eres un experto en auditoría (NIA/IAASB/COSO).';
+
+    return `${persona} Estás asistiendo al auditor a redactar UNA sección específica de un papel de trabajo.
 
 CONTEXTO DE LA AUDITORÍA:
 - Título: "${ctx.auditTitle}"
@@ -542,7 +565,10 @@ SECCIÓN A REDACTAR:
 
 OTRAS SECCIONES YA COMPLETADAS DEL MISMO PAPEL:
 ${siblingsText || '(ninguna)'}
-
+${isFiscal ? `
+NORMATIVA FISCAL REAL RECUPERADA (base de conocimiento NACOT/CT/LISR/Ley IVA — usa este texto como la fuente autorizada de artículos y secciones citables):
+${ctx.fiscalRagContext}
+` : ''}
 ${ctx.userPrompt ? `INSTRUCCIÓN ADICIONAL DEL AUDITOR:\n${ctx.userPrompt}\n` : ''}
 INSTRUCCIONES DE REDACCIÓN:
 - Responde EXCLUSIVAMENTE con el contenido sugerido para esta sección — sin preámbulo, sin disclaimer.
@@ -553,6 +579,7 @@ INSTRUCCIONES DE REDACCIÓN:
 - NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto.
 - Si necesitas referenciar otra sección o papel, usa el formato [CODE::SXX].
 - Si la Instrucción o el Hint IA mencionan más de un área/norma (ej. "Área X: ... Área Y: ..." — plantillas genéricas reutilizadas para varios temas), usa EXCLUSIVAMENTE la guía que corresponda al título real de este papel ("${ctx.paperTitle}") e ignora por completo la de las otras áreas mencionadas.
+${isFiscal ? '- Cita artículo y norma (ej. "Art. 65 Ley IVA", "NACOT Sección 10") ÚNICAMENTE si aparecen textualmente en la NORMATIVA FISCAL REAL RECUPERADA arriba o en el contexto del papel — si no tienes la cita exacta ahí, describe el requisito sin inventar un número de artículo o sección.' : ''}
 - Máximo 400 palabras.`;
   }
 
@@ -562,7 +589,7 @@ INSTRUCCIONES DE REDACCIÓN:
     currentValue: string; aiHint: string;
     siblings: Array<{ key: string; label: string; value: string }>;
     auditTitle: string; auditScope: string; auditType: string; auditSubtype: string;
-    userPrompt: string;
+    userPrompt: string; fiscalRagContext?: string;
   }): string {
     // MATRIX generation often needs to analyze EVERY row of an upstream table (e.g. flag
     // accounts from a full trial balance) — the 400-char truncation used for narrative
@@ -573,7 +600,12 @@ INSTRUCCIONES DE REDACCIÓN:
       .map(s => `[${s.key}] ${s.label}: ${s.value.slice(0, 12000)}`)
       .join('\n');
 
-    return `Eres un experto en auditoría (NIA/IAASB/COSO). Estás generando el CONTENIDO TABULAR de una sección de un papel de trabajo — una tabla con filas y columnas, no texto narrativo.
+    const isFiscal = !!ctx.fiscalRagContext;
+    const persona = isFiscal
+      ? 'Eres un Especialista Tributario experto en la normativa fiscal de El Salvador: NACOT, Código Tributario, Ley de ISR, Ley de IVA y Código de Comercio.'
+      : 'Eres un experto en auditoría (NIA/IAASB/COSO).';
+
+    return `${persona} Estás generando el CONTENIDO TABULAR de una sección de un papel de trabajo — una tabla con filas y columnas, no texto narrativo.
 
 CONTEXTO DE LA AUDITORÍA:
 - Título: "${ctx.auditTitle}"
@@ -591,7 +623,10 @@ TABLA A GENERAR:
 
 OTRAS SECCIONES YA COMPLETADAS DEL MISMO PAPEL (úsalas como fuente de datos reales cuando aplique):
 ${siblingsText || '(ninguna)'}
-
+${isFiscal ? `
+NORMATIVA FISCAL REAL RECUPERADA (base de conocimiento NACOT/CT/LISR/Ley IVA — usa este texto como la fuente autorizada de artículos y secciones citables en columnas como "Base Normativa"):
+${ctx.fiscalRagContext}
+` : ''}
 ${ctx.userPrompt ? `INSTRUCCIÓN ADICIONAL DEL AUDITOR:\n${ctx.userPrompt}\n` : ''}
 INSTRUCCIONES DE SALIDA:
 - Responde EXCLUSIVAMENTE con un array JSON de objetos — sin markdown, sin \`\`\`json, sin preámbulo, sin comentarios.
@@ -601,7 +636,8 @@ INSTRUCCIONES DE SALIDA:
 - Si la Instrucción o la especificación de columnas mencionan más de un área/norma (ej. "Área X: ... Área Y: ..." — plantillas genéricas reutilizadas para varios temas), genera filas usando EXCLUSIVAMENTE la guía que corresponda al título real de este papel ("${ctx.paperTitle}") e ignora la de las otras áreas mencionadas.
 - Si la instrucción pide filtrar (ej. solo cuentas que disparan una alerta, o con variación significativa), evalúa CADA fila de la fuente contra el criterio y genera una fila de salida únicamente para las que califican — no generes una fila por cada fila de la fuente si el criterio es selectivo.
 - Máximo 40 filas.
-- NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto — usa "Pendiente de evidencia" o similar cuando falte información y el campo sea obligatorio.`;
+- NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto — usa "Pendiente de evidencia" o similar cuando falte información y el campo sea obligatorio.
+${isFiscal ? '- En columnas de tipo "Base Normativa" o similar, cita artículo/sección ÚNICAMENTE si aparece textualmente en la NORMATIVA FISCAL REAL RECUPERADA arriba — si no la tienes ahí, deja la celda genérica ("Ver normativa aplicable") en vez de inventar un número de artículo.' : ''}`;
   }
 
   private async callGeminiJson(apiKey: string, prompt: string): Promise<unknown[]> {

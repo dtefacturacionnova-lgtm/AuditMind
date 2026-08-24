@@ -52,7 +52,10 @@ class SearchResult(BaseModel):
 
 @router.post("/search", response_model=list[SearchResult])
 async def search_knowledge(request: SearchRequest):
-    query_embedding = await embed_text(request.query)
+    embedding_list = await embed_text(request.query)
+    # asyncpg no serializa list[float] -> pgvector automaticamente; el cast
+    # ::vector espera el literal de texto '[0.1,0.2,...]', no una lista Python.
+    query_embedding = '[' + ','.join(str(x) for x in embedding_list) + ']'
 
     conn = await asyncpg.connect(settings.DATABASE_URL)
     try:
@@ -224,8 +227,8 @@ async def list_documents(
                 kd.source_url,
                 kd.created_at,
                 COUNT(kc.id)::int AS chunk_count
-            FROM knowledge_documents kd
-            LEFT JOIN knowledge_chunks kc ON kc.doc_id = kd.id
+            FROM rag_documents kd
+            LEFT JOIN rag_chunks kc ON kc.doc_id = kd.id
             {where}
             GROUP BY kd.id
             ORDER BY kd.created_at DESC
@@ -263,7 +266,7 @@ async def delete_document(
     conn = await asyncpg.connect(settings.DATABASE_URL)
     try:
         result = await conn.execute(
-            "DELETE FROM knowledge_documents WHERE id = $1", doc_id
+            "DELETE FROM rag_documents WHERE id = $1", doc_id
         )
         if result == "DELETE 0":
             raise HTTPException(status_code=404, detail="Documento no encontrado")
@@ -285,5 +288,6 @@ async def list_rag_bases():
             {"id": "CLIENT_NORMATIVE", "name": "Normativa del Cliente",       "description": "Políticas y procedimientos internos"},
             {"id": "FINANCIAL",        "name": "Estándares Financieros",      "description": "NIAs, NIIF, PCAOB"},
             {"id": "SECTOR_SPECIFIC",  "name": "Normativa Sectorial",         "description": "Regulaciones por industria"},
+            {"id": "FISCAL_SV",        "name": "Tributario El Salvador",      "description": "NACOT, Código Tributario, Ley ISR, Ley IVA, Código de Comercio"},
         ]
     }

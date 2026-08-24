@@ -1724,6 +1724,14 @@ model WorkingPaper {
   // ─── F6.2 Sign-off matrix timestamps ─────────────────────────────────────
   preparedAt        DateTime? // Fecha firma preparador
   reviewedAt        DateTime? // Fecha firma revisor
+  // ─── Sello de integridad — PDF firmado digitalmente por nivel (2026-08-24) ─
+  // Ruta en Supabase Storage (bucket audit-files), no URL — igual patrón que
+  // FieldEvidence.storageKey. Certificado autofirmado por AuditMind, sello de
+  // integridad interno, no firma con validez legal externa — ver
+  // apps/api/src/pdf-tools/signing-identity.service.ts.
+  preparedPdfPath   String?
+  reviewedPdfPath   String?
+  signedOffPdfPath  String?
   // ─── F6.4 Retención y bloqueo ─────────────────────────────────────────────
   retentionUntil    DateTime? // Fecha hasta la que debe conservarse
   // ─── Comité de Auditoría — disparador de cierre ───────────────────────────

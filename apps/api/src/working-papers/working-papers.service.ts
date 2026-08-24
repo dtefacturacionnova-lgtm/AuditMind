@@ -12,6 +12,12 @@ import { WorkingPaperStatus, UserRole, TickMark, WpKind, SyncStatus, Prisma } fr
 import { PaperGraphService } from './paper-graph.service';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PAPER_CATALOGUE, ALLOWED_CODES_BY_AUDIT_TYPE } from './paper-catalogue';
+import { PaperVersionsService } from './paper-versions.service';
+import { PdfService } from '../pdf/pdf.service';
+import { renderWorkingPaperBody } from '../pdf/pdf-templates';
+import { PAPER_TEMPLATES } from './paper-templates';
+import { PdfToolsService } from '../pdf-tools/pdf-tools.service';
+import { SigningIdentityService } from '../pdf-tools/signing-identity.service';
 
 async function generateWpCode(
   prisma: PrismaService,
@@ -72,6 +78,10 @@ export class WorkingPapersService {
     private readonly prisma:        PrismaService,
     private readonly paperGraph:    PaperGraphService,
     private readonly eventEmitter:  EventEmitter2,
+    private readonly paperVersions: PaperVersionsService,
+    private readonly pdfService:    PdfService,
+    private readonly pdfTools:      PdfToolsService,
+    private readonly signingIdentity: SigningIdentityService,
   ) {
     this.supabaseAdmin = createClient(
       process.env.SUPABASE_URL!,
@@ -945,6 +955,157 @@ export class WorkingPapersService {
     return { success: true };
   }
 
+  // ─── Generación del PDF completo de un papel (reutilizable) ──────────────────
+  // Extraído del endpoint GET :id/pdf (antes vivía inline en el controller) para
+  // poder generar el mismo PDF también desde signOff() al momento de firmar —
+  // ver eslint-disable-next-line comments heredados del código original.
+  async generatePaperPdf(id: string, user: AuthUser): Promise<{ buffer: Buffer; filename: string }> {
+    const wp = await this.findOne(id, user);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = wp as any;
+
+    const versions = await this.paperVersions.listVersions(id, user).catch(() => []);
+    const pbcLinks = await this.getPbcLinksForPdf(id).catch(() => []);
+    const signedOffName = w.signedOffById
+      ? await this.getUserName(w.signedOffById).catch(() => null)
+      : null;
+
+    const tplByKey = new Map(
+      (PAPER_TEMPLATES[w.paperCode ?? ''] ?? []).map(t => [t.sectionKey, t]),
+    );
+
+    const fieldEvidence = await this.prisma.fieldEvidence.findMany({
+      where:   { paperId: id },
+      include: { findings: true },
+      orderBy: { capturedAt: 'desc' },
+    }).catch(() => []);
+
+    const body = renderWorkingPaperBody({
+      paper: {
+        code:         w.code,
+        paperCode:    w.paperCode,
+        title:        w.title,
+        type:         w.type,
+        wpKind:       w.wpKind,
+        status:       w.status,
+        indexSection: w.indexSection,
+        qualityScore: w.qualityScore,
+        conclusion:   w.conclusion,
+        narrative:    w.narrative,
+        preparedBy:   w.preparedBy ? { name: w.preparedBy.name } : null,
+        reviewedBy:   w.reviewedBy ? { name: w.reviewedBy.name } : null,
+        preparedAt:   w.preparedAt?.toISOString?.() ?? null,
+        reviewedAt:   w.reviewedAt?.toISOString?.() ?? null,
+        version:      w.version,
+        audit:        { title: w.audit?.title ?? '' },
+        sections:     (w.sections ?? []).map((s: Record<string, unknown>) => ({
+          sectionKey: s.sectionKey, label: s.label, value: s.value, fieldType: s.fieldType,
+          tab: tplByKey.get(s.sectionKey as string)?.tab ?? null,
+          attachments: Array.isArray(s.attachments) ? s.attachments : [],
+        })),
+        content:      w.content,
+        sourceLinks:  (w.sourceLinks ?? []).map((l: Record<string, any>) => ({
+          targetCode: l.target?.code, targetTitle: l.target?.title,
+          sourceField: l.sourceField, targetField: l.targetField, mappingType: l.mappingType,
+        })),
+        targetLinks:  (w.targetLinks ?? []).map((l: Record<string, any>) => ({
+          sourceCode: l.source?.code, sourceTitle: l.source?.title,
+          sourceField: l.sourceField, targetField: l.targetField, mappingType: l.mappingType,
+        })),
+        comments:     (w.comments ?? []).map((c: Record<string, any>) => ({
+          content: c.content, createdAt: c.createdAt?.toISOString?.() ?? null, resolved: c.resolved,
+        })),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        versions:     (versions as any[]).map(v => ({
+          version: v.version, changedAt: v.changedAt, changedBy: v.changedBy,
+          reason: v.reason, wordCount: v.wordCount,
+        })),
+        qualityReport: w.qualityReport ?? null,
+        signOff: {
+          preparedByName:  w.preparedBy?.name ?? null,
+          preparedAt:      w.preparedAt?.toISOString?.() ?? null,
+          reviewedByName:  w.reviewedBy?.name ?? null,
+          reviewedAt:      w.reviewedAt?.toISOString?.() ?? null,
+          signedOffByName: signedOffName,
+          signedOffAt:     w.signedOffAt?.toISOString?.() ?? null,
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        pbcLinks: (pbcLinks as any[]).map(p => ({ code: p.code, title: p.title, status: p.status })),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fieldEvidence: (fieldEvidence as any[]).map(e => ({
+          kind: e.kind, status: e.status, capturedAt: e.capturedAt?.toISOString?.() ?? null,
+          capturedByName: e.capturedByName, lugar: e.lugar, descripcion: e.descripcion,
+          consentimiento: e.consentimiento, filename: e.filename,
+          textoOriginal: e.textoOriginal, transcript: e.transcript, anotaciones: e.anotaciones,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          findings: (e.findings as any[] ?? []).map((f: any) => ({
+            tipo: f.tipo, descripcion: f.descripcion, citaTextual: f.citaTextual,
+            fuenteRef: f.fuenteRef, nivelRiesgo: f.nivelRiesgo, disposition: f.disposition,
+          })),
+        })),
+      },
+    });
+
+    const footerNote = [
+      w.paperCode ?? w.code,
+      w.audit?.title,
+      w.preparedBy?.name ? `Elaborado por: ${w.preparedBy.name}` : null,
+    ].filter(Boolean).join(' — ');
+
+    const buffer = await this.pdfService.generateBranded({
+      title:    `${w.paperCode ?? w.code} — ${w.title}`,
+      subtitle: `Papel de Trabajo · ${w.audit?.title ?? ''}`,
+      body,
+      options:  { printPageNumbers: true, format: 'A4', footerNote },
+    });
+
+    const filename = `auditmind_papel_${(w.paperCode ?? w.code ?? id).replace(/[^\w-]/g, '_')}.pdf`;
+    return { buffer, filename };
+  }
+
+  // ─── Firma digital del PDF del papel al momento del sign-off ─────────────────
+  // Sello de integridad interno (certificado autofirmado por AuditMind, ver
+  // SigningIdentityService) — NO bloquea el sign-off si Stirling-PDF no está
+  // disponible: la metadata de aprobación (que ya existía antes de esto) es lo
+  // esencial, la firma visual es un enriquecimiento sobre eso.
+  private async signAndStorePaperPdf(
+    id: string,
+    auditId: string,
+    level: 'prepare' | 'review' | 'signoff',
+    user: AuthUser,
+  ): Promise<string | null> {
+    try {
+      const { buffer, filename } = await this.generatePaperPdf(id, user);
+      const identity = await this.signingIdentity.getOrCreateIdentity(user.id);
+      const signedPdf = await this.pdfTools.signPdf(
+        buffer,
+        filename,
+        { privateKeyPem: Buffer.from(identity.privateKeyPem), certPem: Buffer.from(identity.certPem), password: '' },
+        {
+          name:     user.name,
+          reason:   level === 'prepare' ? 'Preparación de papel de trabajo'
+                  : level === 'review'  ? 'Revisión de papel de trabajo'
+                  :                       'Aprobación final de papel de trabajo',
+          location: 'AuditMind',
+          showSignature: true,
+          showLogo: false,
+        },
+      );
+
+      const path = `signed-papers/${auditId}/${id}/${level}_${Date.now()}.pdf`;
+      const { error: upErr } = await this.supabaseAdmin.storage
+        .from('audit-files')
+        .upload(path, signedPdf, { contentType: 'application/pdf', cacheControl: '3600', upsert: false });
+      if (upErr) throw new Error(upErr.message);
+      return path;
+    } catch (e) {
+      // No relanzar: el sign-off en sí (metadata) ya se guardó y es lo que
+      // importa para el flujo de auditoría — la firma visual es un plus.
+      console.error(`[signOff] No se pudo generar/firmar el PDF del papel ${id} (nivel ${level}):`, e);
+      return null;
+    }
+  }
+
   // ─── F6.2 Sign-off matrix ─────────────────────────────────────────────────────
 
   async signOff(
@@ -976,11 +1137,42 @@ export class WorkingPapersService {
       level === 'review'   ? { reviewedById:  user.id, reviewedAt:  new Date() } :
                              { signedOffById: user.id, signedOffAt: new Date() };
 
-    return this.prisma.workingPaper.update({
+    const updated = await this.prisma.workingPaper.update({
       where:   { id },
       data:    data as any,
       include: INCLUDE_FULL,
     });
+
+    // Firma digital del PDF — mejor esfuerzo, no bloquea el sign-off (ver
+    // signAndStorePaperPdf). Corre después del update de metadata para que el
+    // PDF generado ya refleje quién/cuándo firmó en este nivel.
+    const pdfPath = await this.signAndStorePaperPdf(id, wp.auditId, level, user);
+    if (pdfPath) {
+      const pdfField = level === 'prepare' ? 'preparedPdfPath' : level === 'review' ? 'reviewedPdfPath' : 'signedOffPdfPath';
+      return this.prisma.workingPaper.update({
+        where:   { id },
+        data:    { [pdfField]: pdfPath } as any,
+        include: INCLUDE_FULL,
+      });
+    }
+
+    return updated;
+  }
+
+  /** URL firmada (5 min) para descargar el PDF firmado de un nivel de sign-off —
+   * mismo patrón que FieldEvidenceService.obtenerUrlMedia, nunca se persiste. */
+  async getSignedPdfUrl(id: string, level: 'prepare' | 'review' | 'signoff', user: AuthUser): Promise<string> {
+    const wp = await this.findOne(id, user);
+    const path = level === 'prepare' ? (wp as any).preparedPdfPath
+      : level === 'review' ? (wp as any).reviewedPdfPath
+      : (wp as any).signedOffPdfPath;
+    if (!path) throw new NotFoundException('No hay PDF firmado para este nivel todavía');
+
+    const { data, error } = await this.supabaseAdmin.storage
+      .from('audit-files')
+      .createSignedUrl(path, 300);
+    if (error || !data) throw new BadRequestException(error?.message ?? 'No se pudo generar la URL del PDF firmado');
+    return data.signedUrl;
   }
 
   async getSignOffMatrix(auditId: string, user: AuthUser) {
@@ -990,9 +1182,9 @@ export class WorkingPapersService {
       orderBy: [{ indexSection: 'asc' }, { code: 'asc' }],
       select: {
         id: true, code: true, indexSection: true, title: true, status: true, type: true,
-        preparedById: true, preparedAt:  true,
-        reviewedById: true, reviewedAt:  true,
-        signedOffById: true, signedOffAt: true,
+        preparedById: true, preparedAt:  true, preparedPdfPath: true,
+        reviewedById: true, reviewedAt:  true, reviewedPdfPath: true,
+        signedOffById: true, signedOffAt: true, signedOffPdfPath: true,
         preparedBy:   { select: { id: true, name: true } },
         reviewedBy:   { select: { id: true, name: true } },
         signedOffBy:  { select: { id: true, name: true } },

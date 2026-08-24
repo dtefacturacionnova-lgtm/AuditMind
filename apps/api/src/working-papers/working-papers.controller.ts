@@ -73,9 +73,7 @@ import { PaperVersionsService } from './paper-versions.service';
 import { RiskTraceService } from './risk-trace.service';
 import { AiService } from '../ai/ai.service';
 import { PdfService } from '../pdf/pdf.service';
-import { renderWorkingPaperBody } from '../pdf/pdf-templates';
 import { renderIntegratedReportBody } from '../pdf/control-interno-pdf';
-import { PAPER_TEMPLATES } from './paper-templates';
 import type { Response } from 'express';
 import { Res, UploadedFile, UseInterceptors, NotFoundException, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -801,124 +799,28 @@ export class WorkingPapersController {
     @CurrentUser() user: AuthUser,
     @Res() res: Response,
   ) {
-    const wp = await this.service.findOne(id, user);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const w = wp as any;
-
-    // Versiones (PI.5) para la hoja de Historial
-    const versions = await this.versionsService.listVersions(id, user).catch(() => []);
-
-    // Firmante (signed off) + PBC links para la hoja de Revisión
-    const pbcLinks = await this.service.getPbcLinksForPdf(id).catch(() => []);
-    const signedOffName = w.signedOffById
-      ? await this.service.getUserName(w.signedOffById).catch(() => null)
-      : null;
-
-    // Pestaña (tab) por sección — solo vive en la plantilla estática, no en la fila
-    // de BD; se busca aquí para que el PDF pueda agrupar por pestaña (ej. PT-COSO).
-    const tplByKey = new Map(
-      (PAPER_TEMPLATES[w.paperCode ?? ''] ?? []).map(t => [t.sectionKey, t]),
-    );
-
-    // Evidencia de Campo (EVD-01..14) — vive en su propia tabla `field_evidences`,
-    // no en `paper_sections`, así que hay que traerla aparte para que el export
-    // a PDF no la omita (antes se omitía por completo: el generador solo leía
-    // wp.sections). Consulta directa vía Prisma en vez de FieldEvidenceService
-    // para evitar el ciclo de módulos FieldEvidenceModule → WorkingPapersModule.
-    const fieldEvidence = await this.prisma.fieldEvidence.findMany({
-      where:   { paperId: id },
-      include: { findings: true },
-      orderBy: { capturedAt: 'desc' },
-    }).catch(() => []);
-
-    const body = renderWorkingPaperBody({
-      paper: {
-        code:         w.code,
-        paperCode:    w.paperCode,
-        title:        w.title,
-        type:         w.type,
-        wpKind:       w.wpKind,
-        status:       w.status,
-        indexSection: w.indexSection,
-        qualityScore: w.qualityScore,
-        conclusion:   w.conclusion,
-        narrative:    w.narrative,
-        preparedBy:   w.preparedBy ? { name: w.preparedBy.name } : null,
-        reviewedBy:   w.reviewedBy ? { name: w.reviewedBy.name } : null,
-        preparedAt:   w.preparedAt?.toISOString?.() ?? null,
-        reviewedAt:   w.reviewedAt?.toISOString?.() ?? null,
-        version:      w.version,
-        audit:        { title: w.audit?.title ?? '' },
-        sections:     (w.sections ?? []).map((s: Record<string, unknown>) => ({
-          sectionKey: s.sectionKey, label: s.label, value: s.value, fieldType: s.fieldType,
-          tab: tplByKey.get(s.sectionKey as string)?.tab ?? null,
-          attachments: Array.isArray(s.attachments) ? s.attachments : [],
-        })),
-        content:      w.content,
-        // Grafo
-        sourceLinks:  (w.sourceLinks ?? []).map((l: Record<string, any>) => ({
-          targetCode: l.target?.code, targetTitle: l.target?.title,
-          sourceField: l.sourceField, targetField: l.targetField, mappingType: l.mappingType,
-        })),
-        targetLinks:  (w.targetLinks ?? []).map((l: Record<string, any>) => ({
-          sourceCode: l.source?.code, sourceTitle: l.source?.title,
-          sourceField: l.sourceField, targetField: l.targetField, mappingType: l.mappingType,
-        })),
-        // Revisión
-        comments:     (w.comments ?? []).map((c: Record<string, any>) => ({
-          content: c.content, createdAt: c.createdAt?.toISOString?.() ?? null, resolved: c.resolved,
-        })),
-        // Historial
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        versions:     (versions as any[]).map(v => ({
-          version: v.version, changedAt: v.changedAt, changedBy: v.changedBy,
-          reason: v.reason, wordCount: v.wordCount,
-        })),
-        // Revisión enriquecida
-        qualityReport: w.qualityReport ?? null,
-        signOff: {
-          preparedByName:  w.preparedBy?.name ?? null,
-          preparedAt:      w.preparedAt?.toISOString?.() ?? null,
-          reviewedByName:  w.reviewedBy?.name ?? null,
-          reviewedAt:      w.reviewedAt?.toISOString?.() ?? null,
-          signedOffByName: signedOffName,
-          signedOffAt:     w.signedOffAt?.toISOString?.() ?? null,
-        },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        pbcLinks: (pbcLinks as any[]).map(p => ({ code: p.code, title: p.title, status: p.status })),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        fieldEvidence: (fieldEvidence as any[]).map(e => ({
-          kind: e.kind, status: e.status, capturedAt: e.capturedAt?.toISOString?.() ?? null,
-          capturedByName: e.capturedByName, lugar: e.lugar, descripcion: e.descripcion,
-          consentimiento: e.consentimiento, filename: e.filename,
-          textoOriginal: e.textoOriginal, transcript: e.transcript, anotaciones: e.anotaciones,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          findings: (e.findings as any[] ?? []).map((f: any) => ({
-            tipo: f.tipo, descripcion: f.descripcion, citaTextual: f.citaTextual,
-            fuenteRef: f.fuenteRef, nivelRiesgo: f.nivelRiesgo, disposition: f.disposition,
-          })),
-        })),
-      },
-    });
-
-    const footerNote = [
-      w.paperCode ?? w.code,
-      w.audit?.title,
-      w.preparedBy?.name ? `Elaborado por: ${w.preparedBy.name}` : null,
-    ].filter(Boolean).join(' — ');
-
-    const pdf = await this.pdfService.generateBranded({
-      title:    `${w.paperCode ?? w.code} — ${w.title}`,
-      subtitle: `Papel de Trabajo · ${w.audit?.title ?? ''}`,
-      body,
-      options:  { printPageNumbers: true, format: 'A4', footerNote },
-    });
-
-    const filename = `auditmind_papel_${(w.paperCode ?? w.code ?? id).replace(/[^\w-]/g, '_')}.pdf`;
+    const { buffer, filename } = await this.service.generatePaperPdf(id, user);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', pdf.length);
-    res.send(pdf);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  }
+
+  // ─── Sello de integridad — PDF firmado digitalmente por nivel de sign-off ────
+  // Generado automáticamente en signOff() (WorkingPapersService) — este
+  // endpoint solo entrega la URL firmada de descarga (5 min), nunca se
+  // persiste. Certificado autofirmado interno, no firma con validez legal
+  // externa — ver signing-identity.service.ts.
+  @Get(':id/signed-pdf/:level')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'URL de descarga del PDF firmado digitalmente para un nivel de sign-off (prepare/review/signoff)' })
+  async getSignedPdfUrl(
+    @Param('id') id: string,
+    @Param('level') level: 'prepare' | 'review' | 'signoff',
+    @CurrentUser() user: AuthUser,
+  ) {
+    const url = await this.service.getSignedPdfUrl(id, level, user);
+    return { url };
   }
 
   // ─── EXC-03: Plantillas Excel semiautomáticas (zonas libres + controladas) ─

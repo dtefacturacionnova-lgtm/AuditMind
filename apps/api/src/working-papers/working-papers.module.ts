@@ -13,9 +13,10 @@ import { RiskTraceService } from './risk-trace.service';
 import { ExcelTemplateEngineService } from './excel-templates/excel-template-engine.service';
 import { AiModule } from '../ai/ai.module';
 import { ContentLibraryModule } from '../content-library/content-library.module';
+import { PdfToolsModule } from '../pdf-tools/pdf-tools.module';
 
 @Module({
-  imports: [AiModule, ContentLibraryModule],
+  imports: [AiModule, ContentLibraryModule, PdfToolsModule],
   controllers: [WorkingPapersController],
   providers: [
     WorkingPapersService,

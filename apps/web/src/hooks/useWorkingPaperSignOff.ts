@@ -12,10 +12,13 @@ export interface SignOffMatrixRow {
   type: string;
   preparedById:  string | null;
   preparedAt:    string | null;
+  preparedPdfPath: string | null;
   reviewedById:  string | null;
   reviewedAt:    string | null;
+  reviewedPdfPath: string | null;
   signedOffById: string | null;
   signedOffAt:   string | null;
+  signedOffPdfPath: string | null;
   preparedBy:    { id: string; name: string } | null;
   reviewedBy:    { id: string; name: string } | null;
   signedOffBy:   { id: string; name: string } | null;
@@ -29,6 +32,13 @@ export function useSignOffMatrix(auditId: string) {
     queryFn:  () => apiClient.get<SignOffMatrixRow[]>(`/working-papers/sign-off-matrix/${auditId}`),
     enabled:  !!auditId,
   });
+}
+
+/** Abre en una pestaña nueva el PDF firmado digitalmente de un nivel de
+ * sign-off — pide una URL firmada de corta duración (5 min), no persistida. */
+export async function openSignedPdf(paperId: string, level: SignOffLevel) {
+  const { url } = await apiClient.get<{ url: string }>(`/working-papers/${paperId}/signed-pdf/${level}`);
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 export function useSignOff(paperId: string) {

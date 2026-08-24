@@ -1,7 +1,7 @@
 'use client';
 
-import { useSignOffMatrix } from '@/hooks/useWorkingPaperSignOff';
-import { CheckCircle2, Circle, Clock, Lock, AlertCircle, ExternalLink } from 'lucide-react';
+import { useSignOffMatrix, openSignedPdf, type SignOffLevel } from '@/hooks/useWorkingPaperSignOff';
+import { CheckCircle2, Circle, Clock, Lock, AlertCircle, ExternalLink, FileCheck2 } from 'lucide-react';
 import Link from 'next/link';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -32,7 +32,15 @@ const STATUS_COLORS: Record<string, string> = {
   ARCHIVED:       'bg-slate-200 text-slate-500',
 };
 
-function SignCell({ name, date }: { name?: string | null; date?: string | null }) {
+function SignCell({
+  name, date, paperId, level, pdfPath,
+}: {
+  name?: string | null;
+  date?: string | null;
+  paperId: string;
+  level: SignOffLevel;
+  pdfPath?: string | null;
+}) {
   if (!name) {
     return (
       <div className="flex items-center gap-1.5 text-gray-300">
@@ -44,7 +52,7 @@ function SignCell({ name, date }: { name?: string | null; date?: string | null }
   return (
     <div className="flex items-start gap-1.5">
       <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-      <div>
+      <div className="min-w-0">
         <p className="text-xs font-medium text-slate-700 leading-tight">{name}</p>
         {date && (
           <p className="text-[10px] text-slate-400">
@@ -52,6 +60,15 @@ function SignCell({ name, date }: { name?: string | null; date?: string | null }
           </p>
         )}
       </div>
+      {pdfPath && (
+        <button
+          onClick={() => openSignedPdf(paperId, level)}
+          title="Ver PDF firmado digitalmente"
+          className="text-slate-300 hover:text-emerald-600 flex-shrink-0 mt-0.5"
+        >
+          <FileCheck2 className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -154,13 +171,13 @@ export function SignOffMatrix({ auditId }: { auditId: string }) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <SignCell name={wp.preparedBy?.name} date={wp.preparedAt} />
+                      <SignCell name={wp.preparedBy?.name} date={wp.preparedAt} paperId={wp.id} level="prepare" pdfPath={wp.preparedPdfPath} />
                     </td>
                     <td className="px-4 py-3">
-                      <SignCell name={wp.reviewedBy?.name} date={wp.reviewedAt} />
+                      <SignCell name={wp.reviewedBy?.name} date={wp.reviewedAt} paperId={wp.id} level="review" pdfPath={wp.reviewedPdfPath} />
                     </td>
                     <td className="px-4 py-3">
-                      <SignCell name={wp.signedOffBy?.name} date={wp.signedOffAt} />
+                      <SignCell name={wp.signedOffBy?.name} date={wp.signedOffAt} paperId={wp.id} level="signoff" pdfPath={wp.signedOffPdfPath} />
                     </td>
                     <td className="px-3 py-3">
                       <Link

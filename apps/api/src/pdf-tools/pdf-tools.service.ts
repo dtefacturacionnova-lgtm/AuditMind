@@ -99,9 +99,12 @@ export class PdfToolsService {
     formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
     formData.append('watermarkType', 'text');
     formData.append('watermarkText', opts.text);
+    formData.append('alphabet', 'roman');
     formData.append('fontSize', String(opts.fontSize ?? 30));
     formData.append('rotation', String(opts.rotation ?? 45));
     formData.append('opacity', String(opts.opacity ?? 0.3));
+    formData.append('widthSpacer', '50');
+    formData.append('heightSpacer', '50');
     formData.append('customColor', opts.color ?? '#d3d3d3');
     formData.append('convertPDFToImage', 'false'); // mantener el PDF con texto seleccionable/buscable
     return this.callStirling('/api/v1/security/add-watermark', formData);

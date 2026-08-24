@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Delete,
   Body,
   Param,
@@ -225,6 +226,36 @@ export class AiController {
     @Query('ragBase') ragBase?: string,
   ) {
     return this.aiService.listRagDocuments(orgId, ragBase);
+  }
+
+  // ─── RAG — Un documento (polling de estado tras ingesta en segundo plano) ───
+  @Get('rag/documents/:docId')
+  @ApiOperation({ summary: 'Consultar un documento RAG — usado para hacer polling de status tras ingerir' })
+  async getRagDocument(@Param('docId') docId: string) {
+    return this.aiService.getRagDocument(docId);
+  }
+
+  // ─── RAG — Activar/desactivar documento sin borrarlo ─────────────────────────
+  @Patch('rag/documents/:docId/toggle')
+  @ApiOperation({ summary: 'Activar/desactivar un documento RAG (no se borra, deja de usarse en búsquedas)' })
+  async toggleRagDocument(@Param('docId') docId: string) {
+    return this.aiService.toggleRagDocument(docId);
+  }
+
+  // ─── RAG — Ingerir desde una URL ─────────────────────────────────────────────
+  @Post('rag/ingest/url')
+  @ApiOperation({ summary: 'Ingerir un documento normativo desde una URL (PDF o HTML)' })
+  async ingestRagUrl(
+    @Body() body: { url: string; docTitle: string; ragBase: string; orgId?: string },
+  ) {
+    return this.aiService.ingestRagUrl(body.url, body.docTitle, body.ragBase, body.orgId);
+  }
+
+  // ─── RAG — Qué Especialistas IA usan la base de conocimiento ────────────────
+  @Get('rag/agents-with-rag')
+  @ApiOperation({ summary: 'Listar qué agentes IA consultan la base de conocimiento RAG' })
+  async listAgentsWithRag() {
+    return this.aiService.listAgentsWithRag();
   }
 
   // ─── RAG — Eliminar documento ────────────────────────────────────────────────

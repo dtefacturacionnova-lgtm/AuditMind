@@ -1,4 +1,4 @@
-"""RAG Pipeline — ingestión de documentos → chunks → embeddings Gemini → pgvector.
+"""RAG Pipeline — ingestión de documentos → chunks → embeddings (cascada de proveedores) → pgvector.
 
 Uso:
     from app.services.rag_pipeline import ingest_pdf, ingest_text, search_knowledge
@@ -18,21 +18,37 @@ Uso:
         organization_id="org_xxx",
         top_k=5,
     )
+
+Versionado y estado (2026-08-24): cada ingesta calcula un hash SHA-256 del
+texto completo. Si ya existe un documento con el mismo título+base y el mismo
+hash, se omite la reingesta (ahorra cuota de embeddings). Si el contenido
+cambió, se crea una nueva revisión y la anterior queda marcada
+`superseded_by`/`is_active=false` (no se borra, sigue disponible para
+trazabilidad histórica, pero deja de usarse en búsquedas).
+
+La generación de embeddings (la parte lenta y la única que depende de APIs
+externas) puede correr en segundo plano vía FastAPI `BackgroundTasks` — ver
+`run_ingestion()`. `ingest_text`/`ingest_pdf` registran el documento de forma
+rápida y síncrona y devuelven de inmediato con status='pendiente' cuando se
+les pasa `background_tasks`; sin ese argumento (uso directo desde scripts)
+procesan de forma síncrona como antes.
 """
 import asyncio
+import hashlib
 import re
-import time
 import uuid
 from pathlib import Path
 from typing import Optional
 
 import asyncpg
 import pdfplumber
-from google import genai as google_genai
 
 from app.config import settings
-
-_gemini_client = google_genai.Client(api_key=settings.GEMINI_API_KEY)
+from app.services.embedding_router import (
+    EmbeddingProvider,
+    embed_batch_with_fallback,
+    embed_query_with_provider,
+)
 
 
 # ─── Text chunking ────────────────────────────────────────────────────────────
@@ -94,48 +110,17 @@ def _chunk_text(
     return overlapped
 
 
-# ─── Embedding ────────────────────────────────────────────────────────────────
-
-def _embed_batch(texts: list[str]) -> list[list[float]]:
-    """Generate Gemini embeddings for a batch of texts (sync, for ingestion).
-
-    El free tier de Gemini limita embed_content a ~100 req/min — cualquier
-    documento normativo real (NACOT, Codigo Tributario, etc.) supera esto
-    facilmente en chunks de 800 caracteres. Reintenta con backoff en 429
-    en vez de fallar toda la ingesta a mitad de camino.
-    """
-    embeddings: list[list[float]] = []
-    for i, text in enumerate(texts):
-        attempt = 0
-        while True:
-            try:
-                result = _gemini_client.models.embed_content(
-                    model=settings.EMBEDDING_MODEL,
-                    contents=text,
-                )
-                embeddings.append(list(result.embeddings[0].values))
-                break
-            except Exception as e:
-                msg = str(e)
-                is_rate_limit = "RESOURCE_EXHAUSTED" in msg or "429" in msg
-                if not is_rate_limit or attempt >= 5:
-                    raise
-                attempt += 1
-                wait = min(60, 2 ** attempt)
-                print(f"  ⏳ Rate limit en embedding {i + 1}/{len(texts)} — reintento {attempt}/5 en {wait}s")
-                time.sleep(wait)
-        # Throttle proactivo: el free tier es ~100/min → ~0.6s entre llamadas
-        # deja margen para no gatillar el 429 en la mayoria de los casos.
-        if i < len(texts) - 1:
-            time.sleep(0.65)
-    return embeddings
+def _content_hash(text: str) -> str:
+    """SHA-256 del texto completo — usado para versionado y para evitar
+    reingestas (y gasto de cuota de embeddings) cuando el contenido no cambió."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # ─── pgvector helpers ──────────────────────────────────────────────────────────
 
 async def _ensure_pgvector_tables(conn: asyncpg.Connection) -> None:
     """Create knowledge tables if they don't exist (idempotent — safe to call repeatedly)."""
-    await conn.execute("""
+    await conn.execute(f"""
         CREATE EXTENSION IF NOT EXISTS vector;
 
         CREATE TABLE IF NOT EXISTS rag_documents (
@@ -154,9 +139,9 @@ async def _ensure_pgvector_tables(conn: asyncpg.Connection) -> None:
             rag_base        TEXT NOT NULL,
             section_title   TEXT,
             organization_id TEXT,
-            embedding       vector(3072),
+            embedding       vector({settings.EMBEDDING_DIMENSIONS}),
             chunk_index     INTEGER NOT NULL DEFAULT 0,
-            metadata        JSONB DEFAULT '{}',
+            metadata        JSONB DEFAULT '{{}}',
             created_at      TIMESTAMPTZ DEFAULT NOW()
         );
 
@@ -165,37 +150,29 @@ async def _ensure_pgvector_tables(conn: asyncpg.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS rag_chunks_org_idx
             ON rag_chunks(organization_id);
+
+        -- Cascada de proveedores de embeddings (2026-08-24) — columna de respaldo
+        -- para Voyage/Jina/Cohere (1024 dims, no se puede mezclar con la de Gemini
+        -- de 3072 dims en la misma columna de pgvector) + qué proveedor se usó.
+        ALTER TABLE rag_chunks ADD COLUMN IF NOT EXISTS
+            embedding_fallback vector({settings.EMBEDDING_FALLBACK_DIMENSIONS});
+        ALTER TABLE rag_chunks ADD COLUMN IF NOT EXISTS
+            embedding_provider TEXT NOT NULL DEFAULT 'gemini';
+
+        -- Versionado + estado de ingesta (2026-08-24).
+        ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
+        ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS superseded_by TEXT REFERENCES rag_documents(id);
+        ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'listo';
+        ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS error_message TEXT;
     """)
     # No se crea indice HNSW/ivfflat sobre embedding: pgvector los limita a 2000
     # dimensiones y gemini-embedding-001 produce 3072. Ver nota en
     # infrastructure/scripts/pgvector_setup.sql — un scan secuencial de <=> es
-    # instantaneo al tamano actual de esta base de conocimiento.
-
-
-async def _upsert_document(
-    conn: asyncpg.Connection,
-    title: str,
-    rag_base: str,
-    org_id: Optional[str],
-    source_url: Optional[str],
-) -> str:
-    """Insert or update a knowledge document and return its ID."""
-    doc_id = str(uuid.uuid4())
-    await conn.execute("""
-        INSERT INTO rag_documents (id, title, rag_base, organization_id, source_url)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT DO NOTHING
-    """, doc_id, title, rag_base, org_id, source_url)
-
-    # If title already exists for this rag_base + org_id, return existing id
-    existing = await conn.fetchval("""
-        SELECT id FROM rag_documents
-        WHERE title = $1 AND rag_base = $2
-          AND (organization_id = $3 OR (organization_id IS NULL AND $3 IS NULL))
-        ORDER BY created_at DESC LIMIT 1
-    """, title, rag_base, org_id)
-
-    return str(existing) if existing else doc_id
+    # instantaneo al tamano actual de esta base de conocimiento. embedding_fallback
+    # (1024 dims) sí calificaría para un índice HNSW si el volumen lo justifica
+    # en el futuro — no es necesario todavía.
 
 
 async def _insert_chunks(
@@ -205,17 +182,19 @@ async def _insert_chunks(
     org_id: Optional[str],
     chunks: list[str],
     embeddings: list[list[float]],
+    provider: EmbeddingProvider,
     section_titles: Optional[list[str]] = None,
 ) -> int:
-    """Bulk insert chunks with embeddings."""
-    # Delete existing chunks for this doc
+    """Bulk insert chunks with embeddings, en la columna que corresponda al proveedor."""
+    # Delete existing chunks for this doc (reintentos de la misma revisión)
     await conn.execute("DELETE FROM rag_chunks WHERE doc_id = $1", doc_id)
 
+    is_gemini = provider == EmbeddingProvider.GEMINI
     rows = []
     for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
         section = section_titles[i] if section_titles and i < len(section_titles) else None
         # asyncpg no serializa list[float] -> pgvector automaticamente; el cast
-        # $8::vector espera el literal de texto '[0.1,0.2,...]', no una lista Python.
+        # ::vector espera el literal de texto '[0.1,0.2,...]', no una lista Python.
         emb_literal = '[' + ','.join(str(x) for x in emb) + ']'
         rows.append((
             str(uuid.uuid4()),
@@ -225,16 +204,135 @@ async def _insert_chunks(
             section,
             org_id,
             i,       # chunk_index
-            emb_literal,
+            emb_literal if is_gemini else None,
+            emb_literal if not is_gemini else None,
+            provider.value,
         ))
 
     await conn.executemany("""
         INSERT INTO rag_chunks
-            (id, doc_id, content, rag_base, section_title, organization_id, chunk_index, embedding)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector)
+            (id, doc_id, content, rag_base, section_title, organization_id, chunk_index,
+             embedding, embedding_fallback, embedding_provider)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9::vector, $10)
     """, rows)
 
     return len(rows)
+
+
+async def _similarity_search(
+    conn: asyncpg.Connection,
+    vec_str: str,
+    column: str,
+    threshold: float,
+    top_k: int,
+    rag_base: Optional[str] | list[str] | None,
+    organization_id: Optional[str],
+    extra_provider: Optional[str] = None,
+) -> list[dict]:
+    """Busqueda de similitud coseno contra UNA columna de embedding (`embedding`
+    o `embedding_fallback`) — usado por search_knowledge para combinar resultados
+    de distintos proveedores sin mezclar sus vectores en la misma comparación."""
+    conditions = [
+        f"1 - (kc.{column} <=> $1::vector) >= $2",
+        f"kc.{column} IS NOT NULL",
+        "kd.is_active = true",
+    ]
+    params: list = [vec_str, threshold]
+    idx = 3
+
+    if isinstance(rag_base, list) and rag_base:
+        conditions.append(f"kc.rag_base = ANY(${idx}::text[])")
+        params.append(rag_base)
+        idx += 1
+    elif isinstance(rag_base, str) and rag_base:
+        conditions.append(f"kc.rag_base = ${idx}")
+        params.append(rag_base)
+        idx += 1
+
+    if organization_id:
+        conditions.append(f"(kc.organization_id IS NULL OR kc.organization_id = ${idx})")
+        params.append(organization_id)
+        idx += 1
+    else:
+        conditions.append("kc.organization_id IS NULL")
+
+    if extra_provider:
+        conditions.append(f"kc.embedding_provider = ${idx}")
+        params.append(extra_provider)
+        idx += 1
+
+    where_clause = " AND ".join(conditions)
+    sql = f"""
+        SELECT
+            kc.content,
+            kc.section_title,
+            kc.rag_base,
+            kd.title AS doc_title,
+            1 - (kc.{column} <=> $1::vector) AS similarity
+        FROM rag_chunks kc
+        JOIN rag_documents kd ON kd.id = kc.doc_id
+        WHERE {where_clause}
+        ORDER BY kc.{column} <=> $1::vector
+        LIMIT {top_k}
+    """
+    rows = await conn.fetch(sql, *params)
+    return [
+        {
+            "content": row["content"],
+            "section_title": row["section_title"],
+            "rag_base": row["rag_base"],
+            "doc_title": row["doc_title"],
+            "similarity": float(row["similarity"]),
+        }
+        for row in rows
+    ]
+
+
+# ─── Ingesta pesada (embeddings) — pensada para BackgroundTasks ───────────────
+
+async def run_ingestion(
+    doc_id: str,
+    text: str,
+    rag_base: str,
+    org_id: Optional[str],
+    chunk_size: int = 800,
+    overlap: int = 100,
+) -> None:
+    """Fragmenta, genera embeddings (cascada de proveedores) e inserta los
+    chunks de un documento ya registrado. Actualiza `status`/`error_message`
+    en cada paso para que se pueda consultar el progreso desde afuera
+    (GET /rag/documents/:id) mientras corre en segundo plano."""
+    conn = await asyncpg.connect(settings.DATABASE_URL)
+    try:
+        await conn.execute("UPDATE rag_documents SET status = 'procesando' WHERE id = $1", doc_id)
+
+        chunks = _chunk_text(text, chunk_size, overlap)
+        if not chunks:
+            await conn.execute(
+                "UPDATE rag_documents SET status = 'error', error_message = $2 WHERE id = $1",
+                doc_id, "El texto quedó vacío tras la fragmentación.",
+            )
+            return
+
+        print(f"  → Generando {len(chunks)} embeddings para doc {doc_id}...")
+        try:
+            # embed_batch_with_fallback hace llamadas HTTP sincronas — correrla
+            # en el loop de asyncio directamente congelaria el servicio para
+            # otras requests durante toda la ingesta. Se corre en thread aparte.
+            embeddings, provider = await asyncio.to_thread(embed_batch_with_fallback, chunks)
+        except Exception as e:
+            await conn.execute(
+                "UPDATE rag_documents SET status = 'error', error_message = $2 WHERE id = $1",
+                doc_id, str(e)[:2000],
+            )
+            print(f"  ❌ Ingesta fallida para doc {doc_id}: {e}")
+            return
+
+        count = await _insert_chunks(conn, doc_id, rag_base, org_id, chunks, embeddings, provider)
+        await conn.execute("UPDATE rag_documents SET status = 'listo' WHERE id = $1", doc_id)
+        print(f"  ✅ Ingesta completa: {count} chunks para doc {doc_id} vía {provider.value}")
+    finally:
+        await conn.close()
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
@@ -247,25 +345,78 @@ async def ingest_text(
     source_url: Optional[str] = None,
     chunk_size: int = 800,
     overlap: int = 100,
+    background_tasks=None,
 ) -> dict:
-    """Ingest raw text into the knowledge base."""
-    chunks = _chunk_text(text, chunk_size, overlap)
-    if not chunks:
+    """Registra el documento (rápido) y dispara la generación de embeddings.
+
+    Si se pasa `background_tasks` (FastAPI, desde el router), la parte lenta
+    corre en segundo plano y esta función retorna de inmediato con
+    status='pendiente' — el llamador debe consultar GET /rag/documents/:id
+    para saber cuándo terminó. Sin `background_tasks` (uso directo desde
+    scripts/Python) procesa todo de forma síncrona y solo retorna al terminar,
+    igual que antes de esta cascada.
+
+    Si el hash del texto es idéntico a la última revisión ya ingerida para el
+    mismo título+base, no reingesta nada (evita gastar cuota de embeddings en
+    contenido sin cambios) y devuelve status='unchanged'.
+    """
+    if not text.strip():
         return {"doc_id": None, "chunks": 0, "status": "empty"}
 
-    print(f"  → Generating {len(chunks)} embeddings for '{doc_title}'...")
-    embeddings = _embed_batch(chunks)
+    content_hash = _content_hash(text)
 
     conn = await asyncpg.connect(settings.DATABASE_URL)
     try:
         await _ensure_pgvector_tables(conn)
-        doc_id = await _upsert_document(conn, doc_title, rag_base, org_id, source_url)
-        count = await _insert_chunks(conn, doc_id, rag_base, org_id, chunks, embeddings)
+
+        existing = await conn.fetchrow("""
+            SELECT id, revision, content_hash, status
+            FROM rag_documents
+            WHERE title = $1 AND rag_base = $2
+              AND (organization_id = $3 OR (organization_id IS NULL AND $3 IS NULL))
+              AND superseded_by IS NULL
+            ORDER BY created_at DESC LIMIT 1
+        """, doc_title, rag_base, org_id)
+
+        if existing and existing["content_hash"] == content_hash and existing["status"] == "listo":
+            print(f"  ↩️  '{doc_title}' sin cambios (hash idéntico a la revisión {existing['revision']}) — se omite.")
+            return {
+                "doc_id": existing["id"], "chunks": 0, "status": "unchanged",
+                "revision": existing["revision"],
+            }
+
+        doc_id = str(uuid.uuid4())
+        new_revision = (existing["revision"] + 1) if existing else 1
+
+        await conn.execute("""
+            INSERT INTO rag_documents
+                (id, title, rag_base, organization_id, source_url, content_hash, revision, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pendiente')
+        """, doc_id, doc_title, rag_base, org_id, source_url, content_hash, new_revision)
+
+        if existing:
+            # Nueva revisión reemplaza a la anterior — la anterior no se borra
+            # (queda para trazabilidad/reproducibilidad) pero deja de usarse
+            # en búsquedas activas.
+            await conn.execute("""
+                UPDATE rag_documents SET superseded_by = $1, is_active = false WHERE id = $2
+            """, doc_id, existing["id"])
     finally:
         await conn.close()
 
-    print(f"  ✅ Ingested {count} chunks for '{doc_title}' → {rag_base}")
-    return {"doc_id": doc_id, "chunks": count, "status": "ok"}
+    if background_tasks is not None:
+        background_tasks.add_task(run_ingestion, doc_id, text, rag_base, org_id, chunk_size, overlap)
+        return {"doc_id": doc_id, "chunks": 0, "status": "pendiente", "revision": new_revision}
+
+    # Sin BackgroundTasks: procesar inline y esperar (uso directo/scripts).
+    await run_ingestion(doc_id, text, rag_base, org_id, chunk_size, overlap)
+    conn = await asyncpg.connect(settings.DATABASE_URL)
+    try:
+        count = await conn.fetchval("SELECT COUNT(*) FROM rag_chunks WHERE doc_id = $1", doc_id)
+        status = await conn.fetchval("SELECT status FROM rag_documents WHERE id = $1", doc_id)
+    finally:
+        await conn.close()
+    return {"doc_id": doc_id, "chunks": count, "status": status, "revision": new_revision}
 
 
 async def ingest_pdf(
@@ -275,6 +426,7 @@ async def ingest_pdf(
     org_id: Optional[str] = None,
     chunk_size: int = 800,
     overlap: int = 100,
+    background_tasks=None,
 ) -> dict:
     """Extract text from a PDF and ingest into the knowledge base."""
     path = Path(pdf_path)
@@ -301,6 +453,7 @@ async def ingest_pdf(
         source_url=str(path),
         chunk_size=chunk_size,
         overlap=overlap,
+        background_tasks=background_tasks,
     )
 
 
@@ -309,12 +462,19 @@ async def ingest_pdf(
 async def search_knowledge(
     query: str,
     organization_id: Optional[str] = None,
-    rag_base: Optional[str] = None,
+    rag_base: Optional[str] | list[str] | None = None,
     top_k: int = 5,
     threshold: float = 0.65,
 ) -> list[dict]:
     """
     Busca los chunks más relevantes para una consulta usando similitud coseno.
+
+    Busca primero en la columna de Gemini (`embedding`, el caso normal). Si
+    dentro del alcance de la búsqueda hay chunks ingeridos por un proveedor de
+    respaldo (`embedding_fallback` — solo ocurre si Gemini se agotó alguna vez),
+    también genera el embedding de la consulta con ESE MISMO proveedor y busca
+    ahí, combinando y reordenando ambos conjuntos de resultados. En el caso
+    común (todo ingerido con Gemini) esto es un no-op sin costo extra.
 
     Returns:
         Lista de dicts con: content, section_title, rag_base, similarity, doc_title
@@ -322,75 +482,51 @@ async def search_knowledge(
     if not query.strip():
         return []
 
-    # Generate embedding for the query (sync Gemini API via thread executor)
+    conn = await asyncpg.connect(settings.DATABASE_URL)
     try:
-        result = await asyncio.to_thread(
-            lambda: _gemini_client.models.embed_content(
-                model=settings.EMBEDDING_MODEL,
-                contents=query,
-            )
-        )
-        query_embedding = list(result.embeddings[0].values)
-    except Exception as e:
-        print(f"[RAG] Error generating query embedding: {e}")
-        return []
+        all_results: list[dict] = []
 
-    # Build the embedding vector string for pgvector
-    vec_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
-
-    # Build SQL with optional filters
-    conditions = ["1 - (kc.embedding <=> $1::vector) >= $2"]
-    params: list = [vec_str, threshold]
-    param_idx = 3
-
-    if rag_base:
-        conditions.append(f"kc.rag_base = ${param_idx}")
-        params.append(rag_base)
-        param_idx += 1
-
-    if organization_id:
-        # Include global (org NULL) + org-specific chunks
-        conditions.append(f"(kc.organization_id IS NULL OR kc.organization_id = ${param_idx})")
-        params.append(organization_id)
-        param_idx += 1
-    else:
-        # Only global chunks
-        conditions.append("kc.organization_id IS NULL")
-
-    where_clause = " AND ".join(conditions)
-    sql = f"""
-        SELECT
-            kc.content,
-            kc.section_title,
-            kc.rag_base,
-            kd.title AS doc_title,
-            1 - (kc.embedding <=> $1::vector) AS similarity
-        FROM rag_chunks kc
-        LEFT JOIN rag_documents kd ON kd.id = kc.doc_id
-        WHERE {where_clause}
-        ORDER BY kc.embedding <=> $1::vector
-        LIMIT {top_k}
-    """
-
-    try:
-        conn = await asyncpg.connect(settings.DATABASE_URL)
         try:
-            rows = await conn.fetch(sql, *params)
-            return [
-                {
-                    "content": row["content"],
-                    "section_title": row["section_title"],
-                    "rag_base": row["rag_base"],
-                    "doc_title": row["doc_title"],
-                    "similarity": float(row["similarity"]),
-                }
-                for row in rows
-            ]
-        finally:
-            await conn.close()
+            query_embedding = await asyncio.to_thread(
+                embed_query_with_provider, query, EmbeddingProvider.GEMINI
+            )
+            vec_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+            all_results += await _similarity_search(
+                conn, vec_str, "embedding", threshold, top_k, rag_base, organization_id
+            )
+        except Exception as e:
+            print(f"[RAG] Error generando embedding Gemini de la consulta: {e}")
+
+        rag_base_list = rag_base if isinstance(rag_base, list) else ([rag_base] if rag_base else None)
+        fallback_rows = await conn.fetch("""
+            SELECT DISTINCT kc.embedding_provider
+            FROM rag_chunks kc
+            JOIN rag_documents kd ON kd.id = kc.doc_id
+            WHERE kc.embedding_fallback IS NOT NULL AND kd.is_active = true
+              AND ($1::text[] IS NULL OR kc.rag_base = ANY($1::text[]))
+        """, rag_base_list)
+
+        for row in fallback_rows:
+            provider = EmbeddingProvider(row["embedding_provider"])
+            try:
+                query_embedding = await asyncio.to_thread(
+                    embed_query_with_provider, query, provider
+                )
+                vec_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+                all_results += await _similarity_search(
+                    conn, vec_str, "embedding_fallback", threshold, top_k,
+                    rag_base, organization_id, extra_provider=provider.value,
+                )
+            except Exception as e:
+                print(f"[RAG] Error en búsqueda de respaldo ({provider.value}): {e}")
+
+        all_results.sort(key=lambda r: r["similarity"], reverse=True)
+        return all_results[:top_k]
     except Exception as e:
         print(f"[RAG] Search error: {e}")
         return []
+    finally:
+        await conn.close()
 
 
 def format_rag_context(chunks: list[dict]) -> str:

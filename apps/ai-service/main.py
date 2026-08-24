@@ -3,14 +3,29 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import asyncpg
+
 from app.config import settings
 from app.routers import agents, rag, health, analytics, connectors, scriptorium, sampling, evidence
+from app.services.rag_pipeline import _ensure_pgvector_tables
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(f"🚀 AuditMind AI Service — model: {settings.ANTHROPIC_DEFAULT_MODEL}")
     print(f"   Embeddings: {settings.EMBEDDING_MODEL} ({settings.EMBEDDING_DIMENSIONS} dims)")
+    # Migra el esquema de pgvector al arrancar (idempotente — ADD COLUMN IF NOT
+    # EXISTS) en vez de esperar a la primera ingesta, para que /rag/documents y
+    # otras lecturas funcionen aunque nadie haya ingerido nada todavía hoy.
+    try:
+        conn = await asyncpg.connect(settings.DATABASE_URL)
+        try:
+            await _ensure_pgvector_tables(conn)
+            print("   pgvector: esquema RAG verificado/migrado")
+        finally:
+            await conn.close()
+    except Exception as e:
+        print(f"   ⚠️  No se pudo verificar el esquema de pgvector al arrancar: {e}")
     yield
     print("👋 AI Service shutting down")
 

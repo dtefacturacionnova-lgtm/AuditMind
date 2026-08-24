@@ -499,6 +499,55 @@ export class AiService {
     return res.json();
   }
 
+  // ─── RAG — Un documento (polling de estado tras ingesta en segundo plano) ───
+  async getRagDocument(docId: string): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/rag/documents/${docId}`);
+    if (!res.ok) {
+      if (res.status === 404) throw new HttpException('Documento no encontrado', HttpStatus.NOT_FOUND);
+      throw new HttpException('RAG get error', HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
+  // ─── RAG — Activar/desactivar documento sin borrarlo ─────────────────────────
+  async toggleRagDocument(docId: string): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/rag/documents/${docId}/toggle`, {
+      method: 'PATCH',
+      headers: { 'x-internal-key': this.internalKey },
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`RAG toggle error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
+  // ─── RAG — Ingerir desde una URL (alternativa liviana a subir archivo) ──────
+  async ingestRagUrl(
+    url: string,
+    docTitle: string,
+    ragBase: string,
+    orgId?: string,
+  ): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/rag/ingest/url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': this.internalKey },
+      body: JSON.stringify({ url, doc_title: docTitle, rag_base: ragBase, org_id: orgId }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`RAG ingest URL error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
+  // ─── RAG — Qué Especialistas IA usan la base de conocimiento ────────────────
+  async listAgentsWithRag(): Promise<unknown> {
+    const res = await fetch(`${this.aiServiceUrl}/rag/agents-with-rag`);
+    if (!res.ok) throw new HttpException('RAG agents error', HttpStatus.BAD_GATEWAY);
+    return res.json();
+  }
+
   // ─── RAG — Eliminar documento ────────────────────────────────────────────────
   async deleteRagDocument(docId: string): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/rag/documents/${docId}`, {

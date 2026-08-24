@@ -20,6 +20,22 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "models/gemini-embedding-001"
     EMBEDDING_DIMENSIONS: int = 3072
 
+    # Embeddings — cascada de respaldo cuando Gemini falla o agota su cuota diaria.
+    # Todas opcionales: string vacío = proveedor deshabilitado, se salta en la cascada
+    # (ver app/services/embedding_router.py). Orden fijo: Gemini → Voyage → Jina → Cohere.
+    VOYAGE_API_KEY: str = ""
+    VOYAGE_EMBEDDING_MODEL: str = "voyage-multilingual-2"
+    JINA_API_KEY: str = ""
+    # v3 esta deprecado (ago-2026) — v5-text-small es multilingue con buen soporte
+    # de espanol y sigue en 1024 dims por defecto. Confirmar contra jina.ai/embeddings
+    # si cambia antes de activar la key.
+    JINA_EMBEDDING_MODEL: str = "jina-embeddings-v5-text-small"
+    COHERE_API_KEY: str = ""
+    COHERE_EMBEDDING_MODEL: str = "embed-multilingual-v3.0"
+    # Dimensión compartida de la columna de respaldo en pgvector — los 3 proveedores
+    # de fallback producen vectores de 1024 dims con la configuración por defecto.
+    EMBEDDING_FALLBACK_DIMENSIONS: int = 1024
+
     # Service URLs
     WEB_URL: str = "http://localhost:3000"
     API_URL: str = "http://localhost:3001"

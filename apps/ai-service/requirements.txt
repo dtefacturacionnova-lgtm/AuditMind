@@ -15,6 +15,11 @@ anthropic>=0.36.0
 # ─── Embeddings — Gemini (gemini-embedding-001, 3072 dims, free) ───────────────
 google-genai>=1.0.0
 
+# ─── Embeddings — cascada de respaldo (opcionales, se activan solo con API key) ─
+# Jina no necesita SDK propio: su API es REST plano, se llama con httpx (ya arriba).
+voyageai>=0.3.0
+cohere>=5.11.0
+
 # ─── Auth ──────────────────────────────────────────────────────────────────────
 PyJWT>=2.9.0
 

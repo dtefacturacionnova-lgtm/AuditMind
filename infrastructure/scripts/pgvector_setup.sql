@@ -2,6 +2,13 @@
 -- AuditMind — pgvector Setup para RAG
 -- Ejecutar en Supabase SQL Editor (idempotente — se puede re-ejecutar)
 -- Gemini gemini-embedding-001 → 3072 dimensiones
+--
+-- NOTA (2026-08-24): desde la cascada de proveedores de embeddings, la
+-- fuente de verdad real del esquema es `_ensure_pgvector_tables()` en
+-- apps/ai-service/app/services/rag_pipeline.py — corre automáticamente en
+-- cada arranque del servicio (ver main.py), así que este archivo ya no hace
+-- falta ejecutarlo a mano en un entorno nuevo. Se mantiene actualizado como
+-- referencia/documentación del esquema completo en un solo lugar.
 -- ═══════════════════════════════════════════════════════════════════════
 
 -- 1. Habilitar la extensión pgvector
@@ -70,8 +77,36 @@ CREATE INDEX IF NOT EXISTS idx_chunks_org_rag
 CREATE INDEX IF NOT EXISTS idx_chunks_content_fts
   ON rag_chunks USING gin (to_tsvector('spanish', content));
 
+-- 5b. Cascada de proveedores de embeddings (2026-08-24) — Voyage/Jina/Cohere
+--     producen vectores de 1024 dims por defecto, no se pueden mezclar con
+--     los de Gemini (3072) en la misma columna. `embedding_provider` registra
+--     cuál se usó por chunk; la búsqueda (rag_pipeline.search_knowledge)
+--     compara cada columna contra un embedding de consulta generado con el
+--     mismo proveedor, y combina los resultados.
+ALTER TABLE rag_chunks ADD COLUMN IF NOT EXISTS embedding_fallback vector(1024);
+ALTER TABLE rag_chunks ADD COLUMN IF NOT EXISTS embedding_provider TEXT NOT NULL DEFAULT 'gemini';
+
+-- 5c. Versionado + estado de ingesta (2026-08-24) — hash SHA-256 del texto
+--     completo para detectar contenido sin cambios (evita reingestas/gasto
+--     de cuota) y para trazabilidad; revisiones sucesivas del mismo
+--     título+base quedan enlazadas por `superseded_by` sin borrar el
+--     historial. `status`/`error_message` reflejan el progreso de la
+--     ingesta cuando corre en segundo plano (FastAPI BackgroundTasks).
+ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
+ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS superseded_by TEXT REFERENCES rag_documents(id);
+ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'listo';
+ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS error_message TEXT;
+
 -- ─────────────────────────────────────────────────────────────────────────────
--- 6. Función de búsqueda vectorial pura
+-- 6. Funciones de búsqueda vectorial/híbrida — HISTÓRICAS, YA NO LAS LLAMA LA
+--    APLICACIÓN. `/rag/search` (apps/ai-service/app/routers/rag.py) usa
+--    directamente rag_pipeline.search_knowledge() en Python, que sabe
+--    combinar embedding + embedding_fallback (proveedores distintos) — algo
+--    que estas funciones SQL de una sola columna no pueden hacer. Se dejan
+--    aquí solo por si sirven para una consulta manual rápida contra la
+--    columna `embedding` (Gemini) exclusivamente.
 -- ─────────────────────────────────────────────────────────────────────────────
 DROP FUNCTION IF EXISTS match_knowledge(vector(3072), float, int, text, text[]);
 DROP FUNCTION IF EXISTS match_knowledge(vector(1536), float, int, uuid, text[]);

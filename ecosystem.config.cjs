@@ -96,6 +96,11 @@ module.exports = {
         WHISPER_COMPUTE_TYPE:      e.WHISPER_COMPUTE_TYPE || 'int8',
         WHISPER_DEVICE:            e.WHISPER_DEVICE || 'cpu',
         HUGGINGFACE_TOKEN:         e.HUGGINGFACE_TOKEN,
+        // Cascada de embeddings (Gemini→Voyage→Jina→Cohere) — opcionales,
+        // si faltan la cascada simplemente se salta ese proveedor.
+        VOYAGE_API_KEY:            e.VOYAGE_API_KEY,
+        JINA_API_KEY:              e.JINA_API_KEY,
+        COHERE_API_KEY:            e.COHERE_API_KEY,
       },
       // Subido de 800M — pyannote-audio (diarización, EVD-12) trae torch/torchaudio y
       // usa 1-2GB de RAM en inferencia; el VPS tiene sobra (26GB libres verificado

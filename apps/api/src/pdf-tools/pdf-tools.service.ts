@@ -70,4 +70,60 @@ export class PdfToolsService {
     formData.append('location', opts.location ?? 'AuditMind');
     return this.callStirling('/api/v1/security/cert-sign', formData);
   }
+
+  // ─── Fusionar varios PDFs en uno solo ─────────────────────────────────────────
+  async mergePdfs(
+    files: { buffer: Buffer; filename: string }[],
+    opts: { sortType?: 'orderProvided' | 'byFileName' | 'byDateModified' | 'byDateCreated' | 'byPDFTitle'; generateToc?: boolean } = {},
+  ): Promise<Buffer> {
+    if (files.length < 2) {
+      throw new HttpException('Se necesitan al menos 2 archivos para fusionar', HttpStatus.BAD_REQUEST);
+    }
+    const formData = new FormData();
+    for (const f of files) {
+      formData.append('fileInput', new Blob([new Uint8Array(f.buffer)], { type: 'application/pdf' }), f.filename);
+    }
+    formData.append('sortType', opts.sortType ?? 'orderProvided');
+    formData.append('removeCertSign', 'false'); // conservar firmas digitales existentes de cada PDF de origen
+    formData.append('generateToc', String(opts.generateToc ?? false));
+    return this.callStirling('/api/v1/general/merge-pdfs', formData);
+  }
+
+  // ─── Marca de agua (branding/confidencialidad) ────────────────────────────────
+  async addWatermark(
+    fileBuffer: Buffer,
+    filename: string,
+    opts: { text: string; fontSize?: number; rotation?: number; opacity?: number; color?: string },
+  ): Promise<Buffer> {
+    const formData = new FormData();
+    formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
+    formData.append('watermarkType', 'text');
+    formData.append('watermarkText', opts.text);
+    formData.append('fontSize', String(opts.fontSize ?? 30));
+    formData.append('rotation', String(opts.rotation ?? 45));
+    formData.append('opacity', String(opts.opacity ?? 0.3));
+    formData.append('customColor', opts.color ?? '#d3d3d3');
+    formData.append('convertPDFToImage', 'false'); // mantener el PDF con texto seleccionable/buscable
+    return this.callStirling('/api/v1/security/add-watermark', formData);
+  }
+
+  // ─── Redacción automática por texto (antes de compartir externamente) ────────
+  // Redacción real (elimina el contenido, no solo lo tapa visualmente) cuando
+  // convertPDFToImage=true — con false, cubre con un rectángulo de color pero
+  // el texto original podría seguir siendo recuperable del PDF subyacente.
+  async autoRedact(
+    fileBuffer: Buffer,
+    filename: string,
+    opts: { textToRedact: string[]; useRegex?: boolean; wholeWordSearch?: boolean; color?: string; convertToImage?: boolean },
+  ): Promise<Buffer> {
+    const formData = new FormData();
+    formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
+    formData.append('listOfText', opts.textToRedact.join('\n'));
+    formData.append('useRegex', String(opts.useRegex ?? false));
+    formData.append('wholeWordSearch', String(opts.wholeWordSearch ?? false));
+    formData.append('redactColor', opts.color ?? '#000000');
+    formData.append('customPadding', '2');
+    formData.append('convertPDFToImage', String(opts.convertToImage ?? true));
+    return this.callStirling('/api/v1/security/auto-redact', formData);
+  }
 }

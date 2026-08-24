@@ -8,7 +8,7 @@ import {
   UploadedFile,
   UploadedFiles,
 } from '@nestjs/common';
-import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FileFieldsInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -128,5 +128,78 @@ export class PdfToolsController {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', signedPdf.length);
     res.send(signedPdf);
+  }
+
+  // ─── Fusionar varios PDFs en uno solo ─────────────────────────────────────────
+  @Post('merge')
+  @ApiOperation({ summary: 'Fusionar varios PDFs (ej. adjuntos de evidencia de campo) en un solo archivo' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FilesInterceptor('files', 20))
+  async mergePdfs(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body() body: { sortType?: 'orderProvided' | 'byFileName' | 'byDateModified' | 'byDateCreated' | 'byPDFTitle'; generateToc?: string },
+    @Res() res: Response,
+  ) {
+    if (!files?.length) throw new Error('No se subió ningún archivo');
+    const mergedPdf = await this.pdfToolsService.mergePdfs(
+      files.map(f => ({ buffer: f.buffer, filename: f.originalname })),
+      { sortType: body?.sortType, generateToc: body?.generateToc === 'true' },
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="auditmind_fusionado.pdf"');
+    res.setHeader('Content-Length', mergedPdf.length);
+    res.send(mergedPdf);
+  }
+
+  // ─── Marca de agua (branding/confidencialidad en exportaciones) ──────────────
+  @Post('watermark')
+  @ApiOperation({ summary: 'Agregar marca de agua de texto a un PDF (branding/confidencialidad)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async addWatermark(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { text: string; fontSize?: string; rotation?: string; opacity?: string; color?: string },
+    @Res() res: Response,
+  ) {
+    if (!file) throw new Error('No se subió ningún archivo');
+    if (!body?.text) throw new Error('Se requiere el texto de la marca de agua');
+    const watermarked = await this.pdfToolsService.addWatermark(file.buffer, file.originalname, {
+      text: body.text,
+      fontSize: body?.fontSize ? parseFloat(body.fontSize) : undefined,
+      rotation: body?.rotation ? parseFloat(body.rotation) : undefined,
+      opacity: body?.opacity ? parseFloat(body.opacity) : undefined,
+      color: body?.color,
+    });
+    const filename = file.originalname.replace(/\.pdf$/i, '') + '_marcado.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', watermarked.length);
+    res.send(watermarked);
+  }
+
+  // ─── Redacción automática por texto (antes de compartir externamente) ────────
+  @Post('redact')
+  @ApiOperation({ summary: 'Redactar (censurar) texto específico de un PDF antes de compartirlo externamente' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async redactPdf(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { textToRedact: string; useRegex?: string; wholeWordSearch?: string; color?: string; convertToImage?: string },
+    @Res() res: Response,
+  ) {
+    if (!file) throw new Error('No se subió ningún archivo');
+    if (!body?.textToRedact) throw new Error('Se requiere el texto a redactar (separado por saltos de línea)');
+    const redacted = await this.pdfToolsService.autoRedact(file.buffer, file.originalname, {
+      textToRedact: body.textToRedact.split('\n').map(t => t.trim()).filter(Boolean),
+      useRegex: body?.useRegex === 'true',
+      wholeWordSearch: body?.wholeWordSearch === 'true',
+      color: body?.color,
+      convertToImage: body?.convertToImage !== 'false',
+    });
+    const filename = file.originalname.replace(/\.pdf$/i, '') + '_redactado.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', redacted.length);
+    res.send(redacted);
   }
 }

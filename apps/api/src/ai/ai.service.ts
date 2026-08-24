@@ -331,6 +331,7 @@ export class AiService {
     docTitle: string,
     ragBase: string,
     orgId?: string,
+    subcategory?: string,
   ): Promise<unknown> {
     const formData = new FormData();
     const blob = new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' });
@@ -338,6 +339,7 @@ export class AiService {
     formData.append('doc_title', docTitle);
     formData.append('rag_base', ragBase);
     if (orgId) formData.append('org_id', orgId);
+    if (subcategory) formData.append('subcategory', subcategory);
 
     const res = await fetch(`${this.aiServiceUrl}/rag/ingest/pdf`, {
       method: 'POST',
@@ -528,11 +530,12 @@ export class AiService {
     docTitle: string,
     ragBase: string,
     orgId?: string,
+    subcategory?: string,
   ): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/rag/ingest/url`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-internal-key': this.internalKey },
-      body: JSON.stringify({ url, doc_title: docTitle, rag_base: ragBase, org_id: orgId }),
+      body: JSON.stringify({ url, doc_title: docTitle, rag_base: ragBase, org_id: orgId, subcategory }),
     });
     if (!res.ok) {
       const err = await res.text();

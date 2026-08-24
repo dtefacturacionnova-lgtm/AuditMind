@@ -166,6 +166,12 @@ async def _ensure_pgvector_tables(conn: asyncpg.Connection) -> None:
         ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'listo';
         ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS error_message TEXT;
+
+        -- Subclasificación libre dentro de una base (ej. "IVA"/"Renta" dentro de
+        -- Tributario El Salvador) — texto libre, no un enum: el valor lo define
+        -- quien ingiere el documento y el frontend arma las opciones del filtro
+        -- a partir de los valores ya en uso, no de una lista fija en el código.
+        ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS subcategory TEXT;
     """)
     # No se crea indice HNSW/ivfflat sobre embedding: pgvector los limita a 2000
     # dimensiones y gemini-embedding-001 produce 3072. Ver nota en
@@ -343,6 +349,7 @@ async def ingest_text(
     rag_base: str,
     org_id: Optional[str] = None,
     source_url: Optional[str] = None,
+    subcategory: Optional[str] = None,
     chunk_size: int = 800,
     overlap: int = 100,
     background_tasks=None,
@@ -390,9 +397,9 @@ async def ingest_text(
 
         await conn.execute("""
             INSERT INTO rag_documents
-                (id, title, rag_base, organization_id, source_url, content_hash, revision, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pendiente')
-        """, doc_id, doc_title, rag_base, org_id, source_url, content_hash, new_revision)
+                (id, title, rag_base, organization_id, source_url, content_hash, revision, status, subcategory)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pendiente', $8)
+        """, doc_id, doc_title, rag_base, org_id, source_url, content_hash, new_revision, subcategory)
 
         if existing:
             # Nueva revisión reemplaza a la anterior — la anterior no se borra
@@ -424,6 +431,7 @@ async def ingest_pdf(
     doc_title: str,
     rag_base: str,
     org_id: Optional[str] = None,
+    subcategory: Optional[str] = None,
     chunk_size: int = 800,
     overlap: int = 100,
     background_tasks=None,
@@ -451,6 +459,7 @@ async def ingest_pdf(
         rag_base=rag_base,
         org_id=org_id,
         source_url=str(path),
+        subcategory=subcategory,
         chunk_size=chunk_size,
         overlap=overlap,
         background_tasks=background_tasks,

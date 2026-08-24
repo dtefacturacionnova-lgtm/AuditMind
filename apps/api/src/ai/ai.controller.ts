@@ -199,7 +199,7 @@ export class AiController {
   @UseInterceptors(FileInterceptor('file'))
   async ingestPdf(
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { docTitle: string; ragBase: string; orgId?: string },
+    @Body() body: { docTitle: string; ragBase: string; orgId?: string; subcategory?: string },
   ) {
     if (!file) throw new Error('No file uploaded');
     return this.aiService.ingestPdf(
@@ -208,6 +208,7 @@ export class AiController {
       body.docTitle,
       body.ragBase,
       body.orgId,
+      body.subcategory,
     );
   }
 
@@ -246,9 +247,9 @@ export class AiController {
   @Post('rag/ingest/url')
   @ApiOperation({ summary: 'Ingerir un documento normativo desde una URL (PDF o HTML)' })
   async ingestRagUrl(
-    @Body() body: { url: string; docTitle: string; ragBase: string; orgId?: string },
+    @Body() body: { url: string; docTitle: string; ragBase: string; orgId?: string; subcategory?: string },
   ) {
-    return this.aiService.ingestRagUrl(body.url, body.docTitle, body.ragBase, body.orgId);
+    return this.aiService.ingestRagUrl(body.url, body.docTitle, body.ragBase, body.orgId, body.subcategory);
   }
 
   // ─── RAG — Qué Especialistas IA usan la base de conocimiento ────────────────

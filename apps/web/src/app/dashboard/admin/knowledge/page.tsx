@@ -28,6 +28,7 @@ interface RagDocument {
   rag_base: string;
   organization_id: string | null;
   source_url: string | null;
+  subcategory: string | null;
   created_at: string | null;
   chunk_count: number;
   content_hash: string | null;
@@ -46,34 +47,67 @@ interface AgentsWithRag {
 }
 
 // ─── Badge helpers ────────────────────────────────────────────────────────────
+// Colores sólidos y saturados a propósito — la versión anterior usaba tintes
+// pálidos (bg-*-50) que a esta escala de badge se leen todos como "el mismo
+// gris verdoso". Cada estado/proveedor tiene un color sólido distinto.
 const ESTADO_LABEL: Record<RagStatus, string> = {
   pendiente: 'Pendiente', procesando: 'Procesando', listo: 'Listo',
   error: 'Error', unchanged: 'Sin cambios',
 };
 const ESTADO_CLASS: Record<RagStatus, string> = {
-  pendiente: 'bg-gray-100 text-gray-500 border-gray-200',
-  procesando: 'bg-amber-50 text-amber-700 border-amber-200',
-  listo: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  error: 'bg-red-50 text-red-700 border-red-200',
-  unchanged: 'bg-gray-100 text-gray-500 border-gray-200',
+  pendiente: 'bg-slate-500 text-white',
+  procesando: 'bg-amber-500 text-white',
+  listo: 'bg-emerald-600 text-white',
+  error: 'bg-rose-600 text-white',
+  unchanged: 'bg-slate-400 text-white',
 };
 
 const PROVIDER_LABEL: Record<string, string> = {
   gemini: 'Gemini', voyage: 'Voyage', jina: 'Jina', cohere: 'Cohere',
 };
 const PROVIDER_CLASS: Record<string, string> = {
-  gemini: 'bg-violet-50 text-violet-700 border-violet-200',
-  voyage: 'bg-sky-50 text-sky-700 border-sky-200',
-  jina: 'bg-teal-50 text-teal-700 border-teal-200',
-  cohere: 'bg-orange-50 text-orange-700 border-orange-200',
+  gemini: 'bg-indigo-600 text-white',
+  voyage: 'bg-sky-600 text-white',
+  jina: 'bg-teal-600 text-white',
+  cohere: 'bg-orange-600 text-white',
 };
+
+// Subcategoría — texto libre y configurable (ver rag_pipeline.py), así que no
+// hay un mapa fijo de colores por valor. En su lugar, un color determinístico
+// de una paleta curada según el propio texto — mismo valor siempre pinta
+// igual, y cualquier subcategoría nueva que alguien escriba ya tiene color.
+const SUBCATEGORY_PALETTE = [
+  { bg: 'bg-rose-100', text: 'text-rose-700', ring: 'ring-rose-300' },
+  { bg: 'bg-amber-100', text: 'text-amber-700', ring: 'ring-amber-300' },
+  { bg: 'bg-lime-100', text: 'text-lime-700', ring: 'ring-lime-300' },
+  { bg: 'bg-cyan-100', text: 'text-cyan-700', ring: 'ring-cyan-300' },
+  { bg: 'bg-blue-100', text: 'text-blue-700', ring: 'ring-blue-300' },
+  { bg: 'bg-fuchsia-100', text: 'text-fuchsia-700', ring: 'ring-fuchsia-300' },
+  { bg: 'bg-emerald-100', text: 'text-emerald-700', ring: 'ring-emerald-300' },
+  { bg: 'bg-orange-100', text: 'text-orange-700', ring: 'ring-orange-300' },
+] as const;
+
+function subcategoryStyle(value: string) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  return SUBCATEGORY_PALETTE[hash % SUBCATEGORY_PALETTE.length];
+}
 
 function StatusBadge({ status }: { status: RagStatus }) {
   const isBusy = status === 'procesando' || status === 'pendiente';
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${ESTADO_CLASS[status]}`}>
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shadow-sm ${ESTADO_CLASS[status]}`}>
       {isBusy && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
       {ESTADO_LABEL[status]}
+    </span>
+  );
+}
+
+function SubcategoryBadge({ value }: { value: string }) {
+  const c = subcategoryStyle(value);
+  return (
+    <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-md ring-1 ring-inset ${c.bg} ${c.text} ${c.ring}`}>
+      {value}
     </span>
   );
 }
@@ -134,16 +168,19 @@ function usePollDocument(docId: string | null, onSettled: () => void) {
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
 function UploadModal({
   bases,
+  existingSubcategories,
   onClose,
   onQueued,
 }: {
   bases: RagBase[];
+  existingSubcategories: string[];
   onClose: () => void;
   onQueued: (docId: string) => void;
 }) {
   const [mode, setMode]           = useState<'file' | 'url'>('file');
   const [docTitle, setDocTitle]   = useState('');
   const [ragBase, setRagBase]     = useState(bases[0]?.id ?? '');
+  const [subcategory, setSubcategory] = useState('');
   const [selectedFile, setFile]   = useState<File | null>(null);
   const [sourceUrl, setSourceUrl] = useState('');
   const [error, setError]         = useState('');
@@ -184,6 +221,7 @@ function UploadModal({
         formData.append('file', selectedFile as File);
         formData.append('docTitle', docTitle.trim());
         formData.append('ragBase', ragBase);
+        if (subcategory.trim()) formData.append('subcategory', subcategory.trim());
 
         const supabase = createClient();
         const { data: sessionData } = await supabase.auth.getSession();
@@ -201,6 +239,7 @@ function UploadModal({
           url: sourceUrl.trim(),
           docTitle: docTitle.trim(),
           ragBase,
+          subcategory: subcategory.trim() || undefined,
         });
       }
 
@@ -356,6 +395,27 @@ function UploadModal({
                 </select>
               </div>
 
+              {/* Subcategoría — texto libre, con sugerencias de lo ya usado */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Subcategoría <span className="text-gray-400 font-normal">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  list="subcategory-suggestions"
+                  value={subcategory}
+                  onChange={e => setSubcategory(e.target.value)}
+                  placeholder="Ej: IVA, Renta, Jurisprudencia…"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400/50"
+                />
+                <datalist id="subcategory-suggestions">
+                  {existingSubcategories.map(s => <option key={s} value={s} />)}
+                </datalist>
+                <p className="text-xs text-gray-400 mt-1">
+                  Libre — escribí cualquier etiqueta para agrupar dentro de la base (ej. dividir Tributario El Salvador en IVA/Renta/Jurisprudencia).
+                </p>
+              </div>
+
               {error && (
                 <div className="flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -410,6 +470,7 @@ function UploadModal({
 export default function KnowledgePage() {
   const qc = useQueryClient();
   const [ragBaseFilter, setRagBaseFilter] = useState('');
+  const [subcategoryFilter, setSubcategoryFilter] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [pollingDocId, setPollingDocId] = useState<string | null>(null);
 
@@ -418,7 +479,15 @@ export default function KnowledgePage() {
   const { data: agentsData } = useAgentsWithRag();
 
   const bases = basesData?.bases ?? [];
-  const documents = docsData?.documents ?? [];
+  const allDocuments = docsData?.documents ?? [];
+
+  const existingSubcategories = Array.from(
+    new Set(allDocuments.map(d => d.subcategory).filter((s): s is string => !!s))
+  ).sort();
+
+  const documents = subcategoryFilter
+    ? allDocuments.filter(d => d.subcategory === subcategoryFilter)
+    : allDocuments;
 
   const invalidateDocs = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['rag', 'documents'] });
@@ -497,7 +566,7 @@ export default function KnowledgePage() {
         <div className="flex items-center gap-3 flex-wrap">
           <select
             value={ragBaseFilter}
-            onChange={e => setRagBaseFilter(e.target.value)}
+            onChange={e => { setRagBaseFilter(e.target.value); setSubcategoryFilter(''); }}
             className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400/40 bg-white"
           >
             <option value="">Todas las bases</option>
@@ -505,6 +574,18 @@ export default function KnowledgePage() {
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
+          {existingSubcategories.length > 0 && (
+            <select
+              value={subcategoryFilter}
+              onChange={e => setSubcategoryFilter(e.target.value)}
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-400/40 bg-white"
+            >
+              <option value="">Todas las subcategorías</option>
+              {existingSubcategories.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          )}
           <button
             onClick={invalidateDocs}
             className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
@@ -537,7 +618,7 @@ export default function KnowledgePage() {
             </div>
           ) : (
             <>
-              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 grid grid-cols-12 gap-4 text-xs font-medium text-gray-500 uppercase tracking-wide">
+              <div className="px-4 py-3 bg-gray-50 border-b-2 border-gray-200 grid grid-cols-12 gap-4 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 <div className="col-span-4">Documento</div>
                 <div className="col-span-2">Base de Conocimiento</div>
                 <div className="col-span-2">Estado / Proveedor</div>
@@ -547,7 +628,7 @@ export default function KnowledgePage() {
               </div>
               <div className="divide-y divide-gray-100">
                 {documents.map(doc => (
-                  <div key={doc.id} className={`grid grid-cols-12 gap-4 px-4 py-3.5 items-center hover:bg-gray-50 group ${!doc.is_active ? 'opacity-50' : ''}`}>
+                  <div key={doc.id} className={`grid grid-cols-12 gap-4 px-4 py-3.5 items-center hover:bg-violet-50/40 transition-colors group ${!doc.is_active ? 'opacity-50' : ''}`}>
                     <div className="col-span-4 flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
                         <FileText className="w-4 h-4 text-red-500" />
@@ -590,10 +671,11 @@ export default function KnowledgePage() {
                         )}
                       </div>
                     </div>
-                    <div className="col-span-2">
-                      <span className="text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 px-2 py-1 rounded-full">
+                    <div className="col-span-2 flex flex-col gap-1 items-start">
+                      <span className="text-xs font-semibold text-white bg-violet-600 px-2 py-1 rounded-full shadow-sm">
                         {baseLabelMap[doc.rag_base] ?? doc.rag_base}
                       </span>
+                      {doc.subcategory && <SubcategoryBadge value={doc.subcategory} />}
                     </div>
                     <div className="col-span-2 flex flex-col gap-1 items-start">
                       <StatusBadge status={doc.status} />
@@ -698,6 +780,7 @@ export default function KnowledgePage() {
       {showUploadModal && (
         <UploadModal
           bases={bases}
+          existingSubcategories={existingSubcategories}
           onClose={() => setShowUploadModal(false)}
           onQueued={handleQueued}
         />

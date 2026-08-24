@@ -55,6 +55,7 @@ class IngestTextRequest(BaseModel):
     rag_base: str
     org_id: Optional[str] = None
     source_url: Optional[str] = None
+    subcategory: Optional[str] = None
     chunk_size: int = 800
     overlap: int = 100
 
@@ -77,6 +78,7 @@ async def ingest_text_endpoint(request: IngestTextRequest, background_tasks: Bac
             rag_base=request.rag_base,
             org_id=request.org_id,
             source_url=request.source_url,
+            subcategory=request.subcategory,
             chunk_size=request.chunk_size,
             overlap=request.overlap,
             background_tasks=background_tasks,
@@ -92,6 +94,7 @@ async def ingest_pdf_endpoint(
     doc_title: str = Form(...),
     rag_base: str = Form(...),
     org_id: Optional[str] = Form(None),
+    subcategory: Optional[str] = Form(None),
     x_internal_key: Optional[str] = Header(default=None, alias="x-internal-key"),
 ):
     """
@@ -121,6 +124,7 @@ async def ingest_pdf_endpoint(
             doc_title=doc_title.strip(),
             rag_base=rag_base,
             org_id=org_id or None,
+            subcategory=subcategory or None,
             background_tasks=background_tasks,
         )
         result["filename"] = file.filename
@@ -140,6 +144,7 @@ class IngestUrlRequest(BaseModel):
     doc_title: str
     rag_base: str
     org_id: Optional[str] = None
+    subcategory: Optional[str] = None
 
 
 def _strip_html(html: str) -> str:
@@ -199,6 +204,7 @@ async def ingest_url_endpoint(
             rag_base=request.rag_base,
             org_id=request.org_id,
             source_url=request.url,
+            subcategory=request.subcategory,
             background_tasks=background_tasks,
         )
     except Exception as e:
@@ -233,6 +239,7 @@ async def list_documents(
             SELECT
                 kd.id, kd.title, kd.rag_base, kd.organization_id, kd.source_url, kd.created_at,
                 kd.content_hash, kd.revision, kd.superseded_by, kd.is_active, kd.status, kd.error_message,
+                kd.subcategory,
                 COUNT(kc.id)::int AS chunk_count,
                 (ARRAY_AGG(DISTINCT kc.embedding_provider) FILTER (WHERE kc.embedding_provider IS NOT NULL))
                     AS embedding_providers
@@ -259,6 +266,7 @@ def _serialize_document(row) -> dict:
         "rag_base": row["rag_base"],
         "organization_id": row["organization_id"],
         "source_url": row["source_url"],
+        "subcategory": row["subcategory"],
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,
         "chunk_count": row["chunk_count"],
         "content_hash": row["content_hash"],
@@ -282,6 +290,7 @@ async def get_document(doc_id: str):
             SELECT
                 kd.id, kd.title, kd.rag_base, kd.organization_id, kd.source_url, kd.created_at,
                 kd.content_hash, kd.revision, kd.superseded_by, kd.is_active, kd.status, kd.error_message,
+                kd.subcategory,
                 COUNT(kc.id)::int AS chunk_count,
                 (ARRAY_AGG(DISTINCT kc.embedding_provider) FILTER (WHERE kc.embedding_provider IS NOT NULL))
                     AS embedding_providers

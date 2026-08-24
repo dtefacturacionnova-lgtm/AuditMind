@@ -99,6 +99,12 @@ ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DE
 ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'listo';
 ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS error_message TEXT;
 
+-- 5d. Subclasificación libre dentro de una base (ej. "IVA"/"Renta" dentro de
+--     Tributario El Salvador) — texto libre, no un enum: el valor lo define
+--     quien ingiere el documento y el frontend arma las opciones del filtro
+--     a partir de los valores ya en uso.
+ALTER TABLE rag_documents ADD COLUMN IF NOT EXISTS subcategory TEXT;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 6. Funciones de búsqueda vectorial/híbrida — HISTÓRICAS, YA NO LAS LLAMA LA
 --    APLICACIÓN. `/rag/search` (apps/ai-service/app/routers/rag.py) usa

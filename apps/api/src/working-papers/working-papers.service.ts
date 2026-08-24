@@ -1164,7 +1164,10 @@ export class WorkingPapersService {
       const discovered = await this.prisma.workingPaper.findMany({
         where: {
           auditId:   wp.auditId,
-          paperCode: { in: ['PT-FIN-A3-KC', 'PT-A1', 'PT-A2', 'PT-A4', 'PT-A5', 'PT-COSO', 'PT-MRCI'] },
+          // PT-FISC-RISK/PT-FISC-MAT: equivalentes fiscales de PT-A2 (riesgo)/PT-A4
+          // (materialidad) — solo existen en encargos con plantilla Fiscal, nunca
+          // coexisten con PT-A4/PT-A5/PT-COSO/PT-MRCI de la plantilla Financiera.
+          paperCode: { in: ['PT-FIN-A3-KC', 'PT-A1', 'PT-A2', 'PT-A4', 'PT-A5', 'PT-COSO', 'PT-MRCI', 'PT-FISC-RISK', 'PT-FISC-MAT'] },
         },
         include: { sections: { orderBy: { sortOrder: 'asc' } } },
       });

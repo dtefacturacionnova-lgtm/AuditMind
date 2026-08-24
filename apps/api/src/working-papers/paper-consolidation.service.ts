@@ -505,6 +505,11 @@ export class PaperConsolidationService {
     const hasPTA5 = sourceData.some(p => p.paperCode === 'PT-A5');
     const hasPTCOSO = sourceData.some(p => p.paperCode === 'PT-COSO');
     const hasPTMRCI = sourceData.some(p => p.paperCode === 'PT-MRCI');
+    // Plantilla Fiscal: ver nota equivalente en templateFallback() más abajo — PT-A2
+    // en Fiscal es Riesgo de Fraude (no riesgo inherente general) y PT-A4 no existe;
+    // estas fuentes solo aparecen en encargos Fiscal, nunca en Financiera.
+    const hasFiscRisk = sourceData.some(p => p.paperCode === 'PT-FISC-RISK');
+    const hasFiscMat  = sourceData.some(p => p.paperCode === 'PT-FISC-MAT');
 
     if (paperCode === 'PT-PROG') {
       // PT-PROG's real sections (post-rediseño): S1 Objetivo, S2 Alcance/Población/
@@ -533,19 +538,22 @@ ${contextLines.join('\n')}
 Responde EXCLUSIVAMENTE con un JSON (sin markdown extra) con estas claves:
 {
   "S2": "${hasEntendimiento ? 'Entendimiento del negocio: resumen ejecutivo en 3 párrafos síntesis del papel de Conocimiento del Cliente y su Entorno (PT-FIN-A3-KC) — usa el contenido real que aparece en DATOS DE FUENTE bajo ese código, no lo trates como no disponible' : 'Entendimiento del negocio: indica que el papel de Conocimiento del Cliente aún no está completo y describe los pasos a seguir'}. Incluye cita [PT-FIN-A3-KC]. Máx. 350 palabras.",
-  "S3": "${hasPTA2 ? 'Evaluación del riesgo inherente: 2-3 párrafos con nivel global de RI, riesgos significativos y riesgo de fraude de PT-A2. Incluye presunciones NIA 240 evaluadas.' : 'Evaluación de RI: indica que PT-A2 no está disponible'}. Incluye cita [PT-A2]. Máx. 300 palabras.",
-  "S4": "${hasPTA4 ? 'Materialidad NIA 320: 1-2 párrafos con MG, ME, UAE, base y justificación de PT-A4' : 'Materialidad: indica que PT-A4 no está disponible'}. Incluye cita [PT-A4]. Máx. 250 palabras.",
-  "S5": "Enfoque de auditoría: describe la estrategia mixta basada en riesgo (controles vs. sustantivo) por área, apoyándote en los riesgos significativos y presunciones NIA 240 documentados en PT-A2. Máx. 200 palabras.",
+  "S3": "${hasFiscRisk ? `Evaluación del riesgo inherente de incumplimiento fiscal: 2-3 párrafos con el nivel de riesgo por impuesto (ISR/IVA/Retenciones/Precios de Transferencia) de PT-FISC-RISK.${hasPTA2 ? ' Agrega un párrafo final citando PT-A2 EXCLUSIVAMENTE como complemento de riesgo de FRAUDE fiscal — nunca lo presentes como el riesgo inherente general, esa cifra viene de PT-FISC-RISK.' : ''} Incluye cita [PT-FISC-RISK]${hasPTA2 ? '[PT-A2]' : ''}.` : (hasPTA2 ? 'Evaluación del riesgo inherente: 2-3 párrafos con nivel global de RI, riesgos significativos y riesgo de fraude de PT-A2. Incluye presunciones NIA 240 evaluadas. Incluye cita [PT-A2].' : 'Evaluación de RI: indica que PT-A2 no está disponible. Incluye cita [PT-A2].')}. Máx. 300 palabras.",
+  "S4": "${hasFiscMat ? 'Materialidad fiscal (NACOT Sección 10): 1-2 párrafos con la materialidad global (MG), la base y tolerancia aplicadas, y la materialidad específica por tributo, de PT-FISC-MAT. Incluye cita [PT-FISC-MAT].' : (hasPTA4 ? 'Materialidad NIA 320: 1-2 párrafos con MG, ME, UAE, base y justificación de PT-A4. Incluye cita [PT-A4].' : 'Materialidad: indica que PT-A4 no está disponible. Incluye cita [PT-A4].')}. Máx. 250 palabras.",
+  "S5": "Enfoque de auditoría: describe la estrategia mixta basada en riesgo (controles vs. sustantivo) por área, apoyándote en los riesgos significativos${hasFiscRisk ? ' documentados en PT-FISC-RISK' : ' y presunciones NIA 240 documentados en PT-A2'}. Máx. 200 palabras.",
   "S3b": "${hasPTA5 ? 'Resumen de la Estrategia de Auditoría Consolidada por Área: para cada área/ciclo con RMM evaluado en PT-A5 (sección de estrategia consolidada), indica el nivel RMM y el enfoque de auditoría resultante (solo sustantivo / controles+sustantivo / 100% sustantivo). Formato de lista breve, un renglón por área.' : 'Indica que PT-A5 (Matriz RMM Integrada) no está disponible para este encargo.'}. Incluye cita [PT-A5]. Máx. 250 palabras.",
   "S5b": "${hasPTA5 ? 'Respuestas generales a riesgos pervasivos de EEFF identificados en PT-A5, conforme NIA 330.5 (mayor escepticismo, personal más experimentado, imprevisibilidad, procedimientos al cierre en lugar de interino). Si PT-A5 no identificó riesgos pervasivos, indícalo expresamente: "No se identificaron riesgos pervasivos de EEFF que requieran respuesta general".' : 'Indica que PT-A5 no está disponible.'}. Incluye cita [PT-A5]. Máx. 200 palabras.",
   "S3c": "${hasPTCOSO ? 'Conclusión global de control interno: 1-2 párrafos con el resultado de la evaluación COSO 2013 (EFECTIVO / CON_DEBILIDADES_SIGNIFICATIVAS / INEFECTIVO) de PT-COSO y su implicación directa en el enfoque de auditoría (ENFOQUE_CONTROLES / MIXTO / SUSTANTIVO).' : 'Indica que la evaluación COSO (PT-COSO) aún no está completa.'}. Incluye cita [PT-COSO]. Máx. 200 palabras.",
   "S4b": "${hasPTMRCI ? 'Riesgo residual e impacto potencial en el dictamen: resume la conclusión de PT-MRCI — cuántos riesgos quedaron con residual Alto/Muy Alto tras considerar los controles, y si alguno tiene impacto potencial distinto de \\"Ninguno\\" en el tipo de opinión.' : 'Indica que la Matriz de Riesgo-Control-Impacto (PT-MRCI) aún no está completa.'}. Incluye cita [PT-MRCI]. Máx. 250 palabras.",
-  "S8": "Conclusión integral del memorando: 2 párrafos formales que integren entendimiento del negocio, evaluación de riesgos y materialidad para concluir el enfoque de auditoría de '${auditTitle}'. Lenguaje NIA/ISA profesional. Incluye citas [PT-FIN-A3-KC][PT-A2][PT-A4]."
+  "S8": "Conclusión integral del memorando: 2 párrafos formales que integren entendimiento del negocio, evaluación de riesgos y materialidad para concluir el enfoque de auditoría de '${auditTitle}'. Lenguaje ${hasFiscRisk || hasFiscMat ? 'NACOT' : 'NIA/ISA'} profesional. Incluye citas [PT-FIN-A3-KC]${hasFiscRisk ? '[PT-FISC-RISK]' : '[PT-A2]'}${hasFiscMat ? '[PT-FISC-MAT]' : '[PT-A4]'}."
 }
 
 INSTRUCCIONES:
-- Redacta en español formal de auditoría (NIA/IAASB)
-- Usa citas [PT-FIN-A3-KC], [PT-A2], [PT-A4], [PT-A5], [PT-COSO], [PT-MRCI] al referenciar fuentes — SOLO usa los códigos que efectivamente aparecen en DATOS DE FUENTE arriba, con el contenido real que traen (nunca digas que una fuente "no está disponible" si su bloque aparece en DATOS DE FUENTE)
+- Redacta en español formal de auditoría (${hasFiscRisk || hasFiscMat ? 'NACOT' : 'NIA/IAASB'})
+- Usa citas [PT-FIN-A3-KC], [PT-A2], [PT-A4], [PT-FISC-RISK], [PT-FISC-MAT], [PT-A5], [PT-COSO], [PT-MRCI] al referenciar fuentes — SOLO usa los códigos que efectivamente aparecen en DATOS DE FUENTE arriba, con el contenido real que traen (nunca digas que una fuente "no está disponible" si su bloque aparece en DATOS DE FUENTE)
+- Si PT-FISC-RISK está presente en DATOS DE FUENTE, ese es el riesgo inherente fiscal real — PT-A2 (si también aparece) es únicamente riesgo de FRAUDE, un dato complementario, JAMÁS lo presentes como el nivel de riesgo inherente general
+- Si PT-FISC-MAT está presente en DATOS DE FUENTE, esa es la materialidad real de este encargo — ignora cualquier mención a PT-A4, que no aplica a auditorías fiscales
+- Si citas un artículo o sección normativa (Código Tributario, Ley de ISR, Ley de IVA, Código de Comercio, NACOT), cita ÚNICAMENTE los que aparezcan textualmente en DATOS DE FUENTE arriba — nunca inventes ni adivines un número de artículo o de sección que no esté ahí. La NACOT tiene 19 secciones numeradas secuencialmente (no una numeración estilo NIA 100/300/500); si no estás seguro de la sección exacta, cita "conforme a la NACOT" sin número en vez de arriesgar un número incorrecto
 - Sé conciso pero completo
 - Solo el JSON, sin texto fuera del objeto`;
   }
@@ -673,6 +681,15 @@ ${claims.join(',\n')}
     const a2    = sourceData.find(p => p.paperCode === 'PT-A2');
     const a4    = sourceData.find(p => p.paperCode === 'PT-A4');
 
+    // Plantilla Fiscal: PT-A2 en Fiscal es el papel de Riesgo de FRAUDE (no de riesgo
+    // inherente general — ese vive en PT-FISC-RISK), y PT-A4 no existe en Fiscal en
+    // absoluto (la materialidad fiscal vive en PT-FISC-MAT). Detectarlos por separado
+    // y preferirlos SOLO cuando están presentes — un encargo Financiero nunca trae
+    // PT-FISC-RISK/PT-FISC-MAT como fuente, así que esta rama nunca se activa por
+    // error para esa plantilla; el camino a2/a4 de abajo queda intacto como estaba.
+    const fiscRisk = sourceData.find(p => p.paperCode === 'PT-FISC-RISK');
+    const fiscMat  = sourceData.find(p => p.paperCode === 'PT-FISC-MAT');
+
     const a1Bullets = a1
       ? a1.sections
           .filter(s => this.valToString(s.value).length > 5)
@@ -739,27 +756,57 @@ ${claims.join(',\n')}
       };
     }
 
+    // ── Riesgo inherente (S3): Fiscal usa PT-FISC-RISK como fuente principal —
+    // PT-A2 en Fiscal es el papel de FRAUDE, se cita aparte como complemento, nunca
+    // como el nivel de riesgo inherente general.
+    const fiscRiskS3 = fiscRisk?.sections.find(s => s.sectionKey === 'S3'); // Riesgo de incumplimiento significativo
+    const fiscRiskS7 = fiscRisk?.sections.find(s => s.sectionKey === 'S7'); // Score de riesgo por impuesto (MATRIX)
+    const fraudS7    = a2?.sections.find(s => s.sectionKey === 'S7');       // Riesgo de fraude ACFE+NIA240 (también existe en Financiera)
+    const s3Text = fiscRisk
+      ? [
+          `Evaluación del riesgo inherente de incumplimiento fiscal [PT-FISC-RISK] para "${auditTitle}":`,
+          matrixBullets(fiscRiskS7, ['Impuesto', 'Score de Riesgo']) || '',
+          fiscRiskS3 ? `\n${this.valToString(fiscRiskS3.value)}` : '',
+          fraudS7 ? `\n\nRiesgo de fraude fiscal (complementario) [PT-A2]:\n${matrixBullets(fraudS7, ['Indicador ACFE/NIA 240', 'Presente']) || this.valToString(fraudS7.value).slice(0, 400)}` : '',
+          '\nEl equipo de auditoría aplicará un enfoque basado en riesgos, asignando mayor cobertura a las áreas de riesgo alto e incorporando procedimientos para los riesgos de fraude identificados (NIA 240 adaptada a NACOT).',
+        ].filter(Boolean).join('\n')
+      : `La evaluación del riesgo inherente [PT-A2] para la auditoría "${auditTitle}" concluye en un nivel de riesgo inherente global: **${riLevel}**.\n\nSe han identificado áreas de riesgo significativo que requieren procedimientos específicos conforme a NIA 315. El equipo de auditoría aplicará un enfoque basado en riesgos, asignando mayor cobertura a las áreas de riesgo alto e incorporando procedimientos para los riesgos de fraude identificados (NIA 240).`;
+
+    // ── Materialidad (S4): Fiscal usa PT-FISC-MAT (NACOT Sec. 10) — PT-A4 no existe
+    // en la plantilla Fiscal en absoluto, así que esta rama es la única fuente posible.
+    const fiscMatS4 = fiscMat?.sections.find(s => s.sectionKey === 'S4'); // Materialidad Global calculada
+    const fiscMatS7 = fiscMat?.sections.find(s => s.sectionKey === 'S7'); // Conclusión sobre aplicación
+    const s4Text = fiscMat
+      ? [
+          `La materialidad fiscal fue determinada de conformidad con NACOT Sección 10 [PT-FISC-MAT].`,
+          fiscMatS4 ? `Materialidad Global (MG): ${this.valToString(fiscMatS4.value)}` : '',
+          fiscMatS7 ? `\n${this.valToString(fiscMatS7.value)}` : '',
+        ].filter(Boolean).join('\n')
+      : [
+          `La materialidad fue calculada de conformidad con NIA 320 [PT-A4].`,
+          mgSection  ? `Materialidad Global (MG): ${this.valToString(mgSection.value)}` : '',
+          meSection  ? `Materialidad de Ejecución (ME): ${this.valToString(meSection.value)}` : '',
+          uaeSection ? `Umbral de Ajuste Específico (UAE): ${this.valToString(uaeSection.value)}` : '',
+          '',
+          'Los importes anteriores constituyen la referencia para la identificación de errores materiales durante la ejecución.',
+        ].filter(Boolean).join('\n');
+
     // PT-MEMO
     return {
       S2: `Con base en el papel de Conocimiento del Cliente y su Entorno [PT-FIN-A3-KC], se obtuvo el siguiente entendimiento del negocio para la auditoría "${auditTitle}":\n\n${a1Bullets}\n\nEl auditor ha obtenido comprensión suficiente del entorno operativo, regulatorio y de sistemas de la entidad para planificar adecuadamente los procedimientos de auditoría conforme a las NIA.`,
 
-      S3: `La evaluación del riesgo inherente [PT-A2] para la auditoría "${auditTitle}" concluye en un nivel de riesgo inherente global: **${riLevel}**.\n\nSe han identificado áreas de riesgo significativo que requieren procedimientos específicos conforme a NIA 315. El equipo de auditoría aplicará un enfoque basado en riesgos, asignando mayor cobertura a las áreas de riesgo alto e incorporando procedimientos para los riesgos de fraude identificados (NIA 240).`,
+      S3: s3Text,
 
-      S4: [
-        `La materialidad fue calculada de conformidad con NIA 320 [PT-A4].`,
-        mgSection  ? `Materialidad Global (MG): ${this.valToString(mgSection.value)}` : '',
-        meSection  ? `Materialidad de Ejecución (ME): ${this.valToString(meSection.value)}` : '',
-        uaeSection ? `Umbral de Ajuste Específico (UAE): ${this.valToString(uaeSection.value)}` : '',
-        '',
-        'Los importes anteriores constituyen la referencia para la identificación de errores materiales durante la ejecución.',
-      ].filter(Boolean).join('\n'),
+      S4: s4Text,
 
       S3b: s3bText,
       S5b: s5bText,
       S3c: s3cText,
       S4b: s4bText,
 
-      S8: `Con base en el entendimiento del negocio [PT-FIN-A3-KC], la evaluación de riesgo inherente (${riLevel}) [PT-A2] y los parámetros de materialidad establecidos [PT-A4], el equipo de auditoría concluye que la planificación de "${auditTitle}" es adecuada y proporciona una base razonable para la ejecución.\n\nEl enfoque combina pruebas de controles en áreas de menor riesgo con procedimientos sustantivos reforzados en áreas de riesgo significativo, en conformidad con NIA/IAASB. Generado automáticamente el ${now}. El auditor debe revisar y validar este párrafo antes de la aprobación del memorando.`,
+      S8: fiscRisk || fiscMat
+        ? `Con base en el entendimiento del negocio [PT-FIN-A3-KC], la evaluación de riesgo inherente fiscal [PT-FISC-RISK] y la materialidad fiscal establecida [PT-FISC-MAT], el equipo de auditoría concluye que la planificación de "${auditTitle}" es adecuada y proporciona una base razonable para la ejecución.\n\nEl enfoque combina pruebas de controles en áreas de menor riesgo con procedimientos sustantivos reforzados en áreas de riesgo significativo, conforme a la NACOT. Generado automáticamente el ${now}. El auditor debe revisar y validar este párrafo antes de la aprobación del memorando.`
+        : `Con base en el entendimiento del negocio [PT-FIN-A3-KC], la evaluación de riesgo inherente (${riLevel}) [PT-A2] y los parámetros de materialidad establecidos [PT-A4], el equipo de auditoría concluye que la planificación de "${auditTitle}" es adecuada y proporciona una base razonable para la ejecución.\n\nEl enfoque combina pruebas de controles en áreas de menor riesgo con procedimientos sustantivos reforzados en áreas de riesgo significativo, en conformidad con NIA/IAASB. Generado automáticamente el ${now}. El auditor debe revisar y validar este párrafo antes de la aprobación del memorando.`,
     };
   }
 

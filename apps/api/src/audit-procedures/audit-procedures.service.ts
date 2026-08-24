@@ -68,7 +68,7 @@ export interface UpdateStepDto extends Partial<CreateStepDto> {}
 export class AuditProceduresService {
   private readonly logger        = new Logger(AuditProceduresService.name);
   private readonly supabase:     SupabaseClient;
-  private readonly geminiUrl     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+  private readonly geminiUrl     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   constructor(
     private readonly prisma:  PrismaService,
@@ -570,7 +570,7 @@ timing values: INTERIM, YEAR_END, ROLLFORWARD
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
+        generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
       }),
       signal: AbortSignal.timeout(60_000),
     });

@@ -576,6 +576,99 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
+  // PT-B1: Cuestionario de Evaluación de Controles / Requisitos — genérico
+  // Reutilizado por Auditoría Interna (cuestionarios de control por área) y
+  // Auditoría Fiscal (checklists de requisitos legales formales: CCF/DTE,
+  // libros contables, inventario, informe de partes relacionadas) — mismo
+  // patrón "una forma, distinto contenido por título" que PT-A1/A2/A3/B4.
+  // Antes de esta definición, `PT-B1` no existía como clave en este archivo:
+  // los ~5 papeles que ya lo referenciaban (en 2 plantillas) se guardaban sin
+  // ninguna sección estructurada — reproducido en vivo, no supuesto.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-B1': [
+    {
+      sectionKey:  'S1',
+      label:       'Cuestionario de Evaluación / Requisitos',
+      description: 'Matriz de preguntas o requisitos a verificar, con su respuesta y evidencia.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Área/Rubro | Pregunta o Requisito | Base Normativa (si aplica) | Respuesta (Sí/No/N-A) | Evidencia/Observación. Genere UNA FILA POR CADA pregunta o requisito individual — nunca agrupe varios en una sola fila. Adapte el CONTENIDO de las preguntas al tema específico de este papel según su título e índice: si el título es sobre requisitos formales de un documento legal (ej. CCF/DTE), las preguntas versan sobre los atributos/requisitos de ese artículo; si el título es un cuestionario de control interno de un proceso, las preguntas versan sobre los controles clave de ese proceso/ciclo.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Calificación Global',
+      description: 'Conclusión consolidada sobre el grado de cumplimiento/control evidenciado en S1.',
+      fieldType:   FieldType.ENUM_SELECT,
+      options:     ['CUMPLE_TOTALMENTE', 'CUMPLE_CON_EXCEPCIONES_MENORES', 'CUMPLE_CON_EXCEPCIONES_SIGNIFICATIVAS', 'NO_CUMPLE'],
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'CUMPLE_TOTALMENTE: todas o casi todas las respuestas son Sí/N-A justificado. CUMPLE_CON_EXCEPCIONES_MENORES: algunas respuestas No, sin efecto relevante. CUMPLE_CON_EXCEPCIONES_SIGNIFICATIVAS: varias respuestas No con efecto relevante en el objetivo evaluado. NO_CUMPLE: incumplimiento generalizado.',
+    },
+    {
+      sectionKey:  'S3',
+      label:       'Conclusión y Recomendaciones',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   3,
+      aiHint:      'Resume el resultado de la evaluación y, si aplica, las recomendaciones o el efecto en el enfoque de auditoría (ej. ampliar pruebas sustantivas, generar un hallazgo).',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-B2: Papel de Procedimiento Sustantivo — genérico
+  // Reutilizado por Auditoría Interna, Auditoría Forense (partes relacionadas
+  // NIA 550, reconstrucción contable) y Auditoría Fiscal (13 cédulas: ingresos,
+  // gastos deducibles/no deducibles, depreciación, IVA débito/crédito fiscal,
+  // retenciones, precios de transferencia, etc.) — mismo patrón de reutilización
+  // que PT-B1. Tampoco existía como clave antes de esta definición — los ~15
+  // papeles que ya lo referenciaban (en 3 plantillas) se guardaban en blanco.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-B2': [
+    {
+      sectionKey:  'S1',
+      label:       'Objetivo y Alcance de la Prueba',
+      description: 'Qué se está probando, sobre qué población y contra qué criterio.',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Describe el objetivo de la prueba según el título de este papel (ej. "verificar que los gastos cumplan los requisitos de deducibilidad del Art. 28-29 LISR"), la población examinada (universo o muestra) y el período cubierto.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Detalle de la Prueba',
+      description: 'Comparación línea por línea entre el valor registrado y el valor determinado según el criterio aplicable.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Columnas: Concepto/Partida | Valor Registrado (Contable) | Valor Determinado (según criterio aplicado) | Diferencia | Fundamento/Base Normativa | Observación. El "criterio aplicado" y el "fundamento" dependen del tema del papel: en una cédula fiscal es el artículo de ley (ej. Art. 65-A Ley IVA); en una prueba de partes relacionadas es el criterio de vinculación (NIA 550); en una reconstrucción contable es el asiento/documento fuente correcto. No mezcle partidas de distinta naturaleza en una sola fila.',
+    },
+    {
+      sectionKey:  'S3',
+      label:       'Total de Diferencias Determinadas',
+      fieldType:   FieldType.CURRENCY,
+      isRequired:  false,
+      isAutoFilled:false,
+      sortOrder:   3,
+      aiHint:      'Suma de la columna "Diferencia" de S2. Déjalo vacío si la prueba es de naturaleza cualitativa (ej. verificación de requisitos formales, no de montos).',
+    },
+    {
+      sectionKey:  'S4',
+      label:       'Conclusión',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   4,
+      aiHint:      'Concluye si la partida/población examinada está razonablemente presentada/declarada según el criterio aplicado, y si las diferencias determinadas ameritan un hallazgo o un ajuste propuesto.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
   // PT-MEMO: Memorando de Planificación [MASTER]
   // ──────────────────────────────────────────────────────────────────────────
   'PT-MEMO': [
@@ -2595,6 +2688,346 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       description: 'Si hay incumplimientos formales o sustantivos, referencia al Anexo 12 del Informe Fiscal.',
       fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 9,
       aiHint: 'Incluye la nota de referencia al Anexo 12 cuando existan incumplimientos.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FISC-MAT: Materialidad Fiscal (NACOT §10 — modelo de dos capas)
+  // A diferencia de PT-A4 (materialidad financiera NIA-320, con panel de
+  // cálculo automático dedicado y compartido por 4 plantillas), la
+  // materialidad fiscal NACOT es un concepto distinto: (1) una materialidad
+  // GLOBAL sobre el total de impuestos pagados/determinados y (2) una
+  // materialidad ESPECÍFICA por cada tributo evaluado. No reutiliza PT-A4
+  // para no arriesgar su calculadora compartida — cálculo manual aquí.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FISC-MAT': [
+    {
+      sectionKey:  'S1',
+      label:       'Base de Materialidad Global',
+      description: 'Total de impuestos pagados o determinados en el período sujeto a examen (base NACOT §10.2).',
+      fieldType:   FieldType.CURRENCY,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Suma de todos los tributos pagados/determinados por el contribuyente en el período (ISR, IVA, retenciones, municipales, etc.), según sus declaraciones o registros.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       '% de Tolerancia Global',
+      fieldType:   FieldType.PERCENTAGE,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Porcentaje de tolerancia aplicado sobre la base de S1 para obtener la materialidad global. Justifique el porcentaje elegido en S3.',
+    },
+    {
+      sectionKey:  'S3',
+      label:       'Justificación del Criterio de Materialidad Global',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   3,
+      aiHint:      'Explica por qué se eligió esa base y ese porcentaje (naturaleza del contribuyente, riesgo fiscal identificado en la planificación, exigencia normativa aplicable).',
+    },
+    {
+      sectionKey:  'S4',
+      label:       'Materialidad Global Calculada (MG)',
+      fieldType:   FieldType.CURRENCY,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   4,
+      aiHint:      'Resultado de S1 × S2. No hay cálculo automático en este papel — verifica la operación manualmente.',
+    },
+    {
+      sectionKey:  'S5',
+      label:       'Materialidad Específica por Tributo',
+      description: 'Materialidad determinada individualmente para cada tributo relevante examinado.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   5,
+      aiHint:      'Columnas: Tributo (ISR/IVA/Retenciones/Municipales/otros) | Base (monto pagado/determinado de ese tributo) | % Aplicado | Materialidad Específica (Base × %) | Justificación. Una fila por cada tributo relevante para el alcance de este encargo.',
+    },
+    {
+      sectionKey:  'S6',
+      label:       'Criterio de Tolerancia a Incumplimientos Formales',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  false,
+      isAutoFilled:false,
+      sortOrder:   6,
+      aiHint:      'Los incumplimientos meramente formales (sin efecto monetario, ej. requisitos de forma en documentos) no siempre se miden contra la materialidad cuantitativa — describe el criterio cualitativo que se usará para evaluarlos.',
+    },
+    {
+      sectionKey:  'S7',
+      label:       'Conclusión sobre Aplicación de la Materialidad',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   7,
+      aiHint:      'Recuerda: conforme NACOT §10.4/10.5, la materialidad NUNCA excusa la NO REVELACIÓN de un incumplimiento en el Informe — solo afecta el TIPO DE OPINIÓN en el Dictamen (Cumplimiento / Cumplimiento con Salvedad / No Cumplimiento). Deja esto explícito en la conclusión.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FISC-REP: Carta de Manifestaciones / Salvaguarda (NACOT §15, PE21)
+  // Checklist de las 8 manifestaciones escritas que NACOT exige obtener del
+  // contribuyente antes de emitir el Dictamen.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FISC-REP': [
+    {
+      sectionKey:  'S1',
+      label:       'Manifestaciones Requeridas (NACOT §15 / PE21)',
+      description: 'Verificación de las 8 manifestaciones escritas exigidas por NACOT antes del Dictamen.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Genera EXACTAMENTE 8 filas, una por cada manifestación requerida por NACOT §15/PE21 (responsabilidad sobre el cumplimiento de obligaciones tributarias, integridad y disponibilidad de los registros, revelación de irregularidades o incumplimientos conocidos, ausencia de hechos posteriores no revelados, revelación de litigios o contingencias fiscales, cumplimiento de retenciones y otras obligaciones formales, disponibilidad de toda la documentación soporte, y confirmación de que no hay información oculta al equipo de auditoría). Columnas: Manifestación Requerida | Obtenida (Sí/No) | Fecha | Observación.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Firmante de Alto Nivel Jerárquico',
+      description: 'NACOT exige que la carta sea firmada por quien tenga la máxima autoridad y conocimiento sobre las obligaciones tributarias.',
+      fieldType:   FieldType.BOOLEAN,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+    },
+    {
+      sectionKey:  'S3',
+      label:       'Nombre y Cargo del Firmante',
+      fieldType:   FieldType.TEXT,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   3,
+    },
+    {
+      sectionKey:  'S4',
+      label:       'Fecha de la Carta',
+      fieldType:   FieldType.TEXT,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   4,
+      aiHint:      'La carta debe tener fecha lo más cercana posible a la fecha del Dictamen, nunca posterior a ella.',
+    },
+    {
+      sectionKey:  'S5',
+      label:       'Efecto en la Opinión si Falta Alguna Manifestación',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  false,
+      isAutoFilled:false,
+      sortOrder:   5,
+      aiHint:      'Si el contribuyente se niega a firmar o a incluir alguna manifestación de S1, evalúa el efecto en el tipo de opinión del Dictamen (posible Cumplimiento con Salvedad o No Cumplimiento) y documenta la razón.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // PT-FISC-CAAT-*: 9 motores CAATs Fiscales especializados (Fase 3)
+  // Antes de esta definición, los 9 papeles AF-01..05/ISR-07/IVA-07/OF-03/OF-05
+  // compartían el paperCode genérico PT-B4 (S1 CAATS_ANALYSIS + S2 TEXTAREA),
+  // idéntico para los 9 sin importar el tema. PT-B4 en sí NO se toca — sigue
+  // siendo el motor genérico compartido por Auditoría Interna, IT Security,
+  // AML y Financiera Externa (17 usos totales en el catálogo). Cada uno de
+  // estos 9 códigos nuevos reemplaza a PT-B4 SOLO en su papel Fiscal
+  // correspondiente, con columnas MATRIX propias del tema en vez del motor
+  // CAATS_ANALYSIS genérico — mismo espíritu que PT-B1/PT-B2 en Fase 1, pero
+  // en sentido inverso: de una forma compartida a 9 formas específicas.
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-FISC-CAAT-REDFLAGS': [ // AF-01: Red Flags de Evasión Fiscal (ACFE + NIA 240)
+    {
+      sectionKey:  'S1',
+      label:       'Matriz de Red Flags de Evasión Fiscal',
+      description: 'Verificación de indicadores de alerta (red flags) de evasión fiscal sobre la población de transacciones del ejercicio.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Indicador de Red Flag | Categoría (Facturación/Documentación/Flujos de Fondos) | ¿Detectado en la Población? (Sí/No) | Casos Identificados | Monto Involucrado | Evidencia/Observación. Incluye al menos los indicadores clásicos ACFE aplicados a fiscalidad: facturación fuera de secuencia, proveedores sin capacidad operativa, notas de crédito atípicas al cierre, ajustes contables manuales recurrentes en cuentas fiscales, y desviaciones frente al comportamiento histórico del contribuyente.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Concluye si la población examinada muestra o no patrones de evasión fiscal, y si algún indicador detectado amerita la generación de un hallazgo o la ampliación del alcance.',
+    },
+  ],
+
+  'PT-FISC-CAAT-TESTAFERROS': [ // AF-02: Transacciones Inusuales y Posibles Testaferros
+    {
+      sectionKey:  'S1',
+      label:       'Análisis de Contrapartes de Riesgo',
+      description: 'Evaluación de proveedores/clientes nuevos o de bajo volumen histórico en busca de indicadores de testaferros o transacciones simuladas.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Contraparte Analizada | Indicador de Riesgo (dirección o representante legal compartido con otra contraparte, capital social mínimo, ausencia de empleados/activos, antigüedad menor a 6 meses) | ¿Coincidencia Detectada? (Sí/No) | Monto de Operaciones del Período | Evaluación de Riesgo (Bajo/Moderado/Alto) | Observación.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Concluye si se identificaron indicadores de testaferros o transacciones simuladas, y el efecto en el enfoque de auditoría.',
+    },
+  ],
+
+  'PT-FISC-CAAT-IVAEVASION': [ // AF-03: Evasión de IVA — Compras sin CCF Válido / Facturas de Favor
+    {
+      sectionKey:  'S1',
+      label:       'Verificación de Validez de CCF/DTE de Compras',
+      description: 'Conciliación de las compras acreditadas contra la validez de sus documentos legales en el padrón de la DGII.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Proveedor | N° de CCF/DTE | Validación en Padrón DGII (Válido/No Válido/No Encontrado/Contribuyente Inactivo) | Monto de la Compra | Crédito Fiscal Acreditado | Observación. Una fila por cada documento examinado o por lote de documentos del mismo proveedor con el mismo resultado.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Concluye si existen compras acreditadas con documentos inválidos o de proveedores inexistentes/inactivos ("facturas de favor"), y el efecto en el credito fiscal y en la deducibilidad del gasto.',
+    },
+  ],
+
+  'PT-FISC-CAAT-PARAISOS': [ // AF-04: Precios de Transferencia con Paraísos Fiscales (Art. 199-A CT)
+    {
+      sectionKey:  'S1',
+      label:       'Verificación de Jurisdicción de Contrapartes',
+      description: 'Identificación de operaciones con contrapartes domiciliadas en países, estados o territorios de baja o nula tributación (Art. 199-A CT).',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Contraparte | País/Jurisdicción | ¿Listado como Baja o Nula Tributación (Art. 199-A CT / listado vigente del Ministerio de Hacienda)? (Sí/No) | Tipo de Operación | Monto Anual | Retención Aplicada (25%, Art. 158-A CT) | Observación. Una fila por cada contraparte del exterior, incluso si la respuesta es "No" (para dejar constancia de que se evaluó).',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Concluye si existe exposición por operaciones con paraísos fiscales y si la retención del 25% (Art. 158-A CT) se aplicó correctamente cuando corresponde.',
+    },
+  ],
+
+  'PT-FISC-CAAT-100PCT': [ // AF-05: CAATs Fiscales — Análisis del 100% de Transacciones (Agente Argus)
+    {
+      sectionKey:  'S1',
+      label:       'Pruebas CAATs sobre el 100% de las Transacciones',
+      description: 'Resultado de las pruebas de análisis de datos aplicadas sobre la totalidad de la población de transacciones del ejercicio.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Prueba CAATs Aplicada (Ley de Benford / Duplicados y Pagos Múltiples / Valores Atípicos-Outliers / Saltos de Secuencia) | Población Analizada (número de transacciones) | Anomalías Detectadas | Materialidad de las Anomalías | Disposición (Investigado sin efecto / Genera Hallazgo / Requiere Ampliación de Muestra).',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Concluye sobre la efectividad del análisis del 100% de las transacciones y si las anomalías detectadas, en conjunto, representan un riesgo fiscal significativo.',
+    },
+  ],
+
+  'PT-FISC-CAAT-PAC': [ // ISR-07: Revisión de Pago a Cuenta Mensual (F-14, Art. 151 CT)
+    {
+      sectionKey:  'S1',
+      label:       'Verificación Mensual del Pago a Cuenta',
+      description: 'Recálculo del pago a cuenta mensual (1.75% sobre ingresos brutos) y comparación contra lo declarado en el F-14.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Mes | Ingresos Brutos Declarados | Pago a Cuenta Calculado (1.75%, Art. 151 CT) | Pago a Cuenta Declarado (F-14) | Diferencia | Presentado en Plazo (Sí/No). Genera 12 filas, una por cada mes del ejercicio.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Concluye si el pago a cuenta mensual fue calculado, declarado y presentado correctamente durante el ejercicio.',
+    },
+  ],
+
+  'PT-FISC-CAAT-LIBROSIVA': [ // IVA-07: Verificación de Libros de IVA — Compras y Ventas vs. Declaraciones
+    {
+      sectionKey:  'S1',
+      label:       'Cuadre Mensual de Libros de IVA vs. Declaraciones',
+      description: 'Conciliación mensual entre los libros de IVA (compras y ventas) y las cifras declaradas en el F-07.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Mes | Total Libro de Ventas | Débito Fiscal Declarado (F-07) | Diferencia Ventas | Total Libro de Compras | Crédito Fiscal Declarado (F-07) | Diferencia Compras. Genera 12 filas, una por cada mes del ejercicio.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Concluye si los libros de IVA cuadran contra las declaraciones F-07 mensuales, y si alguna diferencia detectada es material.',
+    },
+  ],
+
+  'PT-FISC-CAAT-DTE': [ // OF-03: Verificación de DTE — Correlativo, Invalidaciones y Nulos
+    {
+      sectionKey:  'S1',
+      label:       'Verificación de Correlativo y Estado de los DTE',
+      description: 'Análisis del correlativo de Documentos Tributarios Electrónicos emitidos, invalidados y anulados durante el ejercicio.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Tipo de Documento (CCF/Factura/Nota de Crédito/Nota de Débito) | Rango de Correlativo Examinado | DTE Emitidos | DTE Invalidados | DTE Anulados/Nulos | Justificación Documentada (Sí/No) | Observación. Una fila por cada tipo de documento.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Concluye si existen saltos de correlativo sin justificar o invalidaciones/nulos sin respaldo documental, conforme al Art. 115-A CT.',
+    },
+  ],
+
+  'PT-FISC-CAAT-PLAZOS': [ // OF-05: Cumplimiento de Declaraciones en Tiempo (Art. 134 CT)
+    {
+      sectionKey:  'S1',
+      label:       'Verificación de Oportunidad de Presentación',
+      description: 'Verificación de que todas las declaraciones tributarias del ejercicio se hayan presentado dentro del plazo legal.',
+      fieldType:   FieldType.MATRIX,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Columnas: Declaración (F-11/F-07/F-14/otras) | Período | Fecha Límite Legal | Fecha de Presentación Real | ¿En Plazo? (Sí/No) | Días de Atraso (si aplica). Cubre la totalidad de declaraciones mensuales y anuales del ejercicio (37 filas típicas: 12 F-14 + 12 F-07 + 1 F-11 + otras aplicables).',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Concluye sobre el nivel de cumplimiento en la oportunidad de presentación, y si algún atraso detectado constituye un incumplimiento formal recurrente (Art. 134 CT).',
     },
   ],
 

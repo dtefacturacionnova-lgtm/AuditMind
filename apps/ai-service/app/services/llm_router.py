@@ -331,3 +331,47 @@ async def generate_structured(
             )
 
     raise StructuredGenerationError(f"No se pudo generar una respuesta válida tras 2 intentos: {last_error}")
+
+
+# ─── OCR de PDFs escaneados — fallback de última instancia (2026-08-24) ───────
+# rag_pipeline.py intenta primero pdfplumber (gratis, instantáneo) y luego
+# Stirling-PDF (self-hosted, sin límite de cuota) — esta función es el último
+# recurso si Stirling-PDF no está disponible, para no dejar un documento
+# puntual completamente bloqueado. No pensada para procesar lotes grandes:
+# comparte la misma cuota diaria de Gemini que embeddings y chat.
+
+async def transcribe_scanned_pdf(pdf_bytes: bytes, max_attempts: int = 4) -> str:
+    """Transcribe un PDF escaneado (sin capa de texto) enviando los bytes
+    directamente a Gemini vision. Reintenta con backoff solo ante 503
+    (modelo con alta demanda, transitorio) — cualquier otro error se
+    propaga de inmediato."""
+    model = GEMINI_MODEL_MAP[TaskComplexity.STANDARD]
+    prompt = (
+        "Transcribe todo el texto de este documento escaneado, tal como aparece, "
+        "en español. Solo el texto, sin comentarios tuyos ni resumen — una "
+        "transcripción fiel."
+    )
+    attempt = 0
+    while True:
+        try:
+            response = await _gemini.aio.models.generate_content(
+                model=model,
+                contents=[
+                    genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                    prompt,
+                ],
+                config=genai_types.GenerateContentConfig(temperature=0.0),
+            )
+            return _extract_gemini_text(response)
+        except Exception as e:
+            msg = str(e)
+            is_unavailable = "503" in msg or "UNAVAILABLE" in msg
+            if not is_unavailable or attempt >= max_attempts - 1:
+                raise
+            attempt += 1
+            wait = min(30, 6 * attempt)
+            logger.info(
+                "transcribe_scanned_pdf: Gemini 503 (alta demanda) — reintento %d/%d en %ds",
+                attempt, max_attempts, wait,
+            )
+            await asyncio.sleep(wait)

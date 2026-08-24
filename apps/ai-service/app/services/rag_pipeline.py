@@ -35,12 +35,14 @@ procesan de forma síncrona como antes.
 """
 import asyncio
 import hashlib
+import io
 import re
 import uuid
 from pathlib import Path
 from typing import Optional
 
 import asyncpg
+import httpx
 import pdfplumber
 
 from app.config import settings
@@ -49,6 +51,7 @@ from app.services.embedding_router import (
     embed_batch_with_fallback,
     embed_query_with_provider,
 )
+from app.services.llm_router import transcribe_scanned_pdf
 
 
 # ─── Text chunking ────────────────────────────────────────────────────────────
@@ -426,6 +429,62 @@ async def ingest_text(
     return {"doc_id": doc_id, "chunks": count, "status": status, "revision": new_revision}
 
 
+async def _ocr_via_stirling(pdf_bytes: bytes) -> Optional[str]:
+    """OCR real vía Stirling-PDF (self-hosted, sin límite de cuota) — primer
+    intento cuando pdfplumber no extrajo texto. Devuelve None si el servicio
+    no está configurado (STIRLING_PDF_URL vacío) o no responde; el llamador
+    decide si cae al fallback de Gemini vision."""
+    if not settings.STIRLING_PDF_URL:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                f"{settings.STIRLING_PDF_URL}/api/v1/misc/ocr-pdf",
+                files={"fileInput": ("document.pdf", pdf_bytes, "application/pdf")},
+                data={"languages": "spa", "ocrType": "force-ocr"},
+            )
+            resp.raise_for_status()
+            ocred_pdf_bytes = resp.content
+
+        pages_text = []
+        with pdfplumber.open(io.BytesIO(ocred_pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                t = page.extract_text()
+                if t:
+                    pages_text.append(t)
+        text = "\n\n".join(pages_text)
+        return text if text.strip() else None
+    except Exception as e:
+        print(f"  ⚠️  OCR vía Stirling-PDF falló: {e}")
+        return None
+
+
+_OCR_FALLBACK_MAX_BYTES = 15 * 1024 * 1024  # cap del fallback de Gemini vision (no de Stirling)
+
+
+async def _ocr_fallback(pdf_bytes: bytes, filename: str) -> tuple[Optional[str], Optional[str]]:
+    """Cascada de OCR para un PDF sin capa de texto: Stirling-PDF primero
+    (self-hosted, sin costo de cuota), Gemini vision como último recurso.
+    Devuelve (texto, proveedor_usado) — (None, None) si ambos fallan/no
+    aplican."""
+    print(f"  ⚠️  '{filename}' sin texto extraíble (posible escaneo) — probando OCR de respaldo...")
+
+    stirling_text = await _ocr_via_stirling(pdf_bytes)
+    if stirling_text:
+        return stirling_text, "stirling"
+
+    if len(pdf_bytes) > _OCR_FALLBACK_MAX_BYTES:
+        print(f"  ❌ '{filename}' supera {_OCR_FALLBACK_MAX_BYTES // (1024*1024)}MB — no se intenta el fallback de Gemini vision")
+        return None, None
+
+    try:
+        gemini_text = await transcribe_scanned_pdf(pdf_bytes)
+        return (gemini_text, "gemini_vision") if gemini_text and gemini_text.strip() else (None, None)
+    except Exception as e:
+        print(f"  ❌ Fallback de Gemini vision también falló para '{filename}': {e}")
+        return None, None
+
+
 async def ingest_pdf(
     pdf_path: str | Path,
     doc_title: str,
@@ -450,7 +509,11 @@ async def ingest_pdf(
 
     full_text = "\n\n".join(pages_text)
     if not full_text.strip():
-        return {"doc_id": None, "chunks": 0, "status": "empty_pdf"}
+        ocr_text, ocr_provider = await _ocr_fallback(path.read_bytes(), path.name)
+        if not ocr_text:
+            return {"doc_id": None, "chunks": 0, "status": "empty_pdf"}
+        print(f"  ✅ OCR de respaldo ({ocr_provider}) extrajo {len(ocr_text)} chars")
+        full_text = ocr_text
 
     print(f"📄 PDF '{path.name}' — {len(pages_text)} páginas, {len(full_text)} chars")
     return await ingest_text(

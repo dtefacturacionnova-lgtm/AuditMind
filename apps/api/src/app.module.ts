@@ -32,6 +32,7 @@ import { StrategicModule } from './strategic/strategic.module';
 import { AuditProjectsModule } from './audit-projects/audit-projects.module';
 import { EmailModule } from './email/email.module';
 import { PdfModule } from './pdf/pdf.module';
+import { PdfToolsModule } from './pdf-tools/pdf-tools.module';
 import { FiscalModule } from './fiscal/fiscal.module';
 import { AuditProceduresModule } from './audit-procedures/audit-procedures.module';
 import { AuditBackupModule } from './audits/backup/audit-backup.module';
@@ -61,6 +62,7 @@ import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
     NotificationsModule,
     EmailModule,
     PdfModule,
+    PdfToolsModule,
     FiscalModule,
     ReportsModule,
     DashboardModule,

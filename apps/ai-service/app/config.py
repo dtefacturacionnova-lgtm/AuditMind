@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     API_URL: str = "http://localhost:3001"
     AI_SERVICE_PORT: int = 3003
 
+    # Stirling-PDF — OCR self-hosted (sin límite de cuota) para PDFs escaneados
+    # sin capa de texto, ver rag_pipeline.py. Servicio interno, solo 127.0.0.1
+    # (mismo patrón de aislamiento que ai-service/AI_SERVICE_URL). Vacío =
+    # deshabilitado, se salta directo al fallback de Gemini vision.
+    STIRLING_PDF_URL: str = ""
+
     # Internal API key — used by NestJS to call FastAPI (replaces JWT re-verification)
     INTERNAL_API_KEY: str = "auditmind-internal-2026-xK9mP3qR"
 

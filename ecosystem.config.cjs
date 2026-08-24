@@ -66,6 +66,8 @@ module.exports = {
         // ai-service corre internamente en el mismo VPS
         AI_SERVICE_URL:          'http://127.0.0.1:8003',
         AI_SERVICE_INTERNAL_KEY: e.AI_SERVICE_INTERNAL_KEY,
+        // Stirling-PDF (OCR self-hosted) — contenedor Docker separado, mismo VPS
+        STIRLING_PDF_URL:        'http://127.0.0.1:8090',
       },
       max_memory_restart: '1G',
       autorestart: true,
@@ -101,6 +103,9 @@ module.exports = {
         VOYAGE_API_KEY:            e.VOYAGE_API_KEY,
         JINA_API_KEY:              e.JINA_API_KEY,
         COHERE_API_KEY:            e.COHERE_API_KEY,
+        // Stirling-PDF (OCR self-hosted) — primer intento de la cascada de OCR
+        // en rag_pipeline.py, antes del fallback de Gemini vision.
+        STIRLING_PDF_URL:          'http://127.0.0.1:8090',
       },
       // Subido de 800M — pyannote-audio (diarización, EVD-12) trae torch/torchaudio y
       // usa 1-2GB de RAM en inferencia; el VPS tiene sobra (26GB libres verificado

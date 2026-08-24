@@ -1,0 +1,34 @@
+# Stirling-PDF — servicio de herramientas PDF (OCR self-hosted, sin límite de
+# cuota) para AuditMind. Ver plan de OCR (2026-08-24) para el contexto completo.
+#
+# IMPORTANTE — aislamiento de red: el puerto se publica SOLO en 127.0.0.1.
+# Nunca cambiar "127.0.0.1:8090:8080" por "8090:8080" a secas — eso expondría
+# el servicio (sin autenticación propia, SECURITY_ENABLELOGIN=false) en la
+# interfaz pública del VPS. Mismo criterio que ya usa ai-service (puerto 8003,
+# solo loopback) en ecosystem.config.cjs.
+#
+# Ciclo de vida INDEPENDIENTE de deploy/deploy.sh (que sigue siendo 100%
+# PM2/Node/Python) — se levanta/actualiza a mano:
+#   docker compose -f infrastructure/stirling-pdf/docker-compose.yml pull
+#   docker compose -f infrastructure/stirling-pdf/docker-compose.yml up -d
+#
+# Nota de licencia: se usa la imagen oficial tal cual (incluye físicamente el
+# código de app/proprietary y app/saas, aunque AuditMind solo invoca endpoints
+# de app/core vía pdf-tools.service.ts en NestJS) — riesgo de licencia
+# aceptado conscientemente, no resuelto legalmente. Ver plan de OCR.
+
+services:
+  stirling-pdf:
+    image: ghcr.io/stirling-tools/stirling-pdf:latest
+    container_name: auditmind-stirling-pdf
+    ports:
+      - '127.0.0.1:8090:8080'
+    volumes:
+      - ./data/tessdata:/usr/share/tessdata
+      - ./data/configs:/configs
+      - ./data/logs:/logs
+      - ./data/pipeline:/pipeline
+    environment:
+      - SECURITY_ENABLELOGIN=false
+      - SYSTEM_DEFAULTLOCALE=es-ES
+    restart: unless-stopped

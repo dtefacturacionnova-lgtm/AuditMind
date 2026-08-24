@@ -202,4 +202,95 @@ export class PdfToolsController {
     res.setHeader('Content-Length', redacted.length);
     res.send(redacted);
   }
+
+  // ─── Conversión a PDF/A (archivo de largo plazo, ISO 19005) ──────────────────
+  @Post('pdfa')
+  @ApiOperation({ summary: 'Convertir un PDF a PDF/A para archivo/conservación de largo plazo' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async convertToPdfA(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { outputFormat?: 'pdfa' | 'pdfa-1' | 'pdfa-2' | 'pdfa-2b' | 'pdfa-3' | 'pdfa-3b' | 'pdfx'; strict?: string },
+    @Res() res: Response,
+  ) {
+    if (!file) throw new Error('No se subió ningún archivo');
+    const pdfa = await this.pdfToolsService.convertToPdfA(file.buffer, file.originalname, {
+      outputFormat: body?.outputFormat,
+      strict: body?.strict === 'true',
+    });
+    const filename = file.originalname.replace(/\.pdf$/i, '') + '_pdfa.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfa.length);
+    res.send(pdfa);
+  }
+
+  // ─── Timestamp RFC 3161 (sello de tiempo de autoridad confiable) ─────────────
+  @Post('timestamp')
+  @ApiOperation({ summary: 'Agregar un sello de tiempo RFC 3161 (autoridad confiable) a un PDF' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async timestampPdf(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { tsaUrl?: string },
+    @Res() res: Response,
+  ) {
+    if (!file) throw new Error('No se subió ningún archivo');
+    const timestamped = await this.pdfToolsService.timestampPdf(file.buffer, file.originalname, body?.tsaUrl);
+    const filename = file.originalname.replace(/\.pdf$/i, '') + '_timestamp.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', timestamped.length);
+    res.send(timestamped);
+  }
+
+  // ─── Dividir un PDF en varios documentos ─────────────────────────────────────
+  @Post('split')
+  @ApiOperation({ summary: 'Dividir un PDF en varios documentos por número de página' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async splitPdf(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { pageNumbers?: string },
+    @Res() res: Response,
+  ) {
+    if (!file) throw new Error('No se subió ningún archivo');
+    const { buffer, contentType } = await this.pdfToolsService.splitPdf(file.buffer, file.originalname, body?.pageNumbers || 'all');
+    const ext = contentType.includes('zip') ? 'zip' : 'pdf';
+    const filename = file.originalname.replace(/\.pdf$/i, '') + `_dividido.${ext}`;
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  }
+
+  // ─── Sanitizar (quitar JavaScript/contenido activo) ──────────────────────────
+  @Post('sanitize')
+  @ApiOperation({ summary: 'Quitar JavaScript/contenido activo de un PDF — defensa contra PDFs maliciosos subidos por terceros' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async sanitizePdf(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: {
+      removeJavaScript?: string; removeEmbeddedFiles?: string;
+      removeXMPMetadata?: string; removeMetadata?: string;
+      removeLinks?: string; removeFonts?: string;
+    },
+    @Res() res: Response,
+  ) {
+    if (!file) throw new Error('No se subió ningún archivo');
+    const sanitized = await this.pdfToolsService.sanitizePdf(file.buffer, file.originalname, {
+      removeJavaScript: body?.removeJavaScript !== 'false',
+      removeEmbeddedFiles: body?.removeEmbeddedFiles !== 'false',
+      removeXMPMetadata: body?.removeXMPMetadata === 'true',
+      removeMetadata: body?.removeMetadata === 'true',
+      removeLinks: body?.removeLinks === 'true',
+      removeFonts: body?.removeFonts === 'true',
+    });
+    const filename = file.originalname.replace(/\.pdf$/i, '') + '_sanitizado.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', sanitized.length);
+    res.send(sanitized);
+  }
 }

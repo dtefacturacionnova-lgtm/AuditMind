@@ -16,7 +16,7 @@ export class PdfToolsService {
     this.stirlingPdfUrl = this.config.get<string>('STIRLING_PDF_URL', 'http://127.0.0.1:8090');
   }
 
-  private async callStirling(path: string, formData: FormData): Promise<Buffer> {
+  private async callStirlingRaw(path: string, formData: FormData): Promise<{ buffer: Buffer; contentType: string }> {
     let res: Response;
     try {
       res = await fetch(`${this.stirlingPdfUrl}${path}`, { method: 'POST', body: formData });
@@ -28,7 +28,14 @@ export class PdfToolsService {
       const errText = await res.text();
       throw new HttpException(`Error de Stirling-PDF (${path}): ${errText}`, HttpStatus.BAD_GATEWAY);
     }
-    return Buffer.from(await res.arrayBuffer());
+    return {
+      buffer: Buffer.from(await res.arrayBuffer()),
+      contentType: res.headers.get('content-type') ?? 'application/octet-stream',
+    };
+  }
+
+  private async callStirling(path: string, formData: FormData): Promise<Buffer> {
+    return (await this.callStirlingRaw(path, formData)).buffer;
   }
 
   // ─── OCR real (self-hosted, sin límite de cuota) ─────────────────────────────
@@ -128,5 +135,69 @@ export class PdfToolsService {
     formData.append('customPadding', '2');
     formData.append('convertPDFToImage', String(opts.convertToImage ?? true));
     return this.callStirling('/api/v1/security/auto-redact', formData);
+  }
+
+  // ─── Conversión a PDF/A (archivo de largo plazo, ISO 19005) ──────────────────
+  // Fuentes embebidas, sin dependencias externas — el formato pensado para
+  // conservación a largo plazo. Relevante para WorkingPaper.retentionUntil
+  // (campo ya existente, "F6.4 Retención y bloqueo", sin lógica real detrás
+  // todavía) — este es el paso técnico que ese campo está pidiendo.
+  async convertToPdfA(
+    fileBuffer: Buffer,
+    filename: string,
+    opts: { outputFormat?: 'pdfa' | 'pdfa-1' | 'pdfa-2' | 'pdfa-2b' | 'pdfa-3' | 'pdfa-3b' | 'pdfx'; strict?: boolean } = {},
+  ): Promise<Buffer> {
+    const formData = new FormData();
+    formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
+    formData.append('outputFormat', opts.outputFormat ?? 'pdfa-2b');
+    formData.append('strict', String(opts.strict ?? false));
+    return this.callStirling('/api/v1/convert/pdf/pdfa', formData);
+  }
+
+  // ─── Timestamp RFC 3161 (sello de tiempo de una autoridad confiable) ─────────
+  // Complementa cert-sign: certifica criptográficamente CUÁNDO existió el
+  // documento, no solo quién lo firmó — mucho más difícil de falsificar que
+  // un campo de fecha en la base de datos. TSA por defecto: DigiCert (gratis,
+  // preset ya soportado por Stirling, no requiere cuenta).
+  async timestampPdf(fileBuffer: Buffer, filename: string, tsaUrl?: string): Promise<Buffer> {
+    const formData = new FormData();
+    formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
+    formData.append('tsaUrl', tsaUrl ?? 'http://timestamp.digicert.com');
+    return this.callStirling('/api/v1/security/timestamp-pdf', formData);
+  }
+
+  // ─── Dividir un PDF en varios documentos ─────────────────────────────────────
+  // La respuesta puede ser un PDF (si el resultado es un solo documento) o un
+  // ZIP (si son varios) — Stirling decide el content-type según el caso, por
+  // eso se devuelve también el content-type real en vez de asumir PDF.
+  async splitPdf(fileBuffer: Buffer, filename: string, pageNumbers: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const formData = new FormData();
+    formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
+    formData.append('pageNumbers', pageNumbers);
+    return this.callStirlingRaw('/api/v1/general/split-pages', formData);
+  }
+
+  // ─── Sanitizar (quitar JavaScript/contenido activo) ──────────────────────────
+  // Defensa contra PDFs maliciosos subidos por terceros (evidencia de campo,
+  // adjuntos de clientes) — quita JS embebido y archivos adjuntos ocultos por
+  // defecto; metadata/links/fuentes se conservan salvo que se pida lo contrario.
+  async sanitizePdf(
+    fileBuffer: Buffer,
+    filename: string,
+    opts: {
+      removeJavaScript?: boolean; removeEmbeddedFiles?: boolean;
+      removeXMPMetadata?: boolean; removeMetadata?: boolean;
+      removeLinks?: boolean; removeFonts?: boolean;
+    } = {},
+  ): Promise<Buffer> {
+    const formData = new FormData();
+    formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
+    formData.append('removeJavaScript', String(opts.removeJavaScript ?? true));
+    formData.append('removeEmbeddedFiles', String(opts.removeEmbeddedFiles ?? true));
+    formData.append('removeXMPMetadata', String(opts.removeXMPMetadata ?? false));
+    formData.append('removeMetadata', String(opts.removeMetadata ?? false));
+    formData.append('removeLinks', String(opts.removeLinks ?? false));
+    formData.append('removeFonts', String(opts.removeFonts ?? false));
+    return this.callStirling('/api/v1/security/sanitize-pdf', formData);
   }
 }

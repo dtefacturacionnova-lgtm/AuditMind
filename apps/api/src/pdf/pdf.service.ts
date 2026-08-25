@@ -32,7 +32,24 @@ export interface PdfOptions {
   landscape?:     boolean;
   /** Línea de contexto en el pie (ej. "PT-FIN-B00 — Auditoria Financiera FE&CE 2025") */
   footerNote?:    string;
+  /** Oculta la leyenda legal de confidencialidad (por defecto va en todo PDF —
+   * ver LEGAL_NOTICE). Solo para casos donde no aplica (ej. plantillas vacías
+   * para que el usuario las llene, sin contenido real todavía). */
+  hideLegalNotice?: boolean;
 }
+
+// ─── Leyenda legal de confidencialidad (2026-08-24) ──────────────────────────
+// Verificada contra texto oficial vigente a esa fecha — no cambiar sin
+// reconfirmar (leyes salvadoreñas, pueden reformarse):
+//   - Ley de Protección de Datos Personales: D.L. 144, 12-nov-2024, DO 219 T.445
+//   - Ley Especial Contra los Delitos Informáticos y Conexos: D.L. 260, 2016
+//     (Art. 12 — Espionaje Informático, agravado por revelar info confidencial
+//     o secreto bancario)
+//   - Código Penal Art. 187 — Revelación de Secreto Profesional
+const LEGAL_NOTICE =
+  'Documento confidencial — protegido por la Ley de Protección de Datos Personales (D.L. 144/2024) y la ' +
+  'Ley Especial Contra los Delitos Informáticos y Conexos (Art. 12, D.L. 260/2016). Su divulgación no autorizada ' +
+  'puede constituir revelación de secreto profesional (Art. 187 C.Pn.).';
 
 @Injectable()
 export class PdfService implements OnModuleDestroy {
@@ -132,6 +149,7 @@ export class PdfService implements OnModuleDestroy {
                <span>AuditMind &middot; Plataforma de Auditoría Inteligente${opts.footerNote ? ` &middot; ${escFooter(opts.footerNote)}` : ''}</span>
                <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
              </div>
+             ${opts.hideLegalNotice ? '' : `<div style="padding-top: 1mm; font-size: 6.5px; color: #b0b8c4; line-height: 1.3;">${escFooter(LEGAL_NOTICE)}</div>`}
            </div>`
         : '<div></div>';
 

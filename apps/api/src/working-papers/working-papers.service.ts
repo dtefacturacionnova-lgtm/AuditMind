@@ -342,6 +342,31 @@ export class WorkingPapersService {
     }));
   }
 
+  // ─── Preprocesamiento automático de PDFs adjuntos (2026-08-24) ───────────────
+  // Se aplica en TODO punto de entrada de archivos (secciones, procedimientos,
+  // evidencia documental, cédula analítica), para cualquier tipo de auditoría
+  // — no solo Fiscal. Orden: sanitizar (quita JS/adjuntos ocultos, defensa
+  // contra PDFs maliciosos de terceros) → OCR con ocrType=skip-text (Stirling
+  // decide página por página, solo rellena las que no tienen capa de texto,
+  // no toca las que ya la tienen) → compactar (evidencia pesada, se hace al
+  // final para que el tamaño resultante refleje ya el resto de los cambios).
+  // Mejor esfuerzo silencioso: si Stirling-PDF falla, se sube el archivo
+  // original tal cual en vez de bloquear la subida por esto.
+  private async preprocessUploadedFile(
+    file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+  ): Promise<{ buffer: Buffer; originalname: string; mimetype: string; size: number }> {
+    if (file.mimetype !== 'application/pdf') return file;
+    try {
+      const sanitized = await this.pdfTools.sanitizePdf(file.buffer, file.originalname);
+      const ocred = await this.pdfTools.ocrPdf(sanitized, file.originalname, 'spa', 'skip-text');
+      const compressed = await this.pdfTools.compressPdf(ocred, file.originalname);
+      return { ...file, buffer: compressed, size: compressed.length };
+    } catch (e) {
+      console.error(`[attachments] Preprocesamiento (sanitizar/OCR/compactar) falló para ${file.originalname}, se sube el original:`, e);
+      return file;
+    }
+  }
+
   // ─── Adjuntar archivo de soporte a una SECCIÓN ─────────────────────────────
   async attachToSection(
     paperId: string,
@@ -350,6 +375,7 @@ export class WorkingPapersService {
     user: AuthUser,
   ) {
     await this.findOne(paperId, user); // access guard
+    file = await this.preprocessUploadedFile(file);
 
     const section = await this.prisma.paperSection.findFirst({
       where: { paperId, sectionKey },
@@ -412,6 +438,7 @@ export class WorkingPapersService {
     user: AuthUser,
   ) {
     const wp = await this.findOne(id, user);
+    file = await this.preprocessUploadedFile(file);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const content = (wp.content ?? {}) as Record<string, any>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -479,6 +506,7 @@ export class WorkingPapersService {
     user: AuthUser,
   ) {
     const wp = await this.findOne(paperId, user);
+    file = await this.preprocessUploadedFile(file);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const content = (wp.content ?? {}) as Record<string, any>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -552,6 +580,7 @@ export class WorkingPapersService {
     user: AuthUser,
   ) {
     const wp = await this.findOne(paperId, user);
+    file = await this.preprocessUploadedFile(file);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const content = (wp.content ?? {}) as Record<string, any>;
 
@@ -1092,10 +1121,20 @@ export class WorkingPapersService {
         },
       );
 
+      // Timestamp RFC 3161 — mejor esfuerzo independiente del cert-sign de
+      // arriba: si el TSA externo (DigiCert) falla, se sube igual el PDF ya
+      // firmado sin sello de tiempo, no se descarta ese trabajo por esto.
+      let finalPdf = signedPdf;
+      try {
+        finalPdf = await this.pdfTools.timestampPdf(signedPdf, filename);
+      } catch (e) {
+        console.error(`[signOff] Timestamp RFC 3161 falló para ${id} (nivel ${level}), se sube sin sello de tiempo:`, e);
+      }
+
       const path = `signed-papers/${auditId}/${id}/${level}_${Date.now()}.pdf`;
       const { error: upErr } = await this.supabaseAdmin.storage
         .from('audit-files')
-        .upload(path, signedPdf, { contentType: 'application/pdf', cacheControl: '3600', upsert: false });
+        .upload(path, finalPdf, { contentType: 'application/pdf', cacheControl: '3600', upsert: false });
       if (upErr) throw new Error(upErr.message);
       return path;
     } catch (e) {

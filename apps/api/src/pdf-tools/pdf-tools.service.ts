@@ -39,11 +39,20 @@ export class PdfToolsService {
   }
 
   // ─── OCR real (self-hosted, sin límite de cuota) ─────────────────────────────
-  async ocrPdf(fileBuffer: Buffer, filename: string, languages = 'spa'): Promise<Buffer> {
+  // ocrType: 'skip-text' (por defecto) — Stirling decide página por página,
+  // solo OCRea las que no tienen capa de texto, no toca las que ya la tienen.
+  // 'force-ocr' rasteriza todo (usado por la ingesta del RAG, que ya confirmó
+  // 0 texto extraíble antes de llamar acá).
+  async ocrPdf(
+    fileBuffer: Buffer,
+    filename: string,
+    languages = 'spa',
+    ocrType: 'skip-text' | 'force-ocr' | 'Normal' = 'skip-text',
+  ): Promise<Buffer> {
     const formData = new FormData();
     formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
     formData.append('languages', languages);
-    formData.append('ocrType', 'force-ocr');
+    formData.append('ocrType', ocrType);
     return this.callStirling('/api/v1/misc/ocr-pdf', formData);
   }
 
@@ -199,5 +208,25 @@ export class PdfToolsService {
     formData.append('removeLinks', String(opts.removeLinks ?? false));
     formData.append('removeFonts', String(opts.removeFonts ?? false));
     return this.callStirling('/api/v1/security/sanitize-pdf', formData);
+  }
+
+  // ─── Compactar (optimizar tamaño) ─────────────────────────────────────────────
+  // expectedOutputSize es un campo requerido por Stirling pero NO se usa como
+  // meta estricta acá — su default real (25KB) destruiría la calidad de
+  // cualquier documento real. Se manda generoso; optimizeLevel (1-9) es el
+  // control real de cuánto comprimir.
+  async compressPdf(
+    fileBuffer: Buffer,
+    filename: string,
+    opts: { optimizeLevel?: number } = {},
+  ): Promise<Buffer> {
+    const formData = new FormData();
+    formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
+    formData.append('optimizeLevel', String(opts.optimizeLevel ?? 4));
+    formData.append('expectedOutputSize', '50MB');
+    formData.append('linearize', 'true');
+    formData.append('normalize', 'false');
+    formData.append('grayscale', 'false');
+    return this.callStirling('/api/v1/misc/compress-pdf', formData);
   }
 }

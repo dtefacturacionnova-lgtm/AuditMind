@@ -293,4 +293,25 @@ export class PdfToolsController {
     res.setHeader('Content-Length', sanitized.length);
     res.send(sanitized);
   }
+
+  // ─── Compactar (optimizar tamaño) ─────────────────────────────────────────────
+  @Post('compress')
+  @ApiOperation({ summary: 'Reducir el tamaño de un PDF (útil para evidencia pesada)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async compressPdf(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { optimizeLevel?: string },
+    @Res() res: Response,
+  ) {
+    if (!file) throw new Error('No se subió ningún archivo');
+    const compressed = await this.pdfToolsService.compressPdf(file.buffer, file.originalname, {
+      optimizeLevel: body?.optimizeLevel ? parseInt(body.optimizeLevel, 10) : undefined,
+    });
+    const filename = file.originalname.replace(/\.pdf$/i, '') + '_comprimido.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', compressed.length);
+    res.send(compressed);
+  }
 }

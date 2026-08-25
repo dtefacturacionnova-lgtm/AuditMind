@@ -11,7 +11,7 @@ import {
   Brain, Star, Activity, AlertTriangle, RefreshCw, Zap,
   Folder, ChevronRight, Calendar, User, RotateCcw,
   Download, ExternalLink, FileSpreadsheet, Presentation, Music, Video,
-  Image as ImageIcon, ArrowLeft, Calculator,
+  Image as ImageIcon, ArrowLeft, Calculator, Combine,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -1438,6 +1438,17 @@ export default function WpDetailPage() {
                 <Sparkles className="w-3.5 h-3.5" />
                 COSO IA
               </button>
+              {/* Fase B — Fusionar PDFs (Notario PDF, abre en pestaña nueva) */}
+              <Link
+                href="/dashboard/pdf-tools?op=merge"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 bg-slate-50 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-100 transition-colors"
+                title="Fusionar varios PDFs en uno (se abre en una pestaña nueva)"
+              >
+                <Combine className="w-3.5 h-3.5" />
+                Fusionar PDFs
+              </Link>
               {/* Fase 2 — Descargar PDF del papel */}
               <button
                 onClick={handleDownloadPdf}

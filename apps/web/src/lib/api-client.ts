@@ -59,6 +59,31 @@ export const apiClient = {
     if (res.status === 204) return undefined as T;
     return res.json();
   },
+  /** Multipart POST que devuelve un blob binario (no JSON) — usado por las
+   *  operaciones de pdf-tools, donde el llamador necesita el blob en mano
+   *  (para mostrar un botón "Descargar") en vez de forzar la descarga de
+   *  inmediato como hace `downloadFile`. */
+  postFormBlob: async (
+    path: string,
+    formData: FormData,
+  ): Promise<{ blob: Blob; filename: string; contentType: string }> => {
+    const token = await getAuthToken();
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(error.message ?? `API error ${res.status}`);
+    }
+    const contentType = res.headers.get('Content-Type') ?? 'application/octet-stream';
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const match = /filename="?([^"]+)"?/.exec(disposition);
+    const filename = match?.[1] ?? 'resultado.pdf';
+    const blob = await res.blob();
+    return { blob, filename, contentType };
+  },
   /** Download a binary response and trigger save dialog */
   downloadFile: async (path: string, filename: string): Promise<void> => {
     const token = await getAuthToken();

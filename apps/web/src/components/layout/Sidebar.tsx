@@ -9,6 +9,7 @@ import {
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
   Clock, CalendarClock, DollarSign, Handshake, CheckSquare, Wallet, Gauge, CalendarCheck,
+  Stamp,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -114,6 +115,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: Bot,
     children: [
       { label: 'Motor IA — Agentes', href: '/dashboard/ai', icon: Bot },
+      { label: 'Notario PDF', href: '/dashboard/pdf-tools', icon: Stamp },
       { label: 'Reportes', href: '/dashboard/reports', icon: FileText },
       { label: 'Notificaciones', href: '/dashboard/notifications', icon: Bell },
       { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },

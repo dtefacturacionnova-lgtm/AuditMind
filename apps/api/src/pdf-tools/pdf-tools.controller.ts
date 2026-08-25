@@ -7,6 +7,7 @@ import {
   UseInterceptors,
   UploadedFile,
   UploadedFiles,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor, FileFieldsInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
@@ -16,6 +17,9 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PdfToolsService } from './pdf-tools.service';
 import { SigningIdentityService } from './signing-identity.service';
+
+const PDF_TOOLS_MAX_SIZE = 40 * 1024 * 1024; // 40MB — operaciones de un solo archivo
+const PDF_TOOLS_MERGE_MAX_SIZE = 20 * 1024 * 1024; // 20MB por archivo — fusionar (hasta 20 archivos en memoria)
 
 @ApiTags('PDF Tools')
 @ApiBearerAuth()
@@ -31,13 +35,13 @@ export class PdfToolsController {
   @Post('ocr')
   @ApiOperation({ summary: 'OCR real de un PDF escaneado — devuelve el mismo PDF con capa de texto buscable' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async ocrPdf(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { languages?: string },
     @Res() res: Response,
   ) {
-    if (!file) throw new Error('No se subió ningún archivo');
+    if (!file) throw new BadRequestException('No se subió ningún archivo');
     const ocredPdf = await this.pdfToolsService.ocrPdf(file.buffer, file.originalname, body?.languages || 'spa');
     const filename = file.originalname.replace(/\.pdf$/i, '') + '_ocr.pdf';
     res.setHeader('Content-Type', 'application/pdf');
@@ -59,7 +63,7 @@ export class PdfToolsController {
     { name: 'file', maxCount: 1 },
     { name: 'privateKeyFile', maxCount: 1 },
     { name: 'certFile', maxCount: 1 },
-  ]))
+  ], { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async signPdf(
     @UploadedFiles() files: { file?: Express.Multer.File[]; privateKeyFile?: Express.Multer.File[]; certFile?: Express.Multer.File[] },
     @Body() body: { password?: string; name: string; reason?: string; location?: string; pageNumber?: string; showSignature?: string; showLogo?: string },
@@ -69,7 +73,7 @@ export class PdfToolsController {
     const privateKeyFile = files?.privateKeyFile?.[0];
     const certFile = files?.certFile?.[0];
     if (!file || !privateKeyFile || !certFile) {
-      throw new Error('Se requieren file, privateKeyFile y certFile');
+      throw new BadRequestException('Se requieren file, privateKeyFile y certFile');
     }
     const signedPdf = await this.pdfToolsService.signPdf(
       file.buffer,
@@ -101,14 +105,14 @@ export class PdfToolsController {
   @Post('sign-internal')
   @ApiOperation({ summary: 'Firmar un PDF con el certificado interno del usuario logueado (se genera automáticamente si no existe)' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async signPdfInternal(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { reason?: string; location?: string; pageNumber?: string },
     @CurrentUser() user: AuthUser,
     @Res() res: Response,
   ) {
-    if (!file) throw new Error('No se subió ningún archivo');
+    if (!file) throw new BadRequestException('No se subió ningún archivo');
     const identity = await this.signingIdentityService.getOrCreateIdentity(user.id);
     const signedPdf = await this.pdfToolsService.signPdf(
       file.buffer,
@@ -134,13 +138,13 @@ export class PdfToolsController {
   @Post('merge')
   @ApiOperation({ summary: 'Fusionar varios PDFs (ej. adjuntos de evidencia de campo) en un solo archivo' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FilesInterceptor('files', 20))
+  @UseInterceptors(FilesInterceptor('files', 20, { limits: { fileSize: PDF_TOOLS_MERGE_MAX_SIZE } }))
   async mergePdfs(
     @UploadedFiles() files: Express.Multer.File[],
     @Body() body: { sortType?: 'orderProvided' | 'byFileName' | 'byDateModified' | 'byDateCreated' | 'byPDFTitle'; generateToc?: string },
     @Res() res: Response,
   ) {
-    if (!files?.length) throw new Error('No se subió ningún archivo');
+    if (!files?.length) throw new BadRequestException('No se subió ningún archivo');
     const mergedPdf = await this.pdfToolsService.mergePdfs(
       files.map(f => ({ buffer: f.buffer, filename: f.originalname })),
       { sortType: body?.sortType, generateToc: body?.generateToc === 'true' },
@@ -155,14 +159,14 @@ export class PdfToolsController {
   @Post('watermark')
   @ApiOperation({ summary: 'Agregar marca de agua de texto a un PDF (branding/confidencialidad)' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async addWatermark(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { text: string; fontSize?: string; rotation?: string; opacity?: string; color?: string },
     @Res() res: Response,
   ) {
-    if (!file) throw new Error('No se subió ningún archivo');
-    if (!body?.text) throw new Error('Se requiere el texto de la marca de agua');
+    if (!file) throw new BadRequestException('No se subió ningún archivo');
+    if (!body?.text) throw new BadRequestException('Se requiere el texto de la marca de agua');
     const watermarked = await this.pdfToolsService.addWatermark(file.buffer, file.originalname, {
       text: body.text,
       fontSize: body?.fontSize ? parseFloat(body.fontSize) : undefined,
@@ -181,14 +185,14 @@ export class PdfToolsController {
   @Post('redact')
   @ApiOperation({ summary: 'Redactar (censurar) texto específico de un PDF antes de compartirlo externamente' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async redactPdf(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { textToRedact: string; useRegex?: string; wholeWordSearch?: string; color?: string; convertToImage?: string },
     @Res() res: Response,
   ) {
-    if (!file) throw new Error('No se subió ningún archivo');
-    if (!body?.textToRedact) throw new Error('Se requiere el texto a redactar (separado por saltos de línea)');
+    if (!file) throw new BadRequestException('No se subió ningún archivo');
+    if (!body?.textToRedact) throw new BadRequestException('Se requiere el texto a redactar (separado por saltos de línea)');
     const redacted = await this.pdfToolsService.autoRedact(file.buffer, file.originalname, {
       textToRedact: body.textToRedact.split('\n').map(t => t.trim()).filter(Boolean),
       useRegex: body?.useRegex === 'true',
@@ -207,13 +211,13 @@ export class PdfToolsController {
   @Post('pdfa')
   @ApiOperation({ summary: 'Convertir un PDF a PDF/A para archivo/conservación de largo plazo' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async convertToPdfA(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { outputFormat?: 'pdfa' | 'pdfa-1' | 'pdfa-2' | 'pdfa-2b' | 'pdfa-3' | 'pdfa-3b' | 'pdfx'; strict?: string },
     @Res() res: Response,
   ) {
-    if (!file) throw new Error('No se subió ningún archivo');
+    if (!file) throw new BadRequestException('No se subió ningún archivo');
     const pdfa = await this.pdfToolsService.convertToPdfA(file.buffer, file.originalname, {
       outputFormat: body?.outputFormat,
       strict: body?.strict === 'true',
@@ -229,13 +233,13 @@ export class PdfToolsController {
   @Post('timestamp')
   @ApiOperation({ summary: 'Agregar un sello de tiempo RFC 3161 (autoridad confiable) a un PDF' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async timestampPdf(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { tsaUrl?: string },
     @Res() res: Response,
   ) {
-    if (!file) throw new Error('No se subió ningún archivo');
+    if (!file) throw new BadRequestException('No se subió ningún archivo');
     const timestamped = await this.pdfToolsService.timestampPdf(file.buffer, file.originalname, body?.tsaUrl);
     const filename = file.originalname.replace(/\.pdf$/i, '') + '_timestamp.pdf';
     res.setHeader('Content-Type', 'application/pdf');
@@ -248,13 +252,13 @@ export class PdfToolsController {
   @Post('split')
   @ApiOperation({ summary: 'Dividir un PDF en varios documentos por número de página' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async splitPdf(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { pageNumbers?: string },
     @Res() res: Response,
   ) {
-    if (!file) throw new Error('No se subió ningún archivo');
+    if (!file) throw new BadRequestException('No se subió ningún archivo');
     const { buffer, contentType } = await this.pdfToolsService.splitPdf(file.buffer, file.originalname, body?.pageNumbers || 'all');
     const ext = contentType.includes('zip') ? 'zip' : 'pdf';
     const filename = file.originalname.replace(/\.pdf$/i, '') + `_dividido.${ext}`;
@@ -268,7 +272,7 @@ export class PdfToolsController {
   @Post('sanitize')
   @ApiOperation({ summary: 'Quitar JavaScript/contenido activo de un PDF — defensa contra PDFs maliciosos subidos por terceros' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async sanitizePdf(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: {
@@ -278,7 +282,7 @@ export class PdfToolsController {
     },
     @Res() res: Response,
   ) {
-    if (!file) throw new Error('No se subió ningún archivo');
+    if (!file) throw new BadRequestException('No se subió ningún archivo');
     const sanitized = await this.pdfToolsService.sanitizePdf(file.buffer, file.originalname, {
       removeJavaScript: body?.removeJavaScript !== 'false',
       removeEmbeddedFiles: body?.removeEmbeddedFiles !== 'false',
@@ -298,13 +302,13 @@ export class PdfToolsController {
   @Post('compress')
   @ApiOperation({ summary: 'Reducir el tamaño de un PDF (útil para evidencia pesada)' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: PDF_TOOLS_MAX_SIZE } }))
   async compressPdf(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { optimizeLevel?: string },
     @Res() res: Response,
   ) {
-    if (!file) throw new Error('No se subió ningún archivo');
+    if (!file) throw new BadRequestException('No se subió ningún archivo');
     const compressed = await this.pdfToolsService.compressPdf(file.buffer, file.originalname, {
       optimizeLevel: body?.optimizeLevel ? parseInt(body.optimizeLevel, 10) : undefined,
     });

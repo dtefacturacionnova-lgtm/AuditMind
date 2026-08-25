@@ -177,13 +177,18 @@ export class PdfToolsService {
 
   // ─── Dividir un PDF en varios documentos ─────────────────────────────────────
   // La respuesta puede ser un PDF (si el resultado es un solo documento) o un
-  // ZIP (si son varios) — Stirling decide el content-type según el caso, por
-  // eso se devuelve también el content-type real en vez de asumir PDF.
+  // ZIP (si son varios). Verificado empíricamente (2026-08-25): Stirling SIEMPRE
+  // devuelve el ZIP con `Content-Type: application/octet-stream` — nunca incluye
+  // "zip" en el header — así que no se puede confiar en el content-type que manda
+  // Stirling para distinguir los dos casos. Se detecta por los bytes mágicos del
+  // propio buffer en su lugar (PK.. = ZIP) y se corrige el content-type devuelto.
   async splitPdf(fileBuffer: Buffer, filename: string, pageNumbers: string): Promise<{ buffer: Buffer; contentType: string }> {
     const formData = new FormData();
     formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' }), filename);
     formData.append('pageNumbers', pageNumbers);
-    return this.callStirlingRaw('/api/v1/general/split-pages', formData);
+    const { buffer } = await this.callStirlingRaw('/api/v1/general/split-pages', formData);
+    const isZip = buffer.length >= 2 && buffer[0] === 0x50 && buffer[1] === 0x4b; // 'PK'
+    return { buffer, contentType: isZip ? 'application/zip' : 'application/pdf' };
   }
 
   // ─── Sanitizar (quitar JavaScript/contenido activo) ──────────────────────────

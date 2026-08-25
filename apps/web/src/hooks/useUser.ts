@@ -75,6 +75,11 @@ export function useUser() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Recarga dura (no router.push): limpia cualquier estado/cache en memoria
+    // (React Query, contexto de organización, etc.) — un cambio de ruta sin
+    // recarga dejaba la página actual visible hasta que el usuario refrescaba
+    // a mano, porque nada más que este botón reaccionaba al cierre de sesión.
+    window.location.href = '/login';
   };
 
   return { user, loading, hasRole, signOut };

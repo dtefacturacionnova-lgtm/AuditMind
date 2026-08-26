@@ -85,9 +85,12 @@ async def analyze_sanctions_screening(
             "primary_name_on_list": best.primary_name,
             "tax_id_uploaded": tax_id or None,
             "jurisdiction_note": annotation,
+            # Strings pre-formateados, no objetos anidados — AnalysisResultView
+            # (compartido por los 18 motores) renderiza listas de objetos como
+            # "[object Object]" en la tabla genérica; no vale la pena tocar ese
+            # renderer compartido por un campo auxiliar de un solo motor.
             "other_candidates": [
-                {"matched_name": c.matched_name, "score": c.score, "source_list": c.source_list}
-                for c in candidates[1:]
+                f"{c.matched_name} ({c.score:.0f}%, {c.source_list})" for c in candidates[1:]
             ],
         })
 

@@ -12,6 +12,21 @@ import { PrismaService } from '../prisma/prisma.service';
 // del pooler de Supabase (transaction mode) sin acercarse a saturarlo.
 const UPSERT_BATCH_SIZE = 40;
 
+// Todas las listas activas hoy — único lugar a tocar al agregar una nueva
+// fuente (ej. UE, una vez resuelto el bloqueo de cuenta — ver config.py del
+// ai-service).
+const ALL_SOURCE_LISTS = [
+  WatchlistSourceList.OFAC_SDN,
+  WatchlistSourceList.UN_CONSOLIDATED,
+  WatchlistSourceList.UK_SANCTIONS,
+];
+
+const SOURCE_SLUG: Record<WatchlistSourceList, 'ofac' | 'un' | 'uk'> = {
+  [WatchlistSourceList.OFAC_SDN]: 'ofac',
+  [WatchlistSourceList.UN_CONSOLIDATED]: 'un',
+  [WatchlistSourceList.UK_SANCTIONS]: 'uk',
+};
+
 interface ParsedWatchlistRecord {
   external_id: string;
   entity_type: 'INDIVIDUAL' | 'ENTITY' | 'OTHER';
@@ -46,7 +61,7 @@ export class WatchlistsService {
   }
 
   async triggerSync(sourceList: WatchlistSourceList | undefined, triggeredBy: 'CRON' | 'MANUAL', triggeredById?: string) {
-    const lists = sourceList ? [sourceList] : [WatchlistSourceList.OFAC_SDN, WatchlistSourceList.UN_CONSOLIDATED];
+    const lists = sourceList ? [sourceList] : ALL_SOURCE_LISTS;
 
     // Evita corridas superpuestas — sin esto, un cron que dispara mientras la
     // corrida anterior de la MISMA lista sigue en curso (ej. OFAC tardó más
@@ -82,7 +97,7 @@ export class WatchlistsService {
   }
 
   async getSyncStatus() {
-    const lists = [WatchlistSourceList.OFAC_SDN, WatchlistSourceList.UN_CONSOLIDATED];
+    const lists = ALL_SOURCE_LISTS;
     const [latestSyncs, entryCounts] = await Promise.all([
       Promise.all(
         lists.map((list) =>
@@ -106,7 +121,7 @@ export class WatchlistsService {
   }
 
   private async executeSyncBackground(syncId: string, sourceList: WatchlistSourceList) {
-    const source = sourceList === WatchlistSourceList.OFAC_SDN ? 'ofac' : 'un';
+    const source = SOURCE_SLUG[sourceList];
     try {
       const res = await fetch(`${this.aiServiceUrl}/watchlists/parse/${source}`, {
         method: 'POST',

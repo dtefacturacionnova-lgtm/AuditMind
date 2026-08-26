@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { ProfitabilityService } from '../portfolio/profitability.service';
+import { CapacityService } from '../capacity/capacity.service';
 import {
   PeriodType, getPeriodKey, getPeriodRange, getPeriodYear, getPeriodLabel,
   lastNPeriods, isPeriodType,
@@ -26,7 +27,11 @@ function daysBetween(a: Date, b: Date): number {
 
 @Injectable()
 export class CommitteeService {
-  constructor(private prisma: PrismaService, private profitability: ProfitabilityService) {}
+  constructor(
+    private prisma: PrismaService,
+    private profitability: ProfitabilityService,
+    private capacity: CapacityService,
+  ) {}
 
   // ─── Configuración de frecuencia de corte (Organization.settings) ─────────
 
@@ -360,11 +365,12 @@ export class CommitteeService {
       };
     }
 
-    const payload = await this.computeDashboard(orgId, periodType, periodKey, today);
+    const payload = await this.computeDashboard(user, periodType, periodKey, today);
     return { ...payload, meta: { frozen: false, isCurrent, periodKey, periodType, publishedAt: null, preparedByName: null } };
   }
 
-  private async computeDashboard(orgId: string, periodType: PeriodType, periodKey: string, today: Date) {
+  private async computeDashboard(user: AuthUser, periodType: PeriodType, periodKey: string, today: Date) {
+    const orgId = user.organizationId;
     const { end: periodEnd } = getPeriodRange(periodKey, periodType);
     const year = getPeriodYear(periodKey, periodType);
 
@@ -455,6 +461,17 @@ export class CommitteeService {
 
     const controlInternoGlobal = await this.computeControlInternoGlobal(orgId);
 
+    // Extensiones de rentabilidad/capacidad agregada (roadmap pendiente desde
+    // 2026-08-23) — mismo dato ya expuesto en Cartera (por encargo) y en
+    // Capacidad → Firma (@Roles(CAE)), ahora agregado a nivel organización y
+    // embebido en el payload de Comité (@Roles(AUDIT_MANAGER)). Precedente ya
+    // existente: `planExecution` mezcla financieros por-encargo en este mismo
+    // payload — este es el mismo tipo de cruce de límite de rol, a propósito.
+    const [orgProfitability, firmUtilization] = await Promise.all([
+      this.profitability.getOrgWideProfitability(orgId, periodEnd),
+      this.capacity.getFirmDashboard(year, user),
+    ]);
+
     const openSevSet = new Set(openBySeverity.map((f: any) => f.severity));
     const riskPosture = openSevSet.has('CRITICAL') ? 'CRITICAL'
       : openSevSet.has('HIGH') ? 'HIGH'
@@ -502,6 +519,8 @@ export class CommitteeService {
       },
       openBySeverity: Object.fromEntries(openBySeverity.map((f: any) => [f.severity, f._count.id])),
       controlInternoGlobal,
+      orgProfitability,
+      firmUtilization,
       planExecution,
       trend,
       overdueActions,
@@ -516,7 +535,7 @@ export class CommitteeService {
     if (!isPeriodType(periodTypeRaw)) throw new BadRequestException('periodType inválido');
     const orgId = user.organizationId;
     const today = new Date();
-    const payload = await this.computeDashboard(orgId, periodTypeRaw, periodKeyRaw, today);
+    const payload = await this.computeDashboard(user, periodTypeRaw, periodKeyRaw, today);
 
     const report = await this.prisma.committeeReport.upsert({
       where: { organizationId_period_type: { organizationId: orgId, period: periodKeyRaw, type: periodTypeRaw } },

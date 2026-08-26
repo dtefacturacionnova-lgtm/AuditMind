@@ -2702,6 +2702,7 @@ model ConnectorImport {
 enum WatchlistSourceList {
   OFAC_SDN
   UN_CONSOLIDATED
+  UK_SANCTIONS // "UK Sanctions List" (FCDO) — reemplazó a la antigua OFSI Consolidated List, retirada 28/01/2026
 }
 
 enum WatchlistEntityType {

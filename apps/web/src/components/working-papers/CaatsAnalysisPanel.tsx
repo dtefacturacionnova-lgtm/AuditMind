@@ -52,7 +52,7 @@ const ENGINES: { id: AnalysisId; label: string; icon: typeof Database; color: st
   { id: 'missing_trader', label: 'Missing Trader', icon: Ghost, color: 'bg-slate-500' },
   { id: 'tax_haven', label: 'Jurisdicciones de Baja Tributación', icon: Globe, color: 'bg-emerald-500' },
   { id: 'dte_validation', label: 'Validación DTE', icon: FileCheck2, color: 'bg-blue-700' },
-  { id: 'sanctions_screening', label: 'Screening de Sanciones (OFAC/ONU)', icon: ShieldBan, color: 'bg-red-700' },
+  { id: 'sanctions_screening', label: 'Screening de Sanciones (OFAC/ONU/RU)', icon: ShieldBan, color: 'bg-red-700' },
 ];
 
 export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readOnly = false }: Props) {

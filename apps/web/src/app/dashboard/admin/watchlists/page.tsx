@@ -5,7 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
 
-type SourceList = 'OFAC_SDN' | 'UN_CONSOLIDATED';
+type SourceList = 'OFAC_SDN' | 'UN_CONSOLIDATED' | 'UK_SANCTIONS';
 type SyncStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 
 interface WatchlistSync {
@@ -30,6 +30,7 @@ interface SyncStatusRow {
 const SOURCE_LABELS: Record<SourceList, string> = {
   OFAC_SDN: 'OFAC SDN (Tesoro EE.UU.)',
   UN_CONSOLIDATED: 'Lista Consolidada ONU',
+  UK_SANCTIONS: 'UK Sanctions List (Reino Unido)',
 };
 
 const STATUS_STYLES: Record<SyncStatus, { color: string; label: string; icon: React.ElementType }> = {
@@ -71,8 +72,9 @@ export default function WatchlistsPage() {
               <ShieldBan className="h-6 w-6 text-red-700" /> Listas de Sanciones
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Copia local de OFAC SDN + Lista Consolidada ONU, usada por el motor CAATs de Screening de Sanciones
-              en todas las organizaciones. Se sincroniza automáticamente cada día.
+              Copia local de OFAC SDN + Lista Consolidada ONU + UK Sanctions List, usada por el motor CAATs de
+              Screening de Sanciones en todas las organizaciones. Se sincroniza automáticamente cada día. (La UE
+              queda fuera — su fuente oficial exige una cuenta registrada para obtener acceso.)
             </p>
           </div>
           <button

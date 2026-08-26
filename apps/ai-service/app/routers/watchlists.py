@@ -16,6 +16,7 @@ from app.config import settings
 from app.services.auth import verify_internal_key
 from app.services.watchlists.ofac_parser import parse_sdn_xml
 from app.services.watchlists.un_parser import parse_consolidated_xml
+from app.services.watchlists.uk_parser import parse_uk_sanctions_xml
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,13 @@ router = APIRouter()
 _SOURCE_URLS = {
     "ofac": settings.OFAC_SDN_XML_URL,
     "un": settings.UN_CONSOLIDATED_XML_URL,
+    "uk": settings.UK_SANCTIONS_XML_URL,
+}
+
+_PARSERS = {
+    "ofac": parse_sdn_xml,
+    "un": parse_consolidated_xml,
+    "uk": parse_uk_sanctions_xml,
 }
 
 
@@ -49,18 +57,23 @@ class ParseWatchlistResponse(BaseModel):
 
 @router.post("/parse/{source}", response_model=ParseWatchlistResponse)
 async def parse_watchlist(
-    source: Literal["ofac", "un"],
+    source: Literal["ofac", "un", "uk"],
     x_internal_key: Optional[str] = Header(default=None, alias="x-internal-key"),
 ):
-    """Descarga el XML oficial (OFAC SDN o Lista Consolidada ONU) y lo
-    parsea a una forma normalizada. Timeout generoso (90s) — son archivos
-    de varios MB (OFAC ronda 29MB / ~19,300 registros)."""
+    """Descarga el XML oficial (OFAC SDN, Lista Consolidada ONU, o UK
+    Sanctions List) y lo parsea a una forma normalizada. Timeout generoso
+    (90s) — son archivos de varios MB (OFAC ronda 29MB/~19,300 registros,
+    UK ronda 22MB/~4,000 registros).
+
+    La UE queda fuera — su fuente oficial exige una cuenta registrada para
+    obtener la URL/API key (confirmado en vivo, 403 real), fuera de lo que
+    se puede automatizar sin esa cuenta."""
     verify_internal_key(x_internal_key)
 
     url = _SOURCE_URLS[source]
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=90) as client:
-            # User-Agent explícito — ambas fuentes devuelven contenido vacío
+            # User-Agent explícito — las 3 fuentes devuelven contenido vacío
             # o bloquean sin uno (confirmado en vivo al diseñar esta feature).
             response = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (AuditMind CAATs watchlist sync)"})
             response.raise_for_status()
@@ -68,7 +81,7 @@ async def parse_watchlist(
         raise HTTPException(status_code=502, detail=f"Error descargando la lista '{source}': {e}")
 
     try:
-        parsed = parse_sdn_xml(response.content) if source == "ofac" else parse_consolidated_xml(response.content)
+        parsed = _PARSERS[source](response.content)
     except Exception as e:
         logger.exception("Error parseando la lista '%s'", source)
         raise HTTPException(status_code=502, detail=f"Error parseando la lista '{source}': {e}")

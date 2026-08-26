@@ -10,9 +10,12 @@ import { Header } from '@/components/layout/Header';
 import {
   useCommitteeDashboard, useCommitteePeriods, usePublishCommitteeSnapshot,
   type PeriodType, type EngagementState, type PlanExecutionItem, type ControlInternoGlobal,
+  type OrgProfitability,
 } from '@/hooks/useCommittee';
 import { useCommitteeDashboard as useCommitteeDashboardLegacy } from '@/hooks/useDashboard';
-import { formatDate } from '@/lib/utils';
+import type { FirmDashboard } from '@/hooks/useCapacity';
+import { formatDate, cn } from '@/lib/utils';
+import Link from 'next/link';
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
@@ -76,6 +79,17 @@ const COSO_CONCLUSION_LABEL: Record<string, string> = {
 const COSO_CONCLUSION_COLOR: Record<string, string> = {
   EFECTIVO: 'bg-emerald-500', CON_DEBILIDADES_SIGNIFICATIVAS: 'bg-amber-400', INEFECTIVO: 'bg-red-500',
 };
+
+// Mismo criterio de color que apps/web/src/app/dashboard/firm-hours/page.tsx
+// (única fuente de este semáforo) — se repite acá porque ese archivo no
+// exporta el helper.
+function utilizacionTone(pct: number | null): string {
+  if (pct === null) return 'text-gray-400';
+  if (pct >= 90) return 'text-red-600';
+  if (pct >= 70) return 'text-emerald-600';
+  if (pct >= 40) return 'text-amber-600';
+  return 'text-gray-500';
+}
 
 function daysOverdue(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -232,7 +246,12 @@ export default function CommitteePage() {
         </div>
 
         {activeTab === 'detalles' && (
-          <DetallesTab planExecution={data.planExecution} controlInternoGlobal={data.controlInternoGlobal} />
+          <DetallesTab
+            planExecution={data.planExecution}
+            controlInternoGlobal={data.controlInternoGlobal}
+            orgProfitability={data.orgProfitability}
+            firmUtilization={data.firmUtilization}
+          />
         )}
 
         {activeTab === 'resumen' && <>
@@ -649,14 +668,140 @@ function groupByAuditStatus(items: PlanExecutionItem[]): StatusGroup[] {
   return [...groups.values()].sort((a, b) => b.count - a.count);
 }
 
-function DetallesTab({ planExecution, controlInternoGlobal: cig }: {
+function DetallesTab({ planExecution, controlInternoGlobal: cig, orgProfitability, firmUtilization }: {
   planExecution: PlanExecutionItem[];
   controlInternoGlobal: ControlInternoGlobal;
+  orgProfitability: OrgProfitability;
+  firmUtilization: FirmDashboard;
 }) {
   const statusGroups = groupByAuditStatus(planExecution);
 
   return (
     <>
+      {/* ── Rentabilidad Agregada de la Organización ─────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-emerald-600" />
+            Rentabilidad Agregada de la Organización
+          </h3>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            Suma de {orgProfitability.engagementsTotal} encargo(s) — costo cortado a la fecha de cierre del período seleccionado en Resumen
+          </p>
+        </div>
+        <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-gray-100 p-3">
+            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Ingreso Total</p>
+            <p className="text-lg font-bold text-gray-800 mt-0.5">{money(orgProfitability.totalIncome)}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{orgProfitability.engagementsWithRevenue} de {orgProfitability.engagementsTotal} con honorario conocido</p>
+          </div>
+          <div className="rounded-xl border border-gray-100 p-3">
+            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Costo Total</p>
+            <p className="text-lg font-bold text-gray-800 mt-0.5">{money(orgProfitability.totalCost)}</p>
+          </div>
+          <div className="rounded-xl border border-gray-100 p-3">
+            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Utilidad Total</p>
+            <p className={cn('text-lg font-bold mt-0.5', orgProfitability.totalMargin < 0 ? 'text-red-600' : 'text-gray-800')}>{money(orgProfitability.totalMargin)}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{orgProfitability.engagementsWithMargin} de {orgProfitability.engagementsTotal} con margen calculable</p>
+          </div>
+          <div className="rounded-xl border border-gray-100 p-3">
+            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Margen %</p>
+            <p className="text-lg font-bold text-gray-800 mt-0.5">{orgProfitability.totalMarginPct !== null ? `${orgProfitability.totalMarginPct.toFixed(0)}%` : '—'}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Utilización de la Firma y Ranking de Presupuesto ─────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Users2 className="w-4 h-4 text-blue-500" />
+              Utilización de Personal y Presupuesto — Año {firmUtilization.year}
+            </h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              Mismo dato de <Link href="/dashboard/firm-hours" className="underline">Capacidad → Firma</Link>, embebido aquí para el Comité
+            </p>
+          </div>
+          {firmUtilization.utilizacionPromedio !== null && (
+            <span className={cn('text-sm font-bold shrink-0', utilizacionTone(firmUtilization.utilizacionPromedio))}>
+              {firmUtilization.utilizacionPromedio.toFixed(0)}% promedio
+            </span>
+          )}
+        </div>
+        <div className="p-5 grid md:grid-cols-2 gap-5">
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Utilización por Persona</p>
+            {firmUtilization.utilizacionPorPersona.length === 0 ? (
+              <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">Nadie tiene un perfil de disponibilidad configurado para {firmUtilization.year}.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-left">
+                      <th className="px-3 py-2 font-semibold text-gray-500">Persona</th>
+                      <th className="px-3 py-2 font-semibold text-gray-500 text-right">Reales</th>
+                      <th className="px-3 py-2 font-semibold text-gray-500 text-right">Utilización</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {firmUtilization.utilizacionPorPersona.map(p => (
+                      <tr key={p.userId} className="border-b border-gray-50 last:border-0">
+                        <td className="px-3 py-2 font-medium text-gray-700">{p.userName}</td>
+                        <td className="px-3 py-2 text-right text-gray-500">{p.horasReales.toFixed(1)}h</td>
+                        <td className={cn('px-3 py-2 text-right font-bold', utilizacionTone(p.utilizacionPct))}>
+                          {p.utilizacionPct !== null ? `${p.utilizacionPct.toFixed(0)}%` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Encargos por Variación de Presupuesto</p>
+            {firmUtilization.rankingEncargos.length === 0 ? (
+              <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">Ningún encargo abierto tiene horas presupuestadas todavía.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-left">
+                      <th className="px-3 py-2 font-semibold text-gray-500">Encargo</th>
+                      <th className="px-3 py-2 font-semibold text-gray-500 text-right">Reales</th>
+                      <th className="px-3 py-2 font-semibold text-gray-500 text-right">Variación</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {firmUtilization.rankingEncargos
+                      .slice()
+                      .sort((a, b) => (b.variacionPct ?? -Infinity) - (a.variacionPct ?? -Infinity))
+                      .map(e => (
+                        <tr key={e.auditId} className="border-b border-gray-50 last:border-0">
+                          <td className="px-3 py-2 max-w-[180px]">
+                            <Link href={`/dashboard/audits/${e.auditId}`} className="font-medium text-[#0F2D4A] hover:underline truncate block">
+                              {e.auditTitle}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-500">{e.horasReales.toFixed(1)}h</td>
+                          <td className={cn(
+                            'px-3 py-2 text-right font-bold',
+                            e.variacionPct === null ? 'text-gray-400' : e.variacionPct > 15 ? 'text-red-600' : e.variacionPct > 0 ? 'text-amber-600' : 'text-emerald-600',
+                          )}>
+                            {e.variacionPct !== null ? `${e.variacionPct > 0 ? '+' : ''}${e.variacionPct.toFixed(0)}%` : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* ── Detalle Financiero por Auditoría ─────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">

@@ -10,6 +10,24 @@
 // genérica y se usa por igual en los tres tipos de encargo.
 export type AuditArea = 'fiscal' | 'financiero' | 'operativo' | 'transversal';
 
+export interface EstructuraMinimaCampo {
+  nombre: string;
+  requerido: boolean;
+  tipo?: 'texto' | 'numérico' | 'fecha' | 'booleano';
+}
+
+// Estructura mínima del archivo que espera cada motor — espejo legible para
+// el auditor de FIELD_DEFS/SECONDARY_DATASET (apps/web/src/lib/caats-fields.ts),
+// que es la fuente de verdad real para el mapeo de columnas. Se mantiene
+// aparte (no derivado en runtime) porque acá se agrega contexto narrativo
+// (minRegistros, nota) que no tiene sentido en la estructura de mapeo.
+export interface EstructuraMinima {
+  campos: EstructuraMinimaCampo[];
+  minRegistros?: number;
+  nota?: string;
+  datasetSecundario?: { label: string; campos: EstructuraMinimaCampo[] };
+}
+
 export interface MethodologyInfo {
   objetivo: string;
   metodologia: string;
@@ -17,6 +35,7 @@ export interface MethodologyInfo {
   area: AuditArea;
   pruebas: Array<{ nombre: string; descripcion: string }>;
   limitaciones: string;
+  estructuraMinima: EstructuraMinima;
 }
 
 export const METHODOLOGY: Record<string, MethodologyInfo> = {
@@ -37,6 +56,17 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'Detecta patrones estadísticos y de comportamiento, no confirma fraude ni error por sí mismo. Cada hallazgo requiere corroboración documental del auditor. La calidad depende de que el mapeo de columnas (fecha, monto, usuario) sea correcto.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Monto', requerido: true, tipo: 'numérico' },
+        { nombre: 'Fecha', requerido: false, tipo: 'fecha' },
+        { nombre: 'Hora del asiento (HH:MM)', requerido: false, tipo: 'texto' },
+        { nombre: 'Usuario que registró', requerido: false, tipo: 'texto' },
+        { nombre: 'Cuenta contable', requerido: false, tipo: 'texto' },
+        { nombre: 'Descripción', requerido: false, tipo: 'texto' },
+      ],
+      nota: 'Sin fecha/hora/usuario cargados, las pruebas que dependen de esos campos (fin de período, fuera de horario, usuario de alto volumen) quedan deshabilitadas — el resto sigue funcionando sobre los campos disponibles.',
+    },
   },
   ap: {
     area: 'financiero',
@@ -54,6 +84,16 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'La detección de "proveedores fantasma" es indicativa (datos incompletos), no una confirmación — requiere verificación externa (RUC/NIT, domicilio real). Depende de que el archivo incluya identificador de proveedor y cuenta bancaria si se quiere probar cuentas compartidas.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Monto', requerido: true, tipo: 'numérico' },
+        { nombre: 'Proveedor (ID o nombre)', requerido: false, tipo: 'texto' },
+        { nombre: 'Nombre del proveedor (detecta fantasmas)', requerido: false, tipo: 'texto' },
+        { nombre: 'Número de factura', requerido: false, tipo: 'texto' },
+        { nombre: 'Fecha de factura', requerido: false, tipo: 'fecha' },
+        { nombre: 'Fecha de pago', requerido: false, tipo: 'fecha' },
+      ],
+    },
   },
   payroll: {
     area: 'financiero',
@@ -71,6 +111,18 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'El Z-score requiere una base de comparación razonable (>10 empleados) para ser confiable — con planillas muy pequeñas o muy homogéneas, algunos outliers reales pueden no destacarse estadísticamente.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Salario bruto', requerido: true, tipo: 'numérico' },
+        { nombre: 'ID de empleado', requerido: false, tipo: 'texto' },
+        { nombre: 'Nombre de empleado', requerido: false, tipo: 'texto' },
+        { nombre: 'Salario neto', requerido: false, tipo: 'numérico' },
+        { nombre: 'Departamento', requerido: false, tipo: 'texto' },
+        { nombre: 'Cargo', requerido: false, tipo: 'texto' },
+        { nombre: 'Aprobado por', requerido: false, tipo: 'texto' },
+        { nombre: 'Cuenta bancaria', requerido: false, tipo: 'texto' },
+      ],
+    },
   },
   benford: {
     area: 'transversal',
@@ -86,6 +138,13 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'Requiere un mínimo de 50-100 montos para ser estadísticamente confiable, y funciona mejor sobre conjuntos de datos "naturales" (montos que emergen de transacciones reales, no de rangos artificialmente acotados — ej. precios fijos de catálogo violan Benford sin que haya fraude). Un resultado "No Conforme" señala dónde mirar, no confirma manipulación.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Una columna numérica de montos (el auditor la selecciona tras subir el archivo)', requerido: true, tipo: 'numérico' },
+      ],
+      minRegistros: 50,
+      nota: 'No usa mapeo de campos como los demás motores — se sube el archivo completo y luego se elige, de entre sus columnas, cuál contiene los montos a analizar. El motor rechaza el análisis con menos de 50 montos válidos.',
+    },
   },
   anomaly: {
     area: 'transversal',
@@ -100,6 +159,13 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'Es un modelo estadístico, no conoce el contexto de negocio — una anomalía puede ser perfectamente legítima (ej. un bono anual real). Requiere que las columnas seleccionadas sean genuinamente numéricas y comparables entre sí. Con menos de 10 registros el modelo no tiene suficiente base para entrenar.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Dos o más columnas numéricas (el auditor las selecciona tras subir el archivo)', requerido: true, tipo: 'numérico' },
+      ],
+      minRegistros: 10,
+      nota: 'No usa mapeo de campos como los demás motores — se sube el archivo completo y luego se eligen, de entre sus columnas, cuáles son numéricas y deben entrar al modelo. El motor rechaza el análisis con menos de 10 registros.',
+    },
   },
   sod: {
     area: 'operativo',
@@ -114,6 +180,15 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'El catálogo de conflictos es un punto de partida basado en funciones típicas — cada organización debería revisar y ampliar la lista según su propia matriz de riesgos. El emparejamiento de permisos es por texto (palabras clave), así que nombres de permiso muy distintos a los esperados pueden no matchear — revisar el mapeo de columnas antes de concluir "sin hallazgos".',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Usuario (ID o login)', requerido: true, tipo: 'texto' },
+        { nombre: 'Permiso / Función asignada', requerido: true, tipo: 'texto' },
+        { nombre: 'Nombre completo del usuario', requerido: false, tipo: 'texto' },
+        { nombre: 'Departamento', requerido: false, tipo: 'texto' },
+      ],
+      nota: 'Una fila por combinación usuario-permiso (no una fila por usuario) — un usuario con 5 permisos aparece en 5 filas.',
+    },
   },
   vendor_master: {
     area: 'operativo',
@@ -131,6 +206,18 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'El emparejamiento de NIT/cuenta/dirección es textual (normalizado) — errores de digitación no detectados como "el mismo valor" pueden esconder un duplicado real. Una dirección compartida NO es prueba de fraude por sí sola. Requiere que el archivo sea el MAESTRO de proveedores (un registro por proveedor), no el historial de transacciones — para eso está el motor de Cuentas por Pagar (AP).',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'ID de Proveedor', requerido: true, tipo: 'texto' },
+        { nombre: 'Nombre del Proveedor', requerido: true, tipo: 'texto' },
+        { nombre: 'NIT / RUC', requerido: false, tipo: 'texto' },
+        { nombre: 'Cuenta Bancaria', requerido: false, tipo: 'texto' },
+        { nombre: 'Dirección', requerido: false, tipo: 'texto' },
+        { nombre: 'Estado (Activo/Inactivo)', requerido: false, tipo: 'texto' },
+        { nombre: 'Fecha de Última Actividad', requerido: false, tipo: 'fecha' },
+      ],
+      nota: 'Una fila por proveedor (el maestro), no el historial de transacciones contra ese proveedor.',
+    },
   },
   related_parties: {
     area: 'fiscal',
@@ -146,6 +233,24 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'La calidad del resultado depende por completo de qué tan completo esté el registro de partes relacionadas que se sube — el motor no puede detectar una parte relacionada que nunca se registró. El match por nombre es especialmente propenso a falsos positivos con nombres comunes; siempre revisar manualmente antes de concluir que hay una transacción no revelada.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Nombre de la Contraparte (Proveedor/Cliente)', requerido: true, tipo: 'texto' },
+        { nombre: 'Monto', requerido: true, tipo: 'numérico' },
+        { nombre: 'ID de Contraparte', requerido: false, tipo: 'texto' },
+        { nombre: 'NIT / RUC de la Contraparte', requerido: false, tipo: 'texto' },
+        { nombre: 'Fecha', requerido: false, tipo: 'fecha' },
+      ],
+      nota: 'Único motor que requiere DOS archivos — el de transacciones (arriba) y el registro de partes relacionadas (abajo). Sin el segundo archivo, el motor no tiene contra qué cruzar.',
+      datasetSecundario: {
+        label: 'Registro de Partes Relacionadas / Nómina',
+        campos: [
+          { nombre: 'Nombre de la Parte Relacionada', requerido: true, tipo: 'texto' },
+          { nombre: 'Relación (Accionista/Director/Familiar/Empleado/Filial)', requerido: true, tipo: 'texto' },
+          { nombre: 'NIT / RUC (si está disponible)', requerido: false, tipo: 'texto' },
+        ],
+      },
+    },
   },
   expenses: {
     area: 'operativo',
@@ -163,6 +268,16 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'El umbral de aprobación usado por defecto ($100) es un valor de referencia — para un resultado preciso debe ajustarse a la política real de la entidad. Un empleado con más viajes/gastos legítimos (ej. ventas, dirección) concentrará naturalmente más gasto sin que eso implique fraude — el hallazgo de concentración es un punto de partida, no una conclusión.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Nombre de Empleado', requerido: true, tipo: 'texto' },
+        { nombre: 'Monto', requerido: true, tipo: 'numérico' },
+        { nombre: 'ID de Empleado', requerido: false, tipo: 'texto' },
+        { nombre: 'Fecha del Gasto', requerido: false, tipo: 'fecha' },
+        { nombre: 'Categoría de Gasto', requerido: false, tipo: 'texto' },
+        { nombre: 'Aprobado por', requerido: false, tipo: 'texto' },
+      ],
+    },
   },
   revenue_cutoff: {
     area: 'financiero',
@@ -177,6 +292,16 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'El cierre de período se infiere de los datos cargados (la fecha más reciente) — si el archivo no cubre exactamente el período a evaluar, el resultado no es confiable. Sin fecha de entrega cargada, la prueba de corte queda incompleta (solo señala qué facturas revisar manualmente).',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Nombre del Cliente', requerido: true, tipo: 'texto' },
+        { nombre: 'Monto', requerido: true, tipo: 'numérico' },
+        { nombre: 'Fecha de Factura', requerido: true, tipo: 'fecha' },
+        { nombre: 'Número de Factura', requerido: false, tipo: 'texto' },
+        { nombre: 'Fecha de Guía de Despacho/Entrega', requerido: false, tipo: 'fecha' },
+      ],
+      nota: 'Cargar exactamente el período a evaluar — el cierre se infiere como la fecha de factura más reciente del archivo.',
+    },
   },
   bid_rigging: {
     area: 'operativo',
@@ -192,6 +317,15 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'El fraude en licitaciones no siempre deja un rastro numérico detectable — un proceso genuinamente competitivo entre pocos proveedores especializados puede producir precios similares sin que exista colusión. Cada hallazgo requiere investigación adicional (relaciones societarias entre oferentes, patrones a través de múltiples entidades contratantes) antes de concluir.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'ID de Licitación / Proceso', requerido: true, tipo: 'texto' },
+        { nombre: 'Nombre del Proveedor/Oferente', requerido: true, tipo: 'texto' },
+        { nombre: 'Monto Ofertado', requerido: true, tipo: 'numérico' },
+        { nombre: '¿Ganador? (Sí/No)', requerido: true, tipo: 'booleano' },
+      ],
+      nota: 'Una fila por oferta (no por proceso) — cada licitación aparece varias veces, una por cada proveedor que ofertó en ella.',
+    },
   },
   ar_aging: {
     area: 'financiero',
@@ -207,6 +341,17 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'La antigüedad se calcula contra la fecha de vencimiento más reciente del archivo cargado, no contra la fecha real de hoy — cargue el universo completo de CxC vigente a la fecha de corte que quiere evaluar. La prueba de notas de crédito no vincula automáticamente cada nota contra su factura original (requiere ese cruce manual si el archivo no lo trae).',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Nombre del Cliente', requerido: true, tipo: 'texto' },
+        { nombre: 'Fecha de Vencimiento', requerido: true, tipo: 'fecha' },
+        { nombre: 'Monto', requerido: true, tipo: 'numérico' },
+        { nombre: 'Número de Factura', requerido: false, tipo: 'texto' },
+        { nombre: '¿Es Nota de Crédito? (Sí/No)', requerido: false, tipo: 'booleano' },
+        { nombre: 'Fecha de Factura/Nota', requerido: false, tipo: 'fecha' },
+      ],
+      nota: 'Cargar el universo completo de CxC vigente a la fecha de corte a evaluar — la antigüedad se calcula contra la fecha de vencimiento más reciente del archivo.',
+    },
   },
   fixed_assets: {
     area: 'financiero',
@@ -222,6 +367,18 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'Asume depreciación en línea recta — si la entidad usa otro método (unidades producidas, saldos decrecientes), la comparación no es válida sin ajustar el cálculo. La fecha de referencia se infiere de los datos cargados, no es necesariamente la fecha de cierre real del período auditado.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Nombre del Activo', requerido: true, tipo: 'texto' },
+        { nombre: 'Costo de Adquisición', requerido: true, tipo: 'numérico' },
+        { nombre: 'Fecha de Adquisición', requerido: true, tipo: 'fecha' },
+        { nombre: 'Vida Útil (años)', requerido: true, tipo: 'numérico' },
+        { nombre: 'ID del Activo', requerido: false, tipo: 'texto' },
+        { nombre: 'Depreciación Acumulada Registrada', requerido: false, tipo: 'numérico' },
+        { nombre: 'Estado (Activo/Dado de Baja)', requerido: false, tipo: 'texto' },
+        { nombre: 'Fecha de Última Verificación Física', requerido: false, tipo: 'fecha' },
+      ],
+    },
   },
   structuring: {
     area: 'operativo',
@@ -236,6 +393,13 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'El umbral de reporte usado por defecto ($10,000) es un valor de referencia — debe ajustarse al umbral regulatorio real aplicable (ej. el de la Unidad de Investigación Financiera). Un patrón detectado es un indicio para investigar, no una confirmación de lavado de activos.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Titular de la Cuenta/Depositante', requerido: true, tipo: 'texto' },
+        { nombre: 'Monto', requerido: true, tipo: 'numérico' },
+        { nombre: 'Fecha', requerido: true, tipo: 'fecha' },
+      ],
+    },
   },
   missing_trader: {
     area: 'fiscal',
@@ -250,6 +414,15 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'NO puede confirmar que el IVA facturado no fue enterado a la administración tributaria — ese dato no está disponible en un archivo de transacciones internas, requiere cruce con DGII. Señala el patrón transaccional consistente con el esquema, no una confirmación de fraude.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Nombre del Proveedor', requerido: true, tipo: 'texto' },
+        { nombre: 'Monto', requerido: true, tipo: 'numérico' },
+        { nombre: 'Fecha', requerido: true, tipo: 'fecha' },
+        { nombre: 'NIT / RUC', requerido: false, tipo: 'texto' },
+        { nombre: 'Dirección', requerido: false, tipo: 'texto' },
+      ],
+    },
   },
   tax_haven: {
     area: 'fiscal',
@@ -264,6 +437,14 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'El catálogo de jurisdicciones es una REFERENCIA GENERAL, NO la lista oficial vigente de "paraísos fiscales" o "sujetos a régimen fiscal preferente" que publica el Ministerio de Hacienda/DGII de El Salvador — esa lista oficial debe verificarse aparte y puede diferir. Este motor es un punto de partida para la revisión, no una determinación legal de precios de transferencia.',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Nombre de la Contraparte', requerido: true, tipo: 'texto' },
+        { nombre: 'Monto', requerido: true, tipo: 'numérico' },
+        { nombre: 'País / Jurisdicción', requerido: true, tipo: 'texto' },
+        { nombre: 'Fecha', requerido: false, tipo: 'fecha' },
+      ],
+    },
   },
   dte_validation: {
     area: 'fiscal',
@@ -284,18 +465,34 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     ],
     limitaciones:
       'La firma electrónica se decodifica y se compara contra el documento recibido, pero NO se verifica criptográficamente contra el certificado público de Hacienda — eso requeriría obtener el certificado vigente de cada emisor por separado. Tampoco se verifica en línea el Sello de Recepción contra el servicio público de consulta de Hacienda (admin.factura.gob.sv) ni se reconcilian aritméticamente los totales del resumen — el cálculo varía por tipo de documento, tasas de retención y percepciones aplicables, y debe verificarse aparte. Este motor cubre 11 de los 14 tipos de documento/evento definidos por Hacienda (no incluye eventos de contingencia ni invalidación).',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'JSON completo del DTE, uno por archivo (identificación, emisor, receptor, cuerpo del documento, resumen)', requerido: true, tipo: 'texto' },
+        { nombre: 'Sello de Recepción de Hacienda', requerido: false, tipo: 'texto' },
+        { nombre: 'Firma Electrónica (JWS)', requerido: false, tipo: 'texto' },
+      ],
+      nota: 'No sube CSV/Excel con mapeo de columnas como los demás motores — se suben uno o más archivos JSON del DTE tal como se emiten/reciben, con su estructura técnica oficial intacta. Sin Sello de Recepción o Firma Electrónica, esas pruebas puntuales no aplican al documento pero el resto de la validación de esquema sigue corriendo.',
+    },
   },
   sanctions_screening: {
     area: 'operativo',
     objetivo:
       'Detectar si algún proveedor o cliente del auditado coincide, por nombre, con una persona o entidad sancionada — prueba estándar de cumplimiento AML/KYC (Anti-Lavado de Dinero / Conozca a su Cliente) sobre la cartera de contrapartes del negocio.',
     metodologia:
-      'Matching difuso (similitud de texto, no coincidencia exacta) de cada nombre subido contra una copia local de la Lista SDN de la OFAC (Tesoro de EE.UU.) y la Lista Consolidada del Consejo de Seguridad de la ONU, sincronizada periódicamente desde las fuentes oficiales. Compara contra el nombre principal Y cada alias conocido de cada entrada — una coincidencia de similitud ≥87% (umbral ajustable) se reporta para revisión.',
-    normativa: 'Ley Contra el Lavado de Dinero y Activos, listas de sanciones de OFAC (31 CFR) y resoluciones del Consejo de Seguridad de la ONU',
+      'Matching difuso (similitud de texto, no coincidencia exacta) de cada nombre subido contra una copia local de la Lista SDN de la OFAC (Tesoro de EE.UU.), la Lista Consolidada del Consejo de Seguridad de la ONU y la UK Sanctions List (FCDO, Reino Unido), sincronizadas periódicamente desde las fuentes oficiales. Compara contra el nombre principal Y cada alias conocido de cada entrada — una coincidencia de similitud ≥87% (umbral ajustable) se reporta para revisión.',
+    normativa: 'Ley Contra el Lavado de Dinero y Activos, listas de sanciones de OFAC (31 CFR), resoluciones del Consejo de Seguridad de la ONU y la UK Sanctions List (FCDO)',
     pruebas: [
-      { nombre: 'Coincidencia con Lista de Sanciones', descripcion: 'Nombre subido con similitud igual o mayor al umbral configurado contra el nombre principal o un alias de una entrada activa de OFAC/ONU — se reporta el nombre coincidente, el score de similitud, la lista de origen y los programas/motivos de la sanción.' },
+      { nombre: 'Coincidencia con Lista de Sanciones', descripcion: 'Nombre subido con similitud igual o mayor al umbral configurado contra el nombre principal o un alias de una entrada activa de OFAC/ONU/UK — se reporta el nombre coincidente, el score de similitud, la lista de origen y los programas/motivos de la sanción.' },
     ],
     limitaciones:
-      'El matching difuso puede producir tanto falsos positivos (homónimos, nombres comunes que casualmente se parecen a una entrada de la lista) como falsos negativos (variantes de escritura no capturadas por el umbral) — toda coincidencia requiere verificación manual antes de tratarse como un hallazgo confirmado. La copia local solo es tan reciente como la última sincronización exitosa (ver estado en Administración → Listas de Sanciones). Cobertura limitada a OFAC SDN y la Lista Consolidada ONU — no incluye listas de la Unión Europea, Reino Unido, Interpol, ni registros de Personas Expuestas Políticamente (PEP).',
+      'El matching difuso puede producir tanto falsos positivos (homónimos, nombres comunes que casualmente se parecen a una entrada de la lista) como falsos negativos (variantes de escritura no capturadas por el umbral) — toda coincidencia requiere verificación manual antes de tratarse como un hallazgo confirmado. La copia local solo es tan reciente como la última sincronización exitosa (ver estado en Administración → Listas de Sanciones). Cobertura: OFAC SDN, Lista Consolidada ONU y UK Sanctions List — no incluye la lista de la Unión Europea (su fuente oficial exige una cuenta registrada para obtener acceso, pendiente de gestión administrativa), Interpol, ni registros de Personas Expuestas Políticamente (PEP).',
+    estructuraMinima: {
+      campos: [
+        { nombre: 'Nombre de Proveedor/Cliente', requerido: true, tipo: 'texto' },
+        { nombre: 'NIT / RUC', requerido: false, tipo: 'texto' },
+        { nombre: 'País / Jurisdicción', requerido: false, tipo: 'texto' },
+      ],
+      nota: 'NIT/RUC y jurisdicción no entran al cálculo del score de coincidencia — se muestran solo como anotación de contexto junto a cada resultado.',
+    },
   },
 };

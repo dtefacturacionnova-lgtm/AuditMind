@@ -10,10 +10,12 @@ import { AuditInvestigationAccessService } from './audit-investigation-access.se
 // criterio ya aceptado para el prompt de SHERLOCK entre TS/Python (documentado
 // ahí, no sincronizado automáticamente). related_parties/dte_validation quedan
 // fuera a propósito: ver el comentario en investigation.py para el porqué.
+// sanctions_screening (motor #18) SÍ se incluye desde 2026-08-26 (decisión
+// explícita del usuario).
 const AUTO_RUN_ENGINES = [
   'gl', 'ap', 'payroll', 'benford', 'anomaly', 'sod', 'vendor_master', 'expenses',
   'revenue_cutoff', 'bid_rigging', 'ar_aging', 'fixed_assets', 'structuring',
-  'missing_trader', 'tax_haven',
+  'missing_trader', 'tax_haven', 'sanctions_screening',
 ] as const;
 
 // Fase 2c — el motor CAATs se sigue ejecutando desde el frontend llamando

@@ -1,6 +1,7 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
+import type { FirmDashboard } from './useCapacity';
 
 export type PeriodType = 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
 
@@ -118,6 +119,19 @@ export interface RecurringFinding {
   audit: { title: string };
 }
 
+// Rentabilidad agregada de toda la organización — mismo dato ya disponible
+// por encargo en Cartera (ProfitabilityService.getAuditFinancialSummary),
+// sumado aquí a nivel firma (ProfitabilityService.getOrgWideProfitability).
+export interface OrgProfitability {
+  engagementsTotal: number;
+  engagementsWithRevenue: number;
+  engagementsWithMargin: number;
+  totalIncome: number;
+  totalCost: number;
+  totalMargin: number;
+  totalMarginPct: number | null;
+}
+
 export interface CommitteeDashboard {
   riskPosture: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
   period: { key: string; type: PeriodType; label: string };
@@ -135,6 +149,8 @@ export interface CommitteeDashboard {
   };
   openBySeverity: Record<string, number>;
   controlInternoGlobal: ControlInternoGlobal;
+  orgProfitability: OrgProfitability;
+  firmUtilization: FirmDashboard;
   planExecution: PlanExecutionItem[];
   trend: CommitteeTrendPoint[];
   overdueActions: OverdueAction[];

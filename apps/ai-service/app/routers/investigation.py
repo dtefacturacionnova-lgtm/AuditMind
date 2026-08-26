@@ -362,9 +362,11 @@ async def analyze(
 # satisfacer. dte_validation queda fuera porque espera documentos DTE anidados,
 # no filas planas de spreadsheet. Cualquier motor nuevo debe cumplir "un solo
 # dataset, filas planas" ANTES de agregarse aquí — no basta con que exista en
-# analytics.py. Esta misma lista de 15 está espejada a mano en
-# apps/api/src/investigation-report/caats-auto-run.service.ts (mismo criterio
-# ya aceptado para el prompt de SHERLOCK entre TS/Python) y en
+# analytics.py. sanctions_screening (motor #18) SÍ se incluye (2026-08-26,
+# decisión explícita del usuario) — encaja en el shape estándar de
+# field_mapping igual que los otros 15. Esta misma lista de 16 está espejada
+# a mano en apps/api/src/investigation-report/caats-auto-run.service.ts
+# (mismo criterio ya aceptado para el prompt de SHERLOCK entre TS/Python) y en
 # apps/web/src/lib/caats-fields.ts (AUTO_RUN_ELIGIBLE_ENGINES).
 AUTO_RUN_ENGINES: dict[str, str] = {
     "gl": "Libro Mayor",
@@ -382,12 +384,13 @@ AUTO_RUN_ENGINES: dict[str, str] = {
     "structuring": "Pitufeo / Estructuración",
     "missing_trader": "Missing Trader",
     "tax_haven": "Jurisdicciones de Baja Tributación",
+    "sanctions_screening": "Screening de Sanciones (OFAC/ONU/RU)",
 }
 
 AutoRunEngineId = Literal[
     "gl", "ap", "payroll", "benford", "anomaly", "sod", "vendor_master", "expenses",
     "revenue_cutoff", "bid_rigging", "ar_aging", "fixed_assets", "structuring",
-    "missing_trader", "tax_haven", "ninguno",
+    "missing_trader", "tax_haven", "sanctions_screening", "ninguno",
 ]
 
 

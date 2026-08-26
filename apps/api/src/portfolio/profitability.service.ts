@@ -240,6 +240,50 @@ export class ProfitabilityService {
     };
   }
 
+  // ── Rentabilidad agregada de TODA la organización, para el dashboard de
+  // Comité (extensión del roadmap pendiente desde PT-B4/Comité, 2026-08-23).
+  // Reutiliza getAuditFinancialSummary() encargo por encargo — NO reimplementa
+  // el cálculo de costo en SQL crudo — para preservar la regla de negocio de
+  // que las horas sin costear NUNCA se asumen $0 (ver computeAuditCostSummary).
+  async getOrgWideProfitability(organizationId: string, asOf?: Date) {
+    const engagements = await this.prisma.engagement.findMany({
+      where: { organizationId, auditId: { not: null } },
+      select: { auditId: true },
+    });
+
+    const summaries = await Promise.all(
+      engagements.map((e) => this.getAuditFinancialSummary(e.auditId as string, organizationId, asOf)),
+    );
+
+    let totalIncome = 0;
+    let totalCost = 0;
+    let totalMargin = 0;
+    let engagementsWithRevenue = 0;
+    let engagementsWithMargin = 0;
+
+    for (const s of summaries) {
+      totalCost += s.cost;
+      if (s.revenue !== null) {
+        totalIncome += s.revenue;
+        engagementsWithRevenue++;
+      }
+      if (s.margin !== null) {
+        totalMargin += s.margin;
+        engagementsWithMargin++;
+      }
+    }
+
+    return {
+      engagementsTotal: summaries.length,
+      engagementsWithRevenue,
+      engagementsWithMargin,
+      totalIncome: round2(totalIncome),
+      totalCost: round2(totalCost),
+      totalMargin: round2(totalMargin),
+      totalMarginPct: totalIncome !== 0 ? round2((totalMargin / totalIncome) * 100) : null,
+    };
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   /** Ingreso conocido del encargo, resuelto vía EngagementLetter → Proposal. null si no hay honorario definido. */

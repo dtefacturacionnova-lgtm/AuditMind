@@ -14,24 +14,22 @@ export type AnalysisId =
 export const JSON_UPLOAD_ENGINES: ReadonlySet<AnalysisId> = new Set(['dte_validation']);
 
 // Fase 2c (Investigador Forense) — motores que SÍ se pueden auto-detectar y
-// auto-ejecutar desde una sola hoja de cálculo subida: 15 de los 18 motores.
+// auto-ejecutar desde una sola hoja de cálculo subida: 16 de los 18 motores.
 // Quedan fuera `related_parties` (necesita un segundo dataset de referencia,
 // ver SECONDARY_DATASET más abajo) y `dte_validation` (sube JSON, no filas de
 // spreadsheet, ver JSON_UPLOAD_ENGINES) por incompatibilidad estructural con
-// el flujo de una sola hoja subida. `sanctions_screening` (motor #18) queda
-// fuera por una razón distinta — decisión de alcance, no de estructura: su
-// correctitud depende de un dataset externo con fecha de sincronización que
-// el clasificador automático no puede evaluar, y un falso negativo de
-// compliance pesa distinto a uno de una prueba estadística — el auditor debe
-// elegirlo a mano desde el panel manual por ahora. Espejo a mano de
-// AUTO_RUN_ENGINES en
+// el flujo de una sola hoja subida. `sanctions_screening` (motor #18) SÍ se
+// incluye (2026-08-26, decisión explícita del usuario tras usar el motor un
+// tiempo) — encaja en el shape estándar de field_mapping igual que los otros
+// 15, la dependencia de datos externos ya no se considera un impedimento.
+// Espejo a mano de AUTO_RUN_ENGINES en
 // apps/ai-service/app/routers/investigation.py y de la constante homónima en
 // apps/api/src/investigation-report/caats-auto-run.service.ts — mismo
 // criterio ya aceptado para el prompt de SHERLOCK entre TS/Python.
 export const AUTO_RUN_ELIGIBLE_ENGINES: AnalysisId[] = [
   'gl', 'ap', 'payroll', 'benford', 'anomaly', 'sod', 'vendor_master', 'expenses',
   'revenue_cutoff', 'bid_rigging', 'ar_aging', 'fixed_assets', 'structuring',
-  'missing_trader', 'tax_haven',
+  'missing_trader', 'tax_haven', 'sanctions_screening',
 ];
 
 export const AUTO_RUN_ENGINE_LABELS: Record<string, string> = {
@@ -50,6 +48,7 @@ export const AUTO_RUN_ENGINE_LABELS: Record<string, string> = {
   structuring: 'Pitufeo / Estructuración',
   missing_trader: 'Missing Trader',
   tax_haven: 'Jurisdicciones de Baja Tributación',
+  sanctions_screening: 'Screening de Sanciones (OFAC/ONU/RU)',
 };
 
 export interface FieldDef { key: string; label: string; required?: boolean }

@@ -26,7 +26,7 @@ class ClassifySpreadsheetBody {
 const AUTO_RUN_ENGINE_IDS = [
   'gl', 'ap', 'payroll', 'benford', 'anomaly', 'sod', 'vendor_master', 'expenses',
   'revenue_cutoff', 'bid_rigging', 'ar_aging', 'fixed_assets', 'structuring',
-  'missing_trader', 'tax_haven',
+  'missing_trader', 'tax_haven', 'sanctions_screening',
 ] as const;
 
 class CreateCaatsAutoRunBody {

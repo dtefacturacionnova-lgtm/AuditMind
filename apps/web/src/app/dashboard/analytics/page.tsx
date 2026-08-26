@@ -176,8 +176,8 @@ const ANALYSIS_TYPES: AnalysisType[] = [
   },
   {
     id:          'sanctions_screening',
-    label:       'Screening de Sanciones (OFAC/ONU)',
-    description: 'Busca coincidencias difusas de nombre entre los proveedores/clientes subidos y la copia local de OFAC SDN + Lista Consolidada ONU.',
+    label:       'Screening de Sanciones (OFAC/ONU/RU)',
+    description: 'Busca coincidencias difusas de nombre entre los proveedores/clientes subidos y la copia local de OFAC SDN + Lista Consolidada ONU + UK Sanctions List.',
     icon:        ShieldBan,
     color:       'bg-red-700',
     sampleKey:   'sanctions_screening',
@@ -748,6 +748,68 @@ function MethodologyModal({ analysisId, label, onClose }: { analysisId: Analysis
               <p className="text-sm text-gray-700 leading-relaxed">{info.normativa}</p>
             </div>
           )}
+
+          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-3">
+            <p className="text-xs font-bold text-slate-600 uppercase tracking-wide flex items-center gap-1.5 mb-2">
+              <Table2 className="w-3.5 h-3.5" /> Estructura mínima del archivo
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-slate-500">
+                    <th className="font-semibold pb-1 pr-3">Campo</th>
+                    <th className="font-semibold pb-1 pr-3">Obligatorio</th>
+                    <th className="font-semibold pb-1">Tipo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {info.estructuraMinima.campos.map((c, i) => (
+                    <tr key={i} className="border-t border-slate-200/70">
+                      <td className="py-1 pr-3 text-slate-700">{c.nombre}</td>
+                      <td className="py-1 pr-3">
+                        {c.requerido ? (
+                          <span className="text-red-600 font-semibold">Sí</span>
+                        ) : (
+                          <span className="text-slate-400">No</span>
+                        )}
+                      </td>
+                      <td className="py-1 text-slate-500">{c.tipo ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {info.estructuraMinima.minRegistros && (
+              <p className="text-[11px] text-slate-500 mt-2">Mínimo {info.estructuraMinima.minRegistros} registros válidos.</p>
+            )}
+            {info.estructuraMinima.nota && (
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">{info.estructuraMinima.nota}</p>
+            )}
+            {info.estructuraMinima.datasetSecundario && (
+              <div className="mt-3 pt-3 border-t border-slate-200">
+                <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mb-1.5">
+                  Segundo archivo: {info.estructuraMinima.datasetSecundario.label}
+                </p>
+                <table className="w-full text-xs">
+                  <tbody>
+                    {info.estructuraMinima.datasetSecundario.campos.map((c, i) => (
+                      <tr key={i} className="border-t border-slate-200/70">
+                        <td className="py-1 pr-3 text-slate-700">{c.nombre}</td>
+                        <td className="py-1 pr-3">
+                          {c.requerido ? (
+                            <span className="text-red-600 font-semibold">Sí</span>
+                          ) : (
+                            <span className="text-slate-400">No</span>
+                          )}
+                        </td>
+                        <td className="py-1 text-slate-500">{c.tipo ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
 
           <div>
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Pruebas que aplica</p>

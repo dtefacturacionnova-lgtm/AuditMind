@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     # follow_redirects=True la sigue sin problema.
     OFAC_SDN_XML_URL: str = "https://sanctionslistservice.ofac.treas.gov/api/publicationpreview/exports/sdn.xml"
     UN_CONSOLIDATED_XML_URL: str = "https://scsanctions.un.org/resources/xml/en/consolidated.xml"
+    # UK Sanctions List (FCDO) — reemplazó a la OFSI Consolidated List
+    # (retirada 28/01/2026). Verificada en vivo 2026-08-26 (~3,974 registros).
+    # La UE quedó FUERA de esta ronda: su fuente oficial (webgate.ec.europa.eu)
+    # exige crear una cuenta para obtener la URL/API key — confirmado en vivo
+    # con un 403 real, no un bloqueo de bot — y no está dentro de lo que se
+    # puede automatizar sin esa cuenta.
+    UK_SANCTIONS_XML_URL: str = "https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.xml"
 
     class Config:
         env_file = ".env"

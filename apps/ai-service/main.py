@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncpg
 
 from app.config import settings
-from app.routers import agents, rag, health, analytics, connectors, scriptorium, sampling, evidence, investigation
+from app.routers import agents, rag, health, analytics, connectors, scriptorium, sampling, evidence, investigation, watchlists
 from app.services.rag_pipeline import _ensure_pgvector_tables
 
 
@@ -54,3 +54,4 @@ app.include_router(scriptorium.router, prefix="/scriptorium", tags=["Scriptorium
 app.include_router(sampling.router)  # prefix /sampling viene del propio router
 app.include_router(evidence.router, prefix="/evidence", tags=["Evidencia de Campo"])
 app.include_router(investigation.router, prefix="/investigation", tags=["Investigador Forense — SHERLOCK"])
+app.include_router(watchlists.router, prefix="/watchlists", tags=["Listas de Sanciones — Motor CAATs #18"])

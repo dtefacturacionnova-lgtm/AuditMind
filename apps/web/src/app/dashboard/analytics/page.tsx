@@ -10,7 +10,7 @@ import {
   ChevronDown, ChevronUp, Info, Upload, FileUp, X, ListChecks,
   AlertTriangle, RotateCcw, HelpCircle, FileDown, Table2,
   Target, FlaskConical, ScrollText, Save, ShieldAlert, Building2, Users, Receipt,
-  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe, FileCheck2,
+  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe, FileCheck2, ShieldBan,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -173,6 +173,14 @@ const ANALYSIS_TYPES: AnalysisType[] = [
     icon:        FileCheck2,
     color:       'bg-blue-700',
     sampleKey:   'dte_validation',
+  },
+  {
+    id:          'sanctions_screening',
+    label:       'Screening de Sanciones (OFAC/ONU)',
+    description: 'Busca coincidencias difusas de nombre entre los proveedores/clientes subidos y la copia local de OFAC SDN + Lista Consolidada ONU.',
+    icon:        ShieldBan,
+    color:       'bg-red-700',
+    sampleKey:   'sanctions_screening',
   },
 ];
 
@@ -664,6 +672,18 @@ const SAMPLE_DATA: Record<string, unknown> = {
         // firma con contenido firmado que NO coincide con este documento (codigoGeneracion del payload firmado es BD3B6CB8..., el real de este documento es C8535F77...) — alteración posterior a la firma.
         firmaElectronica: 'eyJhbGciOiJSUzUxMiJ9.eyJpZGVudGlmaWNhY2lvbiI6eyJ2ZXJzaW9uIjoyLCJhbWJpZW50ZSI6IjAxIiwidGlwb0R0ZSI6IjAxIiwibnVtZXJvQ29udHJvbCI6IkRURS0wMS1NMDAxUDAwMS0wMDAwMDAwMDAwMDAwMDYiLCJjb2RpZ29HZW5lcmFjaW9uIjoiQkQzQjZDQjgtODc0NC00NUU4LUI2MzMtNThBNTVDMkM2MEJDIiwidGlwb01vZGVsbyI6MSwidGlwb09wZXJhY2lvbiI6MSwidGlwb0NvbnRpbmdlbmNpYSI6bnVsbCwibW90aXZvQ29udGluIjpudWxsLCJmZWNFbWkiOiIyMDI2LTAzLTA0IiwiaG9yRW1pIjoiMTI6MDU6MDAiLCJ0aXBvTW9uZWRhIjoiVVNEIn0sImRvY3VtZW50b1JlbGFjaW9uYWRvIjpudWxsLCJlbWlzb3IiOnsibml0IjoiMDYxNDAxMDE5MDEwMTIiLCJucmMiOiIxMjM0NTYiLCJub21icmUiOiJDb21lcmNpYWwgRGVtbyBTQSBkZSBDViIsImNvZEFjdGl2aWRhZCI6IjQ3MTkwIiwiZGVzY0FjdGl2aWRhZCI6IlZlbnRhIGFsIHBvciBtZW5vciBkZSBvdHJvcyBwcm9kdWN0b3MgZW4gZXN0YWJsZWNpbWllbnRvcyBubyBlc3BlY2lhbGl6YWRvcyIsIm5vbWJyZUNvbWVyY2lhbCI6IkNvbWVyY2lhbCBEZW1vIiwiZGlyZWNjaW9uIjp7ImRlcGFydGFtZW50byI6IjA2IiwibXVuaWNpcGlvIjoiMjMiLCJkaXN0cml0byI6IjE0MDEiLCJjb21wbGVtZW50byI6IkNvbG9uaWEgRXNjYWxvbiwgQ2FsbGUgUHJpbmNpcGFsLCBMb2NhbCAxMiwgU2FuIFNhbHZhZG9yIn0sInRlbGVmb25vIjoiMjIzNDU2NzgiLCJjb3JyZW8iOiJjb250YWN0b0Bjb21lcmNpYWxkZW1vLmNvbS5zdiIsImNvZEVzdGFibGUiOiIwMDAxIiwiY29kUHVudG9WZW50YSI6IjAwMDEifSwicmVjZXB0b3IiOnsidGlwb0RvY3VtZW50byI6IjM2IiwibnVtRG9jdW1lbnRvIjoiMDYxNDk5OTk5OTk5OTkiLCJucmMiOiI5OTk5OTkiLCJub21icmUiOiJDbGllbnRlIFBydWViYSBSZWNoYXpvIFNBIGRlIENWIiwiY29kQWN0aXZpZGFkIjoiNDcxOTAiLCJkZXNjQWN0aXZpZGFkIjoiVmVudGEgYWwgcG9yIG1lbm9yIGRlIHByb2R1Y3RvcyBkaXZlcnNvcyIsImRpcmVjY2lvbiI6eyJkZXBhcnRhbWVudG8iOiIwNiIsIm11bmljaXBpbyI6IjE0IiwiZGlzdHJpdG8iOiIwNjAyIiwiY29tcGxlbWVudG8iOiJBdmVuaWRhIEluZGVwZW5kZW5jaWEgIzEwLCBNZWppY2Fub3MsIFNhbiBTYWx2YWRvciJ9LCJ0ZWxlZm9ubyI6IjIyMTEwMDk5IiwiY29ycmVvIjoiY29udGFjdG9AY2xpZW50ZXJlY2hhem8uY29tLnN2In0sIm90cm9zRG9jdW1lbnRvcyI6bnVsbCwidmVudGFUZXJjZXJvIjpudWxsLCJjdWVycG9Eb2N1bWVudG8iOlt7Im51bUl0ZW0iOjEsInRpcG9JdGVtIjoxLCJudW1lcm9Eb2N1bWVudG8iOm51bGwsImNhbnRpZGFkIjo0LCJjb2RpZ28iOiJQUk9ELTAwNSIsImNvZFRyaWJ1dG8iOm51bGwsInVuaU1lZGlkYSI6NTksImRlc2NyaXBjaW9uIjoiVmVudGEgZGUgZXF1aXBvIGRlIG9maWNpbmEiLCJwcmVjaW9VbmkiOjEwMC4wLCJtb250b0Rlc2N1IjowLCJ2ZW50YU5vU3VqIjowLCJ2ZW50YUV4ZW50YSI6MCwidmVudGFHcmF2YWRhIjo0MDAuMCwidHJpYnV0b3MiOlsiMjAiXSwicHN2IjowLCJub0dyYXZhZG8iOjAsIml2YUl0ZW0iOjB9XSwicmVzdW1lbiI6eyJ0b3RhbE5vU3VqIjowLCJ0b3RhbEV4ZW50YSI6MCwidG90YWxHcmF2YWRhIjo0MDAuMCwic3ViVG90YWxWZW50YXMiOjQwMC4wLCJkZXNjdU5vU3VqIjowLCJkZXNjdUV4ZW50YSI6MCwiZGVzY3VHcmF2YWRhIjowLCJwb3JjZW50YWplRGVzY3VlbnRvIjowLCJ0b3RhbERlc2N1IjowLCJ0cmlidXRvcyI6W3siY29kaWdvIjoiMjAiLCJkZXNjcmlwY2lvbiI6IkltcHVlc3RvIGFsIFZhbG9yIEFncmVnYWRvIDEzJSIsInZhbG9yIjo1Mi4wfV0sInN1YlRvdGFsIjo0MDAuMCwiaXZhUmV0ZSI6MCwibW9udG9Ub3RhbE9wZXJhY2lvbiI6NDUyLjAsInRvdGFsTm9HcmF2YWRvIjowLCJ0b3RhbFBhZ2FyIjo0NTIuMCwidG90YWxMZXRyYXMiOiJDVUFUUk9DSUVOVE9TIENJTkNVRU5UQSBZIERPUyAwMC8xMDAgRE9MQVJFUyIsInRvdGFsSXZhIjo1Mi4wLCJzYWxkb0Zhdm9yIjowLCJjb25kaWNpb25PcGVyYWNpb24iOjEsInBhZ29zIjpbeyJjb2RpZ28iOiIwMSIsIm1vbnRvUGFnbyI6NDUyLjAsInJlZmVyZW5jaWEiOm51bGwsInBsYXpvIjpudWxsLCJwZXJpb2RvIjpudWxsfV0sIm51bVBhZ29FbGVjdHJvbmljbyI6bnVsbCwib2JzZXJ2YWNpb25lcyI6bnVsbH0sImFwZW5kaWNlIjpudWxsfQ.eyEwtSfxrbVn56T4NgQsV6Eu2-E5PwU9fz0jeq8l9_pdrhNgy2H0R1adPiftjN84dNOIuAkWV4xIAcVmqlSUiQ',
       },
+    ],
+  },
+  // Nombres deliberadamente sintéticos y no coincidentes — a diferencia de
+  // los demás motores, un ejemplo "con hallazgo plantado" requeriría
+  // referenciar un nombre real de OFAC/ONU, que puede quedar obsoleto en
+  // cualquier momento si esa entidad es dada de baja. Esta muestra
+  // demuestra el flujo (y el estado honesto "sin hallazgos") sin ese riesgo.
+  sanctions_screening: {
+    records: [
+      { vendor_name: 'Suministros Industriales del Pacífico SA de CV', tax_id: '0614-123456-789-0', jurisdiction: 'El Salvador' },
+      { vendor_name: 'Distribuidora Comercial Atlántico Ltda',         tax_id: '0614-234567-890-1', jurisdiction: 'El Salvador' },
+      { vendor_name: 'Servicios Profesionales Andinos SRL',            tax_id: '0614-345678-901-2', jurisdiction: 'Panamá' },
     ],
   },
 };

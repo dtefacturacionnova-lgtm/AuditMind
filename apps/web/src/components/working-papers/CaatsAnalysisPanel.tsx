@@ -5,7 +5,7 @@ import {
   Play, Loader2, AlertCircle, AlertTriangle, CheckCircle2, RotateCcw,
   Upload, FileUp, X, ListChecks, Database, FileSpreadsheet, TrendingUp,
   BarChart3, Cpu, ShieldAlert, Building2, Users, Receipt,
-  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe, FileCheck2,
+  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe, FileCheck2, ShieldBan,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
@@ -52,6 +52,7 @@ const ENGINES: { id: AnalysisId; label: string; icon: typeof Database; color: st
   { id: 'missing_trader', label: 'Missing Trader', icon: Ghost, color: 'bg-slate-500' },
   { id: 'tax_haven', label: 'Jurisdicciones de Baja Tributación', icon: Globe, color: 'bg-emerald-500' },
   { id: 'dte_validation', label: 'Validación DTE', icon: FileCheck2, color: 'bg-blue-700' },
+  { id: 'sanctions_screening', label: 'Screening de Sanciones (OFAC/ONU)', icon: ShieldBan, color: 'bg-red-700' },
 ];
 
 export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readOnly = false }: Props) {

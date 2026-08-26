@@ -4,7 +4,7 @@
 export type AnalysisId =
   | 'gl' | 'ap' | 'payroll' | 'benford' | 'anomaly' | 'sod' | 'vendor_master' | 'related_parties' | 'expenses'
   | 'revenue_cutoff' | 'bid_rigging' | 'ar_aging' | 'fixed_assets' | 'structuring' | 'missing_trader' | 'tax_haven'
-  | 'dte_validation';
+  | 'dte_validation' | 'sanctions_screening';
 
 // Motores que NO suben CSV/Excel con mapeo de columnas — suben uno o más
 // archivos JSON tal cual (la estructura la define una fuente externa —
@@ -14,10 +14,17 @@ export type AnalysisId =
 export const JSON_UPLOAD_ENGINES: ReadonlySet<AnalysisId> = new Set(['dte_validation']);
 
 // Fase 2c (Investigador Forense) — motores que SÍ se pueden auto-detectar y
-// auto-ejecutar desde una sola hoja de cálculo subida: los 17 menos
-// `related_parties` (necesita un segundo dataset de referencia, ver
-// SECONDARY_DATASET más abajo) y `dte_validation` (sube JSON, no filas de
-// spreadsheet, ver JSON_UPLOAD_ENGINES). Espejo a mano de AUTO_RUN_ENGINES en
+// auto-ejecutar desde una sola hoja de cálculo subida: 15 de los 18 motores.
+// Quedan fuera `related_parties` (necesita un segundo dataset de referencia,
+// ver SECONDARY_DATASET más abajo) y `dte_validation` (sube JSON, no filas de
+// spreadsheet, ver JSON_UPLOAD_ENGINES) por incompatibilidad estructural con
+// el flujo de una sola hoja subida. `sanctions_screening` (motor #18) queda
+// fuera por una razón distinta — decisión de alcance, no de estructura: su
+// correctitud depende de un dataset externo con fecha de sincronización que
+// el clasificador automático no puede evaluar, y un falso negativo de
+// compliance pesa distinto a uno de una prueba estadística — el auditor debe
+// elegirlo a mano desde el panel manual por ahora. Espejo a mano de
+// AUTO_RUN_ENGINES en
 // apps/ai-service/app/routers/investigation.py y de la constante homónima en
 // apps/api/src/investigation-report/caats-auto-run.service.ts — mismo
 // criterio ya aceptado para el prompt de SHERLOCK entre TS/Python.
@@ -157,6 +164,11 @@ export const FIELD_DEFS: Partial<Record<AnalysisId, FieldDef[]>> = {
     { key: 'amount',        label: 'Monto',                    required: true },
     { key: 'jurisdiction',  label: 'País / Jurisdicción',       required: true },
     { key: 'date',          label: 'Fecha' },
+  ],
+  sanctions_screening: [
+    { key: 'vendor_name',  label: 'Nombre de Proveedor/Cliente', required: true },
+    { key: 'tax_id',       label: 'NIT / RUC' },
+    { key: 'jurisdiction', label: 'País / Jurisdicción' },
   ],
 };
 

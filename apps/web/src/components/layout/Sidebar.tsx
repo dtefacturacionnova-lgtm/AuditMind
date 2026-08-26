@@ -9,7 +9,7 @@ import {
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
   Clock, CalendarClock, DollarSign, Handshake, CheckSquare, Wallet, Gauge, CalendarCheck,
-  Stamp,
+  Stamp, ShieldBan,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -142,6 +142,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Plantillas de Auditoría', href: '/dashboard/admin/audit-templates', icon: ClipboardList },
       { label: 'Biblioteca de Contenido', href: '/dashboard/admin/content-library', icon: Library },
       { label: 'Conectores de Datos', href: '/dashboard/admin/data-sources', icon: Plug },
+      { label: 'Listas de Sanciones', href: '/dashboard/admin/watchlists', icon: ShieldBan },
       { label: 'Base de Conocimiento', href: '/dashboard/admin/knowledge', icon: BookOpen },
       { label: 'Configuración', href: '/dashboard/admin/settings', icon: Settings },
     ],

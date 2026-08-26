@@ -285,4 +285,17 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     limitaciones:
       'La firma electrónica se decodifica y se compara contra el documento recibido, pero NO se verifica criptográficamente contra el certificado público de Hacienda — eso requeriría obtener el certificado vigente de cada emisor por separado. Tampoco se verifica en línea el Sello de Recepción contra el servicio público de consulta de Hacienda (admin.factura.gob.sv) ni se reconcilian aritméticamente los totales del resumen — el cálculo varía por tipo de documento, tasas de retención y percepciones aplicables, y debe verificarse aparte. Este motor cubre 11 de los 14 tipos de documento/evento definidos por Hacienda (no incluye eventos de contingencia ni invalidación).',
   },
+  sanctions_screening: {
+    area: 'operativo',
+    objetivo:
+      'Detectar si algún proveedor o cliente del auditado coincide, por nombre, con una persona o entidad sancionada — prueba estándar de cumplimiento AML/KYC (Anti-Lavado de Dinero / Conozca a su Cliente) sobre la cartera de contrapartes del negocio.',
+    metodologia:
+      'Matching difuso (similitud de texto, no coincidencia exacta) de cada nombre subido contra una copia local de la Lista SDN de la OFAC (Tesoro de EE.UU.) y la Lista Consolidada del Consejo de Seguridad de la ONU, sincronizada periódicamente desde las fuentes oficiales. Compara contra el nombre principal Y cada alias conocido de cada entrada — una coincidencia de similitud ≥87% (umbral ajustable) se reporta para revisión.',
+    normativa: 'Ley Contra el Lavado de Dinero y Activos, listas de sanciones de OFAC (31 CFR) y resoluciones del Consejo de Seguridad de la ONU',
+    pruebas: [
+      { nombre: 'Coincidencia con Lista de Sanciones', descripcion: 'Nombre subido con similitud igual o mayor al umbral configurado contra el nombre principal o un alias de una entrada activa de OFAC/ONU — se reporta el nombre coincidente, el score de similitud, la lista de origen y los programas/motivos de la sanción.' },
+    ],
+    limitaciones:
+      'El matching difuso puede producir tanto falsos positivos (homónimos, nombres comunes que casualmente se parecen a una entrada de la lista) como falsos negativos (variantes de escritura no capturadas por el umbral) — toda coincidencia requiere verificación manual antes de tratarse como un hallazgo confirmado. La copia local solo es tan reciente como la última sincronización exitosa (ver estado en Administración → Listas de Sanciones). Cobertura limitada a OFAC SDN y la Lista Consolidada ONU — no incluye listas de la Unión Europea, Reino Unido, Interpol, ni registros de Personas Expuestas Políticamente (PEP).',
+  },
 };

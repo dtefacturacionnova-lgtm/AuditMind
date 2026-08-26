@@ -67,6 +67,14 @@ class Settings(BaseSettings):
     # funcionando igual (degradación controlada, ver diarization_service.py).
     HUGGINGFACE_TOKEN: str = ""
 
+    # Motor CAATs #18 — Screening de sanciones (OFAC + ONU). URLs oficiales,
+    # verificadas en vivo al diseñar esta feature (2026-08-26) — ambas
+    # responden sin API key. La de ONU solo acepta GET (no HEAD) y redirige
+    # 302 a una URL de Azure Blob Storage firmada temporalmente; httpx con
+    # follow_redirects=True la sigue sin problema.
+    OFAC_SDN_XML_URL: str = "https://sanctionslistservice.ofac.treas.gov/api/publicationpreview/exports/sdn.xml"
+    UN_CONSOLIDATED_XML_URL: str = "https://scsanctions.un.org/resources/xml/en/consolidated.xml"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

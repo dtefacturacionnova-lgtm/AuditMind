@@ -36,6 +36,8 @@ statsmodels>=0.14.0
 scikit-learn>=1.5.0
 openpyxl>=3.1.0
 jsonschema>=4.23.0
+# Matching difuso de nombres — Motor CAATs #18 (screening de sanciones OFAC/ONU)
+rapidfuzz>=3.9.0
 
 # ─── Document Processing ───────────────────────────────────────────────────────
 pdfplumber>=0.11.0

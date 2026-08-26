@@ -1,6 +1,7 @@
 import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -43,11 +44,16 @@ import { CapacityModule } from './capacity/capacity.module';
 import { TimesheetModule } from './timesheet/timesheet.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
+import { WatchlistsModule } from './watchlists/watchlists.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
+    // Primer uso real de @nestjs/schedule en este código — ver
+    // watchlists.scheduler.ts. Sin este forRoot(), cualquier @Cron() no
+    // hace nada silenciosamente.
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     OrganizationsModule,
@@ -86,6 +92,7 @@ import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
     CapacityModule,
     PortfolioModule,
     AdminTasksModule,
+    WatchlistsModule,
   ],
   providers: [
     // Guards globales — aplican a todos los endpoints excepto los @Public()

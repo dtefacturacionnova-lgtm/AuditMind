@@ -516,6 +516,7 @@ model User {
   fieldEvidences             FieldEvidence[]
   investigationReports       InvestigationReport[]
   caatsAutoRuns              CaatsAutoRun[]
+  watchlistSyncsTriggered    WatchlistSync[]
   timeEntries                TimeEntry[]
   availabilityProfiles       UserAvailabilityProfile[]
   costProfiles               UserCostProfile[]
@@ -2684,6 +2685,83 @@ model ConnectorImport {
   @@index([sourceId])
   @@index([auditId])
   @@map("connector_imports")
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  LISTAS DE SANCIONES — Motor CAATs #18: Screening OFAC/ONU
+//  Recurso de PLATAFORMA (sin organizationId) — todas las organizaciones
+//  comparten la misma copia local de OFAC SDN + Lista Consolidada ONU. El
+//  motor CAATs (apps/ai-service/app/services/caats/sanctions_screening.py)
+//  lee esta tabla directamente vía asyncpg (única excepción documentada al
+//  patrón "NestJS orquesta, ai-service es tonto" — ver justificación en el
+//  plan de diseño). NUNCA se borra una entrada dada de baja: se marca
+//  active=false, porque un nombre que SÍ estuvo sancionado en el pasado es
+//  evidencia de auditoría relevante para hallazgos de períodos anteriores.
+// ══════════════════════════════════════════════════════════════════════════════
+
+enum WatchlistSourceList {
+  OFAC_SDN
+  UN_CONSOLIDATED
+}
+
+enum WatchlistEntityType {
+  INDIVIDUAL
+  ENTITY
+  OTHER
+}
+
+enum WatchlistSyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model WatchlistEntry {
+  id              String              @id @default(cuid())
+  sourceList      WatchlistSourceList
+  externalId      String // uid (OFAC) / n° de referencia (ONU)
+  entityType      WatchlistEntityType @default(OTHER)
+  primaryName     String
+  aliases         String[]            @default([])
+  programs        String[]            @default([])
+  nationality     String[]            @default([])
+  countries       String[]            @default([])
+  dateOfBirth     String? // texto libre — las fuentes dan fechas parciales/aproximadas, no cabe en DateTime
+  placeOfBirth    String?
+  remarks         String?
+  rawRecord       Json // registro original del parser — trazabilidad
+  active          Boolean             @default(true) // false = dado de baja (delisting) — nunca se borra
+  sourceUpdatedAt DateTime?
+  lastSyncId      String? // último WatchlistSync que confirmó/tocó este registro
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([sourceList, externalId])
+  @@index([sourceList, active])
+  @@map("watchlist_entries")
+}
+
+// Molde: ConnectorImport (PENDING→RUNNING→COMPLETED/FAILED). Una fila POR
+// LISTA por corrida — OFAC y ONU publican en calendarios distintos y pueden
+// fallar independientemente.
+model WatchlistSync {
+  id                 String              @id @default(cuid())
+  sourceList         WatchlistSourceList
+  status             WatchlistSyncStatus @default(PENDING)
+  triggeredBy        String // "CRON" | "MANUAL"
+  triggeredById      String?
+  recordsFetched     Int?
+  recordsUpserted    Int?
+  recordsDeactivated Int?
+  errorMsg           String?
+  startedAt          DateTime            @default(now())
+  completedAt        DateTime?
+
+  triggeredByUser User? @relation(fields: [triggeredById], references: [id])
+
+  @@index([sourceList, startedAt])
+  @@map("watchlist_syncs")
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

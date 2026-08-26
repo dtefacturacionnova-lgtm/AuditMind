@@ -14,13 +14,13 @@ import {
   type NodeProps,
   MarkerType,
 } from '@xyflow/react';
-import dagre from '@dagrejs/dagre';
 import { useRouter } from 'next/navigation';
 import {
   FileText, Database, Sparkles, Activity, Paperclip,
   CheckCircle2, AlertTriangle, Clock, Loader2,
 } from 'lucide-react';
 import { useAuditPapersGraph, type GraphNode, type AuditGraph } from '@/hooks/useAuditPapersGraph';
+import { layoutNodes } from '@/lib/graph-dagre-layout';
 
 import '@xyflow/react/dist/style.css';
 
@@ -109,32 +109,6 @@ function PaperNode({ data }: NodeProps<Node<PaperNodeData>>) {
 }
 
 const nodeTypes = { paper: PaperNode };
-
-// ─── Layout — Dagre auto top-down ────────────────────────────────────────────
-
-const NODE_W = 200;
-const NODE_H = 90;
-
-function layoutNodes(nodes: Node[], edges: Edge[]): Node[] {
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: 'TB', nodesep: 36, ranksep: 60, marginx: 24, marginy: 24 });
-
-  nodes.forEach(n => g.setNode(n.id, { width: NODE_W, height: NODE_H }));
-  edges.forEach(e => g.setEdge(e.source, e.target));
-
-  dagre.layout(g);
-
-  return nodes.map(n => {
-    const pos = g.node(n.id);
-    return {
-      ...n,
-      position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
-      targetPosition: Position.Top,
-      sourcePosition: Position.Bottom,
-    };
-  });
-}
 
 // ─── Build nodes + edges from graph data ─────────────────────────────────────
 

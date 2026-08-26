@@ -96,6 +96,7 @@ export const AUDIT_SCOPED_MODELS: AuditScopedModel[] = [
   { model: 'connectorImport',       filtro: { tipo: 'auditId_directo' }, nivel: 1 },
   { model: 'auditRestoreLog',       filtro: { tipo: 'auditId_directo' }, nivel: 1 }, // bitácora de restauraciones (BKP-12) — metadata, no daña llevarla en el backup
   { model: 'fieldEvidence',         filtro: { tipo: 'auditId_directo' }, nivel: 1 }, // Evidencia de Campo (EVD-01..18) — agregado 2026-08-20, ver nota arriba
+  { model: 'graphEntity',           filtro: { tipo: 'auditId_directo' }, nivel: 1 }, // Grafo de Evidencia Fase 1 — entidades canónicas, agregado 2026-08-25
 
   // ─── Nivel 2 — dependen de un modelo de nivel 1 ────────────────────────
   { model: 'paperSection',          filtro: { tipo: 'via_paperId', paperIdField: 'paperId' },       nivel: 2 },
@@ -114,6 +115,8 @@ export const AUDIT_SCOPED_MODELS: AuditScopedModel[] = [
   { model: 'pbcMessage',            filtro: { tipo: 'via_pbcId', pbcIdField: 'requestId' },          nivel: 2 },
   { model: 'dataFlag',              filtro: { tipo: 'via_jobId' }, nivel: 2, tieneAuditIdPropio: true },
   { model: 'fieldEvidenceFinding',  filtro: { tipo: 'via_evidenceId' }, nivel: 2 }, // evidenceId → FieldEvidence
+  { model: 'graphEntityMention',    filtro: { tipo: 'via_evidenceId' }, nivel: 2 }, // evidenceId → FieldEvidence — Grafo de Evidencia Fase 1
+  { model: 'graphRelation',         filtro: { tipo: 'via_evidenceId' }, nivel: 2, tieneAuditIdPropio: true }, // evidenceId → FieldEvidence; auditId denormalizado igual que FieldEvidence — Grafo de Evidencia Fase 1
 
   // ─── Nivel 3 ────────────────────────────────────────────────────────────
   { model: 'findingAction',         filtro: { tipo: 'via_findingId' }, nivel: 3 },

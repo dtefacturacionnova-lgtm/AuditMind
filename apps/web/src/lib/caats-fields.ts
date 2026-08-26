@@ -13,6 +13,38 @@ export type AnalysisId =
 // aquí sin tocar los componentes que lo consumen.
 export const JSON_UPLOAD_ENGINES: ReadonlySet<AnalysisId> = new Set(['dte_validation']);
 
+// Fase 2c (Investigador Forense) — motores que SÍ se pueden auto-detectar y
+// auto-ejecutar desde una sola hoja de cálculo subida: los 17 menos
+// `related_parties` (necesita un segundo dataset de referencia, ver
+// SECONDARY_DATASET más abajo) y `dte_validation` (sube JSON, no filas de
+// spreadsheet, ver JSON_UPLOAD_ENGINES). Espejo a mano de AUTO_RUN_ENGINES en
+// apps/ai-service/app/routers/investigation.py y de la constante homónima en
+// apps/api/src/investigation-report/caats-auto-run.service.ts — mismo
+// criterio ya aceptado para el prompt de SHERLOCK entre TS/Python.
+export const AUTO_RUN_ELIGIBLE_ENGINES: AnalysisId[] = [
+  'gl', 'ap', 'payroll', 'benford', 'anomaly', 'sod', 'vendor_master', 'expenses',
+  'revenue_cutoff', 'bid_rigging', 'ar_aging', 'fixed_assets', 'structuring',
+  'missing_trader', 'tax_haven',
+];
+
+export const AUTO_RUN_ENGINE_LABELS: Record<string, string> = {
+  gl: 'Libro Mayor',
+  ap: 'Cuentas por Pagar',
+  payroll: 'Nómina',
+  benford: 'Ley de Benford',
+  anomaly: 'Anomalías (ML)',
+  sod: 'Segregación de Funciones',
+  vendor_master: 'Maestro de Proveedores',
+  expenses: 'Gastos de Representación',
+  revenue_cutoff: 'Corte de Ingresos',
+  bid_rigging: 'Licitación Colusoria',
+  ar_aging: 'Antigüedad de Cuentas por Cobrar',
+  fixed_assets: 'Activo Fijo',
+  structuring: 'Pitufeo / Estructuración',
+  missing_trader: 'Missing Trader',
+  tax_haven: 'Jurisdicciones de Baja Tributación',
+};
+
 export interface FieldDef { key: string; label: string; required?: boolean }
 
 // IMPORTANTE: `key` debe ser EXACTO al nombre que cada endpoint de
@@ -232,4 +264,50 @@ export interface ParsedFile {
   headerConfidence:   'high' | 'low';
   skippedRows:        string[][];
   rawPreview:         string[][];
+}
+
+// Shape persistido en PaperSection.value cuando fieldType='CAATS_ANALYSIS' —
+// movido aquí desde CaatsAnalysisPanel.tsx (que ahora re-exporta el tipo)
+// para que también lo use el panel de auto-detección del Investigador
+// (Fase 2c) sin importar entre dos componentes de UI distintos.
+export interface CaatsAnalysisValue {
+  engine:          AnalysisId | null;
+  fileName?:       string;
+  fieldMapping?:   Record<string, string>;
+  benfordColumn?:  string;
+  anomalyColumns?: string[];
+  result?:         Record<string, unknown> | null;
+  ranAt?:          string;
+}
+
+// Extraído de CaatsAnalysisPanel.runAnalysis() — SOLO las 3 ramas que
+// aplican a los 15 motores de AUTO_RUN_ELIGIBLE_ENGINES (benford / anomaly /
+// standard con field_mapping). Deliberadamente NO cubre las ramas de
+// dte_validation (sube JSON, no rows) ni related_parties (dataset dual) —
+// esos dos siguen siendo exclusivos del panel manual, sin cambios.
+export function buildCaatsRunPayload(params: {
+  engine: AnalysisId;
+  rows: Record<string, unknown>[];
+  fieldMapping: Record<string, string>;
+  benfordColumn?: string;
+  anomalyColumns?: string[];
+}): { payload: unknown; savedMapping: Pick<CaatsAnalysisValue, 'fieldMapping' | 'benfordColumn' | 'anomalyColumns'> } {
+  const { engine, rows, fieldMapping, benfordColumn, anomalyColumns } = params;
+
+  if (engine === 'benford') {
+    const col = benfordColumn ?? '';
+    const amounts = rows
+      .map(r => Number(String(r[col] ?? '').replace(/[^0-9.-]/g, '')))
+      .filter(n => Number.isFinite(n) && n !== 0);
+    return { payload: { amounts }, savedMapping: { benfordColumn: col } };
+  }
+
+  if (engine === 'anomaly') {
+    const columns = anomalyColumns ?? [];
+    return { payload: { records: rows, numeric_fields: columns }, savedMapping: { anomalyColumns: columns } };
+  }
+
+  const mapping: Record<string, string> = {};
+  Object.entries(fieldMapping).forEach(([key, col]) => { if (col) mapping[key] = col; });
+  return { payload: { records: rows, field_mapping: mapping }, savedMapping: { fieldMapping: mapping } };
 }

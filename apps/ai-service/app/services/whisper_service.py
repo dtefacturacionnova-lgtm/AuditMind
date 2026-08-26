@@ -32,7 +32,16 @@ def transcribe_sync(audio_path: str, language: str | None = None) -> dict:
 
     segments_iter, info = model.transcribe(audio_path, language=language, vad_filter=True)
     segmentos = [
-        {"inicio": round(seg.start, 2), "fin": round(seg.end, 2), "texto": seg.text.strip()}
+        {
+            "inicio": round(seg.start, 2), "fin": round(seg.end, 2), "texto": seg.text.strip(),
+            # Fase 2a Investigador Forense — señales de confianza que faster-whisper
+            # ya calcula por segmento, antes descartadas. no_speech_prob alto en un
+            # segmento que igual produjo texto es indicio de transcripción dudosa
+            # (ruido, volumen bajo, habla poco clara) — se usa para marcar
+            # FieldEvidence.calidadBaja en NestJS, no se descarta nada acá.
+            "no_speech_prob": round(seg.no_speech_prob, 4),
+            "avg_logprob": round(seg.avg_logprob, 4),
+        }
         for seg in segments_iter
     ]
     texto = " ".join(s["texto"] for s in segmentos if s["texto"]).strip()

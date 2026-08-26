@@ -28,7 +28,9 @@ import { RollForwardModal }          from '@/components/audits/RollForwardModal'
 import { SignOffMatrix }              from '@/components/audits/SignOffMatrix';
 import { TrialBalanceTab }            from '@/components/audits/TrialBalanceTab';
 import { PapersGraphView }            from '@/components/working-papers/PapersGraphView';
+import { EvidenceGraphView }          from '@/components/working-papers/EvidenceGraphView';
 import { ControlInternoTab }          from '@/components/audits/ControlInternoTab';
+import { InvestigatorTab }            from '@/components/audits/InvestigatorTab';
 import { useControlInternoSummary }   from '@/hooks/useControlInterno';
 import { AiTestsOrchestratorModal }   from '@/components/audits/AiTestsOrchestratorModal';
 import { WorkingPaperIndexReport }    from '@/components/audits/WorkingPaperIndexReport';
@@ -62,7 +64,7 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff' | 'trial-balance' | 'graph' | 'control-interno';
+type Tab = 'overview' | 'expediente' | 'team' | 'findings' | 'pbc' | 'confirmations' | 'progress' | 'hours' | 'signoff' | 'trial-balance' | 'graph' | 'evidence-graph' | 'control-interno' | 'investigador';
 
 function StatCard({ icon: Icon, label, value, color, sub }: {
   icon: React.ElementType;
@@ -156,7 +158,9 @@ export default function AuditDetailPage() {
     { key: 'signoff',         label: '✍ Matriz de Firmas' },
     { key: 'trial-balance',  label: '📊 Balance' },
     { key: 'graph',          label: '🕸️ Grafo' },
+    { key: 'evidence-graph', label: '🔎 Grafo de Evidencia' },
     ...(showControlInterno ? [{ key: 'control-interno' as Tab, label: '🛡️ Control Interno' }] : []),
+    ...(audit.isInvestigationMode ? [{ key: 'investigador' as Tab, label: '🕵️ Investigador' }] : []),
   ];
 
   async function handleStatusChange(newStatus: string) {
@@ -378,9 +382,17 @@ export default function AuditDetailPage() {
               {activeTab === 'graph' && (
                 <PapersGraphView auditId={id} />
               )}
+              {/* Grafo de Evidencia — Fase 1 (Investigador Forense Multi-Modal) */}
+              {activeTab === 'evidence-graph' && (
+                <EvidenceGraphView auditId={id} />
+              )}
               {/* Fase 6b Control Interno — cockpit (stepper + Ficha de Riesgo) */}
               {activeTab === 'control-interno' && (
                 <ControlInternoTab auditId={id} />
+              )}
+              {/* Investigador Forense SHERLOCK — Fase 2b (núcleo mínimo) */}
+              {activeTab === 'investigador' && (
+                <InvestigatorTab auditId={id} />
               )}
             </div>
           </div>

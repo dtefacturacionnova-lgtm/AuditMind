@@ -485,6 +485,65 @@ async def _ocr_fallback(pdf_bytes: bytes, filename: str) -> tuple[Optional[str],
         return None, None
 
 
+_MIN_CHARS_POR_PAGINA_OCR = 50
+_MAX_RATIO_RUIDO_NO_ALFANUMERICO = 0.35
+
+
+def _evaluar_calidad_texto_pdf(texto: str, num_paginas: int, ocr_aplicado: bool) -> tuple[bool, Optional[str]]:
+    """Heurística simple a propósito (Fase 2a Investigador Forense — ver
+    docs/investigador-forense-multimodal-propuesta.md, "Detección de calidad
+    de fuentes"): (1) muy pocos caracteres por página tras OCR — un documento
+    con contenido real produce bastante más; (2) alta proporción de caracteres
+    no alfanuméricos — ruido típico de OCR fallido. Solo se evalúa si SE
+    APLICÓ OCR; el texto nativo de pdfplumber no se cuestiona. Umbrales de
+    partida, ajustables con datos reales."""
+    if not texto.strip():
+        return True, "El PDF no produjo texto extraíble ni siquiera después de OCR."
+    if not ocr_aplicado:
+        return False, None
+    chars_por_pagina = len(texto) / max(num_paginas, 1)
+    if chars_por_pagina < _MIN_CHARS_POR_PAGINA_OCR:
+        return True, f"OCR aplicado pero solo ~{round(chars_por_pagina)} caracteres por página — posible escaneo ilegible."
+    alfanumericos = sum(1 for c in texto if c.isalnum() or c.isspace())
+    ratio_ruido = 1 - (alfanumericos / len(texto))
+    if ratio_ruido > _MAX_RATIO_RUIDO_NO_ALFANUMERICO:
+        return True, f"OCR aplicado pero {round(ratio_ruido * 100)}% de caracteres son ruido no alfanumérico — posible reconocimiento defectuoso."
+    return False, None
+
+
+async def extraer_texto_pdf(pdf_bytes: bytes, filename: str) -> dict:
+    """Texto nativo (pdfplumber) → si vacío, misma cascada OCR que ya usa
+    ingest_pdf (Stirling → Gemini vision, vía _ocr_fallback). Compartida entre
+    ingest_pdf (RAG) y POST /evidence/process-pdf (Fase 2a Investigador
+    Forense), para no duplicar la cascada."""
+    pages_text: list[str] = []
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+        num_paginas = len(pdf.pages)
+        for page in pdf.pages:
+            t = page.extract_text()
+            if t:
+                pages_text.append(t)
+
+    full_text = "\n\n".join(pages_text)
+    ocr_aplicado = False
+    proveedor_ocr: Optional[str] = None
+    if not full_text.strip():
+        ocr_text, ocr_provider = await _ocr_fallback(pdf_bytes, filename)
+        ocr_aplicado = True
+        proveedor_ocr = ocr_provider
+        full_text = ocr_text or ""
+
+    calidad_baja, motivo = _evaluar_calidad_texto_pdf(full_text, num_paginas, ocr_aplicado)
+    return {
+        "texto": full_text,
+        "paginas": num_paginas,
+        "ocr_aplicado": ocr_aplicado,
+        "proveedor_ocr": proveedor_ocr,
+        "calidad_baja": calidad_baja,
+        "motivo_calidad_baja": motivo,
+    }
+
+
 async def ingest_pdf(
     pdf_path: str | Path,
     doc_title: str,
@@ -500,24 +559,14 @@ async def ingest_pdf(
     if not path.exists():
         raise FileNotFoundError(f"PDF no encontrado: {pdf_path}")
 
-    pages_text: list[str] = []
-    with pdfplumber.open(path) as pdf:
-        for page in pdf.pages:
-            t = page.extract_text()
-            if t:
-                pages_text.append(t)
+    resultado = await extraer_texto_pdf(path.read_bytes(), path.name)
+    if not resultado["texto"].strip():
+        return {"doc_id": None, "chunks": 0, "status": "empty_pdf"}
 
-    full_text = "\n\n".join(pages_text)
-    if not full_text.strip():
-        ocr_text, ocr_provider = await _ocr_fallback(path.read_bytes(), path.name)
-        if not ocr_text:
-            return {"doc_id": None, "chunks": 0, "status": "empty_pdf"}
-        print(f"  ✅ OCR de respaldo ({ocr_provider}) extrajo {len(ocr_text)} chars")
-        full_text = ocr_text
-
-    print(f"📄 PDF '{path.name}' — {len(pages_text)} páginas, {len(full_text)} chars")
+    ocr_note = f" (OCR vía {resultado['proveedor_ocr']})" if resultado["ocr_aplicado"] else ""
+    print(f"📄 PDF '{path.name}' — {resultado['paginas']} páginas, {len(resultado['texto'])} chars{ocr_note}")
     return await ingest_text(
-        text=full_text,
+        text=resultado["texto"],
         doc_title=doc_title,
         rag_base=rag_base,
         org_id=org_id,

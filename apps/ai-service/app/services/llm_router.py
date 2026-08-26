@@ -313,7 +313,20 @@ async def generate_structured(
     content = user_content
 
     for attempt in range(2):
-        result = await _generate_structured_once(agent_type, system_prompt, content, response_schema, max_tokens, temperature, imagenes)
+        try:
+            result = await _generate_structured_once(agent_type, system_prompt, content, response_schema, max_tokens, temperature, imagenes)
+        except Exception as e:
+            # Ambos proveedores fallaron (Gemini Y su fallback a Claude, ver
+            # _generate_structured_once) — sin esto, la excepción cruda del SDK
+            # (ej. anthropic.BadRequestError por créditos agotados) se propaga
+            # sin envolver y el llamador (ej. investigation.py, evidence.py) no
+            # puede distinguirla de un bug real; su `except StructuredGenerationError`
+            # nunca la atrapa y termina como 500 Internal Server Error sin mensaje
+            # útil. No se reintenta — un fallo de AMBOS proveedores no es el tipo
+            # de error que un segundo intento idéntico vaya a resolver (a
+            # diferencia del reintento de validación de abajo, que sí cambia el
+            # prompt entre intentos).
+            raise StructuredGenerationError(f"Ambos proveedores de LLM fallaron: {e}") from e
         try:
             validated = response_schema.model_validate(result["parsed"])
             return {

@@ -3,6 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { getAgentSystemPrompt } from './agent-prompts';
 
+// Investigador Forense — SHERLOCK (Fase 2b)
+interface InvestigacionHallazgo {
+  titulo: string;
+  descripcion: string;
+  cita_textual: string;
+  entidad_ids: string[];
+  nivel_riesgo: 'bajo' | 'medio' | 'alto';
+  justificacion: string;
+}
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -362,7 +372,7 @@ export class AiService {
     diarizar?: boolean, // EVD-12, Fase 2 — solo para INTERVIEW_AUDIO
   ): Promise<{
     texto: string;
-    segmentos: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
+    segmentos: { inicio: number; fin: number; texto: string; hablante?: string | null; no_speech_prob?: number; avg_logprob?: number }[];
     idioma: string;
     duracion_seg: number;
     modelo: string;
@@ -404,7 +414,7 @@ export class AiService {
     tiene_audio: boolean;
     transcript: {
       texto: string;
-      segmentos: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
+      segmentos: { inicio: number; fin: number; texto: string; hablante?: string | null; no_speech_prob?: number; avg_logprob?: number }[];
       idioma: string;
       duracion_seg: number;
       modelo: string;
@@ -433,9 +443,40 @@ export class AiService {
     return res.json();
   }
 
+  // ─── Evidencia de campo — PDF con OCR automático (Fase 2a Investigador Forense) ─
+  // Mismo patrón que processVideo: una llamada a ai-service que aplica la
+  // cascada de OCR ya construida (pdfplumber → Stirling → Gemini vision).
+  async processPdf(fileBuffer: Buffer, filename: string): Promise<{
+    texto: string;
+    paginas: number;
+    ocr_aplicado: boolean;
+    proveedor_ocr: string | null;
+    calidad_baja: boolean;
+    motivo_calidad_baja: string | null;
+    processing_ms: number;
+  }> {
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(fileBuffer)], { type: 'application/pdf' });
+    formData.append('file', blob, filename);
+
+    // El OCR de respaldo (Stirling/Gemini vision) puede tardar — mismo criterio
+    // de timeout generoso que transcribeAudio/processVideo.
+    const res = await fetch(`${this.aiServiceUrl}/evidence/process-pdf`, {
+      method: 'POST',
+      headers: { 'x-internal-key': this.internalKey },
+      body: formData,
+      signal: AbortSignal.timeout(180_000),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`Procesamiento de PDF error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
   // ─── Evidencia de campo — extracción estructurada de hallazgos (EVD-05) ─────
   async extractFieldEvidence(payload: {
-    fuente_tipo: 'texto' | 'transcripcion_audio' | 'foto_anotada' | 'video_corto';
+    fuente_tipo: 'texto' | 'transcripcion_audio' | 'foto_anotada' | 'video_corto' | 'pdf_documento';
     contenido: string;
     segmentos?: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
     contexto_expediente?: {
@@ -457,6 +498,14 @@ export class AiService {
     resumen_ejecutivo: string;
     temas: string[];
     entidades_mencionadas: { nombre: string; tipo: string }[];
+    entidades_estructuradas: { nombre: string; tipo: string; cita_textual: string }[];
+    relaciones: {
+      entidad_origen: string;
+      entidad_destino: string;
+      tipo: string;
+      cita_textual: string;
+      confianza: number;
+    }[];
     hallazgos: {
       tipo: string;
       descripcion: string;
@@ -479,6 +528,78 @@ export class AiService {
     if (!res.ok) {
       const err = await res.text();
       throw new HttpException(`Extracción error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
+  // ─── Investigador Forense — SHERLOCK (Fase 2b, núcleo mínimo) ──────────────
+  async runInvestigationAnalysis(payload: {
+    audit_title: string;
+    objetivo: string;
+    nodes: {
+      id: string; tipo: string; nombre: string; mention_count: number;
+      mentions: { cita_textual: string; validada_cita: boolean; evidence_kind: string; confirmado_por_auditor: boolean }[];
+    }[];
+    edges: {
+      id: string; source_id: string; target_id: string; tipo: string;
+      cita_textual: string; validada_cita: boolean; confianza: number; confirmado_por_auditor: boolean;
+    }[];
+    contexto_auditor_texto?: string;
+    grafo_truncado: boolean;
+    total_entidades_totales: number;
+    caats_results?: {
+      engine: string; source: 'manual' | 'auto'; ran_at?: string | null;
+      risk_score?: number | null; top_findings: string[];
+    }[];
+    paper_search_hits?: { paper_code?: string | null; paper_title: string; section_label: string; extracto: string }[];
+  }): Promise<{
+    conclusion_general: string;
+    hallazgos_objetivo: { tema: string; resumen: string; hallazgos: InvestigacionHallazgo[] }[];
+    otras_banderas: { tema: string; resumen: string; hallazgos: InvestigacionHallazgo[] }[];
+    verificacion_contexto: {
+      claim_texto: string;
+      veredicto: 'confirmada' | 'contradicha' | 'sin_evidencia_suficiente';
+      justificacion: string;
+      citas_relevantes: string[];
+      entidad_ids: string[];
+    }[];
+    claims_extraidos: string[];
+    modelo: string;
+    input_tokens: number;
+    output_tokens: number;
+  }> {
+    // Dos llamadas LLM encadenadas cuando hay contexto del auditor (extracción
+    // ciega de afirmaciones + análisis) — timeout más holgado que extract (120s).
+    const res = await fetch(`${this.aiServiceUrl}/investigation/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': this.internalKey },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(180_000),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`Investigación forense error: ${err}`, HttpStatus.BAD_GATEWAY);
+    }
+    return res.json();
+  }
+
+  // Fase 2c — clasifica una hoja de cálculo subida en el Investigador en 1 de
+  // los 15 motores CAATs auto-ejecutables (o "ninguno"). Llamada corta, un
+  // solo round-trip LLM — no confundir con runInvestigationAnalysis.
+  async classifySpreadsheet(payload: {
+    descripcion: string;
+    columns: { name: string; sample_values: string[] }[];
+    row_count: number;
+  }): Promise<{ engine: string; confianza: number; justificacion: string }> {
+    const res = await fetch(`${this.aiServiceUrl}/investigation/classify-spreadsheet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': this.internalKey },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new HttpException(`Clasificación de hoja de cálculo error: ${err}`, HttpStatus.BAD_GATEWAY);
     }
     return res.json();
   }

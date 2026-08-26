@@ -13,24 +13,17 @@ import { AnalysisResultView } from '@/components/caats/CaatsResultView';
 import { SecondaryDatasetUpload, type SecondaryDatasetValue } from '@/components/caats/SecondaryDatasetUpload';
 import { DteJsonUpload } from '@/components/caats/DteJsonUpload';
 import {
-  type AnalysisId, type ParsedFile, FIELD_DEFS, SECONDARY_DATASET, JSON_UPLOAD_ENGINES,
-  autoMatchColumn, autoDetectNumericColumns,
+  type AnalysisId, type ParsedFile, type CaatsAnalysisValue, FIELD_DEFS, SECONDARY_DATASET, JSON_UPLOAD_ENGINES,
+  autoMatchColumn, autoDetectNumericColumns, buildCaatsRunPayload,
 } from '@/lib/caats-fields';
 
-// ─── Persisted shape (lo que vive en PaperSection.value) ─────────────────────
-// El archivo subido NUNCA se persiste — solo el mapeo usado y el resultado
-// calculado. Para volver a correr el análisis (ej. con datos actualizados)
-// hay que resubir el archivo; el resultado guardado queda visible mientras tanto.
-
-export interface CaatsAnalysisValue {
-  engine:          AnalysisId | null;
-  fileName?:       string;
-  fieldMapping?:   Record<string, string>;
-  benfordColumn?:  string;
-  anomalyColumns?: string[];
-  result?:         Record<string, unknown> | null;
-  ranAt?:          string;
-}
+// El shape persistido (lo que vive en PaperSection.value) vive en
+// caats-fields.ts — re-exportado aquí para no romper el único importador
+// externo (SectionField.tsx). El archivo subido NUNCA se persiste — solo el
+// mapeo usado y el resultado calculado. Para volver a correr el análisis (ej.
+// con datos actualizados) hay que resubir el archivo; el resultado guardado
+// queda visible mientras tanto.
+export type { CaatsAnalysisValue };
 
 interface Props {
   paperId:    string;
@@ -190,25 +183,21 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
       } else {
         const p = parsed!;
         fileNameForSave = p.filename;
-        if (engine === 'benford') {
-          const amounts = p.rows
-            .map(r => Number(String(r[benfordColumn] ?? '').replace(/[^0-9.-]/g, '')))
-            .filter(n => Number.isFinite(n) && n !== 0);
-          payload = { amounts };
-          savedMapping = { benfordColumn };
-        } else if (engine === 'anomaly') {
-          payload = { records: p.rows, numeric_fields: anomalyColumns };
-          savedMapping = { anomalyColumns };
-        } else {
+        if (secondaryConfig && secondaryData) {
+          // Dataset dual (hoy solo related_parties) — fuera del alcance de
+          // buildCaatsRunPayload(), que solo cubre los 15 motores de un solo
+          // dataset auto-ejecutables desde el Investigador (Fase 2c).
           const mapping: Record<string, string> = {};
           Object.entries(fieldMapping).forEach(([key, col]) => { if (col) mapping[key] = col; });
-          payload = secondaryConfig && secondaryData
-            ? {
-                records: p.rows, field_mapping: mapping,
-                reference_records: secondaryData.rows, reference_field_mapping: secondaryData.fieldMapping,
-              }
-            : { records: p.rows, field_mapping: mapping };
+          payload = {
+            records: p.rows, field_mapping: mapping,
+            reference_records: secondaryData.rows, reference_field_mapping: secondaryData.fieldMapping,
+          };
           savedMapping = { fieldMapping: mapping };
+        } else {
+          const built = buildCaatsRunPayload({ engine, rows: p.rows, fieldMapping, benfordColumn, anomalyColumns });
+          payload = built.payload;
+          savedMapping = built.savedMapping;
         }
       }
 

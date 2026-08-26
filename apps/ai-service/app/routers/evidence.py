@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 from typing import Literal, Optional
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 from app.services.auth import verify_internal_key
 from app.services.whisper_service import transcribe_sync
 from app.services.video_service import procesar_video_sync
+from app.services.rag_pipeline import extraer_texto_pdf
 from app.services.llm_router import generate_structured, StructuredGenerationError
 
 logger = logging.getLogger(__name__)
@@ -26,6 +28,7 @@ router = APIRouter()
 
 _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB — una entrevista de 45min a 128kbps ≈ 43MB (§6.5)
 _MAX_VIDEO_BYTES = 100 * 1024 * 1024  # mismo límite que audio — video corto tope 180s (EVD-15)
+_MAX_PDF_BYTES = 100 * 1024 * 1024  # mismo tope que audio/video — Fase 2a Investigador Forense
 
 
 class Segmento(BaseModel):
@@ -33,6 +36,11 @@ class Segmento(BaseModel):
     fin: float
     texto: str
     hablante: Optional[str] = None  # poblado solo si diarizar=True (Fase 2, EVD-12)
+    # Fase 2a Investigador Forense — señal de confianza de faster-whisper, para
+    # que NestJS detecte audio/video difícil de transcribir (ruido, volumen
+    # bajo, etc.). No afecta SegmentoInput (clase separada, usada por /extract).
+    no_speech_prob: Optional[float] = None
+    avg_logprob: Optional[float] = None
 
 
 class TranscribeResponse(BaseModel):
@@ -149,6 +157,47 @@ async def process_video(
             pass
 
 
+# ─── PDF como evidencia (Fase 2a Investigador Forense) ─────────────────────────
+# docs/investigador-forense-multimodal-propuesta.md — reutiliza la misma cascada
+# de OCR (pdfplumber → Stirling → Gemini vision) ya construida para el RAG.
+
+class ProcessPdfResponse(BaseModel):
+    texto: str
+    paginas: int
+    ocr_aplicado: bool
+    proveedor_ocr: Optional[str] = None
+    calidad_baja: bool
+    motivo_calidad_baja: Optional[str] = None
+    processing_ms: int
+
+
+@router.post("/process-pdf", response_model=ProcessPdfResponse)
+async def process_pdf(
+    file: UploadFile = File(...),
+    x_internal_key: Optional[str] = Header(default=None, alias="x-internal-key"),
+):
+    """PDF como evidencia de campo — mismo patrón que /process-video: NestJS
+    aplica las reglas de negocio (aquí: texto vacío o calidad_baja) sobre lo
+    que este endpoint reporta. Opera sobre bytes directamente (pdfplumber
+    acepta un stream en memoria; Stirling/Gemini reciben los bytes crudos),
+    sin archivo temporal en disco."""
+    verify_internal_key(x_internal_key)
+
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+    if len(content) > _MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail="El archivo supera el límite de 100 MB")
+
+    start = time.monotonic()
+    try:
+        resultado = await extraer_texto_pdf(content, file.filename or "documento.pdf")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al procesar el PDF: {e}")
+
+    return {**resultado, "processing_ms": round((time.monotonic() - start) * 1000)}
+
+
 # ─── Extracción estructurada (EVD-05) ──────────────────────────────────────────
 # Esquema definitivo — docs/inteligencia-de-evidencia-de-campo.md §6.4.
 
@@ -181,10 +230,41 @@ class Hallazgo(BaseModel):
     referencias_expediente: list[ReferenciaExpediente] = Field(default_factory=list)
 
 
+TipoEntidadEstructurada = Literal[
+    "persona", "cuenta", "transaccion", "documento", "afirmacion", "fecha_evento",
+]
+TipoRelacionEstructurada = Literal["autorizo", "contradice", "menciona", "involucra"]
+
+
+class EntidadEstructurada(BaseModel):
+    """Entidad canónica para el Grafo de Evidencia (Fase 1, ontología fija —
+    distinta de `entidades_mencionadas`, que es una lista libre sin relaciones).
+    `cita_textual` sigue la MISMA regla anti-alucinación que `Hallazgo.cita_textual`."""
+    nombre: str = Field(..., max_length=300)
+    tipo: TipoEntidadEstructurada
+    cita_textual: str
+
+
+class RelacionEstructurada(BaseModel):
+    """Arista del Grafo de Evidencia. `entidad_origen`/`entidad_destino` deben
+    coincidir EXACTO (mismo texto) con un `nombre` ya listado en
+    `entidades_estructuradas` de esta misma respuesta — NestJS resuelve el
+    nombre a un id por texto normalizado, sin fuzzy matching; si el LLM
+    referencia un nombre no declarado como entidad, esa relación se descarta
+    silenciosamente (se loguea, no rompe la extracción)."""
+    entidad_origen: str
+    entidad_destino: str
+    tipo: TipoRelacionEstructurada
+    cita_textual: str
+    confianza: float = Field(ge=0.0, le=1.0)
+
+
 class ExtraccionEvidencia(BaseModel):
     resumen_ejecutivo: str
     temas: list[str] = Field(default_factory=list)
     entidades_mencionadas: list[EntidadMencionada] = Field(default_factory=list)
+    entidades_estructuradas: list[EntidadEstructurada] = Field(default_factory=list)
+    relaciones: list[RelacionEstructurada] = Field(default_factory=list)
     hallazgos: list[Hallazgo] = Field(default_factory=list)
 
 
@@ -239,7 +319,7 @@ class ContextoExpediente(BaseModel):
 
 
 class ExtractRequest(BaseModel):
-    fuente_tipo: Literal["texto", "transcripcion_audio", "foto_anotada", "video_corto"]
+    fuente_tipo: Literal["texto", "transcripcion_audio", "foto_anotada", "video_corto", "pdf_documento"]
     contenido: str
     segmentos: Optional[list[SegmentoInput]] = None
     contexto_expediente: Optional[ContextoExpediente] = None
@@ -269,7 +349,33 @@ def _build_extraction_system_prompt() -> str:
         "sin parafrasear, sin traducir, sin resumir. Si no puedes citar algo textual que "
         "respalde un hallazgo, no lo incluyas. Una cita que no aparece literal en la "
         "fuente se descarta automáticamente antes de llegar al auditor — mejor reportar "
-        "menos hallazgos que inventar o parafrasear una cita.\n\n"
+        "menos hallazgos que inventar o parafrasear una cita. Esta regla aplica IGUAL a "
+        "`entidades_estructuradas[].cita_textual` y `relaciones[].cita_textual` — sin "
+        "excepción.\n\n"
+        "ADEMÁS de los hallazgos, extrae un GRAFO DE EVIDENCIA con ontología fija:\n"
+        "Tipos de entidad (`entidades_estructuradas[].tipo`):\n"
+        "- persona: un individuo identificado por nombre o cargo\n"
+        "- cuenta: una cuenta bancaria, contable o de sistema\n"
+        "- transaccion: un pago, cobro, asiento o movimiento específico\n"
+        "- documento: un documento, contrato, factura o expediente mencionado\n"
+        "- afirmacion: una declaración o testimonio textual relevante (no un hallazgo — la "
+        "afirmación en sí, como entidad citable)\n"
+        "- fecha_evento: una fecha o evento puntual relevante\n"
+        "Tipos de relación (`relaciones[].tipo`):\n"
+        "- autorizo: una entidad dio permiso/aprobación explícita a algo/alguien\n"
+        "- contradice: una afirmación choca con otra ya extraída o con el expediente\n"
+        "- menciona: una entidad menciona o hace referencia a otra, sin relación más específica\n"
+        "- involucra: una entidad participa o está involucrada en otra (ej. una transacción "
+        "involucra a una cuenta)\n"
+        "Reglas del grafo: (1) `entidad_origen`/`entidad_destino` de cada relación deben ser "
+        "copia EXACTA de un `nombre` que ya incluiste en `entidades_estructuradas` de esta "
+        "misma respuesta — nunca inventes una relación entre nombres que no declaraste como "
+        "entidad. (2) No fuerces entidades o relaciones débiles solo para llenar el grafo — si "
+        "esta evidencia no involucra entidades claramente identificables según la ontología de "
+        "arriba, devuelve `entidades_estructuradas`/`relaciones` vacías. (3) `entidades_mencionadas` "
+        "es una lista libre e informal ya existente; `entidades_estructuradas` es una idea "
+        "similar pero restringida a la ontología fija de arriba, con cita literal obligatoria — "
+        "puede haber traslape entre ambas listas, eso es normal.\n\n"
         "Identifica, cuando existan:\n"
         "- contradiccion: el entrevistado se contradice a sí mismo\n"
         "- evasiva: el entrevistado evita responder directamente\n"
@@ -318,6 +424,8 @@ def _build_extraction_system_prompt() -> str:
         '  "resumen_ejecutivo": "string, 2-4 frases",\n'
         '  "temas": ["string", ...],\n'
         '  "entidades_mencionadas": [{"nombre": "string", "tipo": "persona|area|sistema|documento|monto|fecha|otro"}],\n'
+        '  "entidades_estructuradas": [{"nombre": "string", "tipo": "persona|cuenta|transaccion|documento|afirmacion|fecha_evento", "cita_textual": "string — subcadena literal"}],\n'
+        '  "relaciones": [{"entidad_origen": "string — debe existir en entidades_estructuradas", "entidad_destino": "string — ídem", "tipo": "autorizo|contradice|menciona|involucra", "cita_textual": "string — subcadena literal", "confianza": 0.0}],\n'
         '  "hallazgos": [\n'
         "    {\n"
         '      "tipo": "contradiccion|evasiva|anomalia_visual|riesgo_mencionado|inconsistencia_con_expediente|incumplimiento_mencionado",\n'

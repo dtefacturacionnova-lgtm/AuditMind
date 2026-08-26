@@ -114,6 +114,17 @@ export class FieldEvidenceController {
     return this.svc.reintentar(paperId, evidenceId, user);
   }
 
+  @Post(':evidenceId/reprocess-graph')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Reprocesar el grafo de una evidencia lista, reutilizando la extracción cacheada (sin volver a llamar a la IA)' })
+  reprocesarGrafo(
+    @Param('paperId') paperId: string,
+    @Param('evidenceId') evidenceId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.svc.reprocesarGrafo(paperId, evidenceId, user);
+  }
+
   @Delete(':evidenceId')
   @Roles(UserRole.SENIOR_AUDITOR)
   @HttpCode(HttpStatus.OK)

@@ -5,7 +5,7 @@ import { apiClient } from '@/lib/api-client';
 
 // ─── Types (espejo de apps/api/.../field-evidence, ver EVD-04..09) ───────────
 
-export type FieldEvidenceKind = 'TEXT_NOTE' | 'AUDIO_NOTE' | 'INTERVIEW_AUDIO' | 'ANNOTATED_PHOTO' | 'SHORT_VIDEO';
+export type FieldEvidenceKind = 'TEXT_NOTE' | 'AUDIO_NOTE' | 'INTERVIEW_AUDIO' | 'ANNOTATED_PHOTO' | 'SHORT_VIDEO' | 'PDF_DOCUMENT';
 export type FieldEvidenceStatus = 'UPLOADED' | 'TRANSCRIBING' | 'EXTRACTING' | 'READY' | 'FAILED';
 export type EvidenceFindingDisposition = 'PENDING' | 'ACCEPTED' | 'DISCARDED' | 'PROMOTED';
 
@@ -36,7 +36,7 @@ export interface FieldEvidenceFinding {
 
 export interface FieldEvidenceTranscript {
   texto: string;
-  segmentos: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
+  segmentos: { inicio: number; fin: number; texto: string; hablante?: string | null; no_speech_prob?: number; avg_logprob?: number }[];
   idioma: string;
   duracion_seg: number;
   modelo: string;
@@ -47,6 +47,10 @@ export interface FieldEvidenceExtraccion {
   resumen_ejecutivo: string;
   temas: string[];
   entidades_mencionadas: { nombre: string; tipo: string }[];
+  // Fase 2a — presentes solo en extracciones posteriores al cambio; evidencia
+  // vieja puede no tenerlos (ver useReprocessGraph).
+  entidades_estructuradas?: { nombre: string; tipo: string; cita_textual: string }[];
+  relaciones?: { entidad_origen: string; entidad_destino: string; tipo: string; cita_textual: string; confianza: number }[];
 }
 
 export interface FieldEvidence {
@@ -71,6 +75,8 @@ export interface FieldEvidence {
   anotaciones: AnotacionFoto[] | null;
   transcript: FieldEvidenceTranscript | null;
   extraccionRaw: FieldEvidenceExtraccion | null;
+  calidadBaja: boolean;
+  calidadMotivo: string | null;
   errorMsg: string | null;
   processingMs: number | null;
   modeloTranscripcion: string | null;
@@ -89,7 +95,7 @@ export interface AnotacionFoto {
 }
 
 export interface CrearEvidenciaInput {
-  kind: 'TEXT_NOTE' | 'AUDIO_NOTE' | 'INTERVIEW_AUDIO' | 'ANNOTATED_PHOTO' | 'SHORT_VIDEO';
+  kind: 'TEXT_NOTE' | 'AUDIO_NOTE' | 'INTERVIEW_AUDIO' | 'ANNOTATED_PHOTO' | 'SHORT_VIDEO' | 'PDF_DOCUMENT';
   sectionKey: string;
   capturedAt: string; // ISO
   consentimiento?: boolean; // obligatorio true para INTERVIEW_AUDIO — validado también en backend
@@ -172,6 +178,21 @@ export function useRetryFieldEvidence(paperId: string) {
       apiClient.post<FieldEvidence>(`/working-papers/${paperId}/evidence/${evidenceId}/retry`, {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['field-evidence', paperId] });
+    },
+  });
+}
+
+/** Fase 2a — reprocesa el grafo de una evidencia READY reutilizando la
+ * extracción cacheada (extraccionRaw), sin volver a llamar a la IA. Distinto
+ * de useRetryFieldEvidence (que reintenta TODO el pipeline desde FAILED). */
+export function useReprocessGraph(paperId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (evidenceId: string) =>
+      apiClient.post<{ ok: boolean; auditId: string }>(`/working-papers/${paperId}/evidence/${evidenceId}/reprocess-graph`, {}),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['field-evidence', paperId] });
+      qc.invalidateQueries({ queryKey: ['audit', data.auditId, 'evidence-graph'] });
     },
   });
 }

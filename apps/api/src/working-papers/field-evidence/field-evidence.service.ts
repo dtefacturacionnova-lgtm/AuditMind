@@ -8,15 +8,17 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthUser } from '../../auth/jwt.strategy';
 import { AiService } from '../../ai/ai.service';
 import { PaperReferencesService } from '../paper-references.service';
+import { InvestigationGraphService } from '../../investigation-graph/investigation-graph.service';
 
 // Kinds que el pipeline sabe procesar hoy — las 4 fases completas (EVD-15 cierra
-// Fase 4, video corto).
+// Fase 4, video corto) + PDF_DOCUMENT (Fase 2a Investigador Forense).
 const KINDS_SOPORTADOS: FieldEvidenceKind[] = [
   FieldEvidenceKind.TEXT_NOTE,
   FieldEvidenceKind.AUDIO_NOTE,
   FieldEvidenceKind.INTERVIEW_AUDIO,
   FieldEvidenceKind.ANNOTATED_PHOTO,
   FieldEvidenceKind.SHORT_VIDEO,
+  FieldEvidenceKind.PDF_DOCUMENT,
 ];
 
 // Kinds que requieren transcripción de audio antes de extraer (todo lo que no es
@@ -44,6 +46,14 @@ export interface AnotacionFoto {
 // y se auto-sana a FAILED en la primera consulta que lo toque.
 const REAPER_TIMEOUT_MS = 30 * 60 * 1000;
 
+// Fase 2b Investigador Forense — sectionKey sentinel para notas de contexto
+// previo del auditor (paperId:null, no pertenecen a ninguna sección real).
+export const SHERLOCK_CONTEXT_SECTION_KEY = 'investigador-contexto-previo';
+const KINDS_CONTEXTO_INVESTIGADOR: FieldEvidenceKind[] = [
+  FieldEvidenceKind.TEXT_NOTE,
+  FieldEvidenceKind.AUDIO_NOTE,
+];
+
 export interface CrearEvidenciaDto {
   kind: FieldEvidenceKind;
   sectionKey: string;
@@ -66,6 +76,7 @@ export class FieldEvidenceService {
     private readonly prisma: PrismaService,
     private readonly aiService: AiService,
     private readonly paperReferencesService: PaperReferencesService,
+    private readonly investigationGraphService: InvestigationGraphService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -131,6 +142,12 @@ export class FieldEvidenceService {
           `El video dura ${Math.round(duracionSeg)}s y supera el máximo permitido de ${MAX_VIDEO_DURATION_SEG}s (3 minutos). Sube un recorte más corto.`,
         );
       }
+    }
+
+    // PDF (Fase 2a Investigador Forense) — validación barata antes de gastar la
+    // cascada de OCR en un archivo mal etiquetado.
+    if (dto.kind === FieldEvidenceKind.PDF_DOCUMENT && file && file.mimetype !== 'application/pdf') {
+      throw new BadRequestException('El archivo debe ser un PDF (mimetype application/pdf).');
     }
 
     let anotaciones: AnotacionFoto[] | undefined;
@@ -209,6 +226,11 @@ export class FieldEvidenceService {
       return;
     }
 
+    if (evidencia.kind === FieldEvidenceKind.PDF_DOCUMENT) {
+      await this.procesarPdf(evidencia, fileBuffer);
+      return;
+    }
+
     if (!KINDS_CON_AUDIO.includes(evidencia.kind)) {
       // TEXT_NOTE (el texto ES la evidencia) y ANNOTATED_PHOTO (la imagen ES la
       // evidencia, sin transcripción posible) — pasan directo a extraer.
@@ -238,6 +260,7 @@ export class FieldEvidenceService {
         evidencia.kind === FieldEvidenceKind.INTERVIEW_AUDIO,
       );
 
+      const { calidadBaja, motivo } = this.evaluarCalidadTranscripcion(resultado.segmentos);
       await this.prisma.fieldEvidence.update({
         where: { id: evidenceId },
         data: {
@@ -245,6 +268,8 @@ export class FieldEvidenceService {
           transcript:          resultado,
           modeloTranscripcion: resultado.modelo,
           processingMs:        Date.now() - inicio,
+          calidadBaja,
+          calidadMotivo:       motivo,
         },
       });
     } catch (err) {
@@ -310,6 +335,9 @@ export class FieldEvidenceService {
 
       frames = resultado.frames.map(f => ({ tsSeg: f.ts_seg, base64: f.base64, mimeType: f.mime_type }));
 
+      const { calidadBaja, motivo } = resultado.transcript
+        ? this.evaluarCalidadTranscripcion(resultado.transcript.segmentos)
+        : { calidadBaja: false, motivo: null as string | null };
       await this.prisma.fieldEvidence.update({
         where: { id: evidenceId },
         data: {
@@ -317,6 +345,8 @@ export class FieldEvidenceService {
           transcript:          resultado.transcript ?? Prisma.DbNull,
           modeloTranscripcion: resultado.transcript?.modelo,
           processingMs:        Date.now() - inicio,
+          calidadBaja,
+          calidadMotivo:       motivo,
         },
       });
     } catch (err) {
@@ -330,6 +360,98 @@ export class FieldEvidenceService {
     }
 
     await this.ejecutarExtraccion(evidenceId, frames);
+  }
+
+  // PDF (Fase 2a Investigador Forense): mismo esquema que procesarVideo — una
+  // llamada a ai-service que aplica la cascada de OCR (pdfplumber → Stirling →
+  // Gemini vision) ya construida para el RAG. Si el texto sale completamente
+  // vacío se marca FAILED (nada citable); si sale degradado pero no vacío, se
+  // guarda igual con calidadBaja=true para que el auditor sepa que esa fuente
+  // es menos confiable, sin bloquear la extracción.
+  private async procesarPdf(
+    evidencia: { id: string; storageKey: string | null; filename: string | null },
+    fileBuffer?: Buffer,
+  ) {
+    const evidenceId = evidencia.id;
+    await this.prisma.fieldEvidence.update({
+      where: { id: evidenceId },
+      data:  { status: 'TRANSCRIBING', procesamientoIniciado: new Date() },
+    });
+
+    try {
+      const buffer = fileBuffer ?? await this.descargarOriginal(evidencia.storageKey);
+      const inicio = Date.now();
+      const resultado = await this.aiService.processPdf(buffer, evidencia.filename ?? 'documento.pdf');
+
+      if (!resultado.texto.trim()) {
+        await this.prisma.fieldEvidence.update({
+          where: { id: evidenceId },
+          data: {
+            status: 'FAILED',
+            errorMsg: 'No se pudo extraer texto del PDF, ni siquiera después de aplicar OCR — puede ser un escaneo demasiado oscuro/ilegible o un archivo dañado.',
+          },
+        });
+        return;
+      }
+
+      const modelo = resultado.ocr_aplicado ? `ocr:${resultado.proveedor_ocr}` : 'pdfplumber';
+      await this.prisma.fieldEvidence.update({
+        where: { id: evidenceId },
+        data: {
+          status: 'EXTRACTING',
+          // Reutiliza el campo `transcript` (Json?, ya genérico) — PDF no tiene
+          // segmentos con hablante, segmentos=[] es correcto aquí.
+          transcript: { texto: resultado.texto, segmentos: [], idioma: 'n/a', duracion_seg: 0, modelo, processing_ms: resultado.processing_ms },
+          modeloTranscripcion: modelo,
+          calidadBaja: resultado.calidad_baja,
+          calidadMotivo: resultado.motivo_calidad_baja,
+          processingMs: Date.now() - inicio,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Procesamiento de PDF falló para ${evidenceId}: ${message}`);
+      await this.prisma.fieldEvidence.update({
+        where: { id: evidenceId },
+        data:  { status: 'FAILED', errorMsg: message },
+      });
+      return;
+    }
+
+    await this.ejecutarExtraccion(evidenceId);
+  }
+
+  // Fase 2a Investigador Forense — heurística de agregación sobre las señales de
+  // confianza que faster-whisper ya calcula por segmento (no_speech_prob). Se
+  // corre con vad_filter=True (whisper_service.ts), así que Whisper ya descarta
+  // silencio puro antes de emitir segmentos — un segmento que sí llegó a texto
+  // pero con no_speech_prob alto es señal fuerte de "probablemente no era voz
+  // clara" (ruido, volumen bajo, habla superpuesta). Umbrales de partida,
+  // ajustables con datos reales; marca a nivel de evidencia completa, no por
+  // segmento (marcado por segmento en la UI queda deliberadamente diferido).
+  private evaluarCalidadTranscripcion(
+    segmentos: { no_speech_prob?: number; avg_logprob?: number }[] | undefined,
+  ): { calidadBaja: boolean; motivo: string | null } {
+    if (!segmentos?.length) return { calidadBaja: false, motivo: null };
+    const conProb = segmentos.filter(s => typeof s.no_speech_prob === 'number');
+    if (!conProb.length) return { calidadBaja: false, motivo: null };
+
+    const promedioNoSpeech = conProb.reduce((acc, s) => acc + (s.no_speech_prob ?? 0), 0) / conProb.length;
+    const fraccionSospechosos = conProb.filter(s => (s.no_speech_prob ?? 0) > 0.6).length / conProb.length;
+
+    if (promedioNoSpeech > 0.4) {
+      return {
+        calidadBaja: true,
+        motivo: `Probabilidad promedio de "sin voz" de ${(promedioNoSpeech * 100).toFixed(0)}% en los segmentos — posible audio con ruido, volumen bajo o tramos mal transcritos.`,
+      };
+    }
+    if (fraccionSospechosos > 0.3) {
+      return {
+        calidadBaja: true,
+        motivo: `${(fraccionSospechosos * 100).toFixed(0)}% de los segmentos con alta probabilidad de "sin voz" — posible tramo con múltiples hablantes, acento marcado o audio muy comprimido.`,
+      };
+    }
+    return { calidadBaja: false, motivo: null };
   }
 
   private async descargarOriginal(storageKey: string | null): Promise<Buffer> {
@@ -477,10 +599,11 @@ export class FieldEvidenceService {
 
     const transcript = evidencia.transcript as {
       texto?: string;
-      segmentos?: { inicio: number; fin: number; texto: string; hablante?: string | null }[];
+      segmentos?: { inicio: number; fin: number; texto: string; hablante?: string | null; no_speech_prob?: number; avg_logprob?: number }[];
     } | null;
     const esFoto = evidencia.kind === FieldEvidenceKind.ANNOTATED_PHOTO;
     const esVideo = evidencia.kind === FieldEvidenceKind.SHORT_VIDEO;
+    const esPdf = evidencia.kind === FieldEvidenceKind.PDF_DOCUMENT;
     const anotaciones = esFoto ? (evidencia.anotaciones as unknown as AnotacionFoto[] | null) ?? [] : [];
     // Video (§decisión EVD-15): si `transcript` está poblado, el video tenía
     // pista de audio (procesarVideo solo lo guarda cuando aiService.processVideo
@@ -489,13 +612,7 @@ export class FieldEvidenceService {
     // silencioso, ya validado con descripcion no vacía en procesarVideo) se usa
     // la descripción del auditor como texto fuente.
     const usaDescripcionComoFuenteVideo = esVideo && !transcript;
-    const fuenteTexto = evidencia.kind === FieldEvidenceKind.TEXT_NOTE
-      ? (evidencia.textoOriginal ?? '')
-      : esFoto
-        ? this.construirTextoDesdeAnotaciones(anotaciones)
-        : usaDescripcionComoFuenteVideo
-          ? (evidencia.descripcion ?? '')
-          : this.construirTextoConHablantes(transcript);
+    const fuenteTexto = this.derivarFuenteTexto(evidencia, transcript, anotaciones, esFoto, esPdf, usaDescripcionComoFuenteVideo);
 
     // Una foto ES la evidencia aunque el auditor no haya escrito ninguna nota en
     // las zonas marcadas — a diferencia de texto/audio/video, "sin texto fuente"
@@ -512,7 +629,10 @@ export class FieldEvidenceService {
 
     try {
       const inicio = Date.now();
-      const contextoExpediente = await this.construirContextoExpediente(evidencia);
+      // paperId nunca es null aquí — solo las notas de contexto del investigador
+      // (Fase 2b) tienen paperId:null, y esas nunca llegan a ejecutarExtraccion()
+      // (procesarContextoBackground() no la invoca, ver esa sección más abajo).
+      const contextoExpediente = await this.construirContextoExpediente(evidencia as typeof evidencia & { paperId: string });
       let imagenes: { base64: string; mimeType: string; tsSeg?: number }[] | undefined;
       if (esFoto) {
         const buffer = await this.descargarOriginal(evidencia.storageKey);
@@ -522,7 +642,7 @@ export class FieldEvidenceService {
       }
       const resultado = await this.aiService.extractFieldEvidence({
         fuente_tipo: evidencia.kind === FieldEvidenceKind.TEXT_NOTE
-          ? 'texto' : esFoto ? 'foto_anotada' : esVideo ? 'video_corto' : 'transcripcion_audio',
+          ? 'texto' : esFoto ? 'foto_anotada' : esPdf ? 'pdf_documento' : esVideo ? 'video_corto' : 'transcripcion_audio',
         contenido: fuenteTexto,
         segmentos: transcript?.segmentos?.length ? transcript.segmentos : undefined,
         contexto_expediente: contextoExpediente,
@@ -531,6 +651,9 @@ export class FieldEvidenceService {
         instrucciones_extra: [
           usaDescripcionComoFuenteVideo ? null : evidencia.descripcion,
           evidencia.lugar ? `Lugar: ${evidencia.lugar}` : null,
+          evidencia.calidadBaja
+            ? 'Nota: esta fuente fue marcada de calidad baja (OCR degradado o transcripción difícil) — sé tolerante con errores obvios, pero cita_textual sigue debiendo ser subcadena literal del texto entregado.'
+            : null,
         ].filter(Boolean).join('\n') || undefined,
         imagenes: imagenes?.map(i => ({ base64: i.base64, mime_type: i.mimeType, ts_seg: i.tsSeg })),
         anotaciones: esFoto ? anotaciones : undefined,
@@ -562,9 +685,13 @@ export class FieldEvidenceService {
           data: {
             status: 'READY',
             extraccionRaw: {
-              resumen_ejecutivo:     resultado.resumen_ejecutivo,
-              temas:                 resultado.temas,
-              entidades_mencionadas: resultado.entidades_mencionadas,
+              resumen_ejecutivo:       resultado.resumen_ejecutivo,
+              temas:                   resultado.temas,
+              entidades_mencionadas:   resultado.entidades_mencionadas,
+              // Fase 2a: antes se descartaban — necesarios para "reprocesar
+              // grafo desde caché" (reprocesarGrafo()) sin volver a llamar al LLM.
+              entidades_estructuradas: resultado.entidades_estructuradas,
+              relaciones:              resultado.relaciones,
             } as unknown as Prisma.InputJsonValue,
             modeloLlm:    resultado.modelo,
             processingMs: Date.now() - inicio,
@@ -578,6 +705,22 @@ export class FieldEvidenceService {
           `Evidencia ${evidenceId}: ${descartadas} hallazgo(s) con cita no verificable — excluidos de sugerencias por defecto.`,
         );
       }
+
+      // Grafo de Evidencia (Fase 1) — best-effort, mismo criterio que otros
+      // pasos auxiliares del pipeline: NUNCA bloquea/revierte el resultado
+      // principal de hallazgos, que ya se persistió arriba.
+      try {
+        await this.investigationGraphService.recordExtraction(
+          evidencia.auditId,
+          evidenceId,
+          fuenteNormalizada,
+          resultado.entidades_estructuradas,
+          resultado.relaciones,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Grafo de evidencia: fallo registrando entidades/relaciones para ${evidenceId}: ${message}`);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Extracción falló para ${evidenceId}: ${message}`);
@@ -590,6 +733,23 @@ export class FieldEvidenceService {
 
   private normalizarParaComparar(texto: string): string {
     return texto.toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  // Deriva el texto fuente citable según el kind — extraído de ejecutarExtraccion()
+  // (Fase 2a) para que reprocesarGrafo() lo reutilice sin duplicar la lógica.
+  private derivarFuenteTexto(
+    evidencia: { kind: FieldEvidenceKind; textoOriginal: string | null; descripcion: string | null },
+    transcript: { texto?: string; segmentos?: { texto: string; hablante?: string | null }[] } | null,
+    anotaciones: AnotacionFoto[],
+    esFoto: boolean,
+    esPdf: boolean,
+    usaDescripcionComoFuenteVideo: boolean,
+  ): string {
+    if (evidencia.kind === FieldEvidenceKind.TEXT_NOTE) return evidencia.textoOriginal ?? '';
+    if (esFoto) return this.construirTextoDesdeAnotaciones(anotaciones);
+    if (esPdf) return transcript?.texto ?? '';
+    if (usaDescripcionComoFuenteVideo) return evidencia.descripcion ?? '';
+    return this.construirTextoConHablantes(transcript);
   }
 
   // Entrevista diarizada (EVD-12): si los segmentos traen `hablante`, la fuente para
@@ -830,6 +990,50 @@ export class FieldEvidenceService {
     return this.prisma.fieldEvidence.findUniqueOrThrow({ where: { id: evidenceId } });
   }
 
+  // ─── Reprocesar grafo desde caché (Fase 2a Investigador Forense) ────────
+  // Distinto de reintentar(): no vuelve a llamar al LLM, solo re-registra en el
+  // grafo lo que la extracción YA produjo (extraccionRaw.entidades_estructuradas/
+  // relaciones, agregado como campo persistido en esta misma fase). Cubre el caso
+  // "los hallazgos quedaron READY pero investigationGraphService.recordExtraction
+  // falló después" — antes no había forma de recuperar solo esa parte sin repetir
+  // toda la extracción (y duplicar FieldEvidenceFinding). A diferencia del
+  // best-effort dentro de ejecutarExtraccion(), esto NO traga errores — es una
+  // acción iniciada por el usuario, el fallo debe llegar al frontend.
+  async reprocesarGrafo(paperId: string, evidenceId: string, user: AuthUser) {
+    await this.assertPaperAccess(paperId, user);
+
+    const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
+    if (!evidencia || evidencia.paperId !== paperId) throw new NotFoundException('Evidencia no encontrada');
+    if (evidencia.status !== 'READY') {
+      throw new BadRequestException('Solo se puede reprocesar el grafo de una evidencia en estado "Listo".');
+    }
+
+    const raw = evidencia.extraccionRaw as {
+      entidades_estructuradas?: { nombre: string; tipo: string; cita_textual: string }[];
+      relaciones?: { entidad_origen: string; entidad_destino: string; tipo: string; cita_textual: string; confianza: number }[];
+    } | null;
+    if (raw?.entidades_estructuradas === undefined && raw?.relaciones === undefined) {
+      throw new BadRequestException(
+        'Esta evidencia no tiene datos de extracción cacheados para el grafo (se procesó antes de que este reproceso existiera) — no se puede reprocesar sin volver a llamar a la IA.',
+      );
+    }
+
+    const anotaciones = (evidencia.anotaciones as unknown as AnotacionFoto[] | null) ?? [];
+    const transcript = evidencia.transcript as { texto?: string; segmentos?: { texto: string; hablante?: string | null }[] } | null;
+    const esFoto = evidencia.kind === FieldEvidenceKind.ANNOTATED_PHOTO;
+    const esVideo = evidencia.kind === FieldEvidenceKind.SHORT_VIDEO;
+    const esPdf = evidencia.kind === FieldEvidenceKind.PDF_DOCUMENT;
+    const usaDescripcionComoFuenteVideo = esVideo && !transcript;
+    const fuenteTexto = this.derivarFuenteTexto(evidencia, transcript, anotaciones, esFoto, esPdf, usaDescripcionComoFuenteVideo);
+    const fuenteNormalizada = this.normalizarParaComparar(fuenteTexto);
+
+    await this.investigationGraphService.reprocessFromCache(
+      evidencia.auditId, evidenceId, fuenteNormalizada,
+      raw?.entidades_estructuradas ?? [], raw?.relaciones ?? [],
+    );
+    return { ok: true, auditId: evidencia.auditId };
+  }
+
   // ─── Eliminar (SENIOR_AUDITOR — acto de custodia, no de edición) ─────────
 
   async eliminar(paperId: string, evidenceId: string, user: AuthUser) {
@@ -843,6 +1047,169 @@ export class FieldEvidenceService {
     }
     await this.prisma.fieldEvidence.delete({ where: { id: evidenceId } });
     return { deleted: true };
+  }
+
+  // ─── Contexto previo del auditor — Investigador Forense SHERLOCK (Fase 2b) ──
+  // Notas de texto/voz que el auditor captura ANTES de pedir un informe de
+  // SHERLOCK — background/hipótesis que ya cree conocer, para que el informe
+  // las verifique contra el grafo real. Reutilizan el pipeline de FieldEvidence
+  // (TEXT_NOTE/AUDIO_NOTE: transcripción ya construida) con paperId:null y
+  // proposito:CONTEXTO_INVESTIGADOR — así (a) nunca aparecen en ningún grid
+  // normal de evidencia (listar() filtra por paperId, las notas de contexto no
+  // matchean nunca) y (b) procesarContextoBackground() NUNCA llama a
+  // ejecutarExtraccion(), así que estructuralmente jamás entran al grafo
+  // compartido — es la garantía real de la salvaguarda anti-sesgo de
+  // confirmación (docs/investigador-forense-multimodal-propuesta.md), no solo
+  // una instrucción de prompt.
+
+  async crearContextoInvestigador(
+    auditId: string,
+    dto: { kind: FieldEvidenceKind; capturedAt: string; texto?: string },
+    file: UploadedFileLike | undefined,
+    user: AuthUser,
+  ) {
+    await this.assertAuditAccessInvestigacion(auditId, user);
+
+    if (!dto.kind || !KINDS_CONTEXTO_INVESTIGADOR.includes(dto.kind)) {
+      throw new BadRequestException('El contexto previo solo admite nota de texto o nota de voz.');
+    }
+    if (!dto.capturedAt || Number.isNaN(Date.parse(dto.capturedAt))) {
+      throw new BadRequestException('capturedAt debe ser una fecha ISO válida.');
+    }
+    if (dto.kind === FieldEvidenceKind.TEXT_NOTE && !dto.texto?.trim()) {
+      throw new BadRequestException('El texto es obligatorio para una nota de texto.');
+    }
+    if (dto.kind === FieldEvidenceKind.AUDIO_NOTE && !file) {
+      throw new BadRequestException('Se requiere un archivo de audio.');
+    }
+
+    const sha256 = file
+      ? createHash('sha256').update(file.buffer).digest('hex')
+      : createHash('sha256').update(Buffer.from(dto.texto!, 'utf-8')).digest('hex');
+
+    const evidencia = await this.prisma.fieldEvidence.create({
+      data: {
+        auditId,
+        paperId:        null,
+        sectionKey:      SHERLOCK_CONTEXT_SECTION_KEY,
+        kind:            dto.kind,
+        status:          'UPLOADED',
+        proposito:       'CONTEXTO_INVESTIGADOR',
+        filename:        file?.originalname,
+        mimeType:        file?.mimetype,
+        size:            file?.size ?? Buffer.byteLength(dto.texto ?? '', 'utf-8'),
+        sha256,
+        textoOriginal:   dto.kind === FieldEvidenceKind.TEXT_NOTE ? dto.texto : null,
+        capturedById:    user.id,
+        capturedByName:  user.email,
+        capturedAt:      new Date(dto.capturedAt),
+      },
+    });
+
+    if (file) {
+      const safeName = file.originalname.replace(/[^\w.\-]/g, '_');
+      const path = `evidence/${auditId}/_investigacion/${evidencia.id}_${safeName}`;
+
+      const { error: upErr } = await this.supabase.storage
+        .from('audit-files')
+        .upload(path, file.buffer, {
+          contentType:  file.mimetype || 'application/octet-stream',
+          cacheControl: '3600',
+          upsert:       false,
+        });
+      if (upErr) {
+        await this.prisma.fieldEvidence.delete({ where: { id: evidencia.id } });
+        throw new BadRequestException(`Error al subir archivo: ${upErr.message}`);
+      }
+      await this.prisma.fieldEvidence.update({ where: { id: evidencia.id }, data: { storageKey: path } });
+    }
+
+    this.procesarContextoBackground(evidencia.id, file?.buffer).catch(err =>
+      this.logger.error(`Fallo procesando contexto de investigador ${evidencia.id}: ${err.message}`, err.stack),
+    );
+
+    return this.prisma.fieldEvidence.findUniqueOrThrow({ where: { id: evidencia.id } });
+  }
+
+  private async procesarContextoBackground(evidenceId: string, fileBuffer?: Buffer) {
+    const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
+    if (!evidencia) return;
+
+    if (evidencia.kind === FieldEvidenceKind.TEXT_NOTE) {
+      // El texto YA es la evidencia — nada que transcribir.
+      await this.prisma.fieldEvidence.update({ where: { id: evidenceId }, data: { status: 'READY' } });
+      return;
+    }
+
+    // AUDIO_NOTE — diarizar=false siempre (nunca es una entrevista formal).
+    await this.prisma.fieldEvidence.update({
+      where: { id: evidenceId },
+      data:  { status: 'TRANSCRIBING', procesamientoIniciado: new Date() },
+    });
+    try {
+      const buffer = fileBuffer ?? await this.descargarOriginal(evidencia.storageKey);
+      const inicio = Date.now();
+      const resultado = await this.aiService.transcribeAudio(
+        buffer, evidencia.filename ?? 'audio', evidencia.mimeType ?? 'audio/mpeg', undefined, false,
+      );
+      const { calidadBaja, motivo } = this.evaluarCalidadTranscripcion(resultado.segmentos);
+      await this.prisma.fieldEvidence.update({
+        where: { id: evidenceId },
+        data: {
+          status:              'READY',
+          transcript:          resultado,
+          modeloTranscripcion: resultado.modelo,
+          processingMs:        Date.now() - inicio,
+          calidadBaja,
+          calidadMotivo:       motivo,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Transcripción de contexto de investigador falló para ${evidenceId}: ${message}`);
+      await this.prisma.fieldEvidence.update({
+        where: { id: evidenceId },
+        data:  { status: 'FAILED', errorMsg: message },
+      });
+    }
+  }
+
+  async listarContextoInvestigador(auditId: string, user: AuthUser) {
+    await this.assertAuditAccessInvestigacion(auditId, user);
+    return this.prisma.fieldEvidence.findMany({
+      where:   { auditId, proposito: 'CONTEXTO_INVESTIGADOR' },
+      orderBy: { capturedAt: 'desc' },
+    });
+  }
+
+  async eliminarContextoInvestigador(auditId: string, evidenceId: string, user: AuthUser) {
+    await this.assertAuditAccessInvestigacion(auditId, user);
+    const evidencia = await this.prisma.fieldEvidence.findUnique({ where: { id: evidenceId } });
+    if (!evidencia || evidencia.auditId !== auditId || evidencia.proposito !== 'CONTEXTO_INVESTIGADOR') {
+      throw new NotFoundException('Nota de contexto no encontrada');
+    }
+    if (evidencia.storageKey) {
+      await this.supabase.storage.from('audit-files').remove([evidencia.storageKey]);
+    }
+    await this.prisma.fieldEvidence.delete({ where: { id: evidenceId } });
+    return { deleted: true };
+  }
+
+  // Mismo criterio de acceso que working-papers.service.ts:assertAuditAccess —
+  // duplicado deliberado y pequeño (igual que ya hace investigation-graph.service.ts
+  // con su propia variante), no vale la pena un guard cross-módulo para 12 líneas.
+  private async assertAuditAccessInvestigacion(auditId: string, user: AuthUser) {
+    const audit = await this.prisma.audit.findFirst({
+      where:   { id: auditId, organizationId: user.organizationId },
+      include: { team: { select: { userId: true } } },
+    });
+    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    if (audit.isInvestigationMode) {
+      const onTeam     = audit.team.some(m => m.userId === user.id);
+      const privileged  = (['CAE', 'ADMIN', 'SUPER_ADMIN'] as string[]).includes(user.role);
+      if (!onTeam && !privileged) throw new ForbiddenException('Acceso restringido — modo investigación');
+    }
+    return audit;
   }
 
   // ─── Revisión humana (EVD-09, §6.10) — "la IA sugiere, el auditor aprueba" ──

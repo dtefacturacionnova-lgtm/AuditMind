@@ -37,6 +37,8 @@ import { FiscalModule } from './fiscal/fiscal.module';
 import { AuditProceduresModule } from './audit-procedures/audit-procedures.module';
 import { AuditBackupModule } from './audits/backup/audit-backup.module';
 import { FieldEvidenceModule } from './working-papers/field-evidence/field-evidence.module';
+import { InvestigationGraphModule } from './investigation-graph/investigation-graph.module';
+import { InvestigationReportModule } from './investigation-report/investigation-report.module';
 import { CapacityModule } from './capacity/capacity.module';
 import { TimesheetModule } from './timesheet/timesheet.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
@@ -55,6 +57,8 @@ import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
     AuditBackupModule,
     WorkingPapersModule,
     FieldEvidenceModule,
+    InvestigationGraphModule,
+    InvestigationReportModule,
     FindingsModule,
     PbcModule,
     ConfirmationsModule,

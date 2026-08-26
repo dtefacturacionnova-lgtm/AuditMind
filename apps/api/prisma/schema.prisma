@@ -514,6 +514,8 @@ model User {
   dataSources                DataSource[]
   auditRestoreLogs           AuditRestoreLog[]
   fieldEvidences             FieldEvidence[]
+  investigationReports       InvestigationReport[]
+  caatsAutoRuns              CaatsAutoRun[]
   timeEntries                TimeEntry[]
   availabilityProfiles       UserAvailabilityProfile[]
   costProfiles               UserCostProfile[]
@@ -1348,9 +1350,13 @@ model Audit {
   templateId String?
   template   AuditTemplate? @relation(fields: [templateId], references: [id])
 
-  restoreLogs    AuditRestoreLog[]
-  fieldEvidences FieldEvidence[]
-  engagement     Engagement?       @relation("EngagementAudit")
+  restoreLogs          AuditRestoreLog[]
+  fieldEvidences       FieldEvidence[]
+  graphEntities        GraphEntity[]
+  graphRelations       GraphRelation[]
+  investigationReports InvestigationReport[]
+  caatsAutoRuns        CaatsAutoRun[]
+  engagement           Engagement?           @relation("EngagementAudit")
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -1385,14 +1391,16 @@ model AuditRestoreLog {
 }
 
 // ─── EVD-04: Evidencia de campo (docs/inteligencia-de-evidencia-de-campo.md §6.2) ─
-// TEXT_NOTE/AUDIO_NOTE (Fase 1), INTERVIEW_AUDIO (Fase 2), ANNOTATED_PHOTO (Fase 3)
-// ya son procesados por el pipeline. SHORT_VIDEO (Fase 4) sigue pendiente.
+// Todos los kinds ya están procesados por el pipeline. PDF_DOCUMENT agregado en
+// Fase 2a del Investigador Forense (docs/investigador-forense-multimodal-propuesta.md)
+// — OCR automático reutilizando la cascada de rag_pipeline.py.
 enum FieldEvidenceKind {
   TEXT_NOTE // texto libre / lluvia de ideas — Fase 1
   AUDIO_NOTE // nota de voz corta del auditor — Fase 1
   INTERVIEW_AUDIO // entrevista formal (diarización) — Fase 2
   ANNOTATED_PHOTO // foto anotada — Fase 3
   SHORT_VIDEO // video corto — Fase 4
+  PDF_DOCUMENT // documento PDF, OCR automático si no trae capa de texto — Fase 2a Investigador Forense
 }
 
 enum FieldEvidenceStatus {
@@ -1410,13 +1418,19 @@ enum EvidenceFindingDisposition {
   PROMOTED // aceptado Y promovido a PT-HALL
 }
 
+enum FieldEvidencePurpose {
+  EVIDENCIA // comportamiento actual — evidencia de campo normal, ligada a un papel de trabajo
+  CONTEXTO_INVESTIGADOR // Fase 2b Investigador Forense: contexto previo del auditor para SHERLOCK — nunca entra al grafo compartido ni a los grids de evidencia
+}
+
 model FieldEvidence {
-  id         String              @id @default(cuid())
+  id         String               @id @default(cuid())
   auditId    String // denormalizado — consultas y alcance de backup
-  paperId    String
+  paperId    String? // null para notas de contexto del investigador (Fase 2b) — no pertenecen a ningún papel
   sectionKey String // granularidad: (papel, sección) — capacidad general, no solo entrevistas
   kind       FieldEvidenceKind
-  status     FieldEvidenceStatus @default(UPLOADED)
+  status     FieldEvidenceStatus  @default(UPLOADED)
+  proposito  FieldEvidencePurpose @default(EVIDENCIA)
 
   // ── Custodia (molde: StepEvidence, extendido) ──
   storageKey     String? // ruta bare en bucket audit-files; null para TEXT_NOTE
@@ -1433,6 +1447,8 @@ model FieldEvidence {
   lugar          String? // "Bodega central, Soyapango"
   descripcion    String? // contexto del auditor: "arqueo de caja chica, turno noche"
   anotaciones    Json? // ANNOTATED_PHOTO (EVD-14): [{tipo, x, y, ..., nota?}] en coords 0-1 relativas a la imagen — la foto original nunca se modifica (custodia)
+  calidadBaja    Boolean @default(false) // Fase 2a: OCR de PDF degradado o audio/video difícil de transcribir — genérico, no ligado a un kind
+  calidadMotivo  String? // explicación legible de por qué se marcó calidadBaja
 
   // ── Resultado del pipeline ──
   transcript            Json? // {texto, segmentos, idioma, duracion_seg} — ver EVD-03/whisper_service
@@ -1447,9 +1463,11 @@ model FieldEvidence {
   updatedAt DateTime @updatedAt
 
   audit      Audit                  @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  paper      WorkingPaper           @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  paper      WorkingPaper?          @relation(fields: [paperId], references: [id], onDelete: Cascade)
   capturedBy User                   @relation(fields: [capturedById], references: [id])
   findings   FieldEvidenceFinding[]
+  graphMentions  GraphEntityMention[]
+  graphRelations GraphRelation[]
 
   @@index([auditId])
   @@index([paperId])
@@ -1482,6 +1500,94 @@ model FieldEvidenceFinding {
 
   @@index([evidenceId])
   @@map("field_evidence_findings")
+}
+
+// ─── Grafo de Evidencia — Fase 1 (Fundación) ──────────────────────────────────
+// docs/investigador-forense-multimodal-propuesta.md — construido SOLO sobre
+// FieldEvidence (texto/audio/foto/video con custodia). CAATs se integra en
+// Fase 2 (mapeo por motor, fuera de alcance aquí). Ontología fija (estilo
+// OpenCTI, ver propuesta) — 6 tipos de entidad, 4 tipos de relación. Dedup
+// SOLO por nombre normalizado exacto (sin fuzzy/semántico) — limitación
+// conocida y deliberada de Fase 1, ver documento de propuesta.
+enum GraphEntityType {
+  PERSONA
+  CUENTA
+  TRANSACCION
+  DOCUMENTO
+  AFIRMACION
+  FECHA_EVENTO
+}
+
+enum GraphRelationType {
+  AUTORIZO
+  CONTRADICE
+  MENCIONA
+  INVOLUCRA
+}
+
+model GraphEntity {
+  id                String          @id @default(cuid())
+  auditId           String
+  tipo              GraphEntityType
+  nombre            String // forma original citada por el LLM — display
+  nombreNormalizado String // toLowerCase + colapso de espacios + trim — clave de dedup
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  audit             Audit                @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  mentions          GraphEntityMention[]
+  relationsAsSource GraphRelation[]      @relation("GraphRelationSource")
+  relationsAsTarget GraphRelation[]      @relation("GraphRelationTarget")
+
+  // Dedup exacto — misma entidad = mismo encargo + mismo tipo + mismo nombre
+  // normalizado. NO resuelve variantes ("Juan Pérez" vs "J. Pérez") — fuera
+  // de alcance Fase 1, ver propuesta.
+  @@unique([auditId, tipo, nombreNormalizado])
+  @@index([auditId])
+  @@map("graph_entities")
+}
+
+model GraphEntityMention {
+  id           String  @id @default(cuid())
+  entityId     String
+  evidenceId   String
+  citaTextual  String // subcadena literal de la fuente de ESTA evidencia
+  validadaCita Boolean // mismo check anti-alucinación que FieldEvidenceFinding (EVD-06)
+
+  createdAt DateTime @default(now())
+
+  entity   GraphEntity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  evidence FieldEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@index([entityId])
+  @@index([evidenceId])
+  @@map("graph_entity_mentions")
+}
+
+model GraphRelation {
+  id             String            @id @default(cuid())
+  auditId        String // denormalizado — mismo criterio que FieldEvidence.auditId
+  sourceEntityId String
+  targetEntityId String
+  tipo           GraphRelationType
+  citaTextual    String
+  validadaCita   Boolean
+  confianza      Float // 0-1, del LLM extractor
+  evidenceId     String // obligatorio — Fase 1 es solo FieldEvidence (Fase 2 agrega CAATs)
+
+  createdAt DateTime @default(now())
+
+  audit        Audit         @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  sourceEntity GraphEntity   @relation("GraphRelationSource", fields: [sourceEntityId], references: [id], onDelete: Cascade)
+  targetEntity GraphEntity   @relation("GraphRelationTarget", fields: [targetEntityId], references: [id], onDelete: Cascade)
+  evidence     FieldEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@index([auditId])
+  @@index([sourceEntityId])
+  @@index([targetEntityId])
+  @@index([evidenceId])
+  @@map("graph_relations")
 }
 
 // ─── EXPEDIENTE: Fase del proyecto de auditoría ───────────────────────────────
@@ -2578,6 +2684,68 @@ model ConnectorImport {
   @@index([sourceId])
   @@index([auditId])
   @@map("connector_imports")
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  INVESTIGACIÓN FORENSE — SHERLOCK (Fase 2b, núcleo mínimo)
+//  docs/investigador-forense-multimodal-propuesta.md — informe generado en un
+//  solo paso (molde: ConnectorImport/ImportStatus) a partir del Grafo de
+//  Evidencia (GraphEntity/GraphRelation, Fase 1) más el contexto previo del
+//  auditor (FieldEvidence.proposito = CONTEXTO_INVESTIGADOR).
+// ══════════════════════════════════════════════════════════════════════════════
+
+enum InvestigationReportStatus {
+  PENDING // declarado por paridad con ImportStatus — el flujo real crea directo en RUNNING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model InvestigationReport {
+  id            String                    @id @default(cuid())
+  auditId       String
+  objetivo      String // objetivo del análisis — texto libre del auditor
+  status        InvestigationReportStatus @default(PENDING)
+  result        Json? // InvestigationReportResult — ver investigation-report.service.ts
+  errorMsg      String?
+  requestedById String
+  startedAt     DateTime                  @default(now())
+  completedAt   DateTime?
+
+  audit       Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  requestedBy User  @relation(fields: [requestedById], references: [id])
+
+  @@index([auditId])
+  @@map("investigation_reports")
+}
+
+// Fase 2c: auto-detección + auto-ejecución de un motor CAATs a partir de una
+// hoja de cálculo subida en el tab Investigador (molde: ConnectorImport,
+// mismo criterio que InvestigationReport arriba) — NO usa DataSource/
+// ConnectorImport reales porque esos representan conexiones externas
+// recurrentes (bancos, ERPs), no un archivo suelto de una sola vez. El motor
+// se sigue ejecutando desde el frontend llamando POST /ai/analytics/:engine
+// directo (igual que el panel CAATs manual) — este modelo solo persiste el
+// resultado ya calculado, no reejecuta nada server-side.
+model CaatsAutoRun {
+  id                     String   @id @default(cuid())
+  auditId                String
+  engine                 String // uno de los 15 AnalysisId auto-ejecutables — sin enum Prisma, igual que el `type` de POST /ai/analytics/:type
+  fileName               String?
+  descripcion            String // texto libre del auditor sobre qué es el archivo — insumo de la clasificación
+  fieldMapping           Json? // {fieldMapping?, benfordColumn?, anomalyColumns?} — mismo shape libre que ya usa CaatsAnalysisValue
+  result                 Json // resultado crudo del motor — se pasa tal cual a <AnalysisResultView>
+  confianzaDeteccion     Float?
+  justificacionDeteccion String?
+  requestedById          String
+  ranAt                  DateTime @default(now())
+
+  audit       Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  requestedBy User  @relation(fields: [requestedById], references: [id])
+
+  @@index([auditId])
+  @@index([auditId, engine])
+  @@map("caats_auto_runs")
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

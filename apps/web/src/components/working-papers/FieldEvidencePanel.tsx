@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Mic, Square, FileText, ChevronDown, ChevronUp, Loader2, CheckCircle2,
   XCircle, AlertTriangle, Trash2, ArrowUpCircle, Sparkles, ShieldAlert, Users, Camera,
-  Volume2, ImageIcon, Download, Quote, RotateCcw, Video,
+  Volume2, ImageIcon, Download, Quote, RotateCcw, Video, FileUp, Network,
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useUser } from '@/hooks/useUser';
@@ -12,7 +12,8 @@ import type { PaperSection } from '@/hooks/useWorkingPaperGraph';
 import { PhotoAnnotator } from './PhotoAnnotator';
 import {
   useFieldEvidenceList, useCreateFieldEvidence, useDeleteFieldEvidence,
-  useAcceptFinding, useDiscardFinding, usePromoteFinding, useRetryFieldEvidence, fetchFieldEvidenceMediaUrl,
+  useAcceptFinding, useDiscardFinding, usePromoteFinding, useRetryFieldEvidence, useReprocessGraph,
+  fetchFieldEvidenceMediaUrl,
   type FieldEvidence, type FieldEvidenceFinding, type FieldEvidenceStatus, type AnotacionFoto,
 } from '@/hooks/useFieldEvidence';
 
@@ -324,6 +325,7 @@ function EvidenciaCard({
 }) {
   const eliminar = useDeleteFieldEvidence(paperId);
   const reintentar = useRetryFieldEvidence(paperId);
+  const reprocesarGrafo = useReprocessGraph(paperId);
   const { user } = useUser();
   const [verNoVerificables, setVerNoVerificables] = useState(false);
 
@@ -332,6 +334,7 @@ function EvidenciaCard({
   const Icon = evidencia.kind === 'INTERVIEW_AUDIO' ? Users
     : evidencia.kind === 'ANNOTATED_PHOTO' ? Camera
     : evidencia.kind === 'SHORT_VIDEO' ? Video
+    : evidencia.kind === 'PDF_DOCUMENT' ? FileUp
     : evidencia.kind === 'AUDIO_NOTE' ? Mic : FileText;
   const hayHablantes = evidencia.transcript?.segmentos?.some(s => s.hablante) ?? false;
   const puedeDescargar = Boolean(
@@ -394,6 +397,13 @@ function EvidenciaCard({
 
       <MediaOriginal evidencia={evidencia} paperId={paperId} puedeDescargar={puedeDescargar} />
 
+      {evidencia.calidadBaja && evidencia.calidadMotivo && (
+        <div className="flex items-start gap-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2.5 py-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span><strong>Fuente de calidad baja:</strong> {evidencia.calidadMotivo}</span>
+        </div>
+      )}
+
       {evidencia.status === 'FAILED' && evidencia.errorMsg && (
         <div className="space-y-1.5">
           <div className="flex items-start gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">
@@ -426,6 +436,22 @@ function EvidenciaCard({
               )}
             </div>
           </div>
+
+          {/* Fase 2a — recupera solo el paso del grafo si falló tras READY, sin
+              volver a llamar a la IA (ver InvestigationGraphService.reprocessFromCache). */}
+          <button
+            type="button"
+            onClick={() => reprocesarGrafo.mutate(evidencia.id)}
+            disabled={reprocesarGrafo.isPending}
+            title="Vuelve a registrar las entidades/relaciones de esta evidencia en el Grafo de Evidencia, sin volver a llamar a la IA"
+            className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-800 disabled:opacity-50"
+          >
+            {reprocesarGrafo.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Network className="w-3 h-3" />}
+            Reprocesar grafo
+          </button>
+          {reprocesarGrafo.isError && (
+            <p className="text-[11px] text-red-600">{(reprocesarGrafo.error as Error).message}</p>
+          )}
 
           {validados.length > 0 ? (
             <div className="space-y-2">
@@ -473,7 +499,7 @@ function EvidenciaCard({
 
 function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: string }) {
   const crear = useCreateFieldEvidence(paperId);
-  const [modo, setModo] = useState<'texto' | 'audio' | 'entrevista' | 'foto' | 'video'>('texto');
+  const [modo, setModo] = useState<'texto' | 'audio' | 'entrevista' | 'foto' | 'video' | 'pdf'>('texto');
   const [texto, setTexto] = useState('');
   const [lugar, setLugar] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -586,6 +612,23 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
     setVideoUrl(null);
   }
 
+  // PDF (Fase 2a Investigador Forense) — el más simple de todos los modos: solo
+  // un archivo, sin grabación ni preview. OCR automático corre en el backend.
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+
+  function handlePdfSeleccionado(file: File) {
+    setError('');
+    if (file.type !== 'application/pdf') {
+      setError('El archivo debe ser un PDF.');
+      return;
+    }
+    setPdfFile(file);
+  }
+
+  function quitarPdf() {
+    setPdfFile(null);
+  }
+
   // Grabación de audio — MediaRecorder nativo del navegador, sin librerías.
   const [grabando, setGrabando] = useState(false);
   const [segundos, setSegundos] = useState(0);
@@ -674,7 +717,7 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
           lugar: lugar.trim() || undefined, descripcion: descripcion.trim() || undefined,
         });
         quitarFoto();
-      } else {
+      } else if (modo === 'video') {
         if (!videoFile) { setError('Suba o grabe un video antes de guardar.'); return; }
         await crear.mutateAsync({
           kind: 'SHORT_VIDEO', sectionKey, capturedAt: new Date().toISOString(),
@@ -682,6 +725,14 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
           lugar: lugar.trim() || undefined, descripcion: descripcion.trim() || undefined,
         });
         quitarVideo();
+      } else {
+        if (!pdfFile) { setError('Suba un PDF antes de guardar.'); return; }
+        await crear.mutateAsync({
+          kind: 'PDF_DOCUMENT', sectionKey, capturedAt: new Date().toISOString(),
+          file: pdfFile, fileName: pdfFile.name,
+          lugar: lugar.trim() || undefined, descripcion: descripcion.trim() || undefined,
+        });
+        quitarPdf();
       }
       setLugar('');
       setDescripcion('');
@@ -722,6 +773,12 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
           className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 ${modo === 'video' ? 'bg-gray-900 text-white' : 'text-gray-500 border border-gray-200'}`}
         >
           <Video className="w-3.5 h-3.5" /> Video corto
+        </button>
+        <button
+          onClick={() => setModo('pdf')}
+          className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 ${modo === 'pdf' ? 'bg-gray-900 text-white' : 'text-gray-500 border border-gray-200'}`}
+        >
+          <FileUp className="w-3.5 h-3.5" /> Documento PDF
         </button>
       </div>
 
@@ -795,6 +852,38 @@ function CapturaForm({ paperId, sectionKey }: { paperId: string; sectionKey: str
           )}
           {validandoVideo && (
             <p className="text-[11px] text-gray-400 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Validando duración y tamaño del video…</p>
+          )}
+        </div>
+      ) : modo === 'pdf' ? (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+            <FileUp className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <p>
+              Si el PDF es un escaneo sin texto, se aplica OCR automáticamente. Si sale
+              ilegible incluso después del OCR, la evidencia se marca de calidad baja
+              (o falla, si no se pudo extraer nada).
+            </p>
+          </div>
+
+          {!pdfFile ? (
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-lg py-8 cursor-pointer hover:border-gray-300 text-gray-500 text-xs">
+              <FileUp className="w-6 h-6" />
+              Subir un documento PDF
+              <input
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handlePdfSeleccionado(f); e.target.value = ''; }}
+              />
+            </label>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-gray-700 bg-white border border-gray-200 rounded-lg px-3 py-2">
+              <FileText className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+              <span className="flex-1 truncate">{pdfFile.name}</span>
+              <button type="button" onClick={quitarPdf} className="text-gray-500 hover:text-gray-700 underline shrink-0">
+                Quitar
+              </button>
+            </div>
           )}
         </div>
       ) : (

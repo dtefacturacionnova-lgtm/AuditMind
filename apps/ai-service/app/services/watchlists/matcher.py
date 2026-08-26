@@ -118,3 +118,41 @@ async def screen_names(query_names: list[str], threshold: float = DEFAULT_THRESH
 
 def risk_level_for_score(score: float) -> str:
     return "CRITICAL" if score >= _HIGH_CONFIDENCE_THRESHOLD else "HIGH"
+
+
+# Mismo orden/cobertura que ALL_SOURCE_LISTS en
+# apps/api/src/watchlists/watchlists.service.ts — EU queda fuera (bloqueo de
+# cuenta registrada, ver apps/ai-service/app/config.py).
+_SOURCE_LIST_LABELS = {
+    "OFAC_SDN": "OFAC SDN",
+    "UN_CONSOLIDATED": "ONU Consolidada",
+    "UK_SANCTIONS": "UK Sanctions List",
+}
+
+
+async def get_lists_consulted_summary() -> str:
+    """Texto legible de qué listas se consultaron y con qué fecha de última
+    sincronización exitosa — para que el papel de trabajo que embebe este
+    motor (PT-PLD) quede como evidencia autocontenida de qué se revisó, sin
+    depender de que nadie vaya a mirar Administración → Listas de Sanciones
+    por separado. Si una lista nunca sincronizó, se dice explícitamente en
+    vez de omitirla en silencio."""
+    conn = await asyncpg.connect(settings.DATABASE_URL)
+    try:
+        rows = await conn.fetch(
+            'SELECT DISTINCT ON ("sourceList") "sourceList", "completedAt" '
+            'FROM watchlist_syncs WHERE status = \'COMPLETED\' '
+            'ORDER BY "sourceList", "completedAt" DESC'
+        )
+    finally:
+        await conn.close()
+
+    last_sync = {r["sourceList"]: r["completedAt"] for r in rows}
+    parts = []
+    for source_list, label in _SOURCE_LIST_LABELS.items():
+        completed_at = last_sync.get(source_list)
+        if completed_at is None:
+            parts.append(f"{label} (sin sincronizar)")
+        else:
+            parts.append(f"{label} (sync {completed_at.strftime('%d/%m/%Y')})")
+    return ", ".join(parts)

@@ -20,6 +20,7 @@ export const PAPER_CATALOGUE: PaperCatalogueEntry[] = [
   // ── General — Planificación y Riesgo ──────────────────────────────────────
   { code: 'PT-A1',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'PLANNING_UNDERSTANDING', title: 'Entendimiento del Negocio y Entorno',                           hint: 'Contexto del sector, estructura, regulación y entorno' },
   { code: 'PT-A2',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'PLANNING_UNDERSTANDING', title: 'Evaluación de Riesgo Inherente (RI)',                            hint: 'Aserciones por área y factores de riesgo significativo' },
+  { code: 'PT-PLD',   group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'DATA_ANALYSIS',          title: 'Screening de Sanciones a Contrapartes — PLD (LCDA)',            hint: 'Motor de sanciones OFAC/ONU/UK fijo — evidencia de que el procedimiento se corrió, con o sin coincidencias' },
   { code: 'PT-A3',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'CONTROL_EVALUATION',     title: 'Evaluación de Controles y Riesgo de Control',                   hint: 'Diseño y efectividad operativa de controles clave' },
   { code: 'PT-A4',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'PLANNING_UNDERSTANDING', title: 'Cálculo de Materialidad (NIA 320)',                              hint: 'MG, ME y UAE con benchmark referencial automático' },
   { code: 'PT-A5',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'CONTROL_EVALUATION',     title: 'Matriz Integrada RMM — Consolidación RI + RC (NIA 315.32)',     hint: 'Consolida PT-A2 (RI) + PT-A3 (RC) → RMM por área/aserción → alimenta PT-PROG y PT-MEMO' },
@@ -101,7 +102,7 @@ const _HALL = ['PT-HALL', 'PT-HALL-COM', 'PT-HALL-RESP'];
 
 const _EXT_FIN = [
   'PT-FIN-ENCARGO', 'PT-INDEP', 'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-A5',
-  'PT-COSO', 'PT-STRAT', 'PT-APE04', 'PT-APE06', 'PT-ITGC', 'PT-MRCI',
+  'PT-COSO', 'PT-STRAT', 'PT-APE04', 'PT-APE06', 'PT-ITGC', 'PT-MRCI', 'PT-PLD',
   'PT-MEMO', 'PT-PROG',
   'PT-NIA250', 'PT-NIA530', 'PT-NIA610', 'PT-NIA620',
   'PT-FIN-A3-KC', 'PT-FIN-B00', 'PT-FIN-B01', 'PT-FIN-B02', 'PT-FIN-B03',
@@ -115,7 +116,7 @@ const _EXT_FIN = [
 
 const _FISCAL = [
   'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-A5', 'PT-STRAT', 'PT-APE04',
-  'PT-MEMO', 'PT-PROG',
+  'PT-MEMO', 'PT-PROG', 'PT-PLD',
   'PT-FISC-INDEP', 'PT-FISC-QC', 'PT-FISC-ENCARGO', 'PT-FISC-RISK',
   'PT-FISC-AML', 'PT-FISC-PT', 'PT-FISC-ZF', 'PT-FISC-DICT',
   ..._HALL,
@@ -123,7 +124,7 @@ const _FISCAL = [
 
 const _INTERNAL = [
   'PT-A1', 'PT-A2', 'PT-A3', 'PT-A4', 'PT-A5', 'PT-COSO',
-  'PT-STRAT', 'PT-APE04', 'PT-ITGC', 'PT-MRCI',
+  'PT-STRAT', 'PT-APE04', 'PT-ITGC', 'PT-MRCI', 'PT-PLD',
   'PT-MEMO', 'PT-PROG', 'PT-DIFS',
   ..._HALL,
 ];
@@ -140,7 +141,7 @@ const _IT = [
 ];
 
 const _AML = [
-  'PT-A1', 'PT-A3', 'PT-MEMO', 'PT-PROG', 'PT-AML-RISK',
+  'PT-A1', 'PT-A3', 'PT-MEMO', 'PT-PROG', 'PT-AML-RISK', 'PT-PLD',
   ..._HALL,
 ];
 

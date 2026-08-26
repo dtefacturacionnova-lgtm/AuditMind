@@ -1788,6 +1788,41 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
   ],
 
   // ──────────────────────────────────────────────────────────────────────────
+  // PT-PLD: Screening de Sanciones a Contrapartes — Prevención de Lavado de
+  // Dinero (LCDA) [SMART]. Mismo patrón exacto que PT-B4 (S1 CAATS_ANALYSIS +
+  // S2 Conclusión obligatoria) pero DEDICADO — el panel (SectionField.tsx)
+  // fija el motor a `sanctions_screening` para este paperCode específico, sin
+  // el selector de 18 motores. Existe aparte de PT-B4 porque PT-B4 es un slot
+  // único y genérico por encargo — si el auditor lo usa para GL/AP/Nómina no
+  // queda dónde documentar el screening de sanciones por separado. Referenciado
+  // en Financiera Externa v1.0 (A-09B), Interna NOGAI (A-06B), Fiscal (A-04B,
+  // complementa — no reemplaza — el checklist narrativo AF-06/PT-FISC-AML) y
+  // AML (B-PEPS-02, reemplaza el cascarón STANDARD original).
+  // ──────────────────────────────────────────────────────────────────────────
+  'PT-PLD': [
+    {
+      sectionKey:  'S1',
+      label:       'Screening de Sanciones a Contrapartes',
+      description: 'Motor de análisis asistido por computadora: suba el maestro de proveedores/clientes, mapee sus columnas y ejecute el screening contra las listas de sanciones (OFAC SDN, Lista Consolidada ONU, UK Sanctions List).',
+      fieldType:   FieldType.CAATS_ANALYSIS,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   1,
+      aiHint:      'Sección interactiva — no se redacta con IA. El resultado calculado (coincidencias, listas consultadas, fecha de sincronización) queda guardado como evidencia de que el procedimiento se ejecutó, incluso si no hubo coincidencias.',
+    },
+    {
+      sectionKey:  'S2',
+      label:       'Conclusión del Auditor',
+      description: 'Declaración explícita de si el screening arrojó o no coincidencias, y la disposición de cada una si las hubo.',
+      fieldType:   FieldType.TEXTAREA,
+      isRequired:  true,
+      isAutoFilled:false,
+      sortOrder:   2,
+      aiHint:      'Con base en los resultados de S1: declare explícitamente si se identificaron o no coincidencias contra las listas de sanciones consultadas. Si hubo coincidencias, documente la revisión manual de cada una (descartada por homónimo/falso positivo, o escalada) y el efecto en la evaluación de riesgo de lavado de dinero del encargo. Si no hubo coincidencias, declárelo explícitamente como evidencia de que el procedimiento se corrió sin hallazgos — no deje la sección vacía.',
+    },
+  ],
+
+  // ──────────────────────────────────────────────────────────────────────────
   // PT-BIA: Análisis de Impacto en el Negocio — ISO 22301:2019 [SMART]
   // ──────────────────────────────────────────────────────────────────────────
   'PT-BIA': [

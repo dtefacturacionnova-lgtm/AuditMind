@@ -6,7 +6,7 @@
 // diseño entre ambos puntos de entrada.
 
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, ShieldCheck, CheckCircle2, ListChecks } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   fieldLabel, testLabel, formatValue,
@@ -164,7 +164,7 @@ const RESULT_SPECIAL_KEYS = new Set([
   'top_anomalous_amounts', 'interpretation', 'top_anomalies', 'feature_stats', 'conformity',
   'top_conflicted_users', 'exposure_by_party', 'employee_concentration',
   'daily_amounts', 'bidder_win_rate', 'aging_buckets', 'vendor_activity', 'exposure_by_jurisdiction',
-  'tipo_breakdown',
+  'tipo_breakdown', 'lists_consulted',
 ]);
 
 export function AnalysisResultView({ result }: { result: Record<string, unknown> }) {
@@ -197,6 +197,13 @@ export function AnalysisResultView({ result }: { result: Record<string, unknown>
           <KpiStat key={k} label={fieldLabel(k)} value={formatValue(v, k)} />
         ))}
       </div>
+
+      {typeof result.lists_consulted === 'string' && (
+        <div className="flex items-start gap-2 bg-gray-50 rounded-xl px-4 py-2.5 text-xs text-gray-600">
+          <ListChecks className="w-3.5 h-3.5 shrink-0 mt-0.5 text-gray-400" />
+          <p><span className="font-semibold text-gray-700">Listas consultadas: </span>{result.lists_consulted}</p>
+        </div>
+      )}
 
       {conformity && (
         <div className={cn('rounded-xl px-4 py-3 flex items-center gap-3', CONFORMITY_COLORS[conformity]?.bg ?? 'bg-gray-50')}>

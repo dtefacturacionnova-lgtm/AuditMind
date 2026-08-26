@@ -14,6 +14,9 @@ export const FIELD_LABELS: Record<string, string> = {
   risk_score: 'Puntaje de Riesgo',
   summary: 'Resumen',
   findings: 'Hallazgos',
+  // Sanciones (Motor #18)
+  total_screened: 'Nombres Analizados',
+  matches_found: 'Coincidencias Encontradas',
   // AP
   total_invoices: 'Total de Facturas',
   vendor_count: 'Cantidad de Proveedores',

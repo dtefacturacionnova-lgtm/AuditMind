@@ -26,12 +26,17 @@ import {
 export type { CaatsAnalysisValue };
 
 interface Props {
-  paperId:    string;
-  auditId?:   string;
-  sectionKey: string;
-  value:      CaatsAnalysisValue | null;
-  onChange:   (value: CaatsAnalysisValue) => void;
-  readOnly?:  boolean;
+  paperId:      string;
+  auditId?:     string;
+  sectionKey:   string;
+  value:        CaatsAnalysisValue | null;
+  onChange:     (value: CaatsAnalysisValue) => void;
+  readOnly?:    boolean;
+  // Cuando está presente, el panel arranca directo en ese motor y NO muestra
+  // el selector de 18 motores — usado por papeles dedicados a un solo motor
+  // (ej. PT-PLD → sanctions_screening, ver SectionField.tsx). PT-B4 y el resto
+  // de usos genéricos no pasan este prop y siguen igual que siempre.
+  lockedEngine?: AnalysisId;
 }
 
 const ENGINES: { id: AnalysisId; label: string; icon: typeof Database; color: string }[] = [
@@ -55,8 +60,8 @@ const ENGINES: { id: AnalysisId; label: string; icon: typeof Database; color: st
   { id: 'sanctions_screening', label: 'Screening de Sanciones (OFAC/ONU/RU)', icon: ShieldBan, color: 'bg-red-700' },
 ];
 
-export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readOnly = false }: Props) {
-  const [engine, setEngine] = useState<AnalysisId | null>(value?.engine ?? null);
+export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readOnly = false, lockedEngine }: Props) {
+  const [engine, setEngine] = useState<AnalysisId | null>(value?.engine ?? lockedEngine ?? null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<Record<string, unknown> | null>(value?.result ?? null);
@@ -239,7 +244,8 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
 
   return (
     <div className="space-y-4" data-section-key={sectionKey} data-paper-id={paperId}>
-      {/* Selector de motor */}
+      {/* Selector de motor — oculto cuando el papel fija el motor (lockedEngine) */}
+      {!lockedEngine && (
       <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-2">
         {ENGINES.map(e => (
           <button
@@ -262,6 +268,7 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
           </button>
         ))}
       </div>
+      )}
 
       {engine && isJsonEngine && (
         <div className="space-y-3">

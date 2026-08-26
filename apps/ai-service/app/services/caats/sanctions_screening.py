@@ -9,10 +9,13 @@ base directamente en vez de recibir los datos por parámetro).
 Umbral y bandas de riesgo son puntos de partida ajustables, no una
 calibración de compliance — ver docs/... (plan de diseño de esta feature).
 """
+import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.services.watchlists.matcher import screen_names, risk_level_for_score, DEFAULT_THRESHOLD
+from app.services.watchlists.matcher import (
+    screen_names, risk_level_for_score, get_lists_consulted_summary, DEFAULT_THRESHOLD,
+)
 
 
 @dataclass
@@ -30,6 +33,12 @@ class SanctionsScreeningReport:
     matches_found: int
     findings: list[SanctionsScreeningFinding]
     risk_score: float
+    # Texto legible de qué listas se consultaron y con qué fecha de última
+    # sincronización — campo escalar de nivel superior a propósito: se
+    # renderiza automáticamente como tarjeta KPI en AnalysisResultView
+    # (apps/web/.../CaatsResultView.tsx), sin tocar el renderer compartido.
+    # Es la evidencia de "contra qué se corrió" que el papel PT-PLD necesita.
+    lists_consulted: str
     summary: dict
 
 
@@ -50,7 +59,10 @@ async def analyze_sanctions_screening(
     if not unique_names:
         raise ValueError("No hay nombres válidos para analizar tras limpiar el campo mapeado")
 
-    matches_by_name = await screen_names(unique_names, threshold=threshold)
+    matches_by_name, lists_consulted = await asyncio.gather(
+        screen_names(unique_names, threshold=threshold),
+        get_lists_consulted_summary(),
+    )
 
     findings: list[SanctionsScreeningFinding] = []
     sample_records: list[dict] = []
@@ -126,5 +138,6 @@ async def analyze_sanctions_screening(
         matches_found=len(matched_names),
         findings=findings,
         risk_score=risk_score,
+        lists_consulted=lists_consulted,
         summary=summary,
     )

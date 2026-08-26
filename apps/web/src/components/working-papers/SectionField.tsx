@@ -941,7 +941,9 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
               />
             )}
 
-            {/* Análisis de Datos CAATs (PT-B4) — motor GL/AP/Nómina/Benford/Anomalías embebido */}
+            {/* Análisis de Datos CAATs (PT-B4) — motor GL/AP/Nómina/Benford/Anomalías embebido.
+                PT-PLD fija el motor a sanctions_screening (sin selector de 18 motores) — mismo
+                patrón de despacho por paperCode que PT-NIA530/PT-FIN-C-SUST más abajo. */}
             {section.fieldType === 'CAATS_ANALYSIS' && paperId && (
               <CaatsAnalysisPanel
                 paperId={paperId}
@@ -954,6 +956,7 @@ export function SectionField({ section, allSections, readonly = false, onSave, p
                 }
                 onChange={value => onSave(section.sectionKey, value)}
                 readOnly={readonly}
+                lockedEngine={paperCode === 'PT-PLD' ? 'sanctions_screening' : undefined}
               />
             )}
 

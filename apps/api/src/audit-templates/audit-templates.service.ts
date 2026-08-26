@@ -444,7 +444,7 @@ export class AuditTemplatesService {
             type:     WorkingPaperType.CONTROL_EVALUATION, wpKind: WpKind.SMART,
             paperCode: 'PT-COSO' },
           { code: 'A-06B', indexSection: 'A',
-            title:    'Screening de Sanciones a Contrapartes — Prevención de Lavado de Dinero (LCDA)',
+            title:    'Screening de Sanciones a Contrapartes — Prevención de Lavado de Dinero (Decreto 426/2025)',
             type:     WorkingPaperType.DATA_ANALYSIS, wpKind: WpKind.SMART,
             paperCode: 'PT-PLD' },
           { code: 'A-07', indexSection: 'A',
@@ -1315,12 +1315,21 @@ export class AuditTemplatesService {
       // 6. Auditoría AML/Prevención LD (LCDA/NRP-36) — 24 papeles
       //    Secciones: A · B (B-DDC · B-PEPS · B-MON · B-ROS · B-OFC · B-CAP · B-PROD)
       //              C · D
+      //    NOTA (2026-08-26): "name" se mantiene sin cambiar a propósito — es la
+      //    clave de emparejamiento de reseedSystemTemplates() (matchea por nombre
+      //    exacto); renombrarlo crearía un duplicado en la BD en vez de actualizar
+      //    el existente. La ley sustantiva SÍ cambió — ver "description" abajo y
+      //    [[fixes_and_lessons]] si se reabre esto: la vieja "LCDA" (Decreto
+      //    498/1998) fue derogada por la Ley Especial PLD/FT/FP (Decreto 426/2025).
       // ═══════════════════════════════════════════════════════════════════════
       {
         name: 'Auditoría AML/Prevención LD (LCDA/NRP-36)',
         description:
           'Índice completo para Auditoría de Prevención de Lavado de Dinero y Activos ' +
-          'según LCDA, NRP-36 (BCR/SSF), GAFI 40 Recomendaciones y Resolución CVPCPA 129/2022. ' +
+          'según la Ley Especial para la Prevención, Control y Sanción del Lavado de Activos, ' +
+          'Financiamiento del Terrorismo y Financiamiento de la Proliferación de Armas de ' +
+          'Destrucción Masiva (Decreto Legislativo 426/2025 — deroga la antigua LCDA de 1998), ' +
+          'NRP-36 (BCR/SSF), GAFI 40 Recomendaciones y Resolución CVPCPA 129/2022. ' +
           'Cubre DDC/KYC/EDD, PEPs, monitoreo, ROS, Oficial de Cumplimiento y criptoactivos. ' +
           'Aplica a: AML.',
         auditTypes: [AuditType.AML],
@@ -1399,7 +1408,7 @@ export class AuditTemplatesService {
             paperCode: 'PT-AML-RISK' },
           // ── B-OFC — Oficial de Cumplimiento (2 papeles) ─────────────────
           { code: 'B-OFC-01', indexSection: 'B-OFC',
-            title:  'Evaluación del Oficial de Cumplimiento — Perfil e Idoneidad (LCDA Art. 14)',
+            title:  'Evaluación del Oficial de Cumplimiento — Perfil e Idoneidad (Ley PLD/FT/FP Art. 20, Decreto 426/2025)',
             type:   WorkingPaperType.CONTROL_EVALUATION, wpKind: WpKind.STANDARD },
           { code: 'B-OFC-02', indexSection: 'B-OFC',
             title:  'Revisión de Estructura del Área de Cumplimiento y Comité ALD (NRP-36 Art. 21)',
@@ -1451,7 +1460,7 @@ export class AuditTemplatesService {
             title:  'Resumen de Incumplimientos, Observaciones y Plan de Subsanación',
             type:   WorkingPaperType.CLOSURE_CONCLUSION, wpKind: WpKind.MASTER },
         ],
-        // ─── Grafo AML/PLD (LCDA + NRP-36 + GAFI) ────────────────────────────
+        // ─── Grafo AML/PLD (Ley PLD/FT/FP Decreto 426/2025 + NRP-36 + GAFI) ──
         links: [
           { sourceCode: 'A-02', targetCode: 'A-03', sourceField: 'S1', targetField: 'S1', mappingType: 'DIRECT',       description: 'Perfil sujeto obligado → Riesgos LA/FT' },
           { sourceCode: 'A-03', targetCode: 'A-04', sourceField: 'S5', targetField: 'S1', mappingType: 'AGGREGATED',   description: 'ERI → 3 líneas de defensa' },
@@ -1479,7 +1488,7 @@ export class AuditTemplatesService {
       // 7. Auditoría Fiscal El Salvador v6.1 — NACOT 2018 como norma rectora — 53 papeles
       //    Secciones: APF · A · ISR · IVA · OF · AF · D
       //    v6.1: NACOT 2018 central + Independencia/Calidad/Carta de Encargo (CIEPC),
-      //          Riesgo de Incumplimiento (NIA 315), AML (LCLDA), Precios de Transferencia
+      //          Riesgo de Incumplimiento (NIA 315), AML (Ley PLD/FT/FP Decreto 426/2025), Precios de Transferencia
       //          (OCDE/BEPS), Dictamen Semestral Zonas Francas/SSII y Dictamen NACOT Anexo 1.
       // ═══════════════════════════════════════════════════════════════════════
       {
@@ -1491,7 +1500,7 @@ export class AuditTemplatesService {
           'planificación, ejecución, documentación y el Dictamen (Anexo 1, 3 tipos de opinión). ' +
           'Marco legal: Código Tributario Arts. 129-138, LISR, Ley IVA; NIA supletoriamente. ' +
           'Cubre ISR (F11), IVA (F07), Pago a Cuenta (F14), Precios de Transferencia OCDE/BEPS (F982), ' +
-          'AML/LCLDA, Dictamen Semestral Zonas Francas/Servicios Internacionales, Obligaciones Formales ' +
+          'AML/Ley PLD/FT/FP (Decreto 426/2025), Dictamen Semestral Zonas Francas/Servicios Internacionales, Obligaciones Formales ' +
           '(DTE/libros) y Dictamen Fiscal SDF. Aplica a: Fiscal.',
         auditTypes: [AuditType.FISCAL],
         sections: [
@@ -1563,7 +1572,7 @@ export class AuditTemplatesService {
               { ref: 'AF-03', name: 'Evasión IVA — Compras sin CCF Válido' },
               { ref: 'AF-04', name: 'Precios de Transferencia — Paraísos Fiscales' },
               { ref: 'AF-05', name: 'CAATs Fiscales — 100% de Transacciones' },
-              { ref: 'AF-06', name: 'Anti-Lavado de Activos — LCLDA / Reforma 2024' },
+              { ref: 'AF-06', name: 'Anti-Lavado de Activos — Ley PLD/FT/FP (Decreto 426/2025)' },
               { ref: 'AF-07', name: 'Precios de Transferencia — Análisis Completo OCDE/BEPS' },
               { ref: 'AF-08', name: 'Dictamen Semestral — Zonas Francas / Servicios Internacionales' },
             ],
@@ -1624,7 +1633,7 @@ export class AuditTemplatesService {
             type:     WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART,
             paperCode: 'PT-A2' },
           { code: 'A-04B', indexSection: 'A',
-            title:    'Screening de Sanciones a Contrapartes — Prevención de Lavado de Dinero (LCDA), complementa AF-06',
+            title:    'Screening de Sanciones a Contrapartes — Prevención de Lavado de Dinero (Decreto 426/2025), complementa AF-06',
             type:     WorkingPaperType.DATA_ANALYSIS, wpKind: WpKind.SMART,
             paperCode: 'PT-PLD' },
           { code: 'A-05', indexSection: 'A',
@@ -1788,7 +1797,7 @@ export class AuditTemplatesService {
             type:     WorkingPaperType.DATA_ANALYSIS, wpKind: WpKind.SMART,
             paperCode: 'PT-FISC-CAAT-100PCT' },
           { code: 'AF-06', indexSection: 'AF-06',
-            title:    'Análisis de Indicadores de Lavado de Activos — LCLDA / Reforma 2024 / FATF',
+            title:    'Análisis de Indicadores de Lavado de Activos — Ley PLD/FT/FP (Decreto 426/2025) / FATF',
             type:     WorkingPaperType.DATA_ANALYSIS, wpKind: WpKind.SMART,
             paperCode: 'PT-FISC-AML' },
           { code: 'AF-07', indexSection: 'AF-07',
@@ -1957,6 +1966,7 @@ export class AuditTemplatesService {
               { ref: 'C-13', name: 'Partes Relacionadas' },
               { ref: 'C-14', name: 'Estimaciones y Provisiones' },
               { ref: 'C-15', name: 'Continuidad Operativa' },
+              { ref: 'C-16', name: 'Prevención de Lavado de Dinero' },
             ],
           },
           { ref: 'D',   name: 'Cierre de la Auditoría',                   phaseType: 'REPORTING' },
@@ -2028,7 +2038,7 @@ export class AuditTemplatesService {
             title: 'Plan Maestro de Muestreo Estadístico (NIA 530)',
             type: WorkingPaperType.PLANNING_UNDERSTANDING, wpKind: WpKind.SMART, paperCode: 'PT-NIA530' },
           { code: 'A-09B', indexSection: 'A',
-            title: 'Screening de Sanciones a Contrapartes — Prevención de Lavado de Dinero (LCDA)',
+            title: 'Screening de Sanciones a Contrapartes — Prevención de Lavado de Dinero (Decreto 426/2025)',
             type: WorkingPaperType.DATA_ANALYSIS, wpKind: WpKind.SMART, paperCode: 'PT-PLD' },
           // ── B — Estados Financieros y Cédulas Sumarias ────────────────────
           { code: 'B-00', indexSection: 'B-00',
@@ -2110,6 +2120,9 @@ export class AuditTemplatesService {
           { code: 'C-15', indexSection: 'C-15',
             title: 'Continuidad Operativa (NIA 570)',
             type: WorkingPaperType.NORMATIVE_ANALYSIS, wpKind: WpKind.SMART, paperCode: 'PT-NIA570' },
+          { code: 'C-16', indexSection: 'C-16',
+            title: 'Prevención de Lavado de Dinero — Cumplimiento del Sujeto Obligado (Ley PLD/FT/FP Decreto 426/2025)',
+            type: WorkingPaperType.SUBSTANTIVE_TEST, wpKind: WpKind.SMART, paperCode: 'PT-FIN-C-SUST' },
           // ── D — Cierre ────────────────────────────────────────────────────
           { code: 'D-01', indexSection: 'D',
             title: 'Carta de Representación de la Administración (NIA 580)',

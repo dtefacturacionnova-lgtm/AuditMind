@@ -36,12 +36,12 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     {
       sectionKey:  'S3',
       label:       'Entorno Regulatorio',
-      description: 'Marcos normativos aplicables: NIIF, NIA, reguladores sectoriales, leyes tributarias.',
+      description: 'Marcos normativos aplicables: NIIF, NIA, reguladores sectoriales, leyes tributarias. Incluye la determinación de si el auditado es sujeto obligado bajo la Ley Especial de Prevención de Lavado de Dinero.',
       fieldType:   FieldType.TEXTAREA,
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   3,
-      aiHint:      'Lista reguladores, licencias y normas contables que aplican a la entidad.',
+      aiHint:      'Lista reguladores, licencias y normas contables que aplican a la entidad. Adicionalmente, determina EXPLÍCITAMENTE si el auditado califica como sujeto obligado bajo el Art. 7 de la Ley Especial para la Prevención, Control y Sanción del Lavado de Activos, Financiamiento del Terrorismo y Financiamiento de la Proliferación de Armas de Destrucción Masiva (Decreto 426/2025) — la lista de 10 categorías es amplia (financieras, casas de cambio/remesadoras, casinos, inmobiliarias, metales/piedras preciosas, abogados/notarios/contadores/auditores en ciertos servicios al cliente, transporte de dinero, activos digitales/bitcoin, partidos políticos). Documenta la conclusión (sí/no y por qué) aunque la respuesta sea negativa. Si el auditado SÍ es sujeto obligado, indica que su cumplimiento (Oficial de Cumplimiento, Debida Diligencia del Cliente, capacitación PLD, reportes ROS) se evalúa a fondo en un papel dedicado (C-16/PT-FIN-C-SUST en Financiera Externa, A-XXB/PT-PLD en las demás plantillas cubre el screening de contrapartes en todas). Independientemente de si es o no sujeto obligado, el screening de sanciones contra sus proveedores/clientes principales (motor CAATs PT-PLD) es un procedimiento de debida diligencia razonable para cualquier auditoría.',
     },
     {
       sectionKey:  'S4',
@@ -1789,7 +1789,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
 
   // ──────────────────────────────────────────────────────────────────────────
   // PT-PLD: Screening de Sanciones a Contrapartes — Prevención de Lavado de
-  // Dinero (LCDA) [SMART]. Mismo patrón exacto que PT-B4 (S1 CAATS_ANALYSIS +
+  // Dinero (Ley Especial PLD/FT/FP, Decreto 426/2025) [SMART]. Mismo patrón exacto que PT-B4 (S1 CAATS_ANALYSIS +
   // S2 Conclusión obligatoria) pero DEDICADO — el panel (SectionField.tsx)
   // fija el motor a `sanctions_screening` para este paperCode específico, sin
   // el selector de 18 motores. Existe aparte de PT-B4 porque PT-B4 es un slot
@@ -2013,7 +2013,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:  true,
       isAutoFilled:false,
       sortOrder:   9,
-      aiHint:      'Sintetiza: riesgo inherente, efectividad de controles, riesgo residual, cumplimiento NRP-36/LCDA/Instructivo UIF V3, hallazgos críticos y recomendaciones para el Comité de Cumplimiento.',
+      aiHint:      'Sintetiza: riesgo inherente, efectividad de controles, riesgo residual, cumplimiento NRP-36/Ley PLD/FT/FP (Decreto 426/2025)/Instructivo UIF, hallazgos críticos y recomendaciones para el Comité de Cumplimiento.',
     },
   ],
 
@@ -2525,13 +2525,13 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     },
   ],
 
-  // PT-FISC-AML: Indicadores de Lavado de Activos — LCLDA / Reforma 2024 / FATF [SMART]
+  // PT-FISC-AML: Indicadores de Lavado de Activos — Ley PLD/FT/FP (Decreto 426/2025) / FATF [SMART]
   'PT-FISC-AML': [
     {
       sectionKey: 'S1', label: 'Identificación del Contribuyente como Sujeto Obligado',
-      description: '¿El contribuyente es sujeto obligado de reporte bajo la LCLDA?',
+      description: '¿El contribuyente es sujeto obligado de reporte bajo la Ley Especial PLD/FT/FP (Art. 7, Decreto 426/2025)?',
       fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 1,
-      aiHint: 'Determina si el contribuyente es sujeto obligado bajo la LCLDA reformada 2024.',
+      aiHint: 'Determina si el contribuyente es sujeto obligado bajo el Art. 7 de la Ley Especial para la Prevención, Control y Sanción del Lavado de Activos, Financiamiento del Terrorismo y Financiamiento de la Proliferación de Armas de Destrucción Masiva (Decreto Legislativo 426, vigente desde octubre 2025 — deroga la antigua "Ley Contra el Lavado de Dinero y de Activos" de 1998, a veces citada como "LCDA"/"LCLDA" en documentación previa, ya no vigente como norma sustantiva).',
     },
     {
       sectionKey: 'S2', label: 'Indicadores de Lavado en Operaciones',
@@ -2552,10 +2552,10 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       aiHint: 'Si es sujeto obligado, verifica Oficial de Cumplimiento, ROS y políticas KYC.',
     },
     {
-      sectionKey: 'S5', label: 'Obligaciones del Auditor Fiscal bajo la LCLDA',
+      sectionKey: 'S5', label: 'Obligaciones del Auditor Fiscal bajo la Ley PLD/FT/FP',
       description: 'Reportar a la UIF ante indicadores claros de lavado; prohibición de tipping-off (no alertar al cliente).',
       fieldType: FieldType.TEXTAREA, isRequired: true, isAutoFilled: false, sortOrder: 5,
-      aiHint: 'Documenta las obligaciones de reporte del auditor y el cumplimiento de la prohibición de tipping-off.',
+      aiHint: 'Documenta las obligaciones de reporte del auditor bajo la Ley Especial PLD/FT/FP (Decreto 426/2025) y el cumplimiento de la prohibición de tipping-off.',
     },
     {
       sectionKey: 'S6', label: 'Nivel de Riesgo AML',
@@ -4391,7 +4391,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       isRequired:   false,
       isAutoFilled: false,
       sortOrder:    7,
-      aiHint:       'Columnas: Factor | Situación / Descripción | Impacto en la Auditoría. Filas sugeridas: Condiciones económicas | Marco regulatorio aplicable | Posición competitiva | Cambios normativos del período. Condiciones económicas relevantes del sector: crecimiento, inflación, tipo de cambio (si aplica). Marco regulatorio específico: leyes tributarias vigentes, regulaciones sectoriales (banca, seguros, telecomunicaciones, etc.). Posición competitiva y participación de mercado. Principales cambios normativos o regulatorios en el período. Aplica NIA 315.11(c).',
+      aiHint:       'Columnas: Factor | Situación / Descripción | Impacto en la Auditoría. Filas sugeridas: Condiciones económicas | Marco regulatorio aplicable | Posición competitiva | Cambios normativos del período | Sujeto Obligado — Ley PLD/FT/FP. Condiciones económicas relevantes del sector: crecimiento, inflación, tipo de cambio (si aplica). Marco regulatorio específico: leyes tributarias vigentes, regulaciones sectoriales (banca, seguros, telecomunicaciones, etc.). Posición competitiva y participación de mercado. Principales cambios normativos o regulatorios en el período. Para la fila "Sujeto Obligado — Ley PLD/FT/FP": determina EXPLÍCITAMENTE si el cliente califica como sujeto obligado bajo el Art. 7 de la Ley Especial para la Prevención, Control y Sanción del Lavado de Activos, Financiamiento del Terrorismo y Financiamiento de la Proliferación de Armas de Destrucción Masiva (Decreto 426/2025) — 10 categorías amplias, incluye financieras, inmobiliarias, comerciantes de metales/piedras preciosas, activos digitales/bitcoin, y abogados/notarios/contadores/auditores en ciertos servicios al cliente. Registra la conclusión (sí/no) aunque sea negativa; si es afirmativa, el detalle de cumplimiento (Oficial de Cumplimiento, DDC, capacitación) se evalúa en C-16 (PT-FIN-C-SUST). Aplica NIA 315.11(c).',
     },
     {
       sectionKey:   'S7',

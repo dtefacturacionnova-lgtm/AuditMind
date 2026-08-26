@@ -386,7 +386,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'Detectar el patrón transaccional de "pitufeo" (structuring/smurfing) — fraccionamiento deliberado de depósitos o transacciones en montos menores al umbral de reporte regulatorio, típico de la Fase de Colocación del lavado de activos.',
     metodologia:
       'Identifica transacciones individuales justo bajo el umbral de reporte, y agrupa transacciones del mismo titular en ventanas cortas de tiempo (por defecto 3 días) para detectar si, sumadas, superan el umbral.',
-    normativa: 'GAFI Recomendación 20 (Reporte de Operaciones Sospechosas), LCDA / NRP-36 (BCR/SSF El Salvador)',
+    normativa: 'GAFI Recomendación 20 (Reporte de Operaciones Sospechosas), Ley Especial PLD/FT/FP — Decreto 426/2025 (Art. 25, Reporte de Operaciones Reguladas) / NRP-36 (BCR/SSF El Salvador)',
     pruebas: [
       { nombre: 'Transacción Cerca del Umbral', descripcion: 'Transacciones individuales dentro del 10% por debajo del umbral de reporte.' },
       { nombre: 'Patrón de Fraccionamiento', descripcion: 'Mismo titular con 2+ transacciones en una ventana corta que suman igual o más que el umbral — firma clásica del pitufeo.' },
@@ -480,7 +480,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
       'Detectar si algún proveedor o cliente del auditado coincide, por nombre, con una persona o entidad sancionada — prueba estándar de cumplimiento AML/KYC (Anti-Lavado de Dinero / Conozca a su Cliente) sobre la cartera de contrapartes del negocio.',
     metodologia:
       'Matching difuso (similitud de texto, no coincidencia exacta) de cada nombre subido contra una copia local de la Lista SDN de la OFAC (Tesoro de EE.UU.), la Lista Consolidada del Consejo de Seguridad de la ONU y la UK Sanctions List (FCDO, Reino Unido), sincronizadas periódicamente desde las fuentes oficiales. Compara contra el nombre principal Y cada alias conocido de cada entrada — una coincidencia de similitud ≥87% (umbral ajustable) se reporta para revisión.',
-    normativa: 'Ley Contra el Lavado de Dinero y Activos, listas de sanciones de OFAC (31 CFR), resoluciones del Consejo de Seguridad de la ONU y la UK Sanctions List (FCDO)',
+    normativa: 'Ley Especial para la Prevención, Control y Sanción del Lavado de Activos, Financiamiento del Terrorismo y Financiamiento de la Proliferación de Armas de Destrucción Masiva (Decreto 426/2025), listas de sanciones de OFAC (31 CFR), resoluciones del Consejo de Seguridad de la ONU y la UK Sanctions List (FCDO)',
     pruebas: [
       { nombre: 'Coincidencia con Lista de Sanciones', descripcion: 'Nombre subido con similitud igual o mayor al umbral configurado contra el nombre principal o un alias de una entrada activa de OFAC/ONU/UK — se reporta el nombre coincidente, el score de similitud, la lista de origen y los programas/motivos de la sanción.' },
     ],

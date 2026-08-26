@@ -33,7 +33,7 @@ export const AUDIT_TYPES: AuditTypeOption[] = [
   { value: 'BCP_DRP',               label: 'BCP / DRP (Continuidad General)' },
   { value: 'BCP_CONTINUITY',        label: 'Continuidad del Negocio (ISO 22301)' },
   // ── Auditoría Especializada Regulatoria ───────────────────────────────────
-  { value: 'AML',                   label: 'Prevención Lavado de Dinero (LCDA / NRP-36)' },
+  { value: 'AML',                   label: 'Prevención Lavado de Dinero (Decreto 426/2025 / NRP-36)' },
   { value: 'FORENSIC',              label: 'Forense / Examen Especial' },
   { value: 'FISCAL',                label: 'Fiscal (ISR / IVA / CVPCPA El Salvador)' },
   { value: 'ESG',                   label: 'ESG / Sostenibilidad' },

@@ -93,7 +93,7 @@ export class PaperDefDto {
 }
 
 export class CreateAuditTemplateDto {
-  @ApiProperty({ example: 'Auditoría AML - LCDA' })
+  @ApiProperty({ example: 'Auditoría AML - PLD' })
   @IsString()
   name: string;
 

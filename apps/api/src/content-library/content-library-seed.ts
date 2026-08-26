@@ -136,6 +136,31 @@ const PROCEDURE_GROUPS: Record<string, { label: string; items: ProcSeed[] }> = {
       { procedimiento: 'Revisión de gastos con partes relacionadas o inusuales por su naturaleza o monto', tecnica: 'Indagación' },
     ],
   },
+  // ─── C-16 — Prevención de Lavado de Dinero (2026-08-26) ────────────────────
+  // Grupo nuevo (C-13..C-15 ya están tomados por partes relacionadas/estimaciones/
+  // continuidad en sus propios papeles dedicados, no en PT-FIN-C-SUST). Grounded
+  // en la Ley Especial PLD/FT/FP (Decreto 426/2025) — ver base RAG 'AML_SV' y
+  // agente Themis para el texto legal completo. Dos tipos de procedimiento
+  // deliberadamente separados: (a) si el AUDITADO es sujeto obligado, probar su
+  // propio cumplimiento; (b) en CUALQUIER auditoría, screening de contrapartes
+  // (vincula con el motor CAATs PT-PLD ya existente).
+  'C-16': {
+    label: 'Prevención de Lavado de Dinero (Ley Especial PLD/FT/FP — Decreto 426/2025)',
+    items: [
+      { procedimiento: 'Determinar si el auditado califica como sujeto obligado bajo el Art. 7 de la Ley Especial PLD/FT/FP (10 categorías: financieras, casas de cambio/remesadoras, casinos, inmobiliarias, metales/piedras preciosas, abogados/notarios/contadores/auditores en ciertos servicios, transporte de dinero, activos digitales/bitcoin, partidos políticos) — documentar la conclusión con su fundamento, sea positiva o negativa', tecnica: 'Indagación' },
+      { procedimiento: 'Si es sujeto obligado: verificar registro vigente ante la UIF y el ente de supervisión correspondiente (Art. 9.1)', tecnica: 'Inspección' },
+      { procedimiento: 'Si es sujeto obligado: verificar la designación formal de Oficial de Cumplimiento (y suplente) y su comunicación a la UIF/supervisor dentro del plazo de 15 días hábiles (Art. 9.8, Art. 20)', tecnica: 'Inspección' },
+      { procedimiento: 'Si es sujeto obligado con oficialía obligatoria (Art. 20): verificar la constitución del Comité de Prevención con al menos 3 miembros, incluyendo un integrante del máximo órgano de dirección (Art. 23)', tecnica: 'Inspección' },
+      { procedimiento: 'Si es sujeto obligado: verificar la existencia y ejecución real (no solo documental) de políticas de Debida Diligencia del Cliente (DDC) — simplificada/estándar/intensificada según riesgo, incluyendo identificación de beneficiario final ≥25% (Art. 15)', tecnica: 'Inspección' },
+      { procedimiento: 'Si es sujeto obligado: verificar el plan anual de capacitación PLD/FT ejecutado (no solo aprobado) para el personal con responsabilidad en el sistema de gestión de riesgos (Art. 9.6)', tecnica: 'Inspección' },
+      { procedimiento: 'Si es sujeto obligado: verificar evidencia de monitoreo intensificado sobre relaciones con Personas Expuestas Políticamente (PEP), nacionales o extranjeras (Art. 9.14, Art. 19)', tecnica: 'Inspección' },
+      { procedimiento: 'Si es sujeto obligado: verificar que la política de terminación de relaciones comerciales de alto riesgo documenta el análisis de riesgo y su comunicación a la UIF cuando el saldo supera USD 1,000 (Art. 18)', tecnica: 'Inspección' },
+      { procedimiento: 'Si es sujeto obligado: confirmar que las políticas internas NO aplican bloqueos/restricciones generalizados sin análisis de riesgo individualizado documentado — de-risking indiscriminado es en sí mismo un hallazgo bajo el Art. 10/16 de la Ley', tecnica: 'Inspección' },
+      { procedimiento: 'Ejecutar el motor CAATs de Screening de Sanciones (papel PT-PLD) sobre el maestro de proveedores/clientes significativos del auditado, sea o no sujeto obligado — deja evidencia de la revisión contra OFAC/ONU/UK aunque no haya coincidencias', tecnica: 'CAATs' },
+      { procedimiento: 'Indagar con la administración sobre operaciones en efectivo, transferencias internacionales o con jurisdicciones de riesgo que se aparten del giro normal del negocio, como indicador analítico de riesgo LA/FT (independiente de si el auditado es sujeto obligado)', tecnica: 'Indagación' },
+      { procedimiento: 'Si en el trabajo de auditoría surgen indicios claros de lavado de activos, documentar la obligación del propio auditor de reportar a la UIF cuando corresponda, y la prohibición de alertar al cliente (tipping-off)', tecnica: 'Indagación' },
+    ],
+  },
 };
 
 export const SUBSTANTIVE_PROCEDURE_SEED: SeedItem[] = Object.entries(PROCEDURE_GROUPS).flatMap(

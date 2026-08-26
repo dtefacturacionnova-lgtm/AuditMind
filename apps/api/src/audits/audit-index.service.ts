@@ -734,7 +734,8 @@ const INDEX_IT_SYSTEMS: PaperDef[] = [
 
 /**
  * INDICE-10 — Auditoría de Prevención de Lavado de Dinero y Activos
- * (Ley LCDA D.L. 498/1998 + NRP-36 + GAFI 40 Recomendaciones + Instructivo UIF V3)
+ * (Ley Especial PLD/FT/FP D.L. 426/2025 + NRP-36 + GAFI 40 Recomendaciones + Instructivo UIF —
+ *  deroga la antigua "LCDA" D.L. 498/1998)
  * Applies to: AML
  */
 const INDEX_AML: PaperDef[] = [
@@ -805,7 +806,7 @@ const INDEX_AML: PaperDef[] = [
   },
   {
     code: 'B-05', indexSection: 'B',
-    title:    'Evaluación del Oficial de Cumplimiento (Ley LCDA Art. 14)',
+    title:    'Evaluación del Oficial de Cumplimiento (Ley PLD/FT/FP Art. 20, Decreto 426/2025)',
     type:     WorkingPaperType.CONTROL_EVALUATION,
     wpKind:   WpKind.STANDARD,
   },

@@ -366,6 +366,7 @@ async def list_rag_bases():
             {"id": "FINANCIAL",        "name": "Estándares Financieros",      "description": "NIAs, NIIF, PCAOB"},
             {"id": "SECTOR_SPECIFIC",  "name": "Normativa Sectorial",         "description": "Regulaciones por industria"},
             {"id": "FISCAL_SV",        "name": "Tributario El Salvador",      "description": "NACOT, Código Tributario, Ley ISR, Ley IVA, Código de Comercio"},
+            {"id": "AML_SV",           "name": "PLD/FT El Salvador",          "description": "Ley Especial PLD/FT/FP Decreto 426/2025, NRP-36, Reglamento LCDA (vigencia transitoria)"},
         ]
     }
 
@@ -375,14 +376,17 @@ async def agents_with_rag():
     """Qué Especialistas IA consultan la base de conocimiento — informativo,
     para la pantalla de administración. Los agentes del chat general buscan en
     TODAS las bases (no hay restricción por base ahí); la asistencia de sección
-    para auditorías Fiscales es la única ruta que se limita explícitamente a
-    FISCAL_SV (ver apps/api/src/working-papers/paper-sections.service.ts)."""
+    SÍ se restringe a una base específica, pero por TIPO DE AUDITORÍA
+    (audit.type), no por agente — ver assistSection() en
+    apps/api/src/working-papers/paper-sections.service.ts: 'FISCAL' → FISCAL_SV,
+    'AML' → AML_SV."""
     return {
         "general_chat_agents": [
             "MINERVA", "SCRIPTORIUM", "ARGUS", "CICERO",
-            "LEX", "MINERVA_QAIP", "VULCANO", "CASSANDRA",
+            "LEX", "MINERVA_QAIP", "VULCANO", "CASSANDRA", "THEMIS",
         ],
         "note": "Estos agentes buscan en todas las bases de conocimiento activas cuando responden. "
-                "La asistencia de sección para auditorías Fiscales (Lex) es la única ruta que se limita "
-                "explícitamente a la base 'FISCAL_SV'.",
+                "La asistencia de sección (botón 'Asistir con IA' dentro de un papel) es la única ruta "
+                "que restringe la búsqueda a una base específica — según el tipo de auditoría del "
+                "encargo (FISCAL → 'FISCAL_SV', AML → 'AML_SV'), no según qué agente esté activo.",
     }

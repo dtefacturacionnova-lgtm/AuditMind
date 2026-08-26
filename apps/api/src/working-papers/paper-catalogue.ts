@@ -10,7 +10,7 @@ export interface PaperCatalogueEntry {
   group:  string;
   hint:   string;
   // true = esta plantilla se reutiliza a propósito varias veces en el mismo
-  // encargo (ej. PT-FIN-C-SUST sirve a 11 áreas C-XX distintas) — el selector
+  // encargo (ej. PT-FIN-C-SUST sirve a 12 áreas C-XX distintas) — el selector
   // de "nuevo papel" no debe deshabilitarla solo porque ya se usó una vez.
   reusable?: boolean;
 }
@@ -20,7 +20,7 @@ export const PAPER_CATALOGUE: PaperCatalogueEntry[] = [
   // ── General — Planificación y Riesgo ──────────────────────────────────────
   { code: 'PT-A1',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'PLANNING_UNDERSTANDING', title: 'Entendimiento del Negocio y Entorno',                           hint: 'Contexto del sector, estructura, regulación y entorno' },
   { code: 'PT-A2',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'PLANNING_UNDERSTANDING', title: 'Evaluación de Riesgo Inherente (RI)',                            hint: 'Aserciones por área y factores de riesgo significativo' },
-  { code: 'PT-PLD',   group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'DATA_ANALYSIS',          title: 'Screening de Sanciones a Contrapartes — PLD (LCDA)',            hint: 'Motor de sanciones OFAC/ONU/UK fijo — evidencia de que el procedimiento se corrió, con o sin coincidencias' },
+  { code: 'PT-PLD',   group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'DATA_ANALYSIS',          title: 'Screening de Sanciones a Contrapartes — PLD (Decreto 426/2025)',            hint: 'Motor de sanciones OFAC/ONU/UK fijo — evidencia de que el procedimiento se corrió, con o sin coincidencias' },
   { code: 'PT-A3',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'CONTROL_EVALUATION',     title: 'Evaluación de Controles y Riesgo de Control',                   hint: 'Diseño y efectividad operativa de controles clave' },
   { code: 'PT-A4',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'PLANNING_UNDERSTANDING', title: 'Cálculo de Materialidad (NIA 320)',                              hint: 'MG, ME y UAE con benchmark referencial automático' },
   { code: 'PT-A5',    group: 'General — Planificación y Riesgo', wpKind: 'SMART',  type: 'CONTROL_EVALUATION',     title: 'Matriz Integrada RMM — Consolidación RI + RC (NIA 315.32)',     hint: 'Consolida PT-A2 (RI) + PT-A3 (RC) → RMM por área/aserción → alimenta PT-PROG y PT-MEMO' },
@@ -60,7 +60,7 @@ export const PAPER_CATALOGUE: PaperCatalogueEntry[] = [
 
   // ── Auditoría Financiera — Pruebas y Cierre ───────────────────────────────
   { code: 'PT-FIN-C-GEN',    group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Área / Cuenta Adicional — Prueba Sustantiva Genérica (comodín)',   hint: 'Para cuentas sin papel C-XX específico: NIIF 16, derivados, biológicos, criptoactivos, etc.', reusable: true },
-  { code: 'PT-FIN-C-SUST',   group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Prueba Sustantiva por Área (genérico)',                            hint: 'Diferencias auto-push a B-08 cuando superan UAE — reutilizable: Caja, Inventarios, Activo Fijo, Inversiones, Intangibles, CxP, Oblig. Bancarias, Pasivos LP, Capital, Ingresos, Costos', reusable: true },
+  { code: 'PT-FIN-C-SUST',   group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Prueba Sustantiva por Área (genérico)',                            hint: 'Diferencias auto-push a B-08 cuando superan UAE — reutilizable: Caja, Inventarios, Activo Fijo, Inversiones, Intangibles, CxP, Oblig. Bancarias, Pasivos LP, Capital, Ingresos, Costos, PLD', reusable: true },
   { code: 'PT-CIRC',         group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Circularización de CxC (NIA 505)',                                 hint: 'Universo CxC, selección, envío, seguimiento y evaluación de respuestas' },
   { code: 'PT-FIN-C-ESTIM',  group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Estimaciones Contables (NIA 540 Rev.)',                            hint: 'Espectro de resultados, rango del auditor vs estimación gerencia, indicadores de sesgo' },
   { code: 'PT-ENTREV',       group: 'Auditoría Financiera — Pruebas y Cierre', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',   title: 'Guía y Papel de Entrevista',                                       hint: 'Planificación, registro de sesiones y hallazgos sugeridos por IA desde evidencia de campo (audio/texto)' },
@@ -83,7 +83,7 @@ export const PAPER_CATALOGUE: PaperCatalogueEntry[] = [
   { code: 'PT-FISC-QC',      group: 'Auditoría Fiscal SV (NACOT)', wpKind: 'SMART',  type: 'PLANNING_UNDERSTANDING', title: 'Control de Calidad (NACOT Sec. 3)',               hint: 'Revisor independiente, aprobación previa al dictamen' },
   { code: 'PT-FISC-ENCARGO', group: 'Auditoría Fiscal SV (NACOT)', wpKind: 'SMART',  type: 'PLANNING_UNDERSTANDING', title: 'Carta de Encargo Fiscal (NACOT Sec. 4)',          hint: 'Términos, alcance ISR/IVA/retenciones, SDF 31 mayo' },
   { code: 'PT-FISC-RISK',    group: 'Auditoría Fiscal SV (NACOT)', wpKind: 'SMART',  type: 'CONTROL_EVALUATION',     title: 'Riesgo de Incumplimiento Fiscal',                 hint: 'RI por impuesto, fraude fiscal NIA 240, respuesta planeada' },
-  { code: 'PT-FISC-AML',     group: 'Auditoría Fiscal SV (NACOT)', wpKind: 'SMART',  type: 'NORMATIVE_ANALYSIS',     title: 'Indicadores LA/FT (LCLDA / FATF)',               hint: '40 señales FATF, paraísos fiscales, obligaciones UIF' },
+  { code: 'PT-FISC-AML',     group: 'Auditoría Fiscal SV (NACOT)', wpKind: 'SMART',  type: 'NORMATIVE_ANALYSIS',     title: 'Indicadores LA/FT (Ley PLD/FT/FP 2025 / FATF)',               hint: '40 señales FATF, paraísos fiscales, obligaciones UIF' },
   { code: 'PT-FISC-PT',      group: 'Auditoría Fiscal SV (NACOT)', wpKind: 'SMART',  type: 'SUBSTANTIVE_TEST',       title: 'Precios de Transferencia (Art. 199-A CT)',        hint: '5 métodos OCDE, principio plena competencia, ajuste ISR, F982' },
   { code: 'PT-FISC-ZF',      group: 'Auditoría Fiscal SV (NACOT)', wpKind: 'SMART',  type: 'CLOSURE_CONCLUSION',     title: 'Dictamen Semestral Zona Franca / SI',             hint: 'Régimen de exención, 1er y 2do semestre' },
   { code: 'PT-FISC-DICT',    group: 'Auditoría Fiscal SV (NACOT)', wpKind: 'MASTER', type: 'CLOSURE_CONCLUSION',     title: 'Dictamen Fiscal NACOT Anexo 1',                  hint: 'Modelo oficial, 3 tipos de opinión NACOT, independencia auto-fill' },

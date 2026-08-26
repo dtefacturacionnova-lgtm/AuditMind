@@ -13,6 +13,12 @@ export type ProposalStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIR
 export type EngagementLetterStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'DECLINED';
 export type EngagementStatus = 'DRAFT' | 'APPROVED' | 'CANCELLED';
 
+export interface BeneficialOwner {
+  name:              string;
+  participationPct?: number;
+  idNumber?:         string;
+}
+
 export interface Client {
   id:                 string;
   organizationId:     string;
@@ -29,6 +35,9 @@ export interface Client {
   status:             ClientStatus;
   auditEntityId?:     string | null;
   notes?:             string | null;
+  /** DDC — representante legal y beneficiarios finales, para el screening de sanciones (Art. 15, Ley PLD/FT/FP). */
+  legalRepName?:      string | null;
+  beneficialOwners:   BeneficialOwner[];
   createdById:        string;
   createdAt:          string;
   updatedAt:          string;
@@ -46,6 +55,31 @@ export interface AcceptanceChecklistItem {
   comment?: string;
 }
 
+export interface SanctionsMatchRecord {
+  uploaded_name:          string;
+  matched_watchlist_name: string;
+  match_type:             string;
+  score:                  number;
+  source_list:            string;
+  entity_type?:            string | null;
+  programs?:               string[] | null;
+  other_candidates?:       string[];
+}
+
+export interface SanctionsScreeningResult {
+  total_screened:  number;
+  matches_found:   number;
+  risk_score:       number;
+  lists_consulted:  string;
+  findings: Array<{
+    test_name:      string;
+    risk_level:     string;
+    record_count:   number;
+    description:    string;
+    sample_records: SanctionsMatchRecord[];
+  }>;
+}
+
 export interface AcceptanceCheck {
   id:                    string;
   organizationId:        string;
@@ -59,6 +93,9 @@ export interface AcceptanceCheck {
   integrityNotes?:       string | null;
   riskStatus:            AcceptanceRating;
   riskNotes?:            string | null;
+  sanctionsStatus:        AcceptanceRating;
+  sanctionsNotes?:        string | null;
+  sanctionsScreeningResult?: SanctionsScreeningResult | null;
   checklist:              AcceptanceChecklistItem[];
   overallResult:          AcceptanceRating;
   overallJustification?:  string | null;
@@ -169,6 +206,8 @@ export interface CreateClientData {
   fiscalYearEndMonth?: number;
   fiscalYearEndDay?:   number;
   notes?:              string;
+  legalRepName?:       string;
+  beneficialOwners?:   BeneficialOwner[];
 }
 export type UpdateClientData = Partial<CreateClientData>;
 
@@ -181,6 +220,8 @@ export interface UpdateAcceptanceCheckData {
   integrityNotes?:     string;
   riskStatus?:         AcceptanceRating;
   riskNotes?:          string;
+  sanctionsStatus?:    AcceptanceRating;
+  sanctionsNotes?:     string;
   checklist?:          AcceptanceChecklistItem[];
 }
 
@@ -370,6 +411,19 @@ export function useDecideAcceptance() {
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: [CLIENT_KEY, result.clientId] });
       qc.invalidateQueries({ queryKey: [CLIENTS_KEY] });
+    },
+  });
+}
+
+/** Corre el motor CAATs de sanciones (OFAC/ONU/UK) sobre el cliente — razón
+ *  social, representante legal y beneficiarios finales. */
+export function useScreenSanctions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<AcceptanceCheck>(`/portfolio/acceptance-checks/${id}/screen-sanctions`, {}),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: [CLIENT_KEY, result.clientId] });
     },
   });
 }

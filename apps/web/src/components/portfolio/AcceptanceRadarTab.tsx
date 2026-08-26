@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Radar, ShieldCheck, Users, Scale, AlertTriangle, Lock } from 'lucide-react';
+import { Radar, ShieldCheck, Users, Scale, AlertTriangle, Lock, ShieldAlert, Search, Loader2 } from 'lucide-react';
 import {
-  useStartAcceptance, useUpdateAcceptanceCheck, useDecideAcceptance,
+  useStartAcceptance, useUpdateAcceptanceCheck, useDecideAcceptance, useScreenSanctions,
   ACCEPTANCE_RATING_CONFIG, ClientDetail, AcceptanceRating, AcceptanceCheck,
 } from '@/hooks/usePortfolio';
 import { formatDate } from '@/lib/utils';
@@ -11,7 +11,7 @@ import { formatDate } from '@/lib/utils';
 const RATINGS: AcceptanceRating[] = ['PENDING', 'GREEN', 'YELLOW', 'RED'];
 
 interface Dimension {
-  key: 'independence' | 'competence' | 'integrity' | 'risk';
+  key: 'independence' | 'competence' | 'integrity' | 'risk' | 'sanctions';
   label: string;
   description: string;
   icon: React.ElementType;
@@ -22,6 +22,7 @@ const DIMENSIONS: Dimension[] = [
   { key: 'competence',   label: 'Competencia y Recursos', description: 'El equipo cuenta con la competencia técnica y los recursos necesarios.', icon: Users },
   { key: 'integrity',    label: 'Integridad de la Administración', description: 'Antecedentes e integridad de los responsables del gobierno de la entidad.', icon: Scale },
   { key: 'risk',         label: 'Riesgo del Encargo', description: 'Nivel de riesgo global que representa aceptar o continuar el encargo.', icon: AlertTriangle },
+  { key: 'sanctions',    label: 'Sanciones / PLD', description: 'Ley PLD/FT/FP (Decreto 426/2025), Art. 15 — solo si el despacho es sujeto obligado para este cliente (Art. 7.7).', icon: ShieldAlert },
 ];
 
 function statusField(key: Dimension['key']): keyof AcceptanceCheck {
@@ -40,8 +41,50 @@ function Semaforo({ result }: { result: AcceptanceRating }) {
       }`} />
       <div>
         <p className={`text-sm font-bold ${cfg.color}`}>Resultado global: {cfg.label}</p>
-        <p className="text-xs text-gray-500">Se calcula automáticamente como la peor de las 4 dimensiones.</p>
+        <p className="text-xs text-gray-500">Se calcula automáticamente como la peor de las 5 dimensiones.</p>
       </div>
+    </div>
+  );
+}
+
+function SanctionsScreeningBlock({
+  check, decided, onScreen, isScreening, error,
+}: {
+  check: AcceptanceCheck;
+  decided: boolean;
+  onScreen: () => void;
+  isScreening: boolean;
+  error: string | null;
+}) {
+  const result = check.sanctionsScreeningResult;
+
+  return (
+    <div className="border-t border-gray-100 pt-3 space-y-2">
+      <button
+        type="button"
+        disabled={decided || isScreening}
+        onClick={onScreen}
+        className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {isScreening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+        {isScreening ? 'Verificando…' : 'Verificar en Listas de Sanciones (OFAC/ONU/UK)'}
+      </button>
+      {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+      {result && (
+        <div className={`text-xs rounded-lg px-3 py-2 ${result.matches_found > 0 ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+          <p className="font-medium">
+            {result.matches_found > 0
+              ? `${result.matches_found} de ${result.total_screened} nombre(s) con coincidencia — revisar antes de decidir`
+              : `Sin coincidencias en ${result.total_screened} nombre(s) verificado(s)`}
+          </p>
+          <p className="text-[11px] mt-1 opacity-80">{result.lists_consulted}</p>
+          {result.findings[0]?.sample_records?.map((r, i) => (
+            <p key={i} className="mt-1">
+              &bull; &ldquo;{r.uploaded_name}&rdquo; ≈ &ldquo;{r.matched_watchlist_name}&rdquo; ({r.score.toFixed(0)}%, {r.source_list})
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -53,6 +96,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
   const startAcceptance = useStartAcceptance();
   const updateCheck = useUpdateAcceptanceCheck();
   const decide = useDecideAcceptance();
+  const screenSanctions = useScreenSanctions();
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [justification, setJustification] = useState('');
@@ -65,6 +109,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
       competenceStatus:   check.competenceStatus,   competenceNotes:   check.competenceNotes ?? '',
       integrityStatus:    check.integrityStatus,    integrityNotes:    check.integrityNotes ?? '',
       riskStatus:         check.riskStatus,         riskNotes:         check.riskNotes ?? '',
+      sanctionsStatus:    check.sanctionsStatus,    sanctionsNotes:    check.sanctionsNotes ?? '',
     });
   }, [check?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -97,6 +142,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
           competenceStatus:   form.competenceStatus as AcceptanceRating,   competenceNotes:   form.competenceNotes,
           integrityStatus:    form.integrityStatus as AcceptanceRating,    integrityNotes:    form.integrityNotes,
           riskStatus:         form.riskStatus as AcceptanceRating,         riskNotes:         form.riskNotes,
+          sanctionsStatus:    form.sanctionsStatus as AcceptanceRating,    sanctionsNotes:    form.sanctionsNotes,
         },
       });
     } catch { /* shown below */ }
@@ -176,11 +222,22 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
               <textarea
                 rows={2}
                 disabled={decided}
-                placeholder="Notas / evidencia de la evaluación"
+                placeholder={dim.key === 'sanctions'
+                  ? '¿El despacho es sujeto obligado para este cliente (Art. 7.7)? Documente la conclusión y, si aplica, la revisión del screening.'
+                  : 'Notas / evidencia de la evaluación'}
                 value={form[nKey] ?? ''}
                 onChange={e => setForm(p => ({ ...p, [nKey]: e.target.value }))}
                 className={cls}
               />
+              {dim.key === 'sanctions' && (
+                <SanctionsScreeningBlock
+                  check={check}
+                  decided={decided}
+                  onScreen={() => screenSanctions.mutate(check.id)}
+                  isScreening={screenSanctions.isPending}
+                  error={screenSanctions.isError ? ((screenSanctions.error as Error)?.message ?? 'Error al verificar') : null}
+                />
+              )}
             </div>
           );
         })}
@@ -204,7 +261,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
           <button
             onClick={() => setShowDecide(true)}
             disabled={!allEvaluated}
-            title={!allEvaluated ? 'Evalúe las 4 dimensiones antes de decidir' : undefined}
+            title={!allEvaluated ? 'Evalúe las 5 dimensiones antes de decidir' : undefined}
             className="px-4 py-2 bg-[#0F2D4A] text-white text-sm font-medium rounded-xl hover:bg-[#1a3f5f] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Decidir aceptación
@@ -217,7 +274,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
           <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6">
             <h2 className="text-base font-semibold text-gray-800 mb-1">Decidir Aceptación / Continuidad</h2>
             <p className="text-xs text-gray-400 mb-4">
-              El resultado global se calculará automáticamente como la peor calificación de las 4 dimensiones.
+              El resultado global se calculará automáticamente como la peor calificación de las 5 dimensiones.
               Si es Rojo, el cliente quedará marcado como Declinado.
             </p>
             <textarea

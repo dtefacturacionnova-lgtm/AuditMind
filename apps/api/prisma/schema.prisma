@@ -1100,6 +1100,14 @@ model Client {
   status             ClientStatus @default(PROSPECT)
   auditEntityId      String?      @unique
   notes              String?
+  // ─── KYC del cliente — Ley PLD/FT/FP (Decreto 426/2025), Art. 15 DDC ───────
+  // Solo aplica cuando el propio despacho es sujeto obligado para este cliente
+  // (Art. 7.7: administra fondos/cuentas del cliente, constituye sociedades, etc.
+  // — NO por prestar únicamente el servicio de auditoría de EEFF). La
+  // determinación y el screening viven en AcceptanceCheck.sanctions*; estos
+  // campos solo guardan los nombres a screenear (persisten entre años).
+  legalRepName       String?
+  beneficialOwners   Json         @default("[]") // [{name, participationPct?, idNumber?}]
   createdById        String
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -1131,6 +1139,16 @@ model AcceptanceCheck {
   integrityNotes       String?
   riskStatus           AcceptanceRating @default(PENDING)
   riskNotes            String?
+  // ─── Sanciones/PLD (Decreto 426/2025) — 5ª dimensión del Radar ─────────────
+  // sanctionsNotes documenta la determinación de si el despacho es sujeto
+  // obligado para ESTE cliente (Art. 7.7) y, si aplica, la revisión del
+  // screening. sanctionsScreeningResult guarda el reporte crudo del motor
+  // CAATs sanctions_screening (ver AcceptanceService.screenSanctions) —
+  // mismo motor que PT-PLD, aplicado aquí a razón social + representante legal
+  // + beneficiarios finales del cliente en vez de a sus proveedores/clientes.
+  sanctionsStatus           AcceptanceRating @default(PENDING)
+  sanctionsNotes            String?
+  sanctionsScreeningResult  Json?
   checklist            Json             @default("[]")
   overallResult        AcceptanceRating @default(PENDING)
   overallJustification String?

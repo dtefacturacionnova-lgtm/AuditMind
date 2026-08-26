@@ -37,12 +37,21 @@ export class AcceptanceController {
 
   @Post('acceptance-checks/:id/decide')
   @Roles(UserRole.AUDIT_MANAGER)
-  @ApiOperation({ summary: 'Decidir aceptación: overallResult = peor de las 4 dimensiones (RED ⇒ cliente DECLINED)' })
+  @ApiOperation({ summary: 'Decidir aceptación: overallResult = peor de las 5 dimensiones (RED ⇒ cliente DECLINED)' })
   decide(
     @Param('id') id: string,
     @Body() dto: DecideAcceptanceDto,
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.decide(id, dto, user);
+  }
+
+  @Post('acceptance-checks/:id/screen-sanctions')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({
+    summary: 'Screening de sanciones (OFAC/ONU/UK) sobre el cliente — razón social, representante legal y beneficiarios finales (Art. 15 DDC, Ley PLD/FT/FP)',
+  })
+  screenSanctions(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.screenSanctions(id, user);
   }
 }

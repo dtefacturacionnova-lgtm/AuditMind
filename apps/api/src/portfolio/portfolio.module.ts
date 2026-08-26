@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditsModule } from '../audits/audits.module';
 import { AuditFoldersModule } from '../audit-folders/audit-folders.module';
+import { AiModule } from '../ai/ai.module';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { AcceptanceController } from './acceptance.controller';
@@ -25,7 +26,7 @@ import { ProfitabilityService } from './profitability.service';
  * esos módulos depende de PortfolioModule.
  */
 @Module({
-  imports: [AuditsModule, AuditFoldersModule],
+  imports: [AuditsModule, AuditFoldersModule, AiModule],
   controllers: [
     ClientsController,
     AcceptanceController,

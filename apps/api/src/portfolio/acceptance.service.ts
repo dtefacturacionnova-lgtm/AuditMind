@@ -4,13 +4,15 @@ import {
 import { AcceptanceCheck, AcceptanceRating, ClientStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { AiService } from '../ai/ai.service';
 import { ClientsService } from './clients.service';
 import { UpdateAcceptanceCheckDto, DecideAcceptanceDto } from './dto/acceptance.dto';
 
 /**
- * Severidad relativa de las 4 dimensiones del Radar (NIA 220 / ISQM 1).
- * `overallResult` = la PEOR de las cuatro. PENDING es el valor más bajo porque
- * no representa una evaluación: `decide()` lo rechaza antes de comparar.
+ * Severidad relativa de las 5 dimensiones del Radar (NIA 220 / ISQM 1 +
+ * Sanciones/PLD). `overallResult` = la PEOR de las cinco. PENDING es el valor
+ * más bajo porque no representa una evaluación: `decide()` lo rechaza antes
+ * de comparar.
  */
 const SEVERITY: Record<AcceptanceRating, number> = {
   [AcceptanceRating.PENDING]: 0,
@@ -24,6 +26,7 @@ const DIMENSION_LABELS: Record<string, string> = {
   competenceStatus:   'Competencia y recursos',
   integrityStatus:    'Integridad de la administración',
   riskStatus:         'Riesgo del encargo',
+  sanctionsStatus:    'Sanciones / PLD',
 };
 
 const CHECK_INCLUDE = {
@@ -36,6 +39,7 @@ export class AcceptanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clients: ClientsService,
+    private readonly aiService: AiService,
   ) {}
 
   private async getCheckOrThrow(id: string, user: AuthUser): Promise<AcceptanceCheck> {
@@ -90,6 +94,8 @@ export class AcceptanceService {
         ...(dto.integrityNotes     != null && { integrityNotes:     dto.integrityNotes }),
         ...(dto.riskStatus         != null && { riskStatus:         dto.riskStatus }),
         ...(dto.riskNotes          != null && { riskNotes:          dto.riskNotes }),
+        ...(dto.sanctionsStatus    != null && { sanctionsStatus:    dto.sanctionsStatus }),
+        ...(dto.sanctionsNotes     != null && { sanctionsNotes:     dto.sanctionsNotes }),
         ...(dto.checklist          != null && { checklist: dto.checklist as unknown as Prisma.InputJsonValue }),
       },
       include: CHECK_INCLUDE,
@@ -109,6 +115,7 @@ export class AcceptanceService {
       ['competenceStatus',   check.competenceStatus],
       ['integrityStatus',    check.integrityStatus],
       ['riskStatus',         check.riskStatus],
+      ['sanctionsStatus',    check.sanctionsStatus],
     ];
 
     const pending = dimensions.filter(([, rating]) => rating === AcceptanceRating.PENDING);
@@ -116,7 +123,7 @@ export class AcceptanceService {
       const names = pending.map(([key]) => DIMENSION_LABELS[key] ?? key).join(', ');
       throw new BadRequestException(
         `No se puede decidir el Radar de Aceptación con dimensiones sin evaluar: ${names}. ` +
-        'Califique las 4 dimensiones (GREEN / YELLOW / RED) antes de decidir.',
+        'Califique las 5 dimensiones (GREEN / YELLOW / RED) antes de decidir.',
       );
     }
 
@@ -144,5 +151,38 @@ export class AcceptanceService {
     }
 
     return updated;
+  }
+
+  /**
+   * Corre el mismo motor CAATs de `PT-PLD` (sanctions_screening — OFAC SDN +
+   * Lista Consolidada ONU + UK), pero sobre la identidad del CLIENTE en vez
+   * de sus proveedores: razón social + representante legal + beneficiarios
+   * finales declarados. Cubre la obligación de DDC (Art. 15, Ley PLD/FT/FP
+   * Decreto 426/2025) cuando el propio despacho es sujeto obligado para este
+   * cliente (Art. 7.7) — no reemplaza esa determinación, que el auditor deja
+   * en `sanctionsNotes`; solo aporta la evidencia del screening.
+   *
+   * No fija `sanctionsStatus` automáticamente: igual que las otras 4
+   * dimensiones, la calificación final la da el auditor tras revisar el
+   * resultado (el matching difuso puede dar falsos positivos/negativos).
+   */
+  async screenSanctions(id: string, user: AuthUser) {
+    const check = await this.getCheckOrThrow(id, user);
+    const client = await this.clients.getClientOrThrow(check.clientId, user);
+
+    const owners = (client.beneficialOwners as unknown as Array<{ name?: string }>) ?? [];
+    const records: Array<{ vendor_name: string }> = [
+      { vendor_name: client.legalName },
+      ...(client.legalRepName ? [{ vendor_name: client.legalRepName }] : []),
+      ...owners.filter(o => o?.name).map(o => ({ vendor_name: o.name as string })),
+    ];
+
+    const result = await this.aiService.runCaats('sanctions_screening', { records });
+
+    return this.prisma.acceptanceCheck.update({
+      where: { id },
+      data:  { sanctionsScreeningResult: result as Prisma.InputJsonValue },
+      include: CHECK_INCLUDE,
+    });
   }
 }

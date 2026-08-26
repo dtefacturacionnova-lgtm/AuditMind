@@ -1,7 +1,7 @@
 import {
-  IsString, IsOptional, IsEmail, IsInt, IsEnum, Min, Max,
+  IsString, IsOptional, IsEmail, IsInt, IsEnum, IsArray, IsNumber, Min, Max, ValidateNested,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ClientStatus } from '@prisma/client';
 
@@ -10,6 +10,26 @@ import { ClientStatus } from '@prisma/client';
  *  así que sin esto @IsEmail() rechaza un campo de contacto que el usuario
  *  simplemente dejó en blanco. */
 const emptyToUndefined = () => Transform(({ value }) => (value === '' ? undefined : value));
+
+/** Persona/entidad con participación en el cliente — para el screening de
+ *  sanciones del despacho (Art. 15 DDC, ver AcceptanceCheck.sanctions*).
+ *  No se exige el % de participación: puede capturarse un beneficiario final
+ *  solo con el nombre mientras se confirma el porcentaje exacto. */
+export class BeneficialOwnerDto {
+  @ApiProperty({ example: 'María Elena Rodríguez de Hernández' })
+  @IsString()
+  name: string;
+
+  @ApiPropertyOptional({ example: 30, description: '% de participación (Art. 15: relevante desde 25%)' })
+  @IsOptional()
+  @IsNumber()
+  participationPct?: number;
+
+  @ApiPropertyOptional({ example: '01234567-8' })
+  @IsOptional()
+  @IsString()
+  idNumber?: string;
+}
 
 export class CreateClientDto {
   @ApiProperty({ example: 'Empresa Comercial Demo SA de CV' })
@@ -68,6 +88,18 @@ export class CreateClientDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ example: 'Lic. Roberto Morales', description: 'Representante legal — para DDC/screening de sanciones (Art. 15, Ley PLD/FT/FP)' })
+  @IsOptional()
+  @IsString()
+  legalRepName?: string;
+
+  @ApiPropertyOptional({ type: [BeneficialOwnerDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BeneficialOwnerDto)
+  beneficialOwners?: BeneficialOwnerDto[];
 }
 
 /**
@@ -135,6 +167,18 @@ export class UpdateClientDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Representante legal — para DDC/screening de sanciones (Art. 15, Ley PLD/FT/FP)' })
+  @IsOptional()
+  @IsString()
+  legalRepName?: string;
+
+  @ApiPropertyOptional({ type: [BeneficialOwnerDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BeneficialOwnerDto)
+  beneficialOwners?: BeneficialOwnerDto[];
 }
 
 export class ListClientsQueryDto {

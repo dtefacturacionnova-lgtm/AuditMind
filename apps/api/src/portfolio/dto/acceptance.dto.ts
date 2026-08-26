@@ -67,6 +67,16 @@ export class UpdateAcceptanceCheckDto {
   @IsString()
   riskNotes?: string;
 
+  @ApiPropertyOptional({ enum: AcceptanceRating, description: 'Sanciones / PLD (Ley PLD/FT/FP, Decreto 426/2025) — solo aplica si el despacho es sujeto obligado para este cliente (Art. 7.7)' })
+  @IsOptional()
+  @IsEnum(AcceptanceRating)
+  sanctionsStatus?: AcceptanceRating;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sanctionsNotes?: string;
+
   @ApiPropertyOptional({ type: [AcceptanceChecklistItemDto] })
   @IsOptional()
   @IsArray()

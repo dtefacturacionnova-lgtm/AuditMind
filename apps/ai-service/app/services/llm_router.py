@@ -50,7 +50,7 @@ TASK_COMPLEXITY_MAP: dict[str, TaskComplexity] = {
     "SENADO":       TaskComplexity.COMPLEX,
     "ATLAS":        TaskComplexity.STANDARD,
     "FENIX":        TaskComplexity.STANDARD,
-    "LEX":          TaskComplexity.STANDARD,
+    "FISCUS":       TaskComplexity.STANDARD,
     "SHERLOCK":     TaskComplexity.COMPLEX,
     "MINERVA_QAIP": TaskComplexity.STANDARD,
 }

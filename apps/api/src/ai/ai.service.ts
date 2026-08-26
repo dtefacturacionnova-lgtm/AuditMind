@@ -179,11 +179,12 @@ export class AiService {
           { id: 'SENADO',       name: 'Senado',        specialty: 'Compliance' },
           { id: 'ATLAS',        name: 'Atlas',         specialty: 'ESG' },
           { id: 'FENIX',        name: 'Fénix',         specialty: 'BCP/DRP' },
-          { id: 'LEX',          name: 'Lex',           specialty: 'Legal' },
+          { id: 'FISCUS',       name: 'Fiscus',        specialty: 'Auditoría Fiscal (NACOT)' },
+          { id: 'THEMIS',       name: 'Themis',        specialty: 'Prevención de Lavado de Dinero (PLD/FT)' },
           { id: 'SHERLOCK',     name: 'Sherlock',      specialty: 'Investigación Forense' },
           { id: 'MINERVA_QAIP', name: 'Minerva-QAIP',  specialty: 'QAIP y Calidad' },
         ],
-        total: 14,
+        total: 15,
       };
     }
   }

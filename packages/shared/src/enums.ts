@@ -165,7 +165,7 @@ export enum AiAgentType {
   SENADO = 'SENADO',
   ATLAS = 'ATLAS',
   FENIX = 'FENIX',
-  LEX = 'LEX',
+  FISCUS = 'FISCUS',
   SHERLOCK = 'SHERLOCK',
   MINERVA_QAIP = 'MINERVA_QAIP',
 }

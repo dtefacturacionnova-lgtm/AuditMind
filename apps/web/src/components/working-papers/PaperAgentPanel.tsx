@@ -54,7 +54,7 @@ const PAPER_AGENT_MAP: Record<string, AgentMeta> = {
     agentColor: 'bg-emerald-600', badge: 'Flash ✦', badgeStyle: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   },
   NORMATIVE_ANALYSIS: {
-    agentId: 'LEX', agentName: 'LEX', agentRole: 'Asesor Legal-Normativo',
+    agentId: 'FISCUS', agentName: 'FISCUS', agentRole: 'Especialista Tributario',
     agentColor: 'bg-slate-600', badge: 'Flash', badgeStyle: 'bg-sky-100 text-sky-700 border-sky-200',
   },
 };

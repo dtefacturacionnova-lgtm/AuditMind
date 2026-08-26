@@ -96,10 +96,10 @@ const AGENTS = [
     badge: 'Flash',
   },
   {
-    id: 'LEX',
-    name: 'LEX',
-    role: 'Asesor Legal-Normativo',
-    description: 'Normativa chilena, contratos, riesgo legal, compliance regulatorio',
+    id: 'FISCUS',
+    name: 'FISCUS',
+    role: 'Especialista Tributario',
+    description: 'NACOT, Código Tributario, ISR, IVA — auditoría fiscal El Salvador',
     color: 'bg-slate-600',
     badge: 'Flash',
   },
@@ -435,10 +435,10 @@ function WelcomeScreen({ agent, onSuggestion }: {
       'Crea criterios de evaluación del avance en planes de acción correctiva',
       'Sugiere una metodología para priorizar recomendaciones críticas',
     ],
-    LEX: [
-      'Analiza el riesgo legal de una cláusula de garantía en contratos de servicio',
-      'Explica las obligaciones de una empresa bajo la Ley de Delitos Económicos',
-      'Identifica exposiciones legales en el proceso de licitación pública',
+    FISCUS: [
+      'Explica los requisitos de la NACOT para el Dictamen e Informe Fiscal',
+      'Determina el tratamiento en ISR de un ajuste por gastos no deducibles',
+      'Identifica las obligaciones formales del Código Tributario aplicables a este período',
     ],
     SHERLOCK: [
       'Analiza esta secuencia de transacciones en busca de patrones irregulares',

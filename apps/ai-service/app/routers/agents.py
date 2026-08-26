@@ -13,7 +13,7 @@ router = APIRouter()
 # Agents that benefit from normative RAG context
 _RAG_ENABLED_AGENTS = {
     "MINERVA", "SCRIPTORIUM", "ARGUS", "CICERO",
-    "LEX", "MINERVA_QAIP", "VULCANO", "CASSANDRA", "THEMIS",
+    "FISCUS", "MINERVA_QAIP", "VULCANO", "CASSANDRA", "THEMIS",
 }
 
 
@@ -309,7 +309,7 @@ async def list_agents():
         {"id": "SENADO",       "name": "Senado",         "phase": "Fase 5", "specialty": "Comité de Auditoría"},
         {"id": "ATLAS",        "name": "Atlas",          "phase": "Fase 6", "specialty": "Inteligencia Multi-Año"},
         {"id": "FENIX",        "name": "Fénix",          "phase": "Fase 5", "specialty": "BCP/DRP"},
-        {"id": "LEX",          "name": "Lex",            "phase": "Fase 3", "specialty": "Auditoría Fiscal (NACOT)"},
+        {"id": "FISCUS",       "name": "Fiscus",        "phase": "Fase 3", "specialty": "Auditoría Fiscal (NACOT)"},
         {"id": "THEMIS",       "name": "Themis",         "phase": "Fase 3", "specialty": "Prevención de Lavado de Dinero (PLD/FT)"},
         {"id": "SHERLOCK",     "name": "Sherlock",       "phase": "MVP",    "specialty": "Investigación Forense"},
         {"id": "MINERVA_QAIP", "name": "Minerva-QAIP",  "phase": "Fase 5", "specialty": "QAIP y Calidad"},

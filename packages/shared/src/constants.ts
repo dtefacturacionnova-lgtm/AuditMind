@@ -47,7 +47,7 @@ export const AI_AGENT_DESCRIPTIONS: Record<string, string> = {
   SENADO: 'Informes para Comité de Auditoría',
   ATLAS: 'ESG y sostenibilidad',
   FENIX: 'BCP/DRP y continuidad de negocio',
-  LEX: 'Compliance y regulatorio',
+  FISCUS: 'Auditoría fiscal y tributaria (NACOT)',
   SHERLOCK: 'Modo investigación forense',
   MINERVA_QAIP: 'QAIP y mejora continua de la auditoría',
 };

@@ -3796,7 +3796,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
       sectionKey: 'S5', label: 'Efecto Fiscal de los Ajustes — Mercado SV',
       description: 'Impacto en ISR de los ajustes que afectan la renta gravable, para mercado El Salvador.',
       fieldType: FieldType.TEXTAREA, isRequired: false, isAutoFilled: false, sortOrder: 5,
-      aiHint: 'Revise los AJEs de S1 de este mismo papel: para cada uno que afecte una cuenta de ingreso o gasto, calcule su impacto en renta imponible (Código Tributario SV). ISR tasa: 25% para rentas >$150,000 o 30% para rentas >$500,000. Si el encargo incluye dictamen fiscal, referenciar al módulo Fiscal (AF-07 PT-FIN-ISR). El Agente Lex puede calcular el impacto tributario automáticamente.',
+      aiHint: 'Revise los AJEs de S1 de este mismo papel: para cada uno que afecte una cuenta de ingreso o gasto, calcule su impacto en renta imponible (Código Tributario SV). ISR tasa: 25% para rentas >$150,000 o 30% para rentas >$500,000. Si el encargo incluye dictamen fiscal, referenciar al módulo Fiscal (AF-07 PT-FIN-ISR). El Agente Fiscus puede calcular el impacto tributario automáticamente.',
     },
   ],
 

@@ -383,7 +383,7 @@ async def agents_with_rag():
     return {
         "general_chat_agents": [
             "MINERVA", "SCRIPTORIUM", "ARGUS", "CICERO",
-            "LEX", "MINERVA_QAIP", "VULCANO", "CASSANDRA", "THEMIS",
+            "FISCUS", "MINERVA_QAIP", "VULCANO", "CASSANDRA", "THEMIS",
         ],
         "note": "Estos agentes buscan en todas las bases de conocimiento activas cuando responden. "
                 "La asistencia de sección (botón 'Asistir con IA' dentro de un papel) es la única ruta "

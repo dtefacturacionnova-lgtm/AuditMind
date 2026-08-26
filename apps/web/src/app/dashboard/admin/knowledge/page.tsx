@@ -545,7 +545,7 @@ export default function KnowledgePage() {
             <div className="flex items-center gap-4 mt-3">
               <div className="flex items-center gap-1.5 text-xs text-violet-600">
                 <Sparkles className="w-3.5 h-3.5" />
-                Agentes con RAG: {agentsData?.general_chat_agents?.join(', ') ?? 'Minerva, Scriptorium, Argus, Cicero, Lex y más'}
+                Agentes con RAG: {agentsData?.general_chat_agents?.join(', ') ?? 'Minerva, Scriptorium, Argus, Cicero, Fiscus y más'}
               </div>
               <div className="flex items-center gap-1.5 text-xs text-violet-500">
                 <Database className="w-3.5 h-3.5" />

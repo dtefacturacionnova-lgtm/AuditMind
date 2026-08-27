@@ -7,6 +7,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { AiService } from '../ai/ai.service';
 import { ClientsService } from './clients.service';
 import { UpdateAcceptanceCheckDto, DecideAcceptanceDto } from './dto/acceptance.dto';
+import { DEFAULT_MIN_CPE_HOURS_YEAR } from '../common/constants/competency.constants';
 
 /**
  * Severidad relativa de las 5 dimensiones del Radar (NIA 220 / ISQM 1 +
@@ -184,5 +185,63 @@ export class AcceptanceService {
       data:  { sanctionsScreeningResult: result as Prisma.InputJsonValue },
       include: CHECK_INCLUDE,
     });
+  }
+
+  /**
+   * Resumen de competencia/recursos REALES de la firma para respaldar la
+   * dimensión "Competencia y Recursos" (NIA 220/ISQM 1 componente de
+   * Aceptación) — no fija `competenceStatus` automáticamente, igual que el
+   * screening de sanciones: es evidencia de referencia, la calificación la
+   * da el auditor. Es org-wide (no depende de un `AcceptanceCheck`
+   * específico), por eso no toma `:id` — la pregunta que responde es "¿tiene
+   * el despacho, hoy, la competencia y capacidad para atender un cliente
+   * más?", no algo propio de un cliente en particular.
+   */
+  async getCompetenceSummary(user: AuthUser) {
+    const year = new Date().getFullYear();
+    const staff = await this.prisma.user.findMany({
+      where: { organizationId: user.organizationId, active: true },
+      select: {
+        certifications: { where: { isActive: true }, select: { type: true } },
+        competencies: { select: { area: true, expertiseLevel: true } },
+        cpeRecords: { where: { year }, select: { hours: true } },
+      },
+    });
+
+    const staffTotal = staff.length;
+    const staffCompliant = staff.filter(
+      (u) => u.cpeRecords.reduce((s, r) => s + r.hours, 0) >= DEFAULT_MIN_CPE_HOURS_YEAR,
+    ).length;
+
+    const certByType = new Map<string, number>();
+    for (const u of staff) {
+      for (const c of u.certifications) {
+        certByType.set(c.type, (certByType.get(c.type) ?? 0) + 1);
+      }
+    }
+
+    const areaCount = new Map<string, number>();
+    for (const u of staff) {
+      for (const c of u.competencies) {
+        // Cuenta personas con nivel 3+ ("competente" en adelante) por área —
+        // un nivel 1-2 no respalda aceptar un cliente que requiera esa área.
+        if (c.expertiseLevel >= 3) areaCount.set(c.area, (areaCount.get(c.area) ?? 0) + 1);
+      }
+    }
+
+    return {
+      year,
+      staffTotal,
+      staffCompliant,
+      cpeCompliancePct: staffTotal > 0 ? Math.round((staffCompliant / staffTotal) * 100) : null,
+      minRequiredHours: DEFAULT_MIN_CPE_HOURS_YEAR,
+      certifications: Array.from(certByType.entries())
+        .map(([type, count]) => ({ type, count }))
+        .sort((a, b) => b.count - a.count),
+      competencyAreas: Array.from(areaCount.entries())
+        .map(([area, count]) => ({ area, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+    };
   }
 }

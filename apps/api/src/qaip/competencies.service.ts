@@ -4,13 +4,9 @@ import { AuthUser } from '../auth/jwt.strategy';
 import {
   CreateCertificationDto, CreateCompetencyDto, UpdateCompetencyDto, CreateCpeRecordDto,
 } from './dto/competency.dto';
+import { DEFAULT_MIN_CPE_HOURS_YEAR } from '../common/constants/competency.constants';
 
-// NIGC 1 Art. 32(b) / A88-A94 exige que la firma defina y monitoree la
-// competencia y la educación profesional continua de su personal, pero el
-// estándar no fija un número de horas — cada firma define su propia política.
-// 40h/año es el mínimo de referencia por defecto (alineado al esquema CPE del
-// IIA para certificación CIA), no un mandato legal de esta jurisdicción.
-export const DEFAULT_MIN_CPE_HOURS_YEAR = 40;
+export { DEFAULT_MIN_CPE_HOURS_YEAR };
 
 const MANAGER_ROLES = new Set(['AUDIT_MANAGER', 'CAE', 'ADMIN', 'SUPER_ADMIN']);
 

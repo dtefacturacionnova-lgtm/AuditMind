@@ -17,6 +17,7 @@ import {
   type BillingRateType,
 } from '@/hooks/useAudits';
 import { useOrgUsersList } from '@/hooks/useCapacity';
+import { useCompetenciesRoster, CompetencyRosterEntry } from '@/hooks/useQaip';
 import { useUser } from '@/hooks/useUser';
 import { useAuditTimeEntries, useCreateTimeEntry, useDeleteTimeEntry } from '@/hooks/usePlans';
 import { useFindingsByAudit, SEVERITY_CONFIG, STATUS_CONFIG } from '@/hooks/useFindings';
@@ -1236,7 +1237,21 @@ const roleLabels: Record<string, string> = {
 
 /** Formulario para agregar un miembro nuevo — solo lista usuarios de la
  *  organización que todavía NO están en el equipo de este encargo. */
-function AddTeamMemberForm({ auditId, existingUserIds }: { auditId: string; existingUserIds: Set<string> }) {
+function competencyLabel(entry?: CompetencyRosterEntry): string {
+  if (!entry) return '';
+  const parts: string[] = [];
+  if (entry.certifications.length > 0) parts.push(entry.certifications.map(c => c.type).join('/'));
+  parts.push(`${entry.cpe.hours}h CPE${entry.cpe.compliant ? ' ✓' : ''}`);
+  return ` — ${parts.join(' · ')}`;
+}
+
+function AddTeamMemberForm({
+  auditId, existingUserIds, competencyByUserId,
+}: {
+  auditId: string;
+  existingUserIds: Set<string>;
+  competencyByUserId: Map<string, CompetencyRosterEntry>;
+}) {
   const { data: orgUsers = [] } = useOrgUsersList();
   const addMember = useAddTeamMember(auditId);
   const [userId, setUserId] = useState('');
@@ -1266,7 +1281,11 @@ function AddTeamMemberForm({ auditId, existingUserIds }: { auditId: string; exis
           className="flex-1 min-w-[180px] border rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A]"
         >
           <option value="">Seleccionar persona…</option>
-          {available.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+          {available.map(u => (
+            <option key={u.id} value={u.id}>
+              {u.name} ({u.email}){competencyLabel(competencyByUserId.get(u.id))}
+            </option>
+          ))}
         </select>
         <select
           value={role}
@@ -1302,6 +1321,11 @@ function TeamTab({ auditId, team }: { auditId: string; team: any[] }) {
   const removeMember = useRemoveTeamMember(auditId);
   const [removeError, setRemoveError] = useState('');
 
+  // Competencia/CPE real por persona — mismo permiso que gestionar el equipo
+  // (AUDIT_MANAGER+), para ayudar a elegir/evaluar al asignar (NIGC 1 Art. 32).
+  const { data: roster } = useCompetenciesRoster(canManageTeam);
+  const competencyByUserId = new Map((roster ?? []).map(r => [r.id, r]));
+
   async function handleRemove(memberId: string, memberName: string) {
     if (!window.confirm(`¿Quitar a "${memberName}" del equipo de este encargo?`)) return;
     setRemoveError('');
@@ -1315,7 +1339,11 @@ function TeamTab({ auditId, team }: { auditId: string; team: any[] }) {
   return (
     <div className="space-y-4">
       {canManageTeam && (
-        <AddTeamMemberForm auditId={auditId} existingUserIds={new Set(team.map(m => m.userId))} />
+        <AddTeamMemberForm
+          auditId={auditId}
+          existingUserIds={new Set(team.map(m => m.userId))}
+          competencyByUserId={competencyByUserId}
+        />
       )}
       {removeError && (
         <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{removeError}</p>
@@ -1365,6 +1393,12 @@ function TeamTab({ auditId, team }: { auditId: string; team: any[] }) {
                   </button>
                 )}
               </div>
+
+              {canManageTeam && competencyByUserId.has(member.userId) && (
+                <p className="mt-2 text-[11px] text-gray-400 truncate" title="Competencia/CPE registrada — ver tab Competencias y CPE en QAIP">
+                  {competencyLabel(competencyByUserId.get(member.userId)).replace(/^ — /, '')}
+                </p>
+              )}
 
               <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5 text-xs text-gray-500">

@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Radar, ShieldCheck, Users, Scale, AlertTriangle, Lock, ShieldAlert, Search, Loader2 } from 'lucide-react';
+import { Radar, ShieldCheck, Users, Scale, AlertTriangle, Lock, ShieldAlert, Search, Loader2, GraduationCap } from 'lucide-react';
 import {
   useStartAcceptance, useUpdateAcceptanceCheck, useDecideAcceptance, useScreenSanctions,
+  useCompetenceSummary,
   ACCEPTANCE_RATING_CONFIG, ClientDetail, AcceptanceRating, AcceptanceCheck,
 } from '@/hooks/usePortfolio';
+import { useUser } from '@/hooks/useUser';
 import { formatDate } from '@/lib/utils';
 
 const RATINGS: AcceptanceRating[] = ['PENDING', 'GREEN', 'YELLOW', 'RED'];
@@ -85,6 +87,46 @@ function SanctionsScreeningBlock({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function CompetenceSummaryBlock() {
+  const { hasRole } = useUser();
+  const isManager = hasRole(['AUDIT_MANAGER']);
+  const { data: summary, isLoading } = useCompetenceSummary(isManager);
+
+  if (!isManager) return null;
+  if (isLoading || !summary) {
+    return <p className="text-xs text-gray-400 border-t border-gray-100 pt-3">Cargando competencia/CPE de la firma…</p>;
+  }
+
+  return (
+    <div className="border-t border-gray-100 pt-3 space-y-2">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+        <GraduationCap className="w-3.5 h-3.5" /> Competencia/CPE real de la firma (referencia, {summary.year})
+      </div>
+      <div className={`text-xs rounded-lg px-3 py-2 ${
+        summary.cpeCompliancePct != null && summary.cpeCompliancePct < 50 ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-700'
+      }`}>
+        <p className="font-medium">
+          {summary.staffCompliant} de {summary.staffTotal} personas activas cumplen {summary.minRequiredHours}h/año de CPE
+          {summary.cpeCompliancePct != null && ` (${summary.cpeCompliancePct}%)`}
+        </p>
+        {summary.certifications.length > 0 && (
+          <p className="mt-1 opacity-80">
+            Certificaciones: {summary.certifications.map(c => `${c.type} (${c.count})`).join(' · ')}
+          </p>
+        )}
+        {summary.competencyAreas.length > 0 && (
+          <p className="mt-1 opacity-80">
+            Áreas de competencia (nivel 3+): {summary.competencyAreas.map(a => `${a.area} (${a.count})`).join(' · ')}
+          </p>
+        )}
+        {summary.certifications.length === 0 && summary.competencyAreas.length === 0 && (
+          <p className="mt-1 opacity-80">Sin certificaciones ni áreas de competencia registradas todavía — ver &ldquo;Competencias y CPE&rdquo; en QAIP.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -238,6 +280,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
                   error={screenSanctions.isError ? ((screenSanctions.error as Error)?.message ?? 'Error al verificar') : null}
                 />
               )}
+              {dim.key === 'competence' && <CompetenceSummaryBlock />}
             </div>
           );
         })}

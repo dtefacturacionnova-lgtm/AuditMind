@@ -415,6 +415,28 @@ export function useDecideAcceptance() {
   });
 }
 
+export interface CompetenceSummary {
+  year: number;
+  staffTotal: number;
+  staffCompliant: number;
+  cpeCompliancePct: number | null;
+  minRequiredHours: number;
+  certifications: Array<{ type: string; count: number }>;
+  competencyAreas: Array<{ area: string; count: number }>;
+}
+
+/** Resumen real de competencia/CPE/recursos de la firma — evidencia de
+ *  referencia para la dimensión "Competencia y Recursos", org-wide (no
+ *  depende del cliente/check en cuestión). */
+export function useCompetenceSummary(enabled: boolean = true) {
+  return useQuery<CompetenceSummary>({
+    queryKey: ['portfolio-competence-summary'],
+    queryFn: () => apiClient.get('/portfolio/acceptance-checks/competence-summary'),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 /** Corre el motor CAATs de sanciones (OFAC/ONU/UK) sobre el cliente — razón
  *  social, representante legal y beneficiarios finales. */
 export function useScreenSanctions() {

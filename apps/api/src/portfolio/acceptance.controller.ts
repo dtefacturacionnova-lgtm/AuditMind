@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Patch, Body, Param,
+  Controller, Get, Post, Patch, Body, Param,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
@@ -14,6 +14,15 @@ import { AuthUser } from '../auth/jwt.strategy';
 @Controller('portfolio')
 export class AcceptanceController {
   constructor(private readonly service: AcceptanceService) {}
+
+  @Get('acceptance-checks/competence-summary')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({
+    summary: 'Resumen real de competencia/CPE/recursos de la firma — evidencia de referencia para la dimensión "Competencia y Recursos" (no fija la calificación)',
+  })
+  getCompetenceSummary(@CurrentUser() user: AuthUser) {
+    return this.service.getCompetenceSummary(user);
+  }
 
   @Post('clients/:id/start-acceptance')
   @Roles(UserRole.AUDIT_MANAGER)

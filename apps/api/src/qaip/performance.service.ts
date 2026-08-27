@@ -120,18 +120,29 @@ export class PerformanceService {
     };
   }
 
-  // ─── Cumplimiento de horas de estudio continuada (CPE) ─────────────────────
+  // ─── Cumplimiento de horas de estudio continuada (CPE) + cobertura de
+  // certificaciones — Norma 3.2 (CPE) y Norma 12.2, que lista explícitamente
+  // "miembros del personal que cuenten con al menos una certificación
+  // profesional reconocida y relevante" como medida de desempeño de ejemplo,
+  // separada de las horas CPE (texto verbatim de las Normas Globales de
+  // Auditoría Interna 2024, IIA, leído completo esta sesión).
   private async computeCpeCompliance(orgId: string, year: number) {
     const staff = await this.prisma.user.findMany({
       where: { organizationId: orgId, active: true },
-      select: { id: true, name: true, cpeRecords: { where: { year }, select: { hours: true } } },
+      select: {
+        id: true, name: true,
+        cpeRecords: { where: { year }, select: { hours: true } },
+        certifications: { where: { isActive: true }, select: { id: true } },
+      },
     });
     const byUser = staff.map(u => ({
       id: u.id,
       name: u.name,
       hours: Math.round(u.cpeRecords.reduce((s, r) => s + r.hours, 0) * 10) / 10,
+      hasCertification: u.certifications.length > 0,
     }));
     const compliantCount = byUser.filter(u => u.hours >= DEFAULT_MIN_CPE_HOURS_YEAR).length;
+    const certifiedCount = byUser.filter(u => u.hasCertification).length;
 
     return {
       year,
@@ -139,7 +150,11 @@ export class PerformanceService {
       staffTotal: byUser.length,
       staffCompliant: compliantCount,
       compliancePct: byUser.length > 0 ? Math.round((compliantCount / byUser.length) * 100) : null,
-      belowMinimum: byUser.filter(u => u.hours < DEFAULT_MIN_CPE_HOURS_YEAR).map(u => ({ ...u, missingHours: Math.round((DEFAULT_MIN_CPE_HOURS_YEAR - u.hours) * 10) / 10 })),
+      belowMinimum: byUser.filter(u => u.hours < DEFAULT_MIN_CPE_HOURS_YEAR).map(u => ({ id: u.id, name: u.name, hours: u.hours, missingHours: Math.round((DEFAULT_MIN_CPE_HOURS_YEAR - u.hours) * 10) / 10 })),
+      certificationCoverage: {
+        staffCertified: certifiedCount,
+        coveragePct: byUser.length > 0 ? Math.round((certifiedCount / byUser.length) * 100) : null,
+      },
     };
   }
 

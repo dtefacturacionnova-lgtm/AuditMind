@@ -670,6 +670,11 @@ function PerformancePanel() {
       value: perf.recommendations.recurrenceRateYtd != null ? `${perf.recommendations.recurrenceRateYtd}%` : '—',
       sub: `${perf.recommendations.recurringFindingsYtd} de ${perf.recommendations.findingsCreatedYtd} hallazgos ${perf.year} marcados recurrentes`,
     },
+    {
+      label: 'Cobertura de certificaciones',
+      value: perf.cpeCompliance.certificationCoverage.coveragePct != null ? `${perf.cpeCompliance.certificationCoverage.coveragePct}%` : '—',
+      sub: `${perf.cpeCompliance.certificationCoverage.staffCertified} de ${perf.cpeCompliance.staffTotal} con al menos 1 certificación activa — Norma 12.2`,
+    },
   ];
 
   return (

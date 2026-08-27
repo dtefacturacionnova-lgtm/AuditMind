@@ -141,6 +141,7 @@ export interface QaipPerformanceDashboard {
     staffCompliant: number;
     compliancePct: number | null;
     belowMinimum: Array<{ id: string; name: string; hours: number; missingHours: number }>;
+    certificationCoverage: { staffCertified: number; coveragePct: number | null };
   };
   workPlanCompliance: {
     year: number;

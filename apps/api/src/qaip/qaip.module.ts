@@ -10,6 +10,9 @@ import { PerformanceService } from './performance.service';
 import { PerformanceController } from './performance.controller';
 import { EqrService } from './eqr.service';
 import { EqrController } from './eqr.controller';
+import { CompetenciesService } from './competencies.service';
+import { CompetenciesController } from './competencies.controller';
+import { PortfolioModule } from '../portfolio/portfolio.module';
 
 /**
  * QAIP y Calidad — dos tracks normativos paralelos (ver el artefacto de diseño
@@ -23,8 +26,9 @@ import { EqrController } from './eqr.controller';
  * sign-off final en WorkingPapersService.signOff() — ver el comentario ahí.
  */
 @Module({
-  controllers: [AssessmentsController, GovernanceController, FindingsController, PerformanceController, EqrController],
-  providers: [StandardsService, AssessmentsService, GovernanceService, FindingsService, PerformanceService, EqrService],
+  imports: [PortfolioModule],
+  controllers: [AssessmentsController, GovernanceController, FindingsController, PerformanceController, EqrController, CompetenciesController],
+  providers: [StandardsService, AssessmentsService, GovernanceService, FindingsService, PerformanceService, EqrService, CompetenciesService],
   exports: [StandardsService],
 })
 export class QaipModule {}

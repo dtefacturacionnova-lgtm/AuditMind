@@ -134,6 +134,111 @@ export interface QaipPerformanceDashboard {
     withDecidedAcceptance: number;
     coveragePct: number | null;
   };
+  cpeCompliance: {
+    year: number;
+    minRequiredHours: number;
+    staffTotal: number;
+    staffCompliant: number;
+    compliancePct: number | null;
+    belowMinimum: Array<{ id: string; name: string; hours: number; missingHours: number }>;
+  };
+  workPlanCompliance: {
+    year: number;
+    planExists: boolean;
+    planId?: string;
+    planName?: string;
+    planStatus?: string;
+    totalItems: number;
+    startedItems?: number;
+    completedItems: number;
+    completedOnTimeItems: number;
+    completionPct: number | null;
+    onTimePct?: number | null;
+  };
+  profitabilityCompliance: {
+    year: number;
+    hours: { planned: number; real: number; compliancePct: number | null };
+    money: {
+      engagementsTotal: number;
+      engagementsWithRevenue: number;
+      engagementsWithMargin: number;
+      totalIncome: number;
+      totalCost: number;
+      totalMargin: number;
+      totalMarginPct: number | null;
+    };
+  };
+  recommendations: {
+    year: number;
+    findingsCreatedYtd: number;
+    findingsClosedYtd: number;
+    resolutionRateYtd: number | null;
+    recurringFindingsYtd: number;
+    recurrenceRateYtd: number | null;
+    actionsCreatedYtd: number;
+    actionsCompletedYtd: number;
+    implementationRateYtd: number | null;
+    overdueActionsNow: number;
+  };
+  partnerCyclicalInspection: {
+    tracked: boolean;
+    note: string;
+  };
+}
+
+// ─── Competencias / CPE ─────────────────────────────────────────────────────
+export type CertificationType = 'CIA' | 'CISA' | 'CFE' | 'CPA' | 'CRMA' | 'CGAP' | 'PMP' | 'ISO27001_LA' | 'ISO22301_LA' | 'CISSP' | 'CDPSE';
+
+export interface UserCertification {
+  id: string;
+  userId: string;
+  type: CertificationType;
+  certNumber?: string | null;
+  issuedAt: string;
+  expiresAt?: string | null;
+  isActive: boolean;
+  verificationUrl?: string | null;
+  createdAt: string;
+}
+
+export interface UserCompetency {
+  id: string;
+  userId: string;
+  area: string;
+  expertiseLevel: number;
+  yearsExperience: number;
+}
+
+export interface CpeRecord {
+  id: string;
+  userId: string;
+  year: number;
+  category: string;
+  hours: number;
+  description: string;
+  completedAt: string;
+  createdAt: string;
+}
+
+export interface CompetencyRosterEntry {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  certifications: UserCertification[];
+  competencies: UserCompetency[];
+  cpe: { year: number; hours: number; minRequired: number; compliant: boolean };
+}
+
+export interface CompetencyProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  certifications: UserCertification[];
+  competencies: UserCompetency[];
+  cpeRecords: CpeRecord[];
+  cpeSummary: { year: number; hours: number; minRequired: number; compliant: boolean };
 }
 
 // ─── V3 — Revisión de Calidad del Encargo (EQR, NIGC 2) ────────────────────
@@ -164,6 +269,8 @@ const CHARTERS_KEY = 'qaip-charters';
 const FINDINGS_KEY = 'qaip-findings';
 const PERFORMANCE_KEY = 'qaip-performance';
 const EQR_KEY = 'qaip-eqr';
+const COMPETENCIES_ROSTER_KEY = 'qaip-competencies-roster';
+const COMPETENCIES_PROFILE_KEY = 'qaip-competencies-profile';
 
 // ─── Standards ────────────────────────────────────────────────────────────────
 export function useQaipStandards(track: QaipTrack) {
@@ -404,6 +511,111 @@ export function useCompleteEqr() {
     onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: [EQR_KEY, vars.auditId] }),
   });
 }
+
+// ─── Competencias / CPE ─────────────────────────────────────────────────────
+export function useCompetenciesRoster(enabled: boolean = true) {
+  return useQuery<CompetencyRosterEntry[]>({
+    queryKey: [COMPETENCIES_ROSTER_KEY],
+    queryFn: () => apiClient.get('/qaip/competencies'),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useCompetencyProfile(userId: string) {
+  return useQuery<CompetencyProfile>({
+    queryKey: [COMPETENCIES_PROFILE_KEY, userId],
+    queryFn: () => apiClient.get(`/qaip/competencies/${userId}`),
+    enabled: !!userId,
+    staleTime: 15_000,
+  });
+}
+
+export function useMyCompetencyProfile() {
+  return useQuery<CompetencyProfile>({
+    queryKey: [COMPETENCIES_PROFILE_KEY, 'me'],
+    queryFn: () => apiClient.get('/qaip/competencies/me'),
+    staleTime: 15_000,
+  });
+}
+
+function invalidateCompetencies(qc: ReturnType<typeof useQueryClient>, userId?: string) {
+  qc.invalidateQueries({ queryKey: [COMPETENCIES_ROSTER_KEY] });
+  qc.invalidateQueries({ queryKey: [COMPETENCIES_PROFILE_KEY] });
+  qc.invalidateQueries({ queryKey: [PERFORMANCE_KEY] });
+  if (userId) qc.invalidateQueries({ queryKey: [COMPETENCIES_PROFILE_KEY, userId] });
+}
+
+export function useAddCertification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, ...data }: { userId: string; type: CertificationType; certNumber?: string; issuedAt: string; expiresAt?: string; verificationUrl?: string }) =>
+      apiClient.post<UserCertification>(`/qaip/competencies/${userId}/certifications`, data),
+    onSuccess: (_, vars) => invalidateCompetencies(qc, vars.userId),
+  });
+}
+
+export function useRemoveCertification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string; userId: string }) => apiClient.delete(`/qaip/competencies/certifications/${id}`),
+    onSuccess: (_, vars) => invalidateCompetencies(qc, vars.userId),
+  });
+}
+
+export function useAddCompetency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, ...data }: { userId: string; area: string; expertiseLevel: number; yearsExperience?: number }) =>
+      apiClient.post<UserCompetency>(`/qaip/competencies/${userId}/skills`, data),
+    onSuccess: (_, vars) => invalidateCompetencies(qc, vars.userId),
+  });
+}
+
+export function useRemoveCompetency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string; userId: string }) => apiClient.delete(`/qaip/competencies/skills/${id}`),
+    onSuccess: (_, vars) => invalidateCompetencies(qc, vars.userId),
+  });
+}
+
+export function useAddCpeRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, ...data }: { userId: string; year: number; category: string; hours: number; description: string; completedAt: string }) =>
+      apiClient.post<CpeRecord>(`/qaip/competencies/${userId}/cpe`, data),
+    onSuccess: (_, vars) => invalidateCompetencies(qc, vars.userId),
+  });
+}
+
+export function useRemoveCpeRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string; userId: string }) => apiClient.delete(`/qaip/competencies/cpe/${id}`),
+    onSuccess: (_, vars) => invalidateCompetencies(qc, vars.userId),
+  });
+}
+
+export const CERTIFICATION_LABEL: Record<CertificationType, string> = {
+  CIA: 'CIA — Certified Internal Auditor',
+  CISA: 'CISA — Certified Information Systems Auditor',
+  CFE: 'CFE — Certified Fraud Examiner',
+  CPA: 'CPA — Contador Público Autorizado',
+  CRMA: 'CRMA — Certification in Risk Management Assurance',
+  CGAP: 'CGAP — Certified Government Auditing Professional',
+  PMP: 'PMP — Project Management Professional',
+  ISO27001_LA: 'ISO 27001 Lead Auditor',
+  ISO22301_LA: 'ISO 22301 Lead Auditor',
+  CISSP: 'CISSP — Certified Information Systems Security Professional',
+  CDPSE: 'CDPSE — Certified Data Privacy Solutions Engineer',
+};
+
+export const CPE_CATEGORY_LABEL: Record<string, string> = {
+  etica: 'Ética',
+  tecnica: 'Técnica',
+  liderazgo: 'Liderazgo',
+};
 
 // ─── Config visual ──────────────────────────────────────────────────────────────
 export const QAIP_RATING_CONFIG: Record<AcceptanceRating, { label: string; color: string; bg: string; border: string }> = {

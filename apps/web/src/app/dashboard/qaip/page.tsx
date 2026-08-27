@@ -12,19 +12,27 @@ import {
   useAddQaipRootCause, useAddQaipRemediationAction, useUpdateQaipRemediationAction,
   useQaipPerformance,
   useEqr, useRequireEqr, useAssignEqrReviewer, useCompleteEqr,
+  useCompetenciesRoster, useCompetencyProfile, useMyCompetencyProfile,
+  useAddCertification, useRemoveCertification, useAddCompetency, useRemoveCompetency,
+  useAddCpeRecord, useRemoveCpeRecord,
   QAIP_RATING_CONFIG, QAIP_TRACK_LABEL, QAIP_FINDING_STATUS_CONFIG, QAIP_SEVERITY_CONFIG, QAIP_ROOT_CAUSE_LABEL,
+  CERTIFICATION_LABEL, CPE_CATEGORY_LABEL,
   QaipTrack, QaipAssessment, AcceptanceRating, QaipFinding,
   QaipFindingSource, FindingSeverity, QaipRootCauseCategory,
+  CertificationType, CompetencyProfile,
 } from '@/hooks/useQaip';
 import { useAudits } from '@/hooks/useAudits';
 import { useOrgUsersList } from '@/hooks/useCapacity';
-import { formatDate } from '@/lib/utils';
+import { useUser } from '@/hooks/useUser';
+import { formatDate, formatDateUTC } from '@/lib/utils';
 
 const RATINGS: AcceptanceRating[] = ['PENDING', 'GREEN', 'YELLOW', 'RED'];
 const TRACKS: QaipTrack[] = ['IIA_INTERNAL', 'NIGC_EXTERNAL'];
 const FINDING_SOURCES: QaipFindingSource[] = ['AUTOEVALUACION', 'EQR', 'COMITE', 'AD_HOC'];
 const SEVERITIES: FindingSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'];
 const ROOT_CAUSE_CATEGORIES: QaipRootCauseCategory[] = ['COMPETENCIA', 'PRESION_TIEMPO', 'BRECHA_METODOLOGICA', 'SUPERVISION_INSUFICIENTE', 'TONO_DIRECCION', 'OTRO'];
+const CERTIFICATION_TYPES: CertificationType[] = ['CIA', 'CISA', 'CFE', 'CPA', 'CRMA', 'CGAP', 'PMP', 'ISO27001_LA', 'ISO22301_LA', 'CISSP', 'CDPSE'];
+const CPE_CATEGORIES = ['etica', 'tecnica', 'liderazgo'];
 
 // ─── Tarjeta de resultado global ────────────────────────────────────────────
 function Semaforo({ result }: { result: AcceptanceRating }) {
@@ -629,6 +637,41 @@ function PerformancePanel() {
     { label: 'Acciones de remediación vencidas', value: perf.qualityFindings.overdueRemediationActions, sub: 'Requieren atención' },
   ];
 
+  const extraCards = [
+    {
+      label: 'Cumplimiento horas CPE',
+      value: perf.cpeCompliance.compliancePct != null ? `${perf.cpeCompliance.compliancePct}%` : '—',
+      sub: `${perf.cpeCompliance.staffCompliant} de ${perf.cpeCompliance.staffTotal} cumplen ${perf.cpeCompliance.minRequiredHours}h/año — NIGC1 Art. 32(b)`,
+    },
+    {
+      label: 'Cumplimiento del plan de trabajo',
+      value: perf.workPlanCompliance.completionPct != null ? `${perf.workPlanCompliance.completionPct}%` : '—',
+      sub: perf.workPlanCompliance.planExists
+        ? `${perf.workPlanCompliance.completedItems} de ${perf.workPlanCompliance.totalItems} encargos del plan ${perf.year}`
+        : `Sin plan aprobado para ${perf.year}`,
+    },
+    {
+      label: 'Rentabilidad en horas',
+      value: perf.profitabilityCompliance.hours.compliancePct != null ? `${perf.profitabilityCompliance.hours.compliancePct}%` : '—',
+      sub: `${perf.profitabilityCompliance.hours.real}h reales de ${perf.profitabilityCompliance.hours.planned}h planificadas`,
+    },
+    {
+      label: 'Rentabilidad en dinero',
+      value: perf.profitabilityCompliance.money.totalMarginPct != null ? `${perf.profitabilityCompliance.money.totalMarginPct}%` : '—',
+      sub: `Margen ${perf.profitabilityCompliance.money.totalMargin.toLocaleString('es')} sobre ${perf.profitabilityCompliance.money.engagementsWithRevenue} encargos con honorario`,
+    },
+    {
+      label: 'Implementación de recomendaciones',
+      value: perf.recommendations.implementationRateYtd != null ? `${perf.recommendations.implementationRateYtd}%` : '—',
+      sub: `${perf.recommendations.actionsCompletedYtd} de ${perf.recommendations.actionsCreatedYtd} acciones · ${perf.recommendations.overdueActionsNow} vencidas hoy`,
+    },
+    {
+      label: 'Recurrencia de hallazgos',
+      value: perf.recommendations.recurrenceRateYtd != null ? `${perf.recommendations.recurrenceRateYtd}%` : '—',
+      sub: `${perf.recommendations.recurringFindingsYtd} de ${perf.recommendations.findingsCreatedYtd} hallazgos ${perf.year} marcados recurrentes`,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -640,6 +683,35 @@ function PerformancePanel() {
           </div>
         ))}
       </div>
+
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Indicadores de gestión del despacho</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {extraCards.map(c => (
+            <div key={c.label} className="bg-white rounded-2xl border border-gray-200 p-4">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{c.label}</p>
+              <p className="text-2xl font-extrabold text-gray-800">{c.value}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{c.sub}</p>
+            </div>
+          ))}
+        </div>
+        {!perf.partnerCyclicalInspection.tracked && (
+          <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-3">{perf.partnerCyclicalInspection.note}</p>
+        )}
+      </div>
+
+      {perf.cpeCompliance.belowMinimum.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Personal por debajo del mínimo de horas CPE</p>
+          <div className="flex flex-wrap gap-2">
+            {perf.cpeCompliance.belowMinimum.map(u => (
+              <span key={u.id} className="text-xs font-medium bg-red-50 text-red-700 px-3 py-1.5 rounded-full">
+                {u.name}: {u.hours}h (faltan {u.missingHours}h)
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {Object.keys(perf.qualityFindings.byRootCauseCategory).length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-4">
@@ -804,15 +876,281 @@ function EqrPanel() {
   );
 }
 
+// ─── Competencias / CPE ─────────────────────────────────────────────────────
+function CertificationForm({ userId, onDone }: { userId: string; onDone: () => void }) {
+  const add = useAddCertification();
+  const [type, setType] = useState<CertificationType>('CIA');
+  const [certNumber, setCertNumber] = useState('');
+  const [issuedAt, setIssuedAt] = useState('');
+  const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  return (
+    <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+      <select value={type} onChange={e => setType(e.target.value as CertificationType)} className={cls}>
+        {CERTIFICATION_TYPES.map(t => <option key={t} value={t}>{CERTIFICATION_LABEL[t]}</option>)}
+      </select>
+      <input placeholder="Número de certificado (opcional)" value={certNumber} onChange={e => setCertNumber(e.target.value)} className={cls} />
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-gray-600">Fecha de emisión</label>
+        <input type="date" value={issuedAt} onChange={e => setIssuedAt(e.target.value)} className={cls} />
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={async () => { if (!issuedAt) return; await add.mutateAsync({ userId, type, certNumber: certNumber || undefined, issuedAt }); onDone(); }}
+          disabled={add.isPending || !issuedAt}
+          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+        >
+          {add.isPending ? 'Guardando…' : 'Guardar certificación'}
+        </button>
+        <button onClick={onDone} className="px-3 py-1.5 border border-gray-200 text-xs font-medium rounded-lg text-gray-600 hover:bg-gray-50">Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+function SkillForm({ userId, onDone }: { userId: string; onDone: () => void }) {
+  const add = useAddCompetency();
+  const [area, setArea] = useState('');
+  const [expertiseLevel, setExpertiseLevel] = useState(3);
+  const [yearsExperience, setYearsExperience] = useState(0);
+  const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  return (
+    <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+      <input placeholder="Área (ej. Auditoría de TI, NIIF, PLD/FT)" value={area} onChange={e => setArea(e.target.value)} className={cls} />
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <label className="text-xs font-medium text-gray-600 block mb-1">Nivel (1-5)</label>
+          <input type="number" min={1} max={5} value={expertiseLevel} onChange={e => setExpertiseLevel(Number(e.target.value))} className={cls} />
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-medium text-gray-600 block mb-1">Años de experiencia</label>
+          <input type="number" min={0} value={yearsExperience} onChange={e => setYearsExperience(Number(e.target.value))} className={cls} />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={async () => { if (!area.trim()) return; await add.mutateAsync({ userId, area, expertiseLevel, yearsExperience }); onDone(); }}
+          disabled={add.isPending || !area.trim()}
+          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+        >
+          {add.isPending ? 'Guardando…' : 'Guardar competencia'}
+        </button>
+        <button onClick={onDone} className="px-3 py-1.5 border border-gray-200 text-xs font-medium rounded-lg text-gray-600 hover:bg-gray-50">Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+function CpeForm({ userId, onDone }: { userId: string; onDone: () => void }) {
+  const add = useAddCpeRecord();
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+  const [category, setCategory] = useState('tecnica');
+  const [hours, setHours] = useState(1);
+  const [description, setDescription] = useState('');
+  const [completedAt, setCompletedAt] = useState('');
+  const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  return (
+    <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+      <input placeholder="Descripción (ej. Curso NIGC 1, congreso IIA…)" value={description} onChange={e => setDescription(e.target.value)} className={cls} />
+      <div className="grid grid-cols-3 gap-2">
+        <select value={category} onChange={e => setCategory(e.target.value)} className={cls}>
+          {CPE_CATEGORIES.map(c => <option key={c} value={c}>{CPE_CATEGORY_LABEL[c]}</option>)}
+        </select>
+        <input type="number" min={0.25} step={0.25} placeholder="Horas" value={hours} onChange={e => setHours(Number(e.target.value))} className={cls} />
+        <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className={cls} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-gray-600">Fecha completado</label>
+        <input type="date" value={completedAt} onChange={e => setCompletedAt(e.target.value)} className={cls} />
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={async () => {
+            if (!description.trim() || !completedAt || hours <= 0) return;
+            await add.mutateAsync({ userId, year, category, hours, description, completedAt });
+            onDone();
+          }}
+          disabled={add.isPending || !description.trim() || !completedAt || hours <= 0}
+          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+        >
+          {add.isPending ? 'Guardando…' : 'Registrar horas CPE'}
+        </button>
+        <button onClick={onDone} className="px-3 py-1.5 border border-gray-200 text-xs font-medium rounded-lg text-gray-600 hover:bg-gray-50">Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+function CompetencyProfilePanel({ userId, profile, isLoading }: { userId: string; profile?: CompetencyProfile; isLoading: boolean }) {
+  const [showCert, setShowCert] = useState(false);
+  const [showSkill, setShowSkill] = useState(false);
+  const [showCpe, setShowCpe] = useState(false);
+  const removeCert = useRemoveCertification();
+  const removeSkill = useRemoveCompetency();
+  const removeCpe = useRemoveCpeRecord();
+
+  if (isLoading || !profile) return <div className="py-12 text-center text-sm text-gray-400">Cargando…</div>;
+
+  const cpe = profile.cpeSummary;
+
+  return (
+    <div className="space-y-6">
+      <div className={`rounded-2xl border-2 p-4 ${cpe.compliant ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50'}`}>
+        <p className={`text-sm font-bold ${cpe.compliant ? 'text-emerald-700' : 'text-red-700'}`}>
+          Educación Profesional Continua {cpe.year}: {cpe.hours}h de {cpe.minRequired}h mínimas
+        </p>
+        <p className="text-xs text-gray-500 mt-0.5">NIGC 1 Art. 32(b) — competencia y desarrollo profesional continuo del personal.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Certificaciones</p>
+            {!showCert && <button onClick={() => setShowCert(true)} className="text-xs font-medium text-blue-600 hover:text-blue-700">+ Agregar</button>}
+          </div>
+          <div className="space-y-1.5 mb-2">
+            {profile.certifications.map(c => (
+              <div key={c.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white">
+                <div>
+                  <span className="font-medium text-gray-700">{CERTIFICATION_LABEL[c.type]}</span>
+                  {c.certNumber && <span className="text-xs text-gray-400 ml-2">#{c.certNumber}</span>}
+                </div>
+                <button onClick={() => removeCert.mutate({ id: c.id, userId })} className="text-xs text-gray-400 hover:text-red-600">Quitar</button>
+              </div>
+            ))}
+            {profile.certifications.length === 0 && <p className="text-xs text-gray-400">Sin certificaciones registradas.</p>}
+          </div>
+          {showCert && <CertificationForm userId={userId} onDone={() => setShowCert(false)} />}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Matriz de competencias</p>
+            {!showSkill && <button onClick={() => setShowSkill(true)} className="text-xs font-medium text-blue-600 hover:text-blue-700">+ Agregar</button>}
+          </div>
+          <div className="space-y-1.5 mb-2">
+            {profile.competencies.map(c => (
+              <div key={c.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white">
+                <div>
+                  <span className="font-medium text-gray-700">{c.area}</span>
+                  <span className="text-xs text-gray-400 ml-2">Nivel {c.expertiseLevel}/5 · {c.yearsExperience} años</span>
+                </div>
+                <button onClick={() => removeSkill.mutate({ id: c.id, userId })} className="text-xs text-gray-400 hover:text-red-600">Quitar</button>
+              </div>
+            ))}
+            {profile.competencies.length === 0 && <p className="text-xs text-gray-400">Sin áreas de competencia registradas.</p>}
+          </div>
+          {showSkill && <SkillForm userId={userId} onDone={() => setShowSkill(false)} />}
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Registro de horas CPE</p>
+          {!showCpe && <button onClick={() => setShowCpe(true)} className="text-xs font-medium text-blue-600 hover:text-blue-700">+ Registrar horas</button>}
+        </div>
+        <div className="space-y-1.5 mb-2">
+          {profile.cpeRecords.map(r => (
+            <div key={r.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white">
+              <div>
+                <span className="font-medium text-gray-700">{r.description}</span>
+                <span className="text-xs text-gray-400 ml-2">{CPE_CATEGORY_LABEL[r.category] ?? r.category} · {r.hours}h · {formatDateUTC(r.completedAt)} · {r.year}</span>
+              </div>
+              <button onClick={() => removeCpe.mutate({ id: r.id, userId })} className="text-xs text-gray-400 hover:text-red-600">Quitar</button>
+            </div>
+          ))}
+          {profile.cpeRecords.length === 0 && <p className="text-xs text-gray-400">Sin horas CPE registradas.</p>}
+        </div>
+        {showCpe && <CpeForm userId={userId} onDone={() => setShowCpe(false)} />}
+      </div>
+    </div>
+  );
+}
+
+function CompetenciesPanel() {
+  const { user, hasRole } = useUser();
+  const isManager = hasRole(['AUDIT_MANAGER']);
+  const { data: roster } = useCompetenciesRoster(isManager);
+  const [selectedUserId, setSelectedUserId] = useState('');
+
+  const myProfileQ = useMyCompetencyProfile();
+  const otherProfileQ = useCompetencyProfile(selectedUserId);
+  const profile = selectedUserId ? otherProfileQ.data : myProfileQ.data;
+  const isLoading = selectedUserId ? otherProfileQ.isLoading : myProfileQ.isLoading;
+  const activeUserId = selectedUserId || profile?.id || user?.id || '';
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <p className="text-xs text-gray-400">
+        Competencia y desarrollo profesional del personal (NIGC 1 Art. 32(a)-(b)) — dato de la persona, no del encargo.
+        Se usa en la asignación de equipos, en la dimensión &ldquo;Competencia y Recursos&rdquo; del Radar de Aceptación de Cartera,
+        y en el cumplimiento de horas CPE del tablero de desempeño de QAIP.
+      </p>
+
+      {isManager && roster && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Roster de la firma</p>
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="text-left px-4 py-2">Nombre</th>
+                  <th className="text-left px-4 py-2">Rol</th>
+                  <th className="text-left px-4 py-2">Certificaciones</th>
+                  <th className="text-left px-4 py-2">CPE {new Date().getFullYear()}</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {roster.map(r => (
+                  <tr key={r.id} className="border-t border-gray-100">
+                    <td className="px-4 py-2 text-gray-700 font-medium">{r.name}</td>
+                    <td className="px-4 py-2 text-gray-500">{r.role}</td>
+                    <td className="px-4 py-2 text-gray-500">{r.certifications.length > 0 ? r.certifications.map(c => c.type).join(', ') : '—'}</td>
+                    <td className="px-4 py-2">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.cpe.compliant ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                        {r.cpe.hours}h / {r.cpe.minRequired}h
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <button onClick={() => setSelectedUserId(r.id)} className="text-xs font-medium text-blue-600 hover:text-blue-700">Ver perfil</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            {selectedUserId && selectedUserId !== user?.id ? `Perfil de ${profile?.name ?? '…'}` : 'Mi perfil'}
+          </p>
+          {selectedUserId && (
+            <button onClick={() => setSelectedUserId('')} className="text-xs text-gray-400 hover:text-gray-700">Volver a mi perfil</button>
+          )}
+        </div>
+        <CompetencyProfilePanel userId={activeUserId} profile={profile} isLoading={isLoading} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Página principal ────────────────────────────────────────────────────────
 export default function QaipPage() {
-  const [tab, setTab] = useState<QaipTrack | 'GOVERNANCE' | 'FINDINGS' | 'EQR'>('IIA_INTERNAL');
+  const [tab, setTab] = useState<QaipTrack | 'GOVERNANCE' | 'FINDINGS' | 'EQR' | 'COMPETENCIES'>('IIA_INTERNAL');
 
-  const tabs: Array<{ key: QaipTrack | 'GOVERNANCE' | 'FINDINGS' | 'EQR'; label: string }> = [
+  const tabs: Array<{ key: QaipTrack | 'GOVERNANCE' | 'FINDINGS' | 'EQR' | 'COMPETENCIES'; label: string }> = [
     { key: 'IIA_INTERNAL', label: QAIP_TRACK_LABEL.IIA_INTERNAL.label },
     { key: 'NIGC_EXTERNAL', label: QAIP_TRACK_LABEL.NIGC_EXTERNAL.label },
     { key: 'FINDINGS', label: 'Hallazgos y Desempeño' },
     { key: 'EQR', label: 'Revisión de Calidad del Encargo' },
+    { key: 'COMPETENCIES', label: 'Competencias y CPE' },
     { key: 'GOVERNANCE', label: 'Independencia y Estatuto' },
   ];
 
@@ -844,6 +1182,7 @@ export default function QaipPage() {
       {tab === 'GOVERNANCE' ? <GovernancePanel />
         : tab === 'FINDINGS' ? <PerformancePanel />
         : tab === 'EQR' ? <EqrPanel />
+        : tab === 'COMPETENCIES' ? <CompetenciesPanel />
         : <TrackPanel track={tab} />}
     </div>
   );

@@ -8,6 +8,8 @@ import { FindingsService } from './findings.service';
 import { FindingsController } from './findings.controller';
 import { PerformanceService } from './performance.service';
 import { PerformanceController } from './performance.controller';
+import { EqrService } from './eqr.service';
+import { EqrController } from './eqr.controller';
 
 /**
  * QAIP y Calidad — dos tracks normativos paralelos (ver el artefacto de diseño
@@ -17,11 +19,12 @@ import { PerformanceController } from './performance.controller';
  * declaración de independencia + estatuto de auditoría.
  * V2: hallazgos de calidad + causa raíz obligatoria (NIGC 1 comp. 8) +
  * remediación + tablero de KPIs de desempeño calculado sin pedir datos nuevos.
- * V3 (EQR + agente + competencias) se agrega sobre esta misma base.
+ * V3: Revisión de Calidad del Encargo (EQR, NIGC 2) con gate real sobre el
+ * sign-off final en WorkingPapersService.signOff() — ver el comentario ahí.
  */
 @Module({
-  controllers: [AssessmentsController, GovernanceController, FindingsController, PerformanceController],
-  providers: [StandardsService, AssessmentsService, GovernanceService, FindingsService, PerformanceService],
+  controllers: [AssessmentsController, GovernanceController, FindingsController, PerformanceController, EqrController],
+  providers: [StandardsService, AssessmentsService, GovernanceService, FindingsService, PerformanceService, EqrService],
   exports: [StandardsService],
 })
 export class QaipModule {}

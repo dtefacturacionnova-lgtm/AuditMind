@@ -136,6 +136,25 @@ export interface QaipPerformanceDashboard {
   };
 }
 
+// ─── V3 — Revisión de Calidad del Encargo (EQR, NIGC 2) ────────────────────
+export interface EngagementQualityReview {
+  id: string;
+  auditId: string;
+  reviewerId?: string | null;
+  wasEngagementPartner: boolean;
+  independenceJustification?: string | null;
+  checklist: Array<{ item: string; ok?: boolean; comment?: string }>;
+  result: AcceptanceRating;
+  notes?: string | null;
+  completedById?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  reviewer?: { id: string; name: string } | null;
+  completedBy?: { id: string; name: string } | null;
+  audit?: { id: string; title: string; requiresEqr: boolean };
+}
+
 // ─── Query keys ───────────────────────────────────────────────────────────────
 const STANDARDS_KEY = 'qaip-standards';
 const ASSESSMENTS_KEY = 'qaip-assessments';
@@ -144,6 +163,7 @@ const INDEPENDENCE_KEY = 'qaip-independence';
 const CHARTERS_KEY = 'qaip-charters';
 const FINDINGS_KEY = 'qaip-findings';
 const PERFORMANCE_KEY = 'qaip-performance';
+const EQR_KEY = 'qaip-eqr';
 
 // ─── Standards ────────────────────────────────────────────────────────────────
 export function useQaipStandards(track: QaipTrack) {
@@ -348,6 +368,42 @@ export const QAIP_ROOT_CAUSE_LABEL: Record<QaipRootCauseCategory, string> = {
   TONO_DIRECCION: 'Tono desde la dirección',
   OTRO: 'Otro',
 };
+
+// ─── Revisión de Calidad del Encargo (EQR) ───────────────────────────────────
+export function useEqr(auditId: string) {
+  return useQuery<EngagementQualityReview | null>({
+    queryKey: [EQR_KEY, auditId],
+    queryFn: () => apiClient.get(`/qaip/eqr/${auditId}`),
+    enabled: !!auditId,
+    staleTime: 10_000,
+  });
+}
+
+export function useRequireEqr() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (auditId: string) => apiClient.post<EngagementQualityReview>(`/qaip/eqr/${auditId}/require`, {}),
+    onSuccess: (_, auditId) => qc.invalidateQueries({ queryKey: [EQR_KEY, auditId] }),
+  });
+}
+
+export function useAssignEqrReviewer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ auditId, ...data }: { auditId: string; reviewerId: string; wasEngagementPartner?: boolean; independenceJustification?: string }) =>
+      apiClient.patch<EngagementQualityReview>(`/qaip/eqr/${auditId}/reviewer`, data),
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: [EQR_KEY, vars.auditId] }),
+  });
+}
+
+export function useCompleteEqr() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ auditId, result, notes }: { auditId: string; result: AcceptanceRating; notes?: string }) =>
+      apiClient.post<EngagementQualityReview>(`/qaip/eqr/${auditId}/complete`, { result, notes }),
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: [EQR_KEY, vars.auditId] }),
+  });
+}
 
 // ─── Config visual ──────────────────────────────────────────────────────────────
 export const QAIP_RATING_CONFIG: Record<AcceptanceRating, { label: string; color: string; bg: string; border: string }> = {

@@ -11,10 +11,12 @@ import {
   useQaipFindings, useCreateQaipFinding, useUpdateQaipFindingStatus,
   useAddQaipRootCause, useAddQaipRemediationAction, useUpdateQaipRemediationAction,
   useQaipPerformance,
+  useEqr, useRequireEqr, useAssignEqrReviewer, useCompleteEqr,
   QAIP_RATING_CONFIG, QAIP_TRACK_LABEL, QAIP_FINDING_STATUS_CONFIG, QAIP_SEVERITY_CONFIG, QAIP_ROOT_CAUSE_LABEL,
   QaipTrack, QaipAssessment, AcceptanceRating, QaipFinding,
   QaipFindingSource, FindingSeverity, QaipRootCauseCategory,
 } from '@/hooks/useQaip';
+import { useAudits } from '@/hooks/useAudits';
 import { useOrgUsersList } from '@/hooks/useCapacity';
 import { formatDate } from '@/lib/utils';
 
@@ -668,14 +670,149 @@ function PerformancePanel() {
   );
 }
 
+// ─── Revisión de Calidad del Encargo (EQR — NIGC 2, V3) ────────────────────
+function EqrPanel() {
+  const { data: auditsResp } = useAudits({ limit: 100 });
+  const { data: users } = useOrgUsersList();
+  const [auditId, setAuditId] = useState('');
+  const { data: eqr, isLoading } = useEqr(auditId);
+  const requireEqr = useRequireEqr();
+  const assignReviewer = useAssignEqrReviewer();
+  const completeEqr = useCompleteEqr();
+
+  const [reviewerId, setReviewerId] = useState('');
+  const [wasPartner, setWasPartner] = useState(false);
+  const [justification, setJustification] = useState('');
+  const [completeResult, setCompleteResult] = useState<AcceptanceRating>('GREEN');
+  const [completeNotes, setCompleteNotes] = useState('');
+  const [showComplete, setShowComplete] = useState(false);
+
+  const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  const audits = auditsResp?.data ?? [];
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div>
+        <p className="text-xs text-gray-400 mb-4">
+          NIGC 2 (ISQM 2) — revisión independiente obligatoria antes de emitir el informe final para entidades de interés público
+          o cuando el despacho determine que el riesgo del encargo lo amerita. Bloquea la firma final (nivel &ldquo;signoff&rdquo;
+          del papel disparador) hasta completarse.
+        </p>
+        <label className="text-xs font-medium text-gray-600 block mb-1">Encargo</label>
+        <select value={auditId} onChange={e => setAuditId(e.target.value)} className={cls}>
+          <option value="">Seleccionar encargo…</option>
+          {audits.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+        </select>
+      </div>
+
+      {!auditId && <p className="text-sm text-gray-400 text-center py-12">Seleccione un encargo para gestionar su EQR.</p>}
+
+      {auditId && isLoading && <div className="py-12 text-center text-sm text-gray-400">Cargando…</div>}
+
+      {auditId && !isLoading && (!eqr || !eqr.audit?.requiresEqr) && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 text-center">
+          <p className="text-sm text-gray-600 mb-3">Este encargo no requiere EQR actualmente.</p>
+          <button
+            onClick={() => requireEqr.mutate(auditId)}
+            disabled={requireEqr.isPending}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-60"
+          >
+            {requireEqr.isPending ? 'Marcando…' : 'Requerir EQR para este encargo'}
+          </button>
+        </div>
+      )}
+
+      {auditId && eqr && eqr.audit?.requiresEqr && (
+        <div className="space-y-4">
+          {eqr.completedAt ? (
+            <div className={`rounded-2xl border-2 p-5 ${QAIP_RATING_CONFIG[eqr.result].border} ${QAIP_RATING_CONFIG[eqr.result].bg}`}>
+              <p className={`text-sm font-bold ${QAIP_RATING_CONFIG[eqr.result].color}`}>EQR completada: {QAIP_RATING_CONFIG[eqr.result].label}</p>
+              {eqr.notes && <p className="text-sm text-gray-700 mt-2">{eqr.notes}</p>}
+              <p className="text-xs text-gray-400 mt-2">
+                Revisor: {eqr.reviewer?.name ?? '—'} · Completada por {eqr.completedBy?.name ?? '—'} el {formatDate(eqr.completedAt)}
+              </p>
+              <p className="text-xs text-emerald-700 mt-2 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> La firma final de este encargo ya no está bloqueada.</p>
+            </div>
+          ) : (
+            <>
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+                <p className="text-sm font-semibold text-gray-700">Revisor Independiente</p>
+                {eqr.reviewer && (
+                  <p className="text-xs text-gray-500">Asignado: <span className="font-medium text-gray-700">{eqr.reviewer.name}</span></p>
+                )}
+                <select value={reviewerId} onChange={e => setReviewerId(e.target.value)} className={cls}>
+                  <option value="">Seleccionar revisor…</option>
+                  {users?.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                  <input type="checkbox" checked={wasPartner} onChange={e => setWasPartner(e.target.checked)} />
+                  El revisor fue socio/gerente de este encargo en algún momento (requiere enfriamiento — NIGC 2)
+                </label>
+                {wasPartner && (
+                  <textarea rows={2} placeholder="Justificación explícita del enfriamiento…"
+                    value={justification} onChange={e => setJustification(e.target.value)} className={cls} />
+                )}
+                <button
+                  onClick={() => assignReviewer.mutate({ auditId, reviewerId, wasEngagementPartner: wasPartner, independenceJustification: justification || undefined })}
+                  disabled={assignReviewer.isPending || !reviewerId || (wasPartner && !justification.trim())}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {assignReviewer.isPending ? 'Guardando…' : 'Asignar revisor'}
+                </button>
+                {assignReviewer.isError && (
+                  <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{(assignReviewer.error as Error)?.message ?? 'Error'}</p>
+                )}
+              </div>
+
+              {eqr.reviewer && (
+                <div className="bg-white rounded-2xl border border-gray-200 p-5">
+                  <p className="text-sm font-semibold text-gray-700 mb-3">Completar EQR</p>
+                  {!showComplete ? (
+                    <button onClick={() => setShowComplete(true)} className="px-4 py-2 bg-[#0F2D4A] text-white text-sm font-medium rounded-xl hover:bg-[#1a3f5f]">
+                      Completar revisión
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex gap-1.5">
+                        {(['GREEN', 'YELLOW', 'RED'] as AcceptanceRating[]).map(r => {
+                          const rc = QAIP_RATING_CONFIG[r];
+                          return (
+                            <button key={r} onClick={() => setCompleteResult(r)}
+                              className={`flex-1 text-xs font-medium py-1.5 rounded-lg border ${completeResult === r ? `${rc.bg} ${rc.color} ${rc.border}` : 'border-gray-200 text-gray-400'}`}>
+                              {rc.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <textarea rows={3} placeholder="Notas de la revisión" value={completeNotes} onChange={e => setCompleteNotes(e.target.value)} className={cls} />
+                      <button
+                        onClick={async () => { await completeEqr.mutateAsync({ auditId, result: completeResult, notes: completeNotes }); setShowComplete(false); }}
+                        disabled={completeEqr.isPending}
+                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {completeEqr.isPending ? 'Guardando…' : 'Confirmar y desbloquear firma final'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Página principal ────────────────────────────────────────────────────────
 export default function QaipPage() {
-  const [tab, setTab] = useState<QaipTrack | 'GOVERNANCE' | 'FINDINGS'>('IIA_INTERNAL');
+  const [tab, setTab] = useState<QaipTrack | 'GOVERNANCE' | 'FINDINGS' | 'EQR'>('IIA_INTERNAL');
 
-  const tabs: Array<{ key: QaipTrack | 'GOVERNANCE' | 'FINDINGS'; label: string }> = [
+  const tabs: Array<{ key: QaipTrack | 'GOVERNANCE' | 'FINDINGS' | 'EQR'; label: string }> = [
     { key: 'IIA_INTERNAL', label: QAIP_TRACK_LABEL.IIA_INTERNAL.label },
     { key: 'NIGC_EXTERNAL', label: QAIP_TRACK_LABEL.NIGC_EXTERNAL.label },
     { key: 'FINDINGS', label: 'Hallazgos y Desempeño' },
+    { key: 'EQR', label: 'Revisión de Calidad del Encargo' },
     { key: 'GOVERNANCE', label: 'Independencia y Estatuto' },
   ];
 
@@ -704,7 +841,10 @@ export default function QaipPage() {
         ))}
       </div>
 
-      {tab === 'GOVERNANCE' ? <GovernancePanel /> : tab === 'FINDINGS' ? <PerformancePanel /> : <TrackPanel track={tab} />}
+      {tab === 'GOVERNANCE' ? <GovernancePanel />
+        : tab === 'FINDINGS' ? <PerformancePanel />
+        : tab === 'EQR' ? <EqrPanel />
+        : <TrackPanel track={tab} />}
     </div>
   );
 }

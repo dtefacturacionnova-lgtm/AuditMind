@@ -531,6 +531,8 @@ model User {
   decidedQaipAssessments     QaipAssessment[]
   createdQaipFindings        QaipFinding[]
   ownedQaipRemediations      QaipRemediationAction[]
+  eqrReviews                 EngagementQualityReview[] @relation("EqrReviewer")
+  eqrCompleted               EngagementQualityReview[] @relation("EqrCompletedBy")
   createdProposals           Proposal[]                @relation("ProposalCreator")
   createdEngagementLetters   EngagementLetter[]        @relation("EngagementLetterCreator")
   createdEngagements         Engagement[]              @relation("EngagementCreator")
@@ -1353,6 +1355,13 @@ model Audit {
   lastAiTestRunAt   DateTime?
   lastAiTestSummary Json? // { ranAt, durationMs, tests: [{ kind, status, ... }], findingIds[], summary }
 
+  // ─── QAIP V3 — Revisión de Calidad del Encargo (EQR, NIGC 2) ────────────
+  // Default false: no-op para todo encargo existente. Cuando es true, el
+  // sign-off final (WorkingPaper.isCompletionTrigger, nivel "signoff") queda
+  // bloqueado hasta que exista una EngagementQualityReview con completedAt —
+  // ver WorkingPapersService.signOff().
+  requiresEqr Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1385,6 +1394,7 @@ model Audit {
   investigationReports InvestigationReport[]
   caatsAutoRuns        CaatsAutoRun[]
   engagement           Engagement?           @relation("EngagementAudit")
+  qualityReview        EngagementQualityReview?
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -2688,6 +2698,36 @@ model QaipRemediationAction {
 
   @@index([findingId])
   @@map("qaip_remediation_actions")
+}
+
+// ─── QAIP V3 — Revisión de Calidad del Encargo (EQR, NIGC 2) ──────────────
+// 1:1 con Audit. `wasEngagementPartner` + `independenceConfirmed` son la
+// versión pragmática del enfriamiento de 2 años que exige NIGC 2: el sistema
+// SÍ valida en código que el revisor no sea parte del equipo del encargo
+// (contra AuditTeam, dato real) — pero NO reconstruye automáticamente el
+// historial de "quién fue socio del encargo hace cuántos años para este
+// mismo cliente" (dato que el producto no rastrea todavía por período). Si
+// el preparador marca wasEngagementPartner=true, se exige una justificación
+// explícita en vez de fabricar un cálculo de fecha que no se puede verificar.
+model EngagementQualityReview {
+  id                   String           @id @default(cuid())
+  auditId              String           @unique
+  reviewerId           String?
+  wasEngagementPartner Boolean          @default(false)
+  independenceJustification String?
+  checklist            Json             @default("[]")
+  result               AcceptanceRating @default(PENDING)
+  notes                String?
+  completedById        String?
+  completedAt          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  audit       Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  reviewer    User? @relation("EqrReviewer", fields: [reviewerId], references: [id])
+  completedBy User? @relation("EqrCompletedBy", fields: [completedById], references: [id])
+
+  @@map("engagement_quality_reviews")
 }
 
 model IndependenceDeclaration {

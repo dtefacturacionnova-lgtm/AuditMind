@@ -212,6 +212,7 @@ export class WorkingPapersService {
             id: true, title: true, type: true, scope: true,
             organizationId: true,
             isInvestigationMode: true,
+            requiresEqr: true,
             auditPeriodStart: true,
             auditPeriodEnd: true,
             team:         { select: { userId: true } },
@@ -1168,6 +1169,21 @@ export class WorkingPapersService {
       const signOffRoles: string[] = [UserRole.CAE, UserRole.AUDIT_MANAGER, UserRole.ADMIN, UserRole.SUPER_ADMIN];
       if (!signOffRoles.includes(user.role)) {
         throw new ForbiddenException('Solo el CAE o Gerente de Auditoría pueden realizar la firma final');
+      }
+
+      // ─── QAIP V3 — gate de Revisión de Calidad del Encargo (NIGC 2) ───────
+      // Solo aplica al papel disparador del cierre del encargo (E-03/
+      // PT-INFORME-FINAL) y solo cuando el encargo fue marcado como que
+      // requiere EQR — para todo lo demás es exactamente el comportamiento
+      // de siempre (requiresEqr default false = no-op).
+      if (wp.isCompletionTrigger && wp.audit.requiresEqr) {
+        const eqr = await this.prisma.engagementQualityReview.findUnique({ where: { auditId: wp.auditId } });
+        if (!eqr || !eqr.completedAt) {
+          throw new BadRequestException(
+            'Este encargo requiere Revisión de Calidad del Encargo (EQR, NIGC 2) antes de emitir el informe final. ' +
+            'Complete la EQR en QAIP y Calidad → Revisión de Calidad del Encargo antes de firmar.',
+          );
+        }
       }
     }
 

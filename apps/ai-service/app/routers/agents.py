@@ -16,6 +16,21 @@ _RAG_ENABLED_AGENTS = {
     "FISCUS", "MINERVA_QAIP", "VULCANO", "CASSANDRA", "THEMIS",
 }
 
+# Misma restricción que assistSection() en
+# apps/api/src/working-papers/paper-sections.service.ts — un encargo con un
+# marco normativo propio NO debe mezclar conocimiento de otro marco (ej. un
+# encargo INTERNAL_GOVERNMENTAL regido por NAIG/CCR no debe recibir citas de
+# IIA_STANDARDS_2024, aunque ambos sean "auditoría interna" en sentido amplio).
+# INTERNAL_GOVERNMENTAL apunta a NAIG_CCR_SV (Decreto No. 7 de la Corte de
+# Cuentas de la República, texto completo).
+_AUDIT_TYPE_TO_RAG_BASE = {
+    "FISCAL": "FISCAL_SV",
+    "AML": "AML_SV",
+    "INTERNAL": "IIA_STANDARDS_2024",
+    "INTERNAL_GOVERNMENTAL": "NAIG_CCR_SV",
+    "EXTERNAL_FINANCIAL": "CVPCPA_SV",
+}
+
 
 def verify_internal_key(x_internal_key: str | None) -> None:
     """Verify that the request comes from our NestJS API (internal service call)."""
@@ -69,10 +84,13 @@ async def chat(
                 break
 
         if last_user_msg and len(last_user_msg) > 10:
+            audit_type = ctx.get("auditType") or ctx.get("audit_type")
+            rag_base = _AUDIT_TYPE_TO_RAG_BASE.get(str(audit_type).upper()) if audit_type else None
             try:
                 chunks = await search_knowledge(
                     query=last_user_msg,
                     organization_id=request.organization_id,
+                    rag_base=rag_base,
                     top_k=5,
                     threshold=0.65,
                 )

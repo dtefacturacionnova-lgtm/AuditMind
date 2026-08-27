@@ -356,7 +356,8 @@ async def delete_document(
 async def list_rag_bases():
     return {
         "bases": [
-            {"id": "IIA_2025",         "name": "IIA IPPF 2025",               "description": "Marco de Referencia Internacional IIA"},
+            {"id": "IIA_2025",         "name": "IIA IPPF 2025 (legado)",      "description": "Marco de Referencia Internacional IIA — reemplazado por IIA_STANDARDS_2024, sin contenido ingerido"},
+            {"id": "IIA_STANDARDS_2024", "name": "Normas Globales de Auditoría Interna (IIA 2024)", "description": "Texto oficial completo — 15 Principios, 5 Dominios, 40 Normas. Traducción IIA España / FLAI, ©2024 IIA."},
             {"id": "AUDIT_TI",         "name": "Auditoría de TI",             "description": "COBIT, NIST, ISO 27001, GTAGs"},
             {"id": "CONTINUITY",       "name": "Continuidad de Negocio",      "description": "ISO 22301, BCP/DRP"},
             {"id": "COMPLIANCE",       "name": "Compliance y Regulatorio",    "description": "Normativa local e internacional"},
@@ -367,6 +368,8 @@ async def list_rag_bases():
             {"id": "SECTOR_SPECIFIC",  "name": "Normativa Sectorial",         "description": "Regulaciones por industria"},
             {"id": "FISCAL_SV",        "name": "Tributario El Salvador",      "description": "NACOT, Código Tributario, Ley ISR, Ley IVA, Código de Comercio"},
             {"id": "AML_SV",           "name": "PLD/FT El Salvador",          "description": "Ley Especial PLD/FT/FP Decreto 426/2025, NRP-36, Reglamento LCDA (vigencia transitoria)"},
+            {"id": "CVPCPA_SV",        "name": "CVPCPA — Práctica Profesional El Salvador", "description": "Guías oficiales del Consejo de Vigilancia de la Profesión de Contaduría Pública y Auditoría: gestión de calidad (NIGC 1/2), encargos de compilación, checklist de auditoría PYMES"},
+            {"id": "NAIG_CCR_SV",      "name": "NAIG — Auditoría Gubernamental (CCR)", "description": "Normas de Auditoría Interna del Sector Gubernamental — Decreto No. 7 de la Corte de Cuentas de la República (2016), texto completo de los 206 artículos. Marco distinto de IIA_STANDARDS_2024."},
         ]
     }
 
@@ -374,19 +377,24 @@ async def list_rag_bases():
 @router.get("/agents-with-rag")
 async def agents_with_rag():
     """Qué Especialistas IA consultan la base de conocimiento — informativo,
-    para la pantalla de administración. Los agentes del chat general buscan en
-    TODAS las bases (no hay restricción por base ahí); la asistencia de sección
-    SÍ se restringe a una base específica, pero por TIPO DE AUDITORÍA
-    (audit.type), no por agente — ver assistSection() en
-    apps/api/src/working-papers/paper-sections.service.ts: 'FISCAL' → FISCAL_SV,
-    'AML' → AML_SV."""
+    para la pantalla de administración. Tanto el chat general (POST /agents/chat,
+    cuando el caller manda auditType en el context) como la asistencia de
+    sección (assistSection() en
+    apps/api/src/working-papers/paper-sections.service.ts) restringen la
+    búsqueda a una base específica según el TIPO DE AUDITORÍA del encargo, no
+    según qué agente esté activo: 'FISCAL' → FISCAL_SV, 'AML' → AML_SV,
+    'INTERNAL' → IIA_STANDARDS_2024, 'INTERNAL_GOVERNMENTAL' → NAIG_CCR_SV
+    (marco distinto — NAIG/CCR, NO comparte base con IIA_STANDARDS_2024),
+    'EXTERNAL_FINANCIAL' → CVPCPA_SV. Cualquier otro tipo de auditoría busca
+    en todas las bases sin restricción."""
     return {
         "general_chat_agents": [
             "MINERVA", "SCRIPTORIUM", "ARGUS", "CICERO",
             "FISCUS", "MINERVA_QAIP", "VULCANO", "CASSANDRA", "THEMIS",
         ],
-        "note": "Estos agentes buscan en todas las bases de conocimiento activas cuando responden. "
-                "La asistencia de sección (botón 'Asistir con IA' dentro de un papel) es la única ruta "
-                "que restringe la búsqueda a una base específica — según el tipo de auditoría del "
-                "encargo (FISCAL → 'FISCAL_SV', AML → 'AML_SV'), no según qué agente esté activo.",
+        "note": "Estos agentes restringen su búsqueda RAG a la base normativa del tipo de auditoría "
+                "activo cuando el caller manda auditType (FISCAL → 'FISCAL_SV', AML → 'AML_SV', "
+                "INTERNAL → 'IIA_STANDARDS_2024', INTERNAL_GOVERNMENTAL → 'NAIG_CCR_SV', "
+                "EXTERNAL_FINANCIAL → 'CVPCPA_SV') — para cualquier otro tipo, o si no se manda "
+                "auditType (ej. chat global sin encargo asociado), buscan en todas las bases activas.",
     }

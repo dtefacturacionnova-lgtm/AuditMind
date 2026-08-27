@@ -288,19 +288,44 @@ export class PaperSectionsService {
       select: { title: true, scope: true, type: true, subtype: true },
     });
 
-    // Especialista normativo grounded en RAG (PI.3): para encargos de tipo FISCAL o
-    // AML, recupera normativa real de la base de conocimiento correspondiente antes
-    // de generar la sugerencia — nunca depende de que el modelo "recuerde" la ley de
-    // memoria. Guardado por auditType: un encargo Financiero/Interno jamás dispara
-    // esta búsqueda ni recibe este contexto, así que no hay riesgo de mezclar la
-    // normativa de una plantilla con otra. AML usa 'AML_SV' (Ley Especial PLD/FT/FP
-    // Decreto 426/2025 + NRP-36 + Reglamento LCDA de vigencia transitoria) — mismo
-    // mecanismo que FISCAL_SV, agregado junto con el papel PT-PLD.
+    // Especialista normativo grounded en RAG (PI.3): para encargos de tipo FISCAL,
+    // AML, INTERNAL, INTERNAL_GOVERNMENTAL o EXTERNAL_FINANCIAL, recupera normativa
+    // real de la base de conocimiento correspondiente antes de generar la
+    // sugerencia — nunca depende de que el modelo "recuerde" la ley/norma de
+    // memoria. Guardado por auditType: un encargo Financiero jamás dispara esta
+    // búsqueda ni recibe este contexto, así que no hay riesgo de mezclar la
+    // normativa de una plantilla con otra.
+    // AML usa 'AML_SV' (Ley Especial PLD/FT/FP Decreto 426/2025 + NRP-36 +
+    // Reglamento LCDA de vigencia transitoria) — mismo mecanismo que FISCAL_SV,
+    // agregado junto con el papel PT-PLD. INTERNAL usa 'IIA_STANDARDS_2024'
+    // (Normas Globales de Auditoría Interna, texto completo del IIA leído
+    // verbatim e ingerido a la base de conocimiento). INTERNAL_GOVERNMENTAL es
+    // un marco DISTINTO — lo rige la CCR con las NAIG (Normas de Auditoría
+    // Gubernamental), no el IIA — por eso NO comparte base con INTERNAL; usa
+    // 'NAIG_CCR_SV' (Decreto No. 7 de la Corte de Cuentas de la República,
+    // texto completo de los 206 artículos) en vez de citar por error el marco
+    // IIA equivocado (bug real corregido: antes ambos caían en IIA_STANDARDS_2024).
+    // EXTERNAL_FINANCIAL usa 'CVPCPA_SV' (guías oficiales del Consejo de
+    // Vigilancia de la Profesión de Contaduría Pública y Auditoría: gestión de
+    // calidad NIGC 1/2, encargos de compilación, checklist PYMES).
     let ragContext = '';
-    let ragDomain: 'FISCAL' | 'AML' | undefined;
-    if (audit?.type === 'FISCAL' || audit?.type === 'AML') {
+    let ragDomain: 'FISCAL' | 'AML' | 'INTERNAL' | 'INTERNAL_GOVERNMENTAL' | 'EXTERNAL_FINANCIAL' | undefined;
+    if (
+      audit?.type === 'FISCAL' || audit?.type === 'AML' ||
+      audit?.type === 'INTERNAL' || audit?.type === 'INTERNAL_GOVERNMENTAL' ||
+      audit?.type === 'EXTERNAL_FINANCIAL'
+    ) {
       ragDomain = audit.type;
-      const ragBase = ragDomain === 'FISCAL' ? 'FISCAL_SV' : 'AML_SV';
+    }
+    if (ragDomain) {
+      const RAG_BASE_BY_DOMAIN: Record<typeof ragDomain & string, string> = {
+        FISCAL: 'FISCAL_SV',
+        AML: 'AML_SV',
+        INTERNAL: 'IIA_STANDARDS_2024',
+        INTERNAL_GOVERNMENTAL: 'NAIG_CCR_SV',
+        EXTERNAL_FINANCIAL: 'CVPCPA_SV',
+      };
+      const ragBase = RAG_BASE_BY_DOMAIN[ragDomain];
       const query = [section.label, section.aiHint, wp.title].filter(Boolean).join(' — ');
       const hits = await this.aiService.searchRag(query, [ragBase], 6);
       if (hits.length > 0) {
@@ -540,7 +565,7 @@ export class PaperSectionsService {
     currentValue: string; aiHint: string;
     siblings: Array<{ key: string; label: string; value: string }>;
     auditTitle: string; auditScope: string; auditType: string; auditSubtype: string;
-    userPrompt: string; ragContext?: string; ragDomain?: 'FISCAL' | 'AML';
+    userPrompt: string; ragContext?: string; ragDomain?: 'FISCAL' | 'AML' | 'INTERNAL' | 'INTERNAL_GOVERNMENTAL' | 'EXTERNAL_FINANCIAL';
   }): string {
     const siblingsText = ctx.siblings
       .filter(s => s.value.trim())
@@ -553,10 +578,22 @@ export class PaperSectionsService {
       ? 'Eres un Especialista Tributario experto en la normativa fiscal de El Salvador: NACOT, Código Tributario, Ley de ISR, Ley de IVA y Código de Comercio.'
       : ctx.ragDomain === 'AML'
       ? 'Eres un Especialista en Prevención de Lavado de Dinero y Financiamiento del Terrorismo (PLD/FT) de El Salvador: Ley Especial para la Prevención, Control y Sanción del Lavado de Activos, Financiamiento del Terrorismo y Financiamiento de la Proliferación de Armas de Destrucción Masiva (Decreto Legislativo 426, vigente desde octubre 2025), NRP-36 (BCR/SSF) y las 40 Recomendaciones GAFI.'
+      : ctx.ragDomain === 'INTERNAL'
+      ? 'Eres un Especialista en Auditoría Interna experto en las Normas Globales de Auditoría Interna del IIA (2024): los 15 Principios, 5 Dominios y 40 Normas que rigen ética/profesionalidad, gobierno, gestión y desempeño de la Función de Auditoría Interna.'
+      : ctx.ragDomain === 'INTERNAL_GOVERNMENTAL'
+      ? 'Eres un Especialista en Auditoría Gubernamental de El Salvador bajo las Normas de Auditoría Interna del Sector Gubernamental (NAIG, Decreto No. 7 de la Corte de Cuentas de la República) — un marco distinto de las Normas Globales del IIA.'
+      : ctx.ragDomain === 'EXTERNAL_FINANCIAL'
+      ? 'Eres un Especialista en Auditoría Financiera Externa bajo supervisión del Consejo de Vigilancia de la Profesión de Contaduría Pública y Auditoría (CVPCPA) de El Salvador: gestión de calidad del despacho (NIGC 1/2), encargos de compilación y procedimientos de auditoría para PYMES.'
       : 'Eres un experto en auditoría (NIA/IAASB/COSO).';
     const ragLabel = ctx.ragDomain === 'FISCAL'
       ? 'NORMATIVA FISCAL REAL RECUPERADA (base de conocimiento NACOT/CT/LISR/Ley IVA'
-      : 'NORMATIVA PLD/FT REAL RECUPERADA (base de conocimiento Ley Especial PLD/FT/FP Decreto 426/2025 + NRP-36';
+      : ctx.ragDomain === 'AML'
+      ? 'NORMATIVA PLD/FT REAL RECUPERADA (base de conocimiento Ley Especial PLD/FT/FP Decreto 426/2025 + NRP-36'
+      : ctx.ragDomain === 'EXTERNAL_FINANCIAL'
+      ? 'GUÍAS CVPCPA REAL RECUPERADAS (base de conocimiento gestión de calidad NIGC 1/2, compilación y checklist PYMES del CVPCPA'
+      : ctx.ragDomain === 'INTERNAL_GOVERNMENTAL'
+      ? 'NAIG REAL RECUPERADAS (base de conocimiento Normas de Auditoría Interna del Sector Gubernamental, Decreto No. 7 CCR 2016'
+      : 'NORMAS DE AUDITORÍA INTERNA REAL RECUPERADAS (base de conocimiento Normas Globales de Auditoría Interna, IIA 2024';
 
     return `${persona} Estás asistiendo al auditor a redactar UNA sección específica de un papel de trabajo.
 
@@ -590,7 +627,7 @@ INSTRUCCIONES DE REDACCIÓN:
 - NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto.
 - Si necesitas referenciar otra sección o papel, usa el formato [CODE::SXX].
 - Si la Instrucción o el Hint IA mencionan más de un área/norma (ej. "Área X: ... Área Y: ..." — plantillas genéricas reutilizadas para varios temas), usa EXCLUSIVAMENTE la guía que corresponda al título real de este papel ("${ctx.paperTitle}") e ignora por completo la de las otras áreas mencionadas.
-${hasRag ? `- Cita artículo y norma (ej. "${ctx.ragDomain === 'FISCAL' ? 'Art. 65 Ley IVA' : 'Art. 15 Ley Especial PLD/FT/FP'}") ÚNICAMENTE si aparecen textualmente en la ${ctx.ragDomain === 'FISCAL' ? 'NORMATIVA FISCAL' : 'NORMATIVA PLD/FT'} REAL RECUPERADA arriba o en el contexto del papel — si no tienes la cita exacta ahí, describe el requisito sin inventar un número de artículo o sección.` : ''}
+${hasRag ? `- Cita artículo/norma (ej. "${ctx.ragDomain === 'FISCAL' ? 'Art. 65 Ley IVA' : ctx.ragDomain === 'AML' ? 'Art. 15 Ley Especial PLD/FT/FP' : ctx.ragDomain === 'EXTERNAL_FINANCIAL' ? 'sección aplicable de la guía CVPCPA de gestión de calidad' : ctx.ragDomain === 'INTERNAL_GOVERNMENTAL' ? 'numeral aplicable de las NAIG' : 'Norma 13.2 Evaluación de riesgos del trabajo'}") ÚNICAMENTE si aparece textualmente en la ${ctx.ragDomain === 'FISCAL' ? 'NORMATIVA FISCAL' : ctx.ragDomain === 'AML' ? 'NORMATIVA PLD/FT' : ctx.ragDomain === 'EXTERNAL_FINANCIAL' ? 'GUÍA CVPCPA' : ctx.ragDomain === 'INTERNAL_GOVERNMENTAL' ? 'NAIG' : 'NORMAS DE AUDITORÍA INTERNA'} REAL RECUPERADA arriba o en el contexto del papel — si no tienes la cita exacta ahí, describe el requisito sin inventar un número de artículo, norma o sección.` : ''}
 - Máximo 400 palabras.`;
   }
 
@@ -600,7 +637,7 @@ ${hasRag ? `- Cita artículo y norma (ej. "${ctx.ragDomain === 'FISCAL' ? 'Art. 
     currentValue: string; aiHint: string;
     siblings: Array<{ key: string; label: string; value: string }>;
     auditTitle: string; auditScope: string; auditType: string; auditSubtype: string;
-    userPrompt: string; ragContext?: string; ragDomain?: 'FISCAL' | 'AML';
+    userPrompt: string; ragContext?: string; ragDomain?: 'FISCAL' | 'AML' | 'INTERNAL' | 'INTERNAL_GOVERNMENTAL' | 'EXTERNAL_FINANCIAL';
   }): string {
     // MATRIX generation often needs to analyze EVERY row of an upstream table (e.g. flag
     // accounts from a full trial balance) — the 400-char truncation used for narrative
@@ -616,10 +653,22 @@ ${hasRag ? `- Cita artículo y norma (ej. "${ctx.ragDomain === 'FISCAL' ? 'Art. 
       ? 'Eres un Especialista Tributario experto en la normativa fiscal de El Salvador: NACOT, Código Tributario, Ley de ISR, Ley de IVA y Código de Comercio.'
       : ctx.ragDomain === 'AML'
       ? 'Eres un Especialista en Prevención de Lavado de Dinero y Financiamiento del Terrorismo (PLD/FT) de El Salvador: Ley Especial para la Prevención, Control y Sanción del Lavado de Activos, Financiamiento del Terrorismo y Financiamiento de la Proliferación de Armas de Destrucción Masiva (Decreto Legislativo 426, vigente desde octubre 2025), NRP-36 (BCR/SSF) y las 40 Recomendaciones GAFI.'
+      : ctx.ragDomain === 'INTERNAL'
+      ? 'Eres un Especialista en Auditoría Interna experto en las Normas Globales de Auditoría Interna del IIA (2024): los 15 Principios, 5 Dominios y 40 Normas que rigen ética/profesionalidad, gobierno, gestión y desempeño de la Función de Auditoría Interna.'
+      : ctx.ragDomain === 'INTERNAL_GOVERNMENTAL'
+      ? 'Eres un Especialista en Auditoría Gubernamental de El Salvador bajo las Normas de Auditoría Interna del Sector Gubernamental (NAIG, Decreto No. 7 de la Corte de Cuentas de la República) — un marco distinto de las Normas Globales del IIA.'
+      : ctx.ragDomain === 'EXTERNAL_FINANCIAL'
+      ? 'Eres un Especialista en Auditoría Financiera Externa bajo supervisión del Consejo de Vigilancia de la Profesión de Contaduría Pública y Auditoría (CVPCPA) de El Salvador: gestión de calidad del despacho (NIGC 1/2), encargos de compilación y procedimientos de auditoría para PYMES.'
       : 'Eres un experto en auditoría (NIA/IAASB/COSO).';
     const ragLabel = ctx.ragDomain === 'FISCAL'
       ? 'NORMATIVA FISCAL REAL RECUPERADA (base de conocimiento NACOT/CT/LISR/Ley IVA'
-      : 'NORMATIVA PLD/FT REAL RECUPERADA (base de conocimiento Ley Especial PLD/FT/FP Decreto 426/2025 + NRP-36';
+      : ctx.ragDomain === 'AML'
+      ? 'NORMATIVA PLD/FT REAL RECUPERADA (base de conocimiento Ley Especial PLD/FT/FP Decreto 426/2025 + NRP-36'
+      : ctx.ragDomain === 'EXTERNAL_FINANCIAL'
+      ? 'GUÍAS CVPCPA REAL RECUPERADAS (base de conocimiento gestión de calidad NIGC 1/2, compilación y checklist PYMES del CVPCPA'
+      : ctx.ragDomain === 'INTERNAL_GOVERNMENTAL'
+      ? 'NAIG REAL RECUPERADAS (base de conocimiento Normas de Auditoría Interna del Sector Gubernamental, Decreto No. 7 CCR 2016'
+      : 'NORMAS DE AUDITORÍA INTERNA REAL RECUPERADAS (base de conocimiento Normas Globales de Auditoría Interna, IIA 2024';
 
     return `${persona} Estás generando el CONTENIDO TABULAR de una sección de un papel de trabajo — una tabla con filas y columnas, no texto narrativo.
 
@@ -653,7 +702,7 @@ INSTRUCCIONES DE SALIDA:
 - Si la instrucción pide filtrar (ej. solo cuentas que disparan una alerta, o con variación significativa), evalúa CADA fila de la fuente contra el criterio y genera una fila de salida únicamente para las que califican — no generes una fila por cada fila de la fuente si el criterio es selectivo.
 - Máximo 40 filas.
 - NO inventes datos específicos del cliente (NIT, montos, nombres) que no estén en el contexto — usa "Pendiente de evidencia" o similar cuando falte información y el campo sea obligatorio.
-${hasRag ? `- En columnas de tipo "Base Normativa" o similar, cita artículo/sección ÚNICAMENTE si aparece textualmente en la ${ctx.ragDomain === 'FISCAL' ? 'NORMATIVA FISCAL' : 'NORMATIVA PLD/FT'} REAL RECUPERADA arriba — si no la tienes ahí, deja la celda genérica ("Ver normativa aplicable") en vez de inventar un número de artículo.` : ''}`;
+${hasRag ? `- En columnas de tipo "Base Normativa" o similar, cita artículo/norma/sección ÚNICAMENTE si aparece textualmente en la ${ctx.ragDomain === 'FISCAL' ? 'NORMATIVA FISCAL' : ctx.ragDomain === 'AML' ? 'NORMATIVA PLD/FT' : ctx.ragDomain === 'EXTERNAL_FINANCIAL' ? 'GUÍA CVPCPA' : ctx.ragDomain === 'INTERNAL_GOVERNMENTAL' ? 'NAIG' : 'NORMAS DE AUDITORÍA INTERNA'} REAL RECUPERADA arriba — si no la tienes ahí, deja la celda genérica ("Ver normativa aplicable") en vez de inventar un número de artículo o norma.` : ''}`;
   }
 
   private async callGeminiJson(apiKey: string, prompt: string): Promise<unknown[]> {

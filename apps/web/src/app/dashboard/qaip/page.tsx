@@ -2,19 +2,27 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  BadgeCheck, ShieldCheck, FileText, Lock, ChevronRight,
+  BadgeCheck, ShieldCheck, FileText, Lock, ChevronRight, AlertTriangle, Plus, CheckCircle2,
 } from 'lucide-react';
 import {
   useQaipAssessments, useStartQaipAssessment, useUpdateQaipAssessmentItem, useDecideQaipAssessment,
   useIndependenceDeclarations, useUpsertIndependenceDeclaration,
   useAuditCharters, useCreateAuditCharter,
-  QAIP_RATING_CONFIG, QAIP_TRACK_LABEL,
-  QaipTrack, QaipAssessment, AcceptanceRating,
+  useQaipFindings, useCreateQaipFinding, useUpdateQaipFindingStatus,
+  useAddQaipRootCause, useAddQaipRemediationAction, useUpdateQaipRemediationAction,
+  useQaipPerformance,
+  QAIP_RATING_CONFIG, QAIP_TRACK_LABEL, QAIP_FINDING_STATUS_CONFIG, QAIP_SEVERITY_CONFIG, QAIP_ROOT_CAUSE_LABEL,
+  QaipTrack, QaipAssessment, AcceptanceRating, QaipFinding,
+  QaipFindingSource, FindingSeverity, QaipRootCauseCategory,
 } from '@/hooks/useQaip';
+import { useOrgUsersList } from '@/hooks/useCapacity';
 import { formatDate } from '@/lib/utils';
 
 const RATINGS: AcceptanceRating[] = ['PENDING', 'GREEN', 'YELLOW', 'RED'];
 const TRACKS: QaipTrack[] = ['IIA_INTERNAL', 'NIGC_EXTERNAL'];
+const FINDING_SOURCES: QaipFindingSource[] = ['AUTOEVALUACION', 'EQR', 'COMITE', 'AD_HOC'];
+const SEVERITIES: FindingSeverity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'];
+const ROOT_CAUSE_CATEGORIES: QaipRootCauseCategory[] = ['COMPETENCIA', 'PRESION_TIEMPO', 'BRECHA_METODOLOGICA', 'SUPERVISION_INSUFICIENTE', 'TONO_DIRECCION', 'OTRO'];
 
 // ─── Tarjeta de resultado global ────────────────────────────────────────────
 function Semaforo({ result }: { result: AcceptanceRating }) {
@@ -433,13 +441,241 @@ function GovernancePanel() {
   );
 }
 
+// ─── Hallazgos de Calidad, Causa Raíz y Desempeño (V2) ─────────────────────
+function RootCauseForm({ findingId, onDone }: { findingId: string; onDone: () => void }) {
+  const addRootCause = useAddQaipRootCause();
+  const [category, setCategory] = useState<QaipRootCauseCategory>('COMPETENCIA');
+  const [analysis, setAnalysis] = useState('');
+  const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  return (
+    <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+      <select value={category} onChange={e => setCategory(e.target.value as QaipRootCauseCategory)} className={cls}>
+        {ROOT_CAUSE_CATEGORIES.map(c => <option key={c} value={c}>{QAIP_ROOT_CAUSE_LABEL[c]}</option>)}
+      </select>
+      <textarea rows={2} placeholder="Análisis: por qué ocurrió, no solo qué ocurrió"
+        value={analysis} onChange={e => setAnalysis(e.target.value)} className={cls} />
+      <div className="flex gap-2">
+        <button
+          onClick={async () => { if (!analysis.trim()) return; await addRootCause.mutateAsync({ findingId, category, analysis }); onDone(); }}
+          disabled={addRootCause.isPending || !analysis.trim()}
+          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+        >
+          {addRootCause.isPending ? 'Guardando…' : 'Guardar causa raíz'}
+        </button>
+        <button onClick={onDone} className="px-3 py-1.5 border border-gray-200 text-xs font-medium rounded-lg text-gray-600 hover:bg-gray-50">Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+function RemediationForm({ findingId, onDone }: { findingId: string; onDone: () => void }) {
+  const addAction = useAddQaipRemediationAction();
+  const { data: users } = useOrgUsersList();
+  const [description, setDescription] = useState('');
+  const [ownerId, setOwnerId] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  return (
+    <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+      <textarea rows={2} placeholder="Plan de acción" value={description} onChange={e => setDescription(e.target.value)} className={cls} />
+      <div className="flex gap-2">
+        <select value={ownerId} onChange={e => setOwnerId(e.target.value)} className={cls}>
+          <option value="">Responsable…</option>
+          {users?.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={cls} />
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={async () => { if (!description.trim() || !ownerId || !dueDate) return; await addAction.mutateAsync({ findingId, description, ownerId, dueDate }); onDone(); }}
+          disabled={addAction.isPending || !description.trim() || !ownerId || !dueDate}
+          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-60"
+        >
+          {addAction.isPending ? 'Guardando…' : 'Guardar plan de acción'}
+        </button>
+        <button onClick={onDone} className="px-3 py-1.5 border border-gray-200 text-xs font-medium rounded-lg text-gray-600 hover:bg-gray-50">Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+function FindingCard({ finding }: { finding: QaipFinding }) {
+  const [showRootCause, setShowRootCause] = useState(false);
+  const [showRemediation, setShowRemediation] = useState(false);
+  const updateStatus = useUpdateQaipFindingStatus();
+  const updateAction = useUpdateQaipRemediationAction();
+  const sCfg = QAIP_SEVERITY_CONFIG[finding.severity];
+  const stCfg = QAIP_FINDING_STATUS_CONFIG[finding.status];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${sCfg.bg} ${sCfg.color}`}>{sCfg.label}</span>
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${stCfg.bg} ${stCfg.color}`}>{stCfg.label}</span>
+            <span className="text-[11px] text-gray-400">{QAIP_TRACK_LABEL[finding.track].label} · {finding.source}</span>
+          </div>
+          <p className="text-sm text-gray-800">{finding.description}</p>
+          {finding.assessmentItem && (
+            <p className="text-xs text-gray-400 mt-1">Origen: {finding.assessmentItem.standard.code} — {finding.assessmentItem.standard.title}</p>
+          )}
+        </div>
+        {finding.status === 'OPEN' && (
+          <button onClick={() => updateStatus.mutate({ id: finding.id, status: 'CLOSED' })}
+            className="text-xs text-gray-400 hover:text-gray-700 whitespace-nowrap">Cerrar sin remediar</button>
+        )}
+      </div>
+
+      {finding.rootCauses.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Causa raíz</p>
+          {finding.rootCauses.map(rc => (
+            <div key={rc.id} className="text-xs bg-amber-50 text-amber-800 rounded-lg px-3 py-2">
+              <span className="font-semibold">{QAIP_ROOT_CAUSE_LABEL[rc.category]}:</span> {rc.analysis}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {finding.remediationActions.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Plan de acción</p>
+          {finding.remediationActions.map(a => {
+            const overdue = a.status === 'OPEN' && new Date(a.dueDate) < new Date();
+            return (
+              <div key={a.id} className={`text-xs rounded-lg px-3 py-2 flex items-center justify-between gap-2 ${
+                a.status === 'DONE' ? 'bg-emerald-50 text-emerald-800' : overdue ? 'bg-red-50 text-red-800' : 'bg-gray-50 text-gray-700'
+              }`}>
+                <span>{a.description} — {a.owner?.name ?? '—'} · {formatDate(a.dueDate)}{overdue && ' (vencido)'}</span>
+                {a.status === 'OPEN' && (
+                  <button onClick={() => updateAction.mutate({ id: a.id, status: 'DONE' })}
+                    className="shrink-0 flex items-center gap-1 text-emerald-700 hover:text-emerald-900 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Marcar hecho
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex gap-3 pt-1">
+        {!showRootCause && <button onClick={() => setShowRootCause(true)} className="text-xs font-medium text-blue-600 hover:text-blue-700">+ Causa raíz</button>}
+        {!showRemediation && <button onClick={() => setShowRemediation(true)} className="text-xs font-medium text-blue-600 hover:text-blue-700">+ Plan de acción</button>}
+      </div>
+      {showRootCause && <RootCauseForm findingId={finding.id} onDone={() => setShowRootCause(false)} />}
+      {showRemediation && <RemediationForm findingId={finding.id} onDone={() => setShowRemediation(false)} />}
+    </div>
+  );
+}
+
+function NewFindingModal({ onClose }: { onClose: () => void }) {
+  const create = useCreateQaipFinding();
+  const [track, setTrack] = useState<QaipTrack>('IIA_INTERNAL');
+  const [source, setSource] = useState<QaipFindingSource>('AD_HOC');
+  const [severity, setSeverity] = useState<FindingSeverity>('MEDIUM');
+  const [description, setDescription] = useState('');
+  const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 space-y-3">
+        <h2 className="text-base font-semibold text-gray-800">Nuevo Hallazgo de Calidad</h2>
+        <div className="grid grid-cols-2 gap-2">
+          <select value={track} onChange={e => setTrack(e.target.value as QaipTrack)} className={cls}>
+            {TRACKS.map(t => <option key={t} value={t}>{QAIP_TRACK_LABEL[t].label}</option>)}
+          </select>
+          <select value={source} onChange={e => setSource(e.target.value as QaipFindingSource)} className={cls}>
+            {FINDING_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <select value={severity} onChange={e => setSeverity(e.target.value as FindingSeverity)} className={cls}>
+          {SEVERITIES.map(s => <option key={s} value={s}>{QAIP_SEVERITY_CONFIG[s].label}</option>)}
+        </select>
+        <textarea rows={3} placeholder="Descripción del hallazgo" value={description} onChange={e => setDescription(e.target.value)} className={cls} />
+        <div className="flex gap-2 pt-2">
+          <button onClick={onClose} className="flex-1 py-2 border border-gray-200 text-sm font-medium rounded-xl text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button
+            onClick={async () => { if (!description.trim()) return; await create.mutateAsync({ track, source, severity, description }); onClose(); }}
+            disabled={create.isPending || !description.trim()}
+            className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-60"
+          >
+            {create.isPending ? 'Guardando…' : 'Registrar hallazgo'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PerformancePanel() {
+  const currentYear = new Date().getFullYear();
+  const { data: perf, isLoading } = useQaipPerformance(currentYear);
+  const { data: findings } = useQaipFindings();
+  const [showNew, setShowNew] = useState(false);
+
+  if (isLoading || !perf) return <div className="py-16 text-center text-sm text-gray-400">Cargando…</div>;
+
+  const cards = [
+    { label: 'Papeles revisados antes de firmar', value: perf.engagementPerformance.reviewedPct != null ? `${perf.engagementPerformance.reviewedPct}%` : '—', sub: `${perf.engagementPerformance.totalSignedOff} firmados en ${perf.year}` },
+    { label: 'Días promedio revisión → firma', value: perf.engagementPerformance.avgDaysReviewToSignOff ?? '—', sub: 'Std. 12.3 / NIGC1-C5' },
+    { label: 'Cobertura Radar de Aceptación', value: perf.clientAcceptanceCoverage.coveragePct != null ? `${perf.clientAcceptanceCoverage.coveragePct}%` : '—', sub: `${perf.clientAcceptanceCoverage.withDecidedAcceptance} de ${perf.clientAcceptanceCoverage.activeClients} clientes activos — NIGC1-C4` },
+    { label: 'Hallazgos de calidad abiertos', value: perf.qualityFindings.open, sub: `${perf.qualityFindings.remediated} remediados · ${perf.qualityFindings.closed} cerrados` },
+    { label: 'Acciones de remediación vencidas', value: perf.qualityFindings.overdueRemediationActions, sub: 'Requieren atención' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {cards.map(c => (
+          <div key={c.label} className="bg-white rounded-2xl border border-gray-200 p-4">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{c.label}</p>
+            <p className="text-2xl font-extrabold text-gray-800">{c.value}</p>
+            <p className="text-[11px] text-gray-400 mt-1">{c.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {Object.keys(perf.qualityFindings.byRootCauseCategory).length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Causas raíz por categoría</p>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(perf.qualityFindings.byRootCauseCategory).map(([cat, count]) => (
+              <span key={cat} className="text-xs font-medium bg-amber-50 text-amber-800 px-3 py-1.5 rounded-full">
+                {QAIP_ROOT_CAUSE_LABEL[cat as QaipRootCauseCategory] ?? cat}: {count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-gray-400" /> Hallazgos de Calidad</h3>
+        <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">
+          <Plus className="w-3.5 h-3.5" /> Nuevo hallazgo
+        </button>
+      </div>
+      <div className="space-y-3">
+        {findings?.map(f => <FindingCard key={f.id} finding={f} />)}
+        {findings?.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Sin hallazgos de calidad registrados.</p>}
+      </div>
+
+      {showNew && <NewFindingModal onClose={() => setShowNew(false)} />}
+    </div>
+  );
+}
+
 // ─── Página principal ────────────────────────────────────────────────────────
 export default function QaipPage() {
-  const [tab, setTab] = useState<QaipTrack | 'GOVERNANCE'>('IIA_INTERNAL');
+  const [tab, setTab] = useState<QaipTrack | 'GOVERNANCE' | 'FINDINGS'>('IIA_INTERNAL');
 
-  const tabs: Array<{ key: QaipTrack | 'GOVERNANCE'; label: string }> = [
+  const tabs: Array<{ key: QaipTrack | 'GOVERNANCE' | 'FINDINGS'; label: string }> = [
     { key: 'IIA_INTERNAL', label: QAIP_TRACK_LABEL.IIA_INTERNAL.label },
     { key: 'NIGC_EXTERNAL', label: QAIP_TRACK_LABEL.NIGC_EXTERNAL.label },
+    { key: 'FINDINGS', label: 'Hallazgos y Desempeño' },
     { key: 'GOVERNANCE', label: 'Independencia y Estatuto' },
   ];
 
@@ -468,7 +704,7 @@ export default function QaipPage() {
         ))}
       </div>
 
-      {tab === 'GOVERNANCE' ? <GovernancePanel /> : <TrackPanel track={tab} />}
+      {tab === 'GOVERNANCE' ? <GovernancePanel /> : tab === 'FINDINGS' ? <PerformancePanel /> : <TrackPanel track={tab} />}
     </div>
   );
 }

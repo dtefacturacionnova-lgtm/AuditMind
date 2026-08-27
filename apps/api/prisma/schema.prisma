@@ -446,6 +446,7 @@ model Organization {
   complianceAssessments  ComplianceAssessment[]
   normativeExceptions    NormativeException[]
   qaipAssessments        QaipAssessment[]
+  qaipFindings           QaipFinding[]
   auditCharters          AuditCharter[]
   committeeSession       CommitteeSession[]
   committeeReports       CommitteeReport[]
@@ -528,6 +529,8 @@ model User {
   createdClients             Client[]                  @relation("ClientCreator")
   decidedAcceptanceChecks    AcceptanceCheck[]
   decidedQaipAssessments     QaipAssessment[]
+  createdQaipFindings        QaipFinding[]
+  ownedQaipRemediations      QaipRemediationAction[]
   createdProposals           Proposal[]                @relation("ProposalCreator")
   createdEngagementLetters   EngagementLetter[]        @relation("EngagementLetterCreator")
   createdEngagements         Engagement[]              @relation("EngagementCreator")
@@ -2586,9 +2589,105 @@ model QaipAssessmentItem {
 
   assessment QaipAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   standard   QaipStandard   @relation(fields: [standardId], references: [id])
+  findings   QaipFinding[]
 
   @@unique([assessmentId, standardId])
   @@map("qaip_assessment_items")
+}
+
+// ─── QAIP V2 — Hallazgos, causa raíz y remediación ─────────────────────────
+// NIGC 1 componente 8 exige análisis de causa raíz OBLIGATORIO para toda
+// deficiencia — no es una mejor práctica, es texto de la norma. Un hallazgo
+// puede originarse en una autoevaluación (assessmentItemId), en una EQR
+// futura (engagementId — sin @relation todavía: EQR llega en V3, cuando
+// exista el modelo EngagementQualityReview que realmente lo produzca), en
+// el Comité, o ad-hoc.
+enum QaipFindingSource {
+  AUTOEVALUACION
+  EQR
+  COMITE
+  AD_HOC
+}
+
+enum QaipFindingStatus {
+  OPEN
+  REMEDIATED
+  CLOSED
+}
+
+model QaipFinding {
+  id               String            @id @default(cuid())
+  organizationId   String
+  track            QaipTrack
+  source           QaipFindingSource
+  assessmentItemId String?
+  engagementId     String? // sin @relation a propósito — ver comentario arriba
+  severity         FindingSeverity
+  description      String
+  status           QaipFindingStatus @default(OPEN)
+  createdById      String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assessmentItem      QaipAssessmentItem?     @relation(fields: [assessmentItemId], references: [id])
+  createdBy           User                     @relation(fields: [createdById], references: [id])
+  rootCauses           QaipRootCause[]
+  remediationActions   QaipRemediationAction[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("qaip_findings")
+}
+
+enum QaipRootCauseCategory {
+  COMPETENCIA
+  PRESION_TIEMPO
+  BRECHA_METODOLOGICA
+  SUPERVISION_INSUFICIENTE
+  TONO_DIRECCION
+  OTRO
+}
+
+// Por qué ocurrió, no solo qué ocurrió — 1:N con QaipFinding porque una
+// deficiencia puede tener más de una causa concurrente.
+model QaipRootCause {
+  id        String                 @id @default(cuid())
+  findingId String
+  category  QaipRootCauseCategory
+  analysis  String
+  createdAt DateTime               @default(now())
+
+  finding QaipFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@map("qaip_root_causes")
+}
+
+// Sin valor OVERDUE persistido a propósito: "vencido" se calcula en consulta
+// (status=OPEN AND dueDate < hoy) — mismo patrón que FindingAction, que
+// tampoco persiste ese estado.
+enum QaipRemediationStatus {
+  OPEN
+  DONE
+}
+
+model QaipRemediationAction {
+  id              String                @id @default(cuid())
+  findingId       String
+  description     String
+  ownerId         String
+  dueDate         DateTime
+  status          QaipRemediationStatus @default(OPEN)
+  closureEvidence String?
+  closedAt        DateTime?
+  createdAt       DateTime              @default(now())
+
+  finding QaipFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  owner   User        @relation(fields: [ownerId], references: [id])
+
+  @@index([findingId])
+  @@map("qaip_remediation_actions")
 }
 
 model IndependenceDeclaration {

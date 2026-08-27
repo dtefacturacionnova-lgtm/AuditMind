@@ -10,7 +10,7 @@ import { Header } from '@/components/layout/Header';
 import {
   useCommitteeDashboard, useCommitteePeriods, usePublishCommitteeSnapshot,
   type PeriodType, type EngagementState, type PlanExecutionItem, type ControlInternoGlobal,
-  type OrgProfitability,
+  type OrgProfitability, type QaipSummary,
 } from '@/hooks/useCommittee';
 import { useCommitteeDashboard as useCommitteeDashboardLegacy } from '@/hooks/useDashboard';
 import type { FirmDashboard } from '@/hooks/useCapacity';
@@ -176,6 +176,52 @@ function ControlInternoGlobalBanner({ cig }: { cig: ControlInternoGlobal }) {
   );
 }
 
+// ─── QAIP y Calidad — resultado del año del corte (IIA Std. 8.3) ─────────────
+const QAIP_RESULT_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
+  GREEN:   { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  YELLOW:  { bg: 'bg-amber-50',   border: 'border-amber-200',   text: 'text-amber-700',   dot: 'bg-amber-500' },
+  RED:     { bg: 'bg-red-50',     border: 'border-red-200',     text: 'text-red-700',     dot: 'bg-red-500' },
+  PENDING: { bg: 'bg-gray-50',    border: 'border-gray-200',    text: 'text-gray-500',    dot: 'bg-gray-300' },
+};
+const QAIP_RESULT_LABEL: Record<string, string> = { GREEN: 'Verde', YELLOW: 'Amarillo', RED: 'Rojo', PENDING: 'Pendiente' };
+const QAIP_TRACK_LABEL: Record<string, string> = { IIA_INTERNAL: 'Auditoría Interna (IIA)', NIGC_EXTERNAL: 'Auditoría Externa (NIGC 1/2)' };
+
+function QaipBanner({ qaip }: { qaip: QaipSummary }) {
+  if (qaip.tracks.length === 0) {
+    return (
+      <div className="rounded-2xl p-5 flex items-center gap-4 bg-gray-50 border border-gray-200 text-gray-400">
+        <Users2 className="w-8 h-8 shrink-0 opacity-40" />
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest">QAIP y Calidad — {qaip.year}</p>
+          <p className="text-sm mt-0.5">
+            Sin autoevaluación decidida para {qaip.year} todavía — ver <Link href="/dashboard/qaip" className="underline">QAIP y Calidad</Link>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5">
+      <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">QAIP y Calidad — {qaip.year} (IIA Std. 8.3)</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {qaip.tracks.map(t => {
+          const c = QAIP_RESULT_COLORS[t.overallResult] ?? QAIP_RESULT_COLORS.PENDING;
+          return (
+            <div key={t.track} className={`rounded-xl p-4 ${c.bg} border ${c.border}`}>
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} />
+                <p className={`text-sm font-bold ${c.text}`}>{QAIP_TRACK_LABEL[t.track] ?? t.track}: {QAIP_RESULT_LABEL[t.overallResult]}</p>
+              </div>
+              {t.overallJustification && <p className={`text-xs mt-1.5 ${c.text} opacity-80`}>{t.overallJustification}</p>}
+              <p className="text-[11px] text-gray-400 mt-1.5">Decidido por {t.decidedByName ?? '—'} el {formatDate(t.decidedAt)}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CommitteePage() {
@@ -324,6 +370,9 @@ export default function CommitteePage() {
 
         {/* ── Control Interno Global (COSO 2013) — al corte ────────────────── */}
         <ControlInternoGlobalBanner cig={data.controlInternoGlobal} />
+
+        {/* ── QAIP y Calidad — resultado del año del corte (IIA Std. 8.3) ──── */}
+        <QaipBanner qaip={data.qaip} />
 
         {/* ── KPI cards ───────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">

@@ -315,6 +315,33 @@ export class CommitteeService {
     };
   }
 
+  // ─── QAIP y Calidad — resumen para el reporte anual (IIA Std. 8.3) ────────
+  // A diferencia de controlInternoGlobal (que sí es "punto en el tiempo"),
+  // aquí sí importa el período: se busca la evaluación DECIDIDA cuyo `period`
+  // coincide con el año del corte — Std. 8.3 exige comunicación AL MENOS
+  // anual, no un estado "actual" ambiguo. Si el corte es MENSUAL/TRIMESTRAL,
+  // igual se busca por año (una autoevaluación QAIP es anual por diseño), así
+  // que puede repetirse entre varios cortes del mismo año — es lo correcto.
+  private async computeQaipSummary(orgId: string, year: number) {
+    const periodStr = String(year);
+    const assessments = await this.prisma.qaipAssessment.findMany({
+      where: { organizationId: orgId, period: periodStr, decidedAt: { not: null } },
+      select: {
+        id: true, track: true, kind: true, overallResult: true, overallJustification: true,
+        nextDueAt: true, decidedAt: true,
+        decidedBy: { select: { name: true } },
+      },
+    });
+    return {
+      year,
+      tracks: assessments.map(a => ({
+        track: a.track, kind: a.kind, overallResult: a.overallResult,
+        overallJustification: a.overallJustification, nextDueAt: a.nextDueAt,
+        decidedAt: a.decidedAt, decidedByName: a.decidedBy?.name ?? null,
+      })),
+    };
+  }
+
   // ─── Períodos disponibles para el selector ─────────────────────────────────
 
   async listPeriods(user: AuthUser, periodType: PeriodType) {
@@ -460,6 +487,7 @@ export class CommitteeService {
       ]);
 
     const controlInternoGlobal = await this.computeControlInternoGlobal(orgId);
+    const qaip = await this.computeQaipSummary(orgId, year);
 
     // Extensiones de rentabilidad/capacidad agregada (roadmap pendiente desde
     // 2026-08-23) — mismo dato ya expuesto en Cartera (por encargo) y en
@@ -519,6 +547,7 @@ export class CommitteeService {
       },
       openBySeverity: Object.fromEntries(openBySeverity.map((f: any) => [f.severity, f._count.id])),
       controlInternoGlobal,
+      qaip,
       orgProfitability,
       firmUtilization,
       planExecution,

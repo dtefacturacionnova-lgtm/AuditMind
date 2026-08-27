@@ -132,6 +132,22 @@ export interface OrgProfitability {
   totalMarginPct: number | null;
 }
 
+// QAIP y Calidad — resultado de la(s) autoevaluación(es) DECIDIDAS del año del
+// corte (Std. 8.3 del IIA: comunicación anual a junta/alta dirección).
+export interface QaipTrackSummary {
+  track: 'IIA_INTERNAL' | 'NIGC_EXTERNAL';
+  kind: 'AUTOEVALUACION' | 'EQA_EXTERNA' | 'SAIV';
+  overallResult: 'PENDING' | 'GREEN' | 'YELLOW' | 'RED';
+  overallJustification: string | null;
+  nextDueAt: string | null;
+  decidedAt: string;
+  decidedByName: string | null;
+}
+export interface QaipSummary {
+  year: number;
+  tracks: QaipTrackSummary[];
+}
+
 export interface CommitteeDashboard {
   riskPosture: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
   period: { key: string; type: PeriodType; label: string };
@@ -149,6 +165,7 @@ export interface CommitteeDashboard {
   };
   openBySeverity: Record<string, number>;
   controlInternoGlobal: ControlInternoGlobal;
+  qaip: QaipSummary;
   orgProfitability: OrgProfitability;
   firmUtilization: FirmDashboard;
   planExecution: PlanExecutionItem[];

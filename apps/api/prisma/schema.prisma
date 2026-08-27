@@ -322,10 +322,15 @@ enum ConfirmationStatus {
   ALT_PROCEDURE
 }
 
-enum QaipEvaluationType {
-  INTERNAL_CONTINUOUS
-  INTERNAL_PERIODIC
-  EXTERNAL
+enum QaipTrack {
+  IIA_INTERNAL   // Normas Globales de Auditoría Interna (IIA 2024), Dominio V
+  NIGC_EXTERNAL  // NIGC 1/2 (ISQM 1/2), obligatorias CVPCPA desde dic-2022
+}
+
+enum QaipAssessmentKind {
+  AUTOEVALUACION // Std. 12.1 (IIA) / evaluación anual del SGC (NIGC 1)
+  EQA_EXTERNA    // Std. 8.4 — evaluador externo certificado, cada 5 años
+  SAIV           // Std. 8.4 — autoevaluación con validación independiente
 }
 
 enum NotificationChannel {
@@ -440,7 +445,7 @@ model Organization {
   notifications          Notification[]
   complianceAssessments  ComplianceAssessment[]
   normativeExceptions    NormativeException[]
-  qaipEvaluations        QaipEvaluation[]
+  qaipAssessments        QaipAssessment[]
   auditCharters          AuditCharter[]
   committeeSession       CommitteeSession[]
   committeeReports       CommitteeReport[]
@@ -522,6 +527,7 @@ model User {
   costProfiles               UserCostProfile[]
   createdClients             Client[]                  @relation("ClientCreator")
   decidedAcceptanceChecks    AcceptanceCheck[]
+  decidedQaipAssessments     QaipAssessment[]
   createdProposals           Proposal[]                @relation("ProposalCreator")
   createdEngagementLetters   EngagementLetter[]        @relation("EngagementLetterCreator")
   createdEngagements         Engagement[]              @relation("EngagementCreator")
@@ -2516,24 +2522,73 @@ model NormativeException {
 }
 
 // ─── MÓDULO 13: QAIP ──────────────────────────────────────────────────────────
+// Dos tracks normativos paralelos sobre la misma maquinaria (ver
+// C:\Users\DELL\AppData\Local\Temp\claude\...\scratchpad\qaip_design.html,
+// artefacto publicado con la investigación): IIA_INTERNAL para departamentos
+// de Auditoría Interna (Normas Globales IIA 2024, Dominio V — Std. 8.3/8.4/
+// 12.1/12.2/12.3) y NIGC_EXTERNAL para despachos que auditan EEFF/Fiscal/AML
+// (NIGC 1/2 = ISQM 1/2, obligatorias CVPCPA desde encargos posteriores a
+// dic-2022). Un mismo despacho puede tener ambos tracks activos a la vez.
 
-model QaipEvaluation {
-  id             String             @id @default(cuid())
-  organizationId String
-  type           QaipEvaluationType
-  period         String // Q1-2026 | 2026 | etc.
-  results        Json               @default("{}")
-  overallScore   Int                @default(0) // 0-100
-  status         String             @default("IN_PROGRESS")
-  conductedBy    String
-  conductedAt    DateTime
-  nextDueAt      DateTime?
-  createdAt      DateTime           @default(now())
+model QaipStandard {
+  id        String    @id @default(cuid())
+  track     QaipTrack
+  code      String // "Std. 12.1", "NIGC1-C4"
+  component String // dominio/componente al que pertenece, para agrupar en la UI
+  title     String
+  guidance  String? // qué evidencia se espera para calificar este standard
+  sortOrder Int       @default(0)
+  active    Boolean   @default(true)
 
-  organization Organization @relation(fields: [organizationId], references: [id])
+  items QaipAssessmentItem[]
 
+  @@unique([track, code])
+  @@index([track])
+  @@map("qaip_standards")
+}
+
+// Evaluación de calidad de un track completo en un período — una autoevaluación
+// anual (Std. 12.1 / NIGC 1) o una evaluación externa (EQA/SAIV, Std. 8.4).
+// Mismo patrón que AcceptanceCheck: `decidedAt` nulo = en curso, no un campo
+// de status aparte.
+model QaipAssessment {
+  id                   String             @id @default(cuid())
+  organizationId       String
+  track                QaipTrack
+  kind                 QaipAssessmentKind @default(AUTOEVALUACION)
+  period               String // "2026"
+  assessorName         String? // solo EQA_EXTERNA/SAIV — evaluador independiente
+  overallResult        AcceptanceRating   @default(PENDING)
+  overallJustification String?
+  nextDueAt            DateTime? // próxima EQA (Std. 8.4: cada 5 años)
+  decidedById          String?
+  decidedAt            DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  decidedBy    User?                @relation(fields: [decidedById], references: [id])
+  items        QaipAssessmentItem[]
+
+  @@unique([organizationId, track, period])
   @@index([organizationId])
-  @@map("qaip_evaluations")
+  @@map("qaip_assessments")
+}
+
+// Una fila por standard calificado dentro de una QaipAssessment.
+model QaipAssessmentItem {
+  id           String           @id @default(cuid())
+  assessmentId String
+  standardId   String
+  rating       AcceptanceRating @default(PENDING)
+  evidence     String?
+  notes        String?
+
+  assessment QaipAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  standard   QaipStandard   @relation(fields: [standardId], references: [id])
+
+  @@unique([assessmentId, standardId])
+  @@map("qaip_assessment_items")
 }
 
 model IndependenceDeclaration {

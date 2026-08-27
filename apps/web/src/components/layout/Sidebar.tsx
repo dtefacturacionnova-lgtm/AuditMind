@@ -126,7 +126,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: Users2,
     children: [
       { label: 'Comité de Auditoría', href: '/dashboard/committee', icon: Users2 },
-      { label: 'QAIP y Calidad', href: '/dashboard/qaip', icon: BadgeCheck, phase: 'Fase 5' },
+      { label: 'QAIP y Calidad', href: '/dashboard/qaip', icon: BadgeCheck },
       { label: 'ESG / Sostenibilidad', href: '/dashboard/esg', icon: Leaf, phase: 'Fase 6' },
       { label: 'BCP / DRP', href: '/dashboard/bcp', icon: ServerCrash, phase: 'Fase 5' },
     ],

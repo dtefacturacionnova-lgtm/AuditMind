@@ -1,41 +1,47 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '../../../lib/supabase/client';
+import { createBrowserClient } from '@supabase/ssr';
 
 /**
  * Reemplaza el antiguo route.ts (servidor, solo sabía leer `?code=` — flujo
  * PKCE). Los links de invitación/recuperación generados por el admin (Supabase
  * Admin API, sin verificador PKCE del navegador) devuelven el token en el
  * FRAGMENTO de la URL (`#access_token=...&type=invite`), que nunca llega al
- * servidor — solo un componente cliente puede leerlo. Este componente cubre
- * AMBOS casos: `?code=` (magic link autoiniciado desde /login, ya funcionaba)
- * y `#access_token=` (invitación/recuperación generadas por un admin).
+ * servidor — solo un componente cliente puede leerlo.
+ *
+ * Usa un cliente Supabase propio con `detectSessionInUrl: false`: el cliente
+ * por defecto (`lib/supabase/client.ts`) procesa ese fragmento de forma
+ * automática y asíncrona apenas se instancia — eso genera una carrera real
+ * contra la lectura del `type` en este mismo componente (el SDK puede limpiar
+ * el hash antes de que alcancemos a leerlo), haciendo que una invitación real
+ * termine enrutada como un login cualquiera, sin pasar por /auth/set-password.
+ * Al desactivarlo, extraemos el token del hash a mano y llamamos setSession()
+ * nosotros mismos — sin ambigüedad de orden de ejecución.
  */
 export default function AuthCallbackPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [error, setError] = useState(false);
-  const handled = useRef(false);
 
   useEffect(() => {
-    if (handled.current) return;
-    handled.current = true;
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { detectSessionInUrl: false } },
+    );
 
     const params = new URLSearchParams(window.location.search);
     const next = params.get('next') ?? '/dashboard';
     const code = params.get('code');
 
-    // Leer el tipo ANTES de que el SDK procese y limpie el fragmento.
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const hashType = hashParams.get('type');
+    const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
     const isFirstTimeSetup = hashType === 'invite' || hashType === 'recovery';
 
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-
     const finish = (session: unknown) => {
-      if (timeout) clearTimeout(timeout);
       if (!session) {
         setError(true);
         return;
@@ -44,44 +50,24 @@ export default function AuthCallbackPage() {
     };
 
     if (code) {
+      // Magic-link autoiniciado desde /login ("Enlace mágico") — sí tenía
+      // verificador PKCE del navegador, viene como ?code=.
       supabase.auth.exchangeCodeForSession(code).then(({ data, error: exchangeError }) => {
-        if (exchangeError) {
-          setError(true);
-        } else {
-          finish(data.session);
-        }
+        if (exchangeError) setError(true); else finish(data.session);
       });
       return;
     }
 
-    if (window.location.hash.includes('access_token')) {
-      // `detectSessionInUrl` (activo por defecto) procesa el fragmento en
-      // segundo plano — esperamos el evento en vez de adivinar el timing.
-      const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
-          sub.subscription.unsubscribe();
-          finish(session);
-        }
-      });
-      // Por si la sesión ya estaba lista antes de suscribirnos.
-      supabase.auth.getSession().then(({ data }) => {
-        if (data.session) {
-          sub.subscription.unsubscribe();
-          finish(data.session);
-        }
-      });
-      timeout = setTimeout(() => {
-        sub.subscription.unsubscribe();
-        setError(true);
-      }, 8000);
-      return () => {
-        if (timeout) clearTimeout(timeout);
-        sub.subscription.unsubscribe();
-      };
+    if (accessToken && refreshToken) {
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(({ data, error: sessionError }) => {
+          if (sessionError) setError(true); else finish(data.session);
+        });
+      return;
     }
 
     setError(true);
-  }, [router, supabase]);
+  }, [router]);
 
   useEffect(() => {
     if (error) {

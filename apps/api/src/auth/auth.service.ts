@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -14,52 +14,74 @@ export class AuthService {
     );
   }
 
+  /** URL pública de la app — destino del link del correo de invitación. */
+  private get appUrl(): string {
+    return (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://auditoria.ianovatechsystems.com')
+      .replace(/\/+$/, '');
+  }
+
   async inviteUser(params: {
     email: string;
     name: string;
     role: string;
     organizationId: string;
   }) {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: params.email },
-    });
+    const email = params.email.trim().toLowerCase();
+
+    const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
-      throw new ConflictException(`El usuario ${params.email} ya existe`);
+      throw new ConflictException(`El usuario ${email} ya existe`);
     }
 
-    // Crea el usuario en Supabase Auth con el rol en app_metadata
-    const { data, error } = await this.supabaseAdmin.auth.admin.inviteUserByEmail(
-      params.email,
-      {
-        data: {
-          name: params.name,
-        },
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
-      },
-    );
+    // Crea el usuario en Supabase Auth con el rol en app_metadata.
+    // `redirectTo` va a /auth/callback: ahí el token del correo se convierte en
+    // sesión y, por ser una invitación, lleva a /auth/set-password.
+    const { data, error } = await this.supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      data: { name: params.name },
+      redirectTo: `${this.appUrl}/auth/callback`,
+    });
 
-    if (error) throw new UnauthorizedException(error.message);
+    if (error) {
+      // No es un 401 (sesión inválida): el correo ya existe en Auth o es inválido.
+      if (/already|registered|exists/i.test(error.message)) {
+        throw new ConflictException(`El correo ${email} ya está registrado en el sistema de autenticación`);
+      }
+      throw new BadRequestException(`No se pudo enviar la invitación: ${error.message}`);
+    }
+
+    // Si algo falla de aquí en adelante, se borra el usuario de Auth recién
+    // creado — si no, quedaría un huérfano que bloquea reintentar con ese correo.
+    const rollbackAuthUser = async () => {
+      await this.supabaseAdmin.auth.admin.deleteUser(data.user.id).catch(() => undefined);
+    };
 
     // Actualiza app_metadata con organization_id y role
-    await this.supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+    const { error: metaError } = await this.supabaseAdmin.auth.admin.updateUserById(data.user.id, {
       app_metadata: {
         organization_id: params.organizationId,
         role: params.role,
       },
     });
+    if (metaError) {
+      await rollbackAuthUser();
+      throw new BadRequestException(`No se pudo asignar el rol: ${metaError.message}`);
+    }
 
     // Crea el registro en nuestra tabla users
-    const user = await this.prisma.user.create({
-      data: {
-        supabaseUserId: data.user.id,
-        email: params.email,
-        name: params.name,
-        role: params.role as any,
-        organizationId: params.organizationId,
-      },
-    });
-
-    return user;
+    try {
+      return await this.prisma.user.create({
+        data: {
+          supabaseUserId: data.user.id,
+          email,
+          name: params.name,
+          role: params.role as any,
+          organizationId: params.organizationId,
+        },
+      });
+    } catch (err) {
+      await rollbackAuthUser();
+      throw err;
+    }
   }
 
   async updateUserRole(userId: string, newRole: string) {

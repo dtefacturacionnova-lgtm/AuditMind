@@ -9,7 +9,7 @@ import {
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
   Clock, CalendarClock, DollarSign, Handshake, CheckSquare, Wallet, Gauge, CalendarCheck,
-  Stamp, ShieldBan,
+  Stamp, ShieldBan, Landmark,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -27,6 +27,8 @@ interface NavItem {
   /** Restringe la visibilidad del grupo a una modalidad de auditoría específica.
    *  Sin este campo, el item siempre es visible (comportamiento actual). */
   module?: 'INTERNAL' | 'EXTERNAL';
+  /** Solo visible para el rol SUPER_ADMIN (administración de la plataforma, no de una organización). */
+  superAdminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -136,6 +138,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: Settings,
     children: [
       { label: 'Organización', href: '/dashboard/admin/organization', icon: Building2 },
+      { label: 'Organizaciones', href: '/dashboard/admin/organizations', icon: Landmark, superAdminOnly: true },
       { label: 'Usuarios', href: '/dashboard/admin/users', icon: Users2 },
       { label: 'Catálogos Generales', href: '/dashboard/admin/catalogs', icon: ListTree },
       { label: 'Plantillas de Índice', href: '/dashboard/admin/index-templates', icon: FolderOpen },
@@ -155,10 +158,21 @@ const NAV_ITEMS: NavItem[] = [
  * - `'INTERNAL'` → excluye los items etiquetados `module: 'EXTERNAL'`.
  * - `'EXTERNAL'` → excluye los items etiquetados `module: 'INTERNAL'`.
  */
-function getVisibleNavItems(items: NavItem[], modality: AuditModality | undefined): NavItem[] {
-  if (modality === undefined || modality === 'BOTH') return items;
-  const excluded: AuditModality = modality === 'INTERNAL' ? 'EXTERNAL' : 'INTERNAL';
-  return items.filter((item) => item.module !== excluded);
+function getVisibleNavItems(
+  items: NavItem[],
+  modality: AuditModality | undefined,
+  role: string | undefined,
+): NavItem[] {
+  const excluded: AuditModality | null =
+    modality === 'INTERNAL' ? 'EXTERNAL' : modality === 'EXTERNAL' ? 'INTERNAL' : null;
+
+  const filter = (list: NavItem[]): NavItem[] =>
+    list
+      .filter((item) => !(excluded && item.module === excluded))
+      .filter((item) => !item.superAdminOnly || role === 'SUPER_ADMIN')
+      .map((item) => (item.children ? { ...item, children: filter(item.children) } : item));
+
+  return filter(items);
 }
 
 function NavGroup({ item, depth = 0, pathname }: { item: NavItem; depth?: number; pathname: string }) {
@@ -226,7 +240,7 @@ export function Sidebar() {
   const { user, signOut } = useUser();
   const { organization } = useOrganization();
   const pathname = usePathname();
-  const visibleNavItems = getVisibleNavItems(NAV_ITEMS, organization?.auditModality);
+  const visibleNavItems = getVisibleNavItems(NAV_ITEMS, organization?.auditModality, user?.role);
 
   return (
     <aside className="flex h-screen w-60 flex-col overflow-hidden bg-[#0F2D4A] shadow-2xl">

@@ -8,6 +8,18 @@ require('dotenv').config({ path: '/home/deploy/auditmind/.env' });
 
 const e = process.env;
 
+// El pooler de Supabase (modo sesión, puerto 5432) tiene pool_size=15 COMPARTIDO
+// por todos los clientes de la base. Prisma abre por defecto (nº de CPUs*2 + 1)
+// conexiones — en este VPS eso son 15: auditmind-api se quedaba con TODO el
+// pool y nadie más (ai-service/RAG, scripts, desarrollo local) podía conectarse
+// (EMAXCONNSESSION → la búsqueda RAG devolvía 500 en producción). Se limita SOLO
+// para la API: no se toca el DATABASE_URL compartido porque asyncpg (ai-service)
+// rechaza parámetros de URL desconocidos como connection_limit.
+function withPoolLimit(url, limit) {
+  if (!url || /[?&]connection_limit=/.test(url)) return url;
+  return url + (url.includes('?') ? '&' : '?') + `connection_limit=${limit}`;
+}
+
 // Variables compartidas entre web y api
 const envBase = {
   NODE_ENV:                  'production',
@@ -60,6 +72,7 @@ module.exports = {
       script: 'dist/main.js',
       env: {
         ...envBase,
+        DATABASE_URL: withPoolLimit(e.DATABASE_URL, 8),
         PORT: 4003,
         // CORS: permite el frontend VPS
         APP_URL: 'https://auditoria.ianovatechsystems.com',

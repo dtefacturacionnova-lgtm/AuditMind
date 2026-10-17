@@ -1,6 +1,6 @@
 import {
   Injectable, CanActivate, ExecutionContext,
-  UnauthorizedException,
+  UnauthorizedException, ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { createClient } from '@supabase/supabase-js';
@@ -54,11 +54,23 @@ export class JwtAuthGuard implements CanActivate {
         organizationId: true,
         aiAssistantPersonality: true,
         active: true,
+        organization: { select: { active: true } },
       },
     });
 
     if (!dbUser || !dbUser.active) {
       throw new UnauthorizedException('Usuario no encontrado o inactivo');
+    }
+
+    // Desactivar una organización (Administración → Organizaciones) bloquea a
+    // TODOS sus usuarios. Antes `Organization.active` no se validaba en ningún
+    // lado: el botón "Desactivar" solo cambiaba la marca y la organización
+    // seguía trabajando con normalidad. SUPER_ADMIN queda exento: administra
+    // la plataforma y no debe quedar fuera si su propia organización se desactiva.
+    if (!dbUser.organization.active && dbUser.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'Tu organización está desactivada. Contacta al administrador de la plataforma.',
+      );
     }
 
     const authUser: AuthUser = {

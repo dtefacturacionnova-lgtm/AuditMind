@@ -297,8 +297,12 @@ export default function OrganizationsPage() {
 
   async function handleToggle(org: OrgRow) {
     const next = !org.active;
-    const verb = next ? 'activar' : 'desactivar';
-    if (!window.confirm(`¿Seguro que quieres ${verb} la organización "${org.name}"?`)) return;
+    const msg = next
+      ? `¿Reactivar la organización "${org.name}"? Sus usuarios podrán volver a entrar.`
+      : `¿Desactivar la organización "${org.name}"?
+
+Todos sus usuarios dejarán de poder usar AuditMind hasta que la reactives. Sus datos no se borran.`;
+    if (!window.confirm(msg)) return;
     try {
       await toggle.mutateAsync({ id: org.id, active: next });
       showToast('ok', `"${org.name}" ${next ? 'activada' : 'desactivada'}.`);

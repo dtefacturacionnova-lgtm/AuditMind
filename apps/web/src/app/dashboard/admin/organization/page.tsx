@@ -241,7 +241,7 @@ function OrganizationPageInner() {
   if (!hasRole(['ADMIN', 'CAE'])) {
     return (
       <div className="flex flex-col h-full">
-        <Header title="Organización" />
+        <Header title="Mi organización" />
         <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-6">
           <div className="p-4 bg-amber-50 rounded-full">
             <ShieldAlert className="h-10 w-10 text-amber-500" />
@@ -261,7 +261,7 @@ function OrganizationPageInner() {
   if (orgLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title="Organización" />
+        <Header title="Mi organización" />
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
         </div>
@@ -273,7 +273,7 @@ function OrganizationPageInner() {
   if (orgError || !org) {
     return (
       <div className="flex flex-col h-full">
-        <Header title="Organización" />
+        <Header title="Mi organización" />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
           <AlertCircle className="h-10 w-10 text-red-400" />
           <p className="text-sm font-medium text-gray-700">No se pudo cargar la organización.</p>
@@ -287,10 +287,10 @@ function OrganizationPageInner() {
   return (
     <div className="flex flex-col h-full">
       <Header
-        title="Organización"
+        title="Mi organización"
         breadcrumbs={[
           { label: 'Admin' },
-          { label: 'Organización' },
+          { label: 'Mi organización' },
         ]}
       />
 

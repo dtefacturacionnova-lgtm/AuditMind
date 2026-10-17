@@ -137,7 +137,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Administración',
     icon: Settings,
     children: [
-      { label: 'Organización', href: '/dashboard/admin/organization', icon: Building2 },
+      { label: 'Mi organización', href: '/dashboard/admin/organization', icon: Building2 },
       { label: 'Organizaciones', href: '/dashboard/admin/organizations', icon: Landmark, superAdminOnly: true },
       { label: 'Usuarios', href: '/dashboard/admin/users', icon: Users2 },
       { label: 'Catálogos Generales', href: '/dashboard/admin/catalogs', icon: ListTree },

@@ -73,7 +73,131 @@ interface RouteHelpEntry {
  *  entradas más específicas van primero para no perder contra un prefijo
  *  más corto (ej. "/dashboard/portfolio/profitability" antes que
  *  "/dashboard/portfolio"). */
+
+/** Coincide con la ruta exacta o con subrutas — `startsWith` a secas haría que
+ *  `/dashboard/admin/organization` capturara también `/dashboard/admin/organizations`. */
+const routeIs = (p: string, base: string) => p === base || p.startsWith(base + '/');
+
 const ROUTE_HELP: RouteHelpEntry[] = [
+  // ── Administración ───────────────────────────────────────────────────────
+  {
+    test: p => routeIs(p, '/dashboard/admin/organizations'),
+    topic: {
+      title: 'Organizaciones (solo Super Admin)',
+      body: [
+        'Una organización es un despacho o una empresa con su propio equipo: sus usuarios, auditorías, plantillas y datos están aislados de las demás.',
+        'NO crees una organización por cliente. Los clientes de un despacho van en Cartera de Clientes, dentro de la organización del despacho.',
+        'Crea otra organización solo para otro despacho o empresa con usuarios propios, o para separar un entorno de demo del real.',
+        'Al crearla puedes invitar a su primer administrador: recibe un correo y define su propia contraseña. Un correo solo puede pertenecer a una organización.',
+        '"Desactivar" bloquea el acceso de todos sus usuarios hasta que la reactives; no borra ningún dato.',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/organization'),
+    topic: {
+      title: 'Mi organización',
+      body: [
+        'Es el perfil de la organización a la que pertenece tu usuario: nombre, color, logotipo y los módulos que ve tu equipo (Interna, Externa o Ambas).',
+        'Cambiar la modalidad solo muestra u oculta menús del equipo; no borra ni mueve datos.',
+        'Para ver o crear otras organizaciones existe "Organizaciones", visible solo para el Super Admin de la plataforma.',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/users'),
+    topic: {
+      title: 'Usuarios',
+      body: [
+        'Aquí están las personas de TU organización. "Invitar usuario" envía un correo y la persona define su propia contraseña; nadie más la ve.',
+        'Un correo electrónico pertenece a una sola organización: quien trabaje en dos necesita un correo distinto en cada una.',
+        'Cambiar el rol o desactivar a alguien requiere ser Administrador. Desactivar no borra su trabajo previo.',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/catalogs'),
+    topic: {
+      title: 'Catálogos Generales',
+      body: [
+        'Listas propias de tu organización: la clasificación del organigrama (tipos de entidad) y las categorías de proceso.',
+        'Alimentan el Universo de Auditoría y los encargos. Cualquier auditor las consulta; crear, editar o borrar requiere ser Gerente de Auditoría o superior.',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/index-templates'),
+    topic: {
+      title: 'Plantillas de Índice',
+      body: [
+        'Definen la estructura de fases y carpetas del expediente de una auditoría (ej. "IIA Estándar", "Auditoría TI").',
+        'Se elige una al inicializar el expediente de un encargo. No confundir con "Plantillas de Auditoría", que definen QUÉ papeles de trabajo se crean.',
+        'Una sola plantilla puede ser la predeterminada de la organización. Crear y editar requiere ser Gerente de Auditoría o superior.',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/audit-templates'),
+    topic: {
+      title: 'Plantillas de Auditoría',
+      body: [
+        'Definen qué papeles de trabajo se crean automáticamente al iniciar un encargo, según su tipo (Interna, Financiera Externa, Fiscal, AML…), con sus secciones y vínculos entre papeles.',
+        'Las plantillas de sistema vienen precargadas y solo se pueden duplicar; trabaja sobre la copia para adaptarla a tu metodología.',
+        'No confundir con "Plantillas de Índice", que definen la estructura de carpetas del expediente.',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/content-library'),
+    topic: {
+      title: 'Biblioteca de Contenido',
+      body: [
+        'Textos reutilizables que alimentan los papeles: procedimientos sustantivos por área (C-01, C-02…) y preguntas COSO por componente.',
+        'Cualquier auditor las consulta; crear o editar requiere ser Gerente de Auditoría o superior. "Restaurar biblioteca" repone el contenido de sistema.',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/data-sources'),
+    topic: {
+      title: 'Conectores de Datos',
+      body: [
+        'Conectan fuentes de datos del cliente (SAP, APIs REST) o cargan archivos para alimentar los análisis CAATs.',
+        'Prueba cada conexión antes de importar; el resultado de cada importación queda registrado.',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/watchlists'),
+    topic: {
+      title: 'Listas de Sanciones',
+      body: [
+        'Copia local de OFAC, ONU y Reino Unido que usa el screening de PLD. Es la MISMA para todas las organizaciones.',
+        'Se actualiza sola cada noche y hay una verificación semanal que repara cualquier lista atrasada. Revisa la fecha de la última sincronización exitosa: si una lista está atrasada, el screening usa datos viejos.',
+        'Ver el estado requiere ser Administrador; lanzar una sincronización manual, ser Super Admin.',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/knowledge'),
+    topic: {
+      title: 'Base de Conocimiento',
+      body: [
+        'Son las leyes, normas y guías (NIA, IIA, NAIG, leyes tributarias, PLD…) que consultan los especialistas de IA para citar texto real.',
+        'Cada tipo de auditoría consulta su propio marco: Interna → IIA, Gubernamental → NAIG, Externa → CVPCPA, Fiscal y AML con sus leyes. No se mezclan.',
+        'Puedes cargar un documento en PDF o desde una URL; queda disponible cuando su estado pasa a "Listo".',
+      ],
+    },
+  },
+  {
+    test: p => routeIs(p, '/dashboard/admin/settings'),
+    topic: {
+      title: 'Configuración',
+      body: [
+        'Tu perfil personal, tus preferencias de IA y tus notificaciones. Lo que cambies aquí solo te afecta a ti, no al resto de la organización.',
+      ],
+    },
+  },
   {
     test: p => p.startsWith('/dashboard/portfolio/profitability'),
     topic: {

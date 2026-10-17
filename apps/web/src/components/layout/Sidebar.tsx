@@ -29,6 +29,8 @@ interface NavItem {
   module?: 'INTERNAL' | 'EXTERNAL';
   /** Solo visible para el rol SUPER_ADMIN (administración de la plataforma, no de una organización). */
   superAdminOnly?: boolean;
+  /** Explicación de una línea — se muestra como tooltip al pasar el mouse. */
+  hint?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -137,17 +139,17 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Administración',
     icon: Settings,
     children: [
-      { label: 'Mi organización', href: '/dashboard/admin/organization', icon: Building2 },
-      { label: 'Organizaciones', href: '/dashboard/admin/organizations', icon: Landmark, superAdminOnly: true },
-      { label: 'Usuarios', href: '/dashboard/admin/users', icon: Users2 },
-      { label: 'Catálogos Generales', href: '/dashboard/admin/catalogs', icon: ListTree },
-      { label: 'Plantillas de Índice', href: '/dashboard/admin/index-templates', icon: FolderOpen },
-      { label: 'Plantillas de Auditoría', href: '/dashboard/admin/audit-templates', icon: ClipboardList },
-      { label: 'Biblioteca de Contenido', href: '/dashboard/admin/content-library', icon: Library },
-      { label: 'Conectores de Datos', href: '/dashboard/admin/data-sources', icon: Plug },
-      { label: 'Listas de Sanciones', href: '/dashboard/admin/watchlists', icon: ShieldBan },
-      { label: 'Base de Conocimiento', href: '/dashboard/admin/knowledge', icon: BookOpen },
-      { label: 'Configuración', href: '/dashboard/admin/settings', icon: Settings },
+      { label: 'Mi organización', href: '/dashboard/admin/organization', icon: Building2, hint: 'Perfil de TU organización: nombre, color, logo y módulos (Interna / Externa).' },
+      { label: 'Organizaciones', href: '/dashboard/admin/organizations', icon: Landmark, superAdminOnly: true, hint: 'Todas las organizaciones de la plataforma (despachos o empresas). No es una por cliente.' },
+      { label: 'Usuarios', href: '/dashboard/admin/users', icon: Users2, hint: 'Las personas de tu organización: invitar, cambiar rol, desactivar.' },
+      { label: 'Catálogos Generales', href: '/dashboard/admin/catalogs', icon: ListTree, hint: 'Tipos de entidad y categorías de proceso propios de tu organización.' },
+      { label: 'Plantillas de Índice', href: '/dashboard/admin/index-templates', icon: FolderOpen, hint: 'Estructura de fases y carpetas del expediente de cada auditoría.' },
+      { label: 'Plantillas de Auditoría', href: '/dashboard/admin/audit-templates', icon: ClipboardList, hint: 'Qué papeles de trabajo se crean solos al iniciar un encargo, según su tipo.' },
+      { label: 'Biblioteca de Contenido', href: '/dashboard/admin/content-library', icon: Library, hint: 'Procedimientos y preguntas COSO reutilizables que alimentan los papeles.' },
+      { label: 'Conectores de Datos', href: '/dashboard/admin/data-sources', icon: Plug, hint: 'Conexión con SAP, APIs REST y carga de archivos para los análisis CAATs.' },
+      { label: 'Listas de Sanciones', href: '/dashboard/admin/watchlists', icon: ShieldBan, hint: 'OFAC, ONU y UK para el screening de PLD — la misma para todas las organizaciones.' },
+      { label: 'Base de Conocimiento', href: '/dashboard/admin/knowledge', icon: BookOpen, hint: 'Leyes, normas y guías que consultan los especialistas de IA.' },
+      { label: 'Configuración', href: '/dashboard/admin/settings', icon: Settings, hint: 'Tu perfil, preferencias de IA y notificaciones (solo te afecta a ti).' },
     ],
   },
 ];
@@ -186,6 +188,7 @@ function NavGroup({ item, depth = 0, pathname }: { item: NavItem; depth?: number
     return (
       <Link
         href={item.disabled ? '#' : (item.href as string)}
+        title={item.hint}
         className={cn(
           'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
           depth === 1 && 'ml-4 text-[13px]',

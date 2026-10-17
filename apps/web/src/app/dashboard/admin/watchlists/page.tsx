@@ -25,6 +25,18 @@ interface SyncStatusRow {
   sourceList: SourceList;
   lastSync: WatchlistSync | null;
   activeEntryCount: number;
+  /** Última sincronización EXITOSA (distinta de lastSync, que puede ser una corrida fallida). */
+  lastSuccessAt: string | null;
+  daysSinceSuccess: number | null;
+  /** Sin corrida exitosa en más de 3 días (o nunca): el screening usa datos viejos. */
+  isStale: boolean;
+}
+
+function freshnessLabel(row: SyncStatusRow): string {
+  if (row.lastSuccessAt === null || row.daysSinceSuccess === null) return 'Nunca se ha sincronizado con éxito';
+  const d = row.daysSinceSuccess;
+  const ago = d < 1 ? 'hoy' : d < 2 ? 'hace 1 día' : `hace ${Math.floor(d)} días`;
+  return `Última sincronización exitosa: ${ago} (${formatDate(row.lastSuccessAt)})`;
 }
 
 const SOURCE_LABELS: Record<SourceList, string> = {
@@ -109,6 +121,16 @@ export default function WatchlistsPage() {
                     <div>
                       <h3 className="text-sm font-bold text-gray-800">{SOURCE_LABELS[row.sourceList]}</h3>
                       <p className="text-xs text-gray-500 mt-0.5">{row.activeEntryCount.toLocaleString()} entradas activas</p>
+                      <p className={`text-xs mt-1 font-medium ${row.isStale ? 'text-red-600' : 'text-emerald-600'}`}>
+                        {row.isStale ? '⚠ Desactualizada — ' : '✓ Al día — '}
+                        {freshnessLabel(row)}
+                      </p>
+                      {row.isStale && (
+                        <p className="text-[11px] text-red-500 mt-0.5">
+                          El screening de sanciones está usando datos de esa fecha. Se reintenta cada noche y una verificación
+                          semanal la repara; un Super Admin puede forzarla con &quot;Sincronizar ahora&quot;.
+                        </p>
+                      )}
                     </div>
                     {style && (
                       <span className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${style.color}`}>

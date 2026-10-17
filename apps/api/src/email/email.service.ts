@@ -49,7 +49,11 @@ export class EmailService {
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     this.defaultFrom = this.config.get<string>('EMAIL_FROM', 'AuditMind <onboarding@resend.dev>');
-    this.appUrl      = this.config.get<string>('WEB_URL', 'http://localhost:3000');
+    // WEB_URL no existe en el env de producción (solo APP_URL, que sí define ecosystem.config.cjs):
+    // sin este fallback los links de los correos (CTA) saldrían como http://localhost:3000/...
+    this.appUrl      = (this.config.get<string>('WEB_URL')
+      ?? this.config.get<string>('APP_URL')
+      ?? 'http://localhost:3000').replace(/\/+$/, '');
     this.enabled     = !!apiKey;
 
     if (this.enabled) {

@@ -4,7 +4,7 @@
 
 | Fase | Estado |
 |---|---|
-| F1a · Infraestructura y bases | **Hecha en código (2026-10-18), 62 pruebas.** Falta aplicarla en producción: SQL → ClamAV → despliegue (§17) |
+| F1a · Infraestructura y bases | **Hecha y aplicada en producción (2026-10-18), 62 pruebas.** SQL aplicado, ClamAV en `127.0.0.1:3310` (EICAR detectado; no accesible desde internet), API desplegada con `trust proxy` y límite de intentos registrado. Verificado el código compilado contra el ClamAV real y el cifrado con la clave real del servidor |
 | F1b · F1c · F1d · F1e · F2 · F3 · F4 · F5 · F5b · F6 | Pendientes |
 
 Precisiones surgidas al construir F1a (el diseño no cambia, solo se concreta):

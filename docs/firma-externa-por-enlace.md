@@ -1,5 +1,19 @@
 # Firma electrónica simple por enlace externo — especificación completa
 
+## Estado de implementación
+
+| Fase | Estado |
+|---|---|
+| F1a · Infraestructura y bases | **Hecha en código (2026-10-18), 62 pruebas.** Falta aplicarla en producción: SQL → ClamAV → despliegue (§17) |
+| F1b · F1c · F1d · F1e · F2 · F3 · F4 · F5 · F5b · F6 | Pendientes |
+
+Precisiones surgidas al construir F1a (el diseño no cambia, solo se concreta):
+- El HMAC del código de verificación se calcula sobre `requestId:código` (no solo el código), así un código de una solicitud no sirve en otra.
+- Imagen→PDF de Stirling verificado con curl en el VPS (PNG y JPEG → `200 application/pdf`; un archivo falso → 500 con mensaje claro). El PDF resultante pasa por `sanitize-pdf`.
+- Pipeline de sellado verificado en el VPS con un certificado de organización generado por el código real (nombre con acento incluido): fusionar 2 PDF → `cert-sign` visible en la página 2 → `timestamp-pdf` con DigiCert **y** con Sectigo, ambos `200`.
+- `PdfToolsService` ahora corta las llamadas a Stirling a los 120 s (antes podían quedar colgadas).
+- Jest quedó configurado en `apps/api` (`jest.config.js`); las pruebas viven junto al código (`*.spec.ts`).
+
 **Versión 2 (2026-10-18).** Diseñada con **Opus** para que la implementación con **Sonnet** no tenga que tomar decisiones de diseño ni de seguridad. Si algo de este documento resulta imposible tal como está escrito, se detiene la implementación y se consulta. No se improvisa.
 
 ---

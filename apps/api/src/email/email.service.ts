@@ -314,6 +314,144 @@ export class EmailService {
     });
   }
 
+  // ─── Firma electrónica simple por enlace (docs/firma-externa-por-enlace.md §13) ─
+  // Todo valor que viene de un usuario o de un tercero se escapa con escHtml. El token va en el
+  // FRAGMENTO de la URL (#), nunca en la ruta ni en la query: no llega a logs ni a cabeceras Referer.
+
+  /** Enlace de firma. El token en claro solo existe en el correo y en esta URL. */
+  signUrl(token: string): string { return `${this.appUrl}/firmar#${token}`; }
+  /** Página pública de verificación de un documento firmado. */
+  verifyUrl(): string { return `${this.appUrl}/verificar`; }
+  panelUrl(path: string): string { return `${this.appUrl}${path.startsWith('/') ? path : `/${path}`}`; }
+
+  private signatureInvitation(
+    to: string,
+    p: { orgName: string; documentLabel: string; title: string; senderName: string; deadline: string; token: string; replyTo?: string },
+    reminder: boolean,
+  ) {
+    return this.send({
+      to,
+      replyTo: p.replyTo,
+      subject: `${reminder ? 'Recordatorio: firma pendiente' : 'Firma pendiente'}: ${p.title}`,
+      body: {
+        heading: reminder ? 'Te recordamos que tienes un documento por firmar' : 'Tienes un documento para firmar',
+        paragraphs: [
+          `<strong>${escHtml(p.orgName)}</strong> te envió el documento «${escHtml(p.title)}» (${escHtml(p.documentLabel)}) para tu firma electrónica.`,
+          `Enviado por: ${escHtml(p.senderName)}<br/>Fecha límite: <strong>${escHtml(p.deadline)}</strong>`,
+          'Por seguridad, antes de ver el documento te pediremos un código de verificación que enviaremos a este mismo correo. El enlace es personal: no lo compartas.',
+        ],
+        ctaLabel: 'Revisar y firmar',
+        ctaUrl: this.signUrl(p.token),
+      },
+    });
+  }
+
+  /** Invitación a firmar. */
+  sendSignatureRequest(
+    to: string,
+    p: { orgName: string; documentLabel: string; title: string; senderName: string; deadline: string; token: string; replyTo?: string },
+  ) {
+    return this.signatureInvitation(to, p, false);
+  }
+
+  /** Recordatorio (3 días antes del vencimiento): mismo enlace, no se rota el token. */
+  sendSignatureReminder(
+    to: string,
+    p: { orgName: string; documentLabel: string; title: string; senderName: string; deadline: string; token: string; replyTo?: string },
+  ) {
+    return this.signatureInvitation(to, p, true);
+  }
+
+  /** Código de verificación. El código va en el cuerpo, NUNCA en el asunto. */
+  sendSignatureOtp(to: string, p: { orgName: string; code: string }) {
+    return this.send({
+      to,
+      subject: 'Tu código de verificación de AuditMind',
+      body: {
+        heading: 'Tu código de verificación',
+        paragraphs: [
+          `Usa este código para continuar con la firma del documento de <strong>${escHtml(p.orgName)}</strong>:`,
+          `<span style="display:inline-block;font-size:30px;font-weight:700;letter-spacing:8px;color:#0F2D4A;">${escHtml(p.code)}</span>`,
+          'El código vence en 10 minutos. Si no lo pediste, ignora este correo: sin el código nadie puede ver ni firmar el documento.',
+        ],
+      },
+    });
+  }
+
+  /** Constancia para el firmante cuando su firma quedó registrada. */
+  sendSignatureCompleted(to: string, p: { orgName: string; title: string; verificationCode: string; signedAt: string }) {
+    return this.send({
+      to,
+      subject: `Tu firma quedó registrada: ${p.title}`,
+      body: {
+        heading: 'Tu firma quedó registrada',
+        paragraphs: [
+          `Firmaste «${escHtml(p.title)}» de <strong>${escHtml(p.orgName)}</strong> el ${escHtml(p.signedAt)}.`,
+          `Código de verificación del documento:<br/><span style="font-size:20px;font-weight:700;letter-spacing:2px;color:#0F2D4A;">${escHtml(p.verificationCode)}</span>`,
+          'Puedes descargar una copia firmada desde el mismo enlace que recibiste, durante los próximos 30 días (se te pedirá un código de verificación). Cualquier persona puede comprobar la autenticidad del documento con el código de arriba.',
+        ],
+        ctaLabel: 'Verificar documento',
+        ctaUrl: this.verifyUrl(),
+      },
+    });
+  }
+
+  /** Aviso al equipo cuando el firmante firma o rechaza. */
+  sendSignatureOutcome(
+    to: string,
+    p: { title: string; signerName: string; signerEmail: string; outcome: 'SIGNED' | 'DECLINED'; reason?: string; panelPath: string },
+  ) {
+    const signed = p.outcome === 'SIGNED';
+    return this.send({
+      to,
+      subject: `${signed ? 'Firma recibida' : 'Firma rechazada'}: ${p.title}`,
+      body: {
+        heading: signed ? 'Se recibió una firma' : 'El firmante rechazó firmar',
+        paragraphs: [
+          `<strong>${escHtml(p.signerName)}</strong> (${escHtml(p.signerEmail)}) ${signed ? 'firmó' : 'no firmó'} «${escHtml(p.title)}».`,
+          ...(!signed && p.reason ? [`<strong>Motivo:</strong> ${escHtml(p.reason)}`] : []),
+          ...(signed ? ['El documento se está sellando; en unos minutos tendrás la copia firmada disponible.'] : []),
+        ],
+        ctaLabel: 'Ver en AuditMind',
+        ctaUrl: this.panelUrl(p.panelPath),
+      },
+    });
+  }
+
+  /** El sellado falló tras todos los reintentos. */
+  sendSignatureSealFailed(to: string, p: { title: string; panelPath: string }) {
+    return this.send({
+      to,
+      subject: `Acción requerida: sellado pendiente de «${p.title}»`,
+      body: {
+        heading: 'No se pudo sellar el documento firmado',
+        paragraphs: [
+          `La firma de «${escHtml(p.title)}» quedó registrada, pero no se pudo generar el PDF sellado después de varios intentos.`,
+          'Abre el documento en AuditMind y usa «Reintentar sellado». Si el problema persiste, avisa al administrador.',
+        ],
+        ctaLabel: 'Abrir en AuditMind',
+        ctaUrl: this.panelUrl(p.panelPath),
+      },
+    });
+  }
+
+  /** El PDF original cambió después de enviarse: la firma se detuvo. */
+  sendSignatureIntegrityAlert(to: string, p: { title: string; panelPath: string }) {
+    return this.send({
+      to,
+      subject: `Alerta de integridad: «${p.title}»`,
+      body: {
+        heading: 'El documento no pudo verificarse',
+        paragraphs: [
+          `Alguien intentó firmar «${escHtml(p.title)}», pero la huella del PDF guardado no coincide con la que se calculó al enviarlo, así que la firma no se aceptó.`,
+          'Revisa el documento y la bitácora en AuditMind; revoca la solicitud y envía una nueva.',
+        ],
+        ctaLabel: 'Abrir en AuditMind',
+        ctaUrl: this.panelUrl(p.panelPath),
+      },
+    });
+  }
+
   /** Email de prueba — útil para verificar configuración */
   async sendTestEmail(to: string) {
     return this.send({

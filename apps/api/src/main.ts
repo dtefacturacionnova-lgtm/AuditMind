@@ -1,11 +1,18 @@
 import { NestFactory, Reflector } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // nginx (mismo VPS) agrega la IP real del cliente a X-Forwarded-For. Con 'loopback' Express confía
+  // SOLO en ese salto: req.ip es la IP real y un valor falso metido por el cliente queda a la izquierda y
+  // se ignora. Sin esto, req.ip sería siempre 127.0.0.1: el límite de intentos bloquearía a todos a la
+  // vez y la evidencia de las firmas guardaría una IP inútil (docs/firma-externa-por-enlace.md §7).
+  app.set('trust proxy', 'loopback');
 
   // Sin esto, Nest nunca dispara los hooks onModuleDestroy (ej. PrismaService)
   // al recibir SIGTERM/SIGINT — la conexión a Postgres queda huérfana en el

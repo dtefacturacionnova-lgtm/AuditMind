@@ -48,6 +48,8 @@ import { TimesheetModule } from './timesheet/timesheet.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
 import { WatchlistsModule } from './watchlists/watchlists.module';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { SignaturesModule } from './signatures/signatures.module';
 
 @Module({
   imports: [
@@ -97,6 +99,10 @@ import { WatchlistsModule } from './watchlists/watchlists.module';
     PortfolioModule,
     AdminTasksModule,
     WatchlistsModule,
+    // Límite de intentos: ThrottlerModule es global, pero NO hay guard global — cada controlador
+    // público aplica PublicThrottlerGuard con sus @Throttle (ver signatures/public-throttle.ts).
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
+    SignaturesModule,
   ],
   providers: [
     // Guards globales — aplican a todos los endpoints excepto los @Public()

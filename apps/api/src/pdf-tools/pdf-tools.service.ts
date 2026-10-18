@@ -19,7 +19,8 @@ export class PdfToolsService {
   private async callStirlingRaw(path: string, formData: FormData): Promise<{ buffer: Buffer; contentType: string }> {
     let res: Response;
     try {
-      res = await fetch(`${this.stirlingPdfUrl}${path}`, { method: 'POST', body: formData });
+      // Tiempo máximo: una llamada colgada a Stirling bloquearía peticiones (incluidas las públicas de firma).
+      res = await fetch(`${this.stirlingPdfUrl}${path}`, { method: 'POST', body: formData, signal: AbortSignal.timeout(120_000) });
     } catch (err) {
       this.logger.error(`No se pudo contactar Stirling-PDF en ${this.stirlingPdfUrl}: ${err}`);
       throw new HttpException('Servicio de herramientas PDF no disponible', HttpStatus.BAD_GATEWAY);
@@ -220,6 +221,24 @@ export class PdfToolsService {
   // meta estricta acá — su default real (25KB) destruiría la calidad de
   // cualquier documento real. Se manda generoso; optimizeLevel (1-9) es el
   // control real de cuánto comprimir.
+  // ─── Imagen → PDF (adjuntos de terceros, docs/firma-externa-por-enlace.md §12) ─
+  // Reconstruye una imagen como PDF nuevo: el resultado no arrastra metadatos EXIF ni
+  // estructuras del archivo original. Verificado con curl contra Stirling (PNG y JPEG →
+  // 200 application/pdf). Se mandan SIEMPRE los 4 campos (lección del NPE de watermark).
+  async imageToPdf(
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: 'image/png' | 'image/jpeg',
+    opts: { fitOption?: 'fillPage' | 'fitDocumentToImage' | 'maintainAspectRatio'; colorType?: 'color' | 'greyscale' | 'blackwhite' } = {},
+  ): Promise<Buffer> {
+    const formData = new FormData();
+    formData.append('fileInput', new Blob([new Uint8Array(fileBuffer)], { type: mimeType }), filename);
+    formData.append('fitOption', opts.fitOption ?? 'maintainAspectRatio');
+    formData.append('colorType', opts.colorType ?? 'color');
+    formData.append('autoRotate', 'false');
+    return this.callStirling('/api/v1/convert/img/pdf', formData);
+  }
+
   async compressPdf(
     fileBuffer: Buffer,
     filename: string,

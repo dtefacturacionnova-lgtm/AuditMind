@@ -471,6 +471,12 @@ model Organization {
   engagementLetters      EngagementLetter[]
   engagements            Engagement[]
   adminTasks             AdminTask[]
+  signatureRequests      SignatureRequest[]
+
+  // Sello de evidencia de la firma por enlace (docs/firma-externa-por-enlace.md §10)
+  sealCertPem      String?
+  sealKeyEncrypted String?
+  sealCreatedAt    DateTime?
 
   @@map("organizations")
 }
@@ -535,6 +541,7 @@ model User {
   eqrCompleted               EngagementQualityReview[] @relation("EqrCompletedBy")
   createdProposals           Proposal[]                @relation("ProposalCreator")
   createdEngagementLetters   EngagementLetter[]        @relation("EngagementLetterCreator")
+  signatureRequestsCreated   SignatureRequest[]        @relation("SignatureRequestCreator")
   createdEngagements         Engagement[]              @relation("EngagementCreator")
   assignedAdminTasks         AdminTask[]               @relation("AdminTaskAssignee")
   createdAdminTasks          AdminTask[]               @relation("AdminTaskCreator")
@@ -1376,6 +1383,7 @@ model Audit {
   dataAnalysisJobs      DataAnalysisJob[]
   auditReports          AuditReport[]
   externalConfirmations ExternalConfirmation[]
+  signatureRequests     SignatureRequest[]
   bcpAudit              BcpAudit?
   connectorImports      ConnectorImport[]
   requestDocuments      AuditRequestDocument[]
@@ -3213,4 +3221,190 @@ model AdminTask {
   @@index([organizationId, status])
   @@index([assignedToId])
   @@map("admin_tasks")
+}
+
+// ─── FIRMA ELECTRÓNICA SIMPLE POR ENLACE EXTERNO ──────────────────────────────
+// Especificación: docs/firma-externa-por-enlace.md. SQL: infrastructure/db-migrations/2026-10-firma-externa.sql
+// (NO usar `prisma db push`: intenta borrar rag_chunks/rag_documents).
+
+enum SignatureDocumentType {
+  ENGAGEMENT_LETTER
+  EXTERNAL_CONFIRMATION
+  INTERVIEW_RECORD
+}
+
+enum SignatureRequestStatus {
+  PENDING
+  VIEWED
+  SIGNED
+  DECLINED
+  REVOKED
+  EXPIRED
+}
+
+enum SignatureSealStatus {
+  NOT_APPLICABLE
+  PENDING
+  SEALED
+  FAILED
+}
+
+enum SignatureEventType {
+  CREATED
+  SENT
+  RESENT
+  REMINDER_SENT
+  OTP_SENT
+  OTP_FAILED
+  OTP_LOCKED
+  SESSION_STARTED
+  VIEWED
+  ATTACHMENT_ACCEPTED
+  ATTACHMENT_REJECTED
+  SIGNED
+  DECLINED
+  REVOKED
+  EXPIRED
+  SEALED
+  SEAL_FAILED
+  TARGET_UPDATED
+  INTEGRITY_FAILED
+}
+
+enum SignatureAttachmentScan {
+  CLEAN
+  INFECTED
+  ERROR
+}
+
+model SignatureRequest {
+  id              String                 @id @default(cuid())
+  organizationId  String
+  auditId         String? // null en la carta (vive a nivel de cliente)
+  documentType    SignatureDocumentType
+  targetId        String // EngagementLetter.id | ExternalConfirmation.id | WorkingPaper.id
+  title           String
+  signerName      String
+  signerEmail     String
+  signerRole      String?
+  payload         Json                   @default("{}")
+  // enlace
+  tokenHash       String                 @unique // sha256(token) hex — para buscar
+  tokenEncrypted  String // AES-256-GCM con ENCRYPTION_KEY — solo para el recordatorio
+  expiresAt       DateTime
+  status          SignatureRequestStatus @default(PENDING)
+  lockedUntil     DateTime?
+  // código de verificación
+  otpHash         String?
+  otpExpiresAt    DateTime?
+  otpAttempts     Int                    @default(0)
+  otpFailuresHour Int                    @default(0)
+  otpWindowStart  DateTime?
+  otpSentCount    Int                    @default(0)
+  otpLastSentAt   DateTime?
+  otpVerifiedAt   DateTime?
+  // documento congelado
+  documentPath    String
+  documentSha256  String
+  documentPages   Int?
+  // firma
+  consentVersion  String?
+  consentText     String?
+  signedName      String?
+  signedRole      String?
+  response        Json?
+  declineReason   String?
+  signedAt        DateTime?
+  viewedAt        DateTime?
+  signerIp        String?
+  signerUserAgent String?
+  // sello
+  verificationCode String?               @unique
+  sealStatus       SignatureSealStatus   @default(NOT_APPLICABLE)
+  sealAttempts     Int                   @default(0)
+  sealedAt         DateTime?
+  tsaUrlUsed       String?
+  signedPdfPath    String?
+  signedPdfSha256  String?
+  eventsHeadHash   String?
+  // envío
+  sentAt          DateTime?
+  sendCount       Int                    @default(0)
+  reminderEnabled Boolean                @default(true)
+  reminderSentAt  DateTime?
+  createdById     String
+  revokedAt       DateTime?
+  revokedById     String?
+  revokedReason   String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  audit        Audit?                @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  createdBy    User                  @relation("SignatureRequestCreator", fields: [createdById], references: [id])
+  events       SignatureEvent[]
+  sessions     SignatureSession[]
+  attachments  SignatureAttachment[]
+
+  @@index([organizationId])
+  @@index([documentType, targetId])
+  @@index([status, expiresAt])
+  @@index([sealStatus])
+  @@map("signature_requests")
+}
+
+model SignatureSession {
+  id        String    @id @default(cuid())
+  requestId String
+  tokenHash String    @unique
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  request SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("signature_sessions")
+}
+
+model SignatureEvent {
+  id        String             @id @default(cuid())
+  requestId String
+  seq       Int
+  type      SignatureEventType
+  at        DateTime           @default(now())
+  ip        String?
+  userAgent String?
+  actorId   String?
+  detail    Json?
+  prevHash  String
+  hash      String
+
+  request SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, seq])
+  @@map("signature_events")
+}
+
+model SignatureAttachment {
+  id             String                  @id @default(cuid())
+  requestId      String
+  originalName   String
+  detectedType   String
+  sizeBytes      Int
+  originalSha256 String
+  quarantinePath String
+  safePath       String?
+  safeSha256     String?
+  scanStatus     SignatureAttachmentScan
+  scanSignature  String?
+  submitted      Boolean                 @default(false)
+  createdAt      DateTime                @default(now())
+
+  request SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("signature_attachments")
 }

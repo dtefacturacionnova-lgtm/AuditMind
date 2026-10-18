@@ -1,0 +1,35 @@
+# ClamAV — antivirus para los adjuntos que suben terceros desde el enlace de firma
+# (confirmaciones externas). Ver docs/firma-externa-por-enlace.md §12.
+#
+# IMPORTANTE — aislamiento de red: el puerto se publica SOLO en 127.0.0.1.
+# Nunca cambiar "127.0.0.1:3310:3310" por "3310:3310" a secas: clamd no tiene
+# autenticación y expondría el servicio en la interfaz pública del VPS.
+# Mismo criterio que Stirling-PDF (8090) y ai-service (8003).
+#
+# Ciclo de vida INDEPENDIENTE de deploy/deploy.sh — se levanta/actualiza a mano:
+#   docker compose -f infrastructure/clamav/docker-compose.yml pull
+#   docker compose -f infrastructure/clamav/docker-compose.yml up -d
+#
+# Primer arranque: descarga las firmas de virus (varios minutos). El contenedor queda
+# "healthy" cuando clamd responde. Las firmas se guardan en ./data para no volver a
+# bajarlas en cada reinicio; freshclam las actualiza solo.
+#
+# Verificación obligatoria tras instalarlo (la cadena EICAR es inofensiva y debe salir FOUND):
+#   printf 'X5O!P%%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' | \
+#     docker exec -i auditmind-clamav clamdscan --stream -
+#   → "stream: Win.Test.EICAR_HDB-1 FOUND"
+
+services:
+  clamav:
+    image: clamav/clamav:stable
+    container_name: auditmind-clamav
+    ports:
+      - '127.0.0.1:3310:3310'
+    volumes:
+      - ./data:/var/lib/clamav
+    environment:
+      - CLAMAV_NO_FRESHCLAMD=false
+      - CLAMAV_NO_CLAMD=false
+    # clamd carga ~1.5 GB de firmas en memoria; el VPS tiene 32 GB.
+    mem_limit: 3g
+    restart: unless-stopped

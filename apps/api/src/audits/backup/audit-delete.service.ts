@@ -80,7 +80,7 @@ export class AuditDeleteService {
     //    contienen todavía existen.
     const { data, conteoPorModelo, totalFilas, advertencias: advertenciasExport } =
       await this.exportSvc.exportarEncargo(auditId, user);
-    const rutas = this.filesSvc.extraerRutasDeArchivo(data);
+    const rutas = this.filesSvc.extraerRutasDeArchivo(data, auditId);
 
     // 2. Desvincular (NUNCA borrar) cualquier Engagement de Cartera que
     //    apunte a este encargo — el registro comercial (Cliente → Radar de

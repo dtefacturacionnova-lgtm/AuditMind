@@ -49,8 +49,8 @@ export class AuditProjectsController {
   @Get(':id')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Get single audit project' })
-  findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.findOne(id, user);
   }
 
   @Post()
@@ -63,14 +63,14 @@ export class AuditProjectsController {
   @Patch(':id')
   @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Update audit project' })
-  update(@Param('id') id: string, @Body() dto: UpdateAuditProjectDto) {
-    return this.service.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateAuditProjectDto, @CurrentUser() user: AuthUser) {
+    return this.service.update(id, dto, user);
   }
 
   @Delete(':id')
   @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Delete audit project' })
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.remove(id, user);
   }
 }

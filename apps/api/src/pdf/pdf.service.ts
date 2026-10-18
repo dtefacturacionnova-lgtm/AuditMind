@@ -8,6 +8,7 @@
  * - Templates HTML se mantienen separados en pdf-templates.ts.
  */
 import { Injectable, Logger, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
+import { isPublicHost } from '../common/utils/ssrf.util';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Browser = any;
@@ -138,6 +139,28 @@ export class PdfService implements OnModuleDestroy {
     const page = await browser.newPage();
 
     try {
+      // SSRF: el HTML trae contenido del usuario (títulos, textos de papeles).
+      // Chromium solo puede cargar data:/about: y hosts PÚBLICOS por http(s) —
+      // nunca 127.0.0.1 (ai-service, Stirling, la propia API), redes privadas
+      // ni metadatos de la nube. Logos/fuentes externos públicos siguen
+      // funcionando.
+      await page.setRequestInterception(true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      page.on('request', (req: any) => {
+        void (async () => {
+          try {
+            const u = req.url();
+            if (u.startsWith('data:') || u.startsWith('about:')) return await req.continue();
+            const parsed = new URL(u);
+            const permitido = (parsed.protocol === 'https:' || parsed.protocol === 'http:')
+              && await isPublicHost(parsed.hostname);
+            return permitido ? await req.continue() : await req.abort('blockedbyclient');
+          } catch {
+            await req.abort('blockedbyclient').catch(() => undefined);
+          }
+        })();
+      });
+
       await page.setContent(html, {
         waitUntil: 'load',
         timeout:   30_000,
@@ -198,7 +221,7 @@ export class PdfService implements OnModuleDestroy {
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>${opts.title}</title>
+  <title>${escFooter(opts.title)}</title>
   <style>
     @page { size: A4; }
     * { box-sizing: border-box; }
@@ -278,8 +301,8 @@ export class PdfService implements OnModuleDestroy {
 <body>
   <header class="pdf-header">
     <div class="brand">AuditMind · Plataforma de Auditoría Inteligente</div>
-    <div class="title">${opts.title}</div>
-    ${opts.subtitle ? `<div class="subtitle">${opts.subtitle}</div>` : ''}
+    <div class="title">${escFooter(opts.title)}</div>
+    ${opts.subtitle ? `<div class="subtitle">${escFooter(opts.subtitle)}</div>` : ''}
   </header>
   <main class="pdf-body">
     ${opts.body}

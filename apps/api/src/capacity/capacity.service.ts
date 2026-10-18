@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { Prisma, TimeEntryCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInOrg } from '../common/utils/tenant.util';
 import {
   CreateHolidayDto, UpdateHolidayDto,
   CreateAvailabilityProfileDto, UpdateAvailabilityProfileDto,
@@ -126,6 +127,7 @@ export class CapacityService {
   }
 
   async upsertAvailabilityProfile(dto: CreateAvailabilityProfileDto, user: AuthUser) {
+    await assertInOrg(this.prisma.user, dto.userId, { organizationId: user.organizationId }, 'El usuario');
     const workingDaysPerWeek = dto.workingDaysPerWeek ?? 5;
     const standardDailyHours = dto.standardDailyHours ?? 8;
     const annualVacationDays = dto.annualVacationDays ?? 15;
@@ -289,6 +291,7 @@ export class CapacityService {
   }
 
   async createCostProfile(dto: CreateCostProfileDto, user: AuthUser) {
+    await assertInOrg(this.prisma.user, dto.userId, { organizationId: user.organizationId }, 'El usuario');
     const [availabilityProfile, existingCostProfile] = await Promise.all([
       this.prisma.userAvailabilityProfile.findUnique({
         where: {

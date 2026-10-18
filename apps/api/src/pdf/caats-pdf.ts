@@ -89,7 +89,7 @@ function findingsSection(findings: FindingLike[]): string {
       <div class="no-break" style="border:1px solid #E2E8F0;border-radius:2mm;padding:4mm;margin:3mm 0;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <strong style="font-size:10.5pt;color:#1a202c;">${esc(TEST_NAME_LABELS[f.test_name] ?? f.test_name)}</strong>
-          <span class="badge ${RISK_BADGE[f.risk_level] ?? 'badge-info'}">${esc(RISK_LABEL[f.risk_level] ?? f.risk_level)} · ${f.record_count} registro(s)</span>
+          <span class="badge ${RISK_BADGE[f.risk_level] ?? 'badge-info'}">${esc(RISK_LABEL[f.risk_level] ?? f.risk_level)} · ${esc(f.record_count)} registro(s)</span>
         </div>
         <p class="text-small" style="margin-top:2mm;color:#4A5568;">${esc(f.description)}</p>
         ${cols.length > 0 ? `

@@ -30,15 +30,15 @@ export class StrategicController {
   @Patch('objectives/:id')
   @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Actualizar objetivo estratégico' })
-  updateObjective(@Param('id') id: string, @Body() dto: UpdateObjectiveDto) {
-    return this.service.updateObjective(id, dto);
+  updateObjective(@Param('id') id: string, @Body() dto: UpdateObjectiveDto, @CurrentUser() user: AuthUser) {
+    return this.service.updateObjective(id, dto, user);
   }
 
   @Delete('objectives/:id')
   @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Eliminar objetivo estratégico' })
-  deleteObjective(@Param('id') id: string) {
-    return this.service.deleteObjective(id);
+  deleteObjective(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.deleteObjective(id, user);
   }
 
   @Post('lines')
@@ -51,14 +51,14 @@ export class StrategicController {
   @Patch('lines/:id')
   @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Actualizar línea estratégica' })
-  updateLine(@Param('id') id: string, @Body() dto: UpdateLineDto) {
-    return this.service.updateLine(id, dto);
+  updateLine(@Param('id') id: string, @Body() dto: UpdateLineDto, @CurrentUser() user: AuthUser) {
+    return this.service.updateLine(id, dto, user);
   }
 
   @Delete('lines/:id')
   @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Eliminar línea estratégica' })
-  deleteLine(@Param('id') id: string) {
-    return this.service.deleteLine(id);
+  deleteLine(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.deleteLine(id, user);
   }
 }

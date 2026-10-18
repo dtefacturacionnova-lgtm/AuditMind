@@ -41,7 +41,7 @@ export class AuditBackupService {
     const t0 = Date.now();
     const exportado = await this.exportSvc.exportarEncargo(auditId, user);
 
-    const rutas = this.filesSvc.extraerRutasDeArchivo(exportado.data);
+    const rutas = this.filesSvc.extraerRutasDeArchivo(exportado.data, auditId);
     const { archivos, advertencias: advertenciasArchivos } = await this.filesSvc.descargarArchivos(rutas);
 
     const manifest = construirBackupManifest(this.manifestSecret, {

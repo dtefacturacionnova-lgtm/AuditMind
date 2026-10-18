@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { PerformanceService } from './performance.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 @ApiTags('QAIP y Calidad')
 @ApiBearerAuth()
@@ -11,6 +13,7 @@ export class PerformanceController {
   constructor(private readonly service: PerformanceService) {}
 
   @Get('performance')
+  @Roles(UserRole.AUDITOR)
   @ApiQuery({ name: 'year', required: false })
   @ApiOperation({ summary: 'Tablero de KPIs de desempeño (Std. 12.2) — calculado, sin datos nuevos del usuario' })
   getDashboard(@Query('year') year: string | undefined, @CurrentUser() user: AuthUser) {

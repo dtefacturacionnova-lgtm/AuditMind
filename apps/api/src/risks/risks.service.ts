@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInOrg } from '../common/utils/tenant.util';
 import {
   IsString, IsOptional, IsInt, Min, Max, IsIn, IsArray,
 } from 'class-validator';
@@ -101,6 +102,7 @@ export class RisksService {
   }
 
   async create(dto: CreateRiskDto, user: AuthUser) {
+    await assertInOrg(this.prisma.auditEntity, dto.auditEntityId, { organizationId: user.organizationId }, 'La entidad');
     const inherentScore = dto.probability * dto.impact;
     const residualScore = calcResidual(inherentScore, dto.controlsScore);
 
@@ -128,6 +130,7 @@ export class RisksService {
 
   async update(id: string, dto: UpdateRiskDto, user: AuthUser) {
     const existing = await this.findOne(id, user);
+    await assertInOrg(this.prisma.auditEntity, dto.auditEntityId, { organizationId: user.organizationId }, 'La entidad');
 
     const probability = dto.probability ?? existing.probability;
     const impact      = dto.impact      ?? existing.impact;

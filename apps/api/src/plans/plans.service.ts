@@ -4,7 +4,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
-import { assertDailyHoursCap } from '../timesheet/daily-hours-cap.util';
+import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg } from '../timesheet/daily-hours-cap.util';
 import {
   CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
   CreateTimeEntryDto, LinkAuditDto,
@@ -363,6 +363,8 @@ export class PlansService {
 
   // ── L2.8: Timesheet — create time entry ──────────────────────────────────────
   async createTimeEntry(dto: CreateTimeEntryDto, user: AuthUser) {
+    assertValidHours(dto.hours);
+    await assertTimeAnchorsInOrg(this.prisma, user.organizationId, [dto]);
     await assertDailyHoursCap(this.prisma, user.id, new Map([[dto.workDate, dto.hours]]));
 
     const entry = await this.prisma.timeEntry.create({

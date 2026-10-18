@@ -1,6 +1,7 @@
 import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
+import { assertInOrg } from '../common/utils/tenant.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -109,12 +110,16 @@ export class WorkingPapersService {
 
   async create(dto: CreateWorkingPaperDto, user: AuthUser) {
     await this.assertAuditAccess(dto.auditId, user);
+    // La carpeta debe ser de ESTE encargo y el revisor de la organización
+    // (auditoría de seguridad 2026-10-18 — antes se aceptaba cualquier id).
+    await assertInOrg(this.prisma.auditFolder, dto.folderId, { auditId: dto.auditId }, 'La carpeta');
+    await assertInOrg(this.prisma.user, dto.reviewerId, { organizationId: user.organizationId }, 'El revisor');
 
     // Resolve indexSection from folderId if not provided explicitly
     let indexSection = dto.indexSection;
     if (dto.folderId && !indexSection) {
-      const folder = await this.prisma.auditFolder.findUnique({
-        where:  { id: dto.folderId },
+      const folder = await this.prisma.auditFolder.findFirst({
+        where:  { id: dto.folderId, auditId: dto.auditId },
         select: { ref: true },
       });
       if (folder) indexSection = folder.ref;
@@ -755,6 +760,10 @@ export class WorkingPapersService {
       throw new BadRequestException(
         `El papel "${wp.title}" está bloqueado (estado: ${wp.status}). No se permiten modificaciones.`,
       );
+    }
+
+    if (dto.reviewerId) {
+      await assertInOrg(this.prisma.user, dto.reviewerId, { organizationId: user.organizationId }, 'El revisor');
     }
 
     // Snapshot version before updating

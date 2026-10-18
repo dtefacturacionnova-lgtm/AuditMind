@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import {
@@ -64,6 +64,7 @@ export class CatalogsService {
   }
 
   async updateEntityType(id: string, dto: UpdateEntityTypeDto, user: AuthUser) {
+    await this.assertEntityType(id, user);
     return this.prisma.entityTypeConfig.update({
       where: { id },
       data: dto,
@@ -71,6 +72,7 @@ export class CatalogsService {
   }
 
   async deleteEntityType(id: string, user: AuthUser) {
+    await this.assertEntityType(id, user);
     return this.prisma.entityTypeConfig.delete({ where: { id } });
   }
 
@@ -107,6 +109,7 @@ export class CatalogsService {
   }
 
   async updateProcessCategory(id: string, dto: UpdateProcessCategoryDto, user: AuthUser) {
+    await this.assertProcessCategory(id, user);
     return this.prisma.processCategoryConfig.update({
       where: { id },
       data: dto,
@@ -114,7 +117,24 @@ export class CatalogsService {
   }
 
   async deleteProcessCategory(id: string, user: AuthUser) {
+    await this.assertProcessCategory(id, user);
     return this.prisma.processCategoryConfig.delete({ where: { id } });
+  }
+
+  // Aislamiento multi-organización (auditoría de seguridad 2026-10-18): antes
+  // se editaba/borraba por id el catálogo de cualquier organización.
+  private async assertEntityType(id: string, user: AuthUser) {
+    const found = await this.prisma.entityTypeConfig.findFirst({
+      where: { id, organizationId: user.organizationId }, select: { id: true },
+    });
+    if (!found) throw new NotFoundException('Tipo de entidad no encontrado');
+  }
+
+  private async assertProcessCategory(id: string, user: AuthUser) {
+    const found = await this.prisma.processCategoryConfig.findFirst({
+      where: { id, organizationId: user.organizationId }, select: { id: true },
+    });
+    if (!found) throw new NotFoundException('Categoría de proceso no encontrada');
   }
 
   // ─── Seeds ─────────────────────────────────────────────────────────────────

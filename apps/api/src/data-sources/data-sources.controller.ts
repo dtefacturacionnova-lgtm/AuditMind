@@ -8,7 +8,8 @@ import {
 } from 'class-validator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { DataSourcesService } from './data-sources.service';
-import { DataSourceType, ConnectorStatus } from '@prisma/client';
+import { DataSourceType, ConnectorStatus, UserRole } from '@prisma/client';
+import { Roles } from '../common/decorators/roles.decorator';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/jwt.strategy';
 
@@ -32,6 +33,7 @@ class RunImportDto {
 @ApiTags('Data Sources')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.AUDITOR)
 @Controller('data-sources')
 export class DataSourcesController {
   constructor(private readonly service: DataSourcesService) {}
@@ -49,12 +51,14 @@ export class DataSourcesController {
   }
 
   @Post()
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Crear una nueva fuente de datos' })
   create(@Body() dto: CreateDataSourceDto, @Req() req: Request) {
     return this.service.create(dto, req.user as AuthUser);
   }
 
   @Patch(':id')
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Actualizar configuración o estado de una fuente' })
   update(
     @Param('id') id: string,
@@ -65,18 +69,21 @@ export class DataSourcesController {
   }
 
   @Delete(':id')
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Eliminar una fuente de datos' })
   remove(@Param('id') id: string, @Req() req: Request) {
     return this.service.remove(id, req.user as AuthUser);
   }
 
   @Post(':id/test')
+  @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Probar la conectividad de la fuente de datos' })
   test(@Param('id') id: string, @Req() req: Request) {
     return this.service.testConnection(id, req.user as AuthUser);
   }
 
   @Post(':id/import')
+  @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Iniciar una importación de datos (async)' })
   runImport(
     @Param('id') id: string,

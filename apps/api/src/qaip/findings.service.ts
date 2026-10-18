@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInOrg } from '../common/utils/tenant.util';
 import {
   CreateQaipFindingDto, UpdateQaipFindingStatusDto,
   CreateQaipRootCauseDto, CreateQaipRemediationActionDto, UpdateQaipRemediationActionDto,
@@ -50,6 +51,8 @@ export class FindingsService {
         throw new BadRequestException('assessmentItemId inválido para esta organización');
       }
     }
+    // engagementId no tiene @relation en el esquema: se valida a mano.
+    await assertInOrg(this.prisma.audit, dto.engagementId, { organizationId: user.organizationId }, 'El encargo');
     return this.prisma.qaipFinding.create({
       data: {
         organizationId: user.organizationId,
@@ -85,6 +88,7 @@ export class FindingsService {
 
   async addRemediationAction(findingId: string, dto: CreateQaipRemediationActionDto, user: AuthUser) {
     await this.getFindingOrThrow(findingId, user);
+    await assertInOrg(this.prisma.user, dto.ownerId, { organizationId: user.organizationId }, 'El responsable');
     await this.prisma.qaipRemediationAction.create({
       data: {
         findingId, description: dto.description, ownerId: dto.ownerId,

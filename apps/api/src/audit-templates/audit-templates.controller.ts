@@ -7,12 +7,14 @@ import { AuditTemplatesService } from './audit-templates.service';
 import { CreateAuditTemplateDto, UpdateAuditTemplateDto } from './dto/audit-template.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
-import { AuditType } from '@prisma/client';
+import { AuditType, UserRole } from '@prisma/client';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @ApiTags('audit-templates')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Roles(UserRole.AUDITOR)
 @Controller('audit-templates')
 export class AuditTemplatesController {
   constructor(private readonly service: AuditTemplatesService) {}
@@ -34,12 +36,14 @@ export class AuditTemplatesController {
   }
 
   @Post()
+  @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Crear nueva plantilla de auditoría' })
   create(@Body() dto: CreateAuditTemplateDto, @CurrentUser() user: AuthUser) {
     return this.service.create(dto, user);
   }
 
   @Patch(':id')
+  @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Actualizar plantilla de auditoría' })
   update(
     @Param('id') id: string,
@@ -50,30 +54,35 @@ export class AuditTemplatesController {
   }
 
   @Delete(':id')
+  @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Eliminar plantilla de auditoría' })
   remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.remove(id, user);
   }
 
   @Post(':id/duplicate')
+  @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Duplicar una plantilla de auditoría' })
   duplicate(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.duplicate(id, user);
   }
 
   @Post(':id/set-default')
+  @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Establecer como plantilla predeterminada para sus tipos' })
   setDefault(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.setDefault(id, user);
   }
 
   @Post('reseed-system')
+  @Roles(UserRole.CAE)
   @ApiOperation({ summary: 'Restaurar / actualizar plantillas de sistema con el catálogo más reciente' })
   reseedSystem(@CurrentUser() user: AuthUser) {
     return this.service.reseedSystemTemplates(user);
   }
 
   @Post('create-demo-audit')
+  @Roles(UserRole.CAE)
   @ApiOperation({
     summary: 'Crear auditoría de demostración completa',
     description:

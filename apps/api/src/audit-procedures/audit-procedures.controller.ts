@@ -9,8 +9,9 @@ import { IsString, IsArray, IsBoolean, IsNumber, IsOptional, IsEnum } from 'clas
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  ProcStatus, StepStatus, StepConclusion, TestType, AuditNature, AuditTiming,
+  ProcStatus, StepStatus, StepConclusion, TestType, AuditNature, AuditTiming, UserRole,
 } from '@prisma/client';
+import { Roles } from '../common/decorators/roles.decorator';
 import { AuditProceduresService } from './audit-procedures.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -256,6 +257,7 @@ class UpdateStepDto extends CreateStepDto {}
 
 @ApiTags('Programa de Auditoría — Procedimientos')
 @ApiBearerAuth()
+@Roles(UserRole.AUDITOR)
 @Controller('audit-procedures')
 export class AuditProceduresController {
   constructor(private readonly svc: AuditProceduresService) {}

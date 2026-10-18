@@ -1,6 +1,7 @@
 import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
+import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
@@ -57,6 +58,12 @@ export class AuditsService {
       where: { id: dto.auditableUnitId, organizationId: user.organizationId },
     });
     if (!unit) throw new NotFoundException('Unidad auditable no encontrada');
+    // Plantilla y equipo deben ser de la propia organización (auditoría de
+    // seguridad 2026-10-18): antes se podía instanciar la plantilla privada de
+    // otra organización o meter a sus usuarios en el equipo de este encargo.
+    const orgScope = { organizationId: user.organizationId };
+    await assertInOrg(this.prisma.auditTemplate, dto.templateId, orgScope, 'La plantilla de auditoría');
+    await assertAllInOrg(this.prisma.user, dto.teamMemberIds ?? [], orgScope, 'Miembros del equipo');
 
     const materialityData = dto.materiality
       ? this.computeMateriality(dto.materiality.base, dto.materiality.percentage)
@@ -463,6 +470,7 @@ export class AuditsService {
     const tb = await this.prisma.trialBalance.findUnique({ where: { id: tbId } });
     if (!tb) throw new NotFoundException('Balance no encontrado');
     if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+    await assertInOrg(this.prisma.workingPaper, paperId, { auditId: tb.auditId }, 'El papel de trabajo');
 
     return this.prisma.trialBalancePaperLink.upsert({
       where:  { trialBalanceId_paperId: { trialBalanceId: tbId, paperId } },

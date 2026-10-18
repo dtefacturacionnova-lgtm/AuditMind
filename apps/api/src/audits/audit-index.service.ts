@@ -936,9 +936,13 @@ export class AuditIndexService {
 
     let index: PaperDef[];
 
+    const auditOrg = templateId
+      ? (await this.prisma.audit.findUnique({ where: { id: auditId }, select: { organizationId: true } }))?.organizationId
+      : undefined;
+
     if (templateId) {
-      const template = await this.prisma.auditTemplate.findUnique({
-        where: { id: templateId },
+      const template = await this.prisma.auditTemplate.findFirst({
+        where: { id: templateId, organizationId: auditOrg ?? '__none__' },
       });
       if (template) {
         index = template.papers as unknown as PaperDef[];
@@ -970,8 +974,8 @@ export class AuditIndexService {
     // ─── Instantiate PaperLinks from template (knowledge graph) ────────────
     if (templateId) {
       try {
-        const tpl = await this.prisma.auditTemplate.findUnique({
-          where: { id: templateId },
+        const tpl = await this.prisma.auditTemplate.findFirst({
+          where: { id: templateId, organizationId: auditOrg ?? '__none__' },
           select: { links: true },
         });
         const linkDefs = (tpl?.links ?? []) as unknown as Array<{

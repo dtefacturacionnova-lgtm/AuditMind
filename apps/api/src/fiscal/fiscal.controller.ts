@@ -5,6 +5,8 @@ import { Type } from 'class-transformer';
 import type { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 import { DteValidatorService, DteRecord } from './dte-validator.service';
 import { DgiiService } from './dgii.service';
 import { Anexo12Service } from './anexo12.service';
@@ -54,6 +56,7 @@ class VerifyNrcDto {
 
 @ApiTags('Fiscal SV')
 @ApiBearerAuth()
+@Roles(UserRole.AUDITOR)
 @Controller('fiscal')
 export class FiscalController {
   constructor(
@@ -71,6 +74,7 @@ export class FiscalController {
 
   // ─── Padrón DGII ─────────────────────────────────────────────────────────
   @Post('dgii/import')
+  @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Importar padrón de contribuyentes DGII (CSV/JSON parseado en frontend)' })
   importDgii(@Body() dto: ImportDgiiDto, @CurrentUser() user: AuthUser) {
     return this.dgii.import(dto, user);

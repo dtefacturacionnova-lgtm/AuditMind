@@ -117,8 +117,8 @@ export class PbcController {
   @ApiBearerAuth()
   @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Marcar como vencidas las solicitudes expiradas' })
-  markOverdue(@CurrentUser() _user: AuthUser) {
-    return this.service.markOverdue();
+  markOverdue(@CurrentUser() user: AuthUser) {
+    return this.service.markOverdue(user);
   }
 
   // ─── Endpoints públicos del portal (sin autenticación) ───────────────────────

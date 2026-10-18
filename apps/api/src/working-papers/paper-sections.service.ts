@@ -2300,7 +2300,7 @@ ${hasRag ? `- En columnas de tipo "Base Normativa" o similar, cita artículo/nor
       const severityRaw = (riesgoKey ? norm(row[riesgoKey]) : '').toLowerCase();
       const severity = SEVERITY_MAP[severityRaw] ?? FindingSeverity.MEDIUM;
 
-      const existing = await this.prisma.finding.findFirst({ where: { workingPaperId: paperId, title } });
+      const existing = await this.prisma.finding.findFirst({ where: { workingPaperId: paperId, auditId: wp.auditId, title } });
       const data = {
         title, condition, criteria, cause, effect, risk: effect, recommendation,
         severity, status, isRecurring,

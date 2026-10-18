@@ -31,9 +31,23 @@ export class AuditBackupFilesService {
     );
   }
 
-  /** Recorre `data` completo y extrae toda ruta de Storage referenciada (sin duplicados). */
-  extraerRutasDeArchivo(data: Record<string, unknown>): string[] {
+  /**
+   * Recorre `data` completo y extrae toda ruta de Storage referenciada (sin
+   * duplicados) QUE PERTENEZCA A ESTE ENCARGO.
+   *
+   * Auditoría de seguridad 2026-10-18: antes se aceptaba cualquier ruta
+   * escrita en el contenido del encargo — un usuario podía pegar la ruta de un
+   * archivo de OTRA organización (`sections/<paperId ajeno>/...`) en un papel
+   * suyo, y el backup se lo descargaba dentro del ZIP o el borrado completo
+   * del encargo lo eliminaba del bucket. Toda ruta que generamos lleva en sus
+   * carpetas el id del encargo, del papel o del paso al que pertenece
+   * (`<auditId>/…`, `evidence/<auditId>/…`, `sections/<paperId>/…`,
+   * `procedures/steps/<stepId>/…`), así que se exige que alguna carpeta sea
+   * un id de una fila exportada de ESTE encargo.
+   */
+  extraerRutasDeArchivo(data: Record<string, unknown>, auditId: string): string[] {
     const rutas = new Set<string>();
+    const idsDelEncargo = new Set<string>([auditId]);
     const visto = new WeakSet<object>();
 
     const visitar = (valor: unknown) => {
@@ -47,11 +61,21 @@ export class AuditBackupFilesService {
       if (visto.has(valor)) return; // evita ciclos — no debería haberlos en JSON puro, pero defensivo
       visto.add(valor);
       if (Array.isArray(valor)) { valor.forEach(visitar); return; }
+      const id = (valor as Record<string, unknown>).id;
+      if (typeof id === 'string' && id) idsDelEncargo.add(id);
       Object.values(valor as Record<string, unknown>).forEach(visitar);
     };
 
     visitar(data);
-    return Array.from(rutas);
+    const propias = Array.from(rutas).filter((ruta) => {
+      const carpetas = ruta.split('/').slice(0, -1);
+      return carpetas.some((c) => idsDelEncargo.has(c));
+    });
+    const ajenas = rutas.size - propias.length;
+    if (ajenas > 0) {
+      this.logger.warn(`Encargo ${auditId}: ${ajenas} ruta(s) de Storage ignoradas por no pertenecer al encargo`);
+    }
+    return propias;
   }
 
   /**

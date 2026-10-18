@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { assertInOrg } from '../common/utils/tenant.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { CreateAuditProjectDto, UpdateAuditProjectDto } from './dto/audit-project.dto';
@@ -30,26 +31,53 @@ export class AuditProjectsService {
     return this.enrichWithCoverage(projects, user.organizationId);
   }
 
-  async findOne(id: string) {
-    const project = await this.prisma.auditProject.findUnique({ where: { id }, include: INCLUDE });
+  async findOne(id: string, user: AuthUser) {
+    const project = await this.prisma.auditProject.findFirst({
+      where: { id, organizationId: user.organizationId }, include: INCLUDE,
+    });
     if (!project) return null;
     const [enriched] = await this.enrichWithCoverage([project], project.organizationId);
     return enriched;
   }
 
   async create(dto: CreateAuditProjectDto, user: AuthUser) {
+    await this.assertRefsInOrg(dto, user);
     return this.prisma.auditProject.create({
       data: { ...dto, organizationId: user.organizationId },
       include: INCLUDE,
     });
   }
 
-  async update(id: string, dto: UpdateAuditProjectDto) {
+  async update(id: string, dto: UpdateAuditProjectDto, user: AuthUser) {
+    await this.assertOwned(id, user);
+    await this.assertRefsInOrg(dto, user);
     return this.prisma.auditProject.update({ where: { id }, data: dto, include: INCLUDE });
   }
 
-  async remove(id: string) {
+  async remove(id: string, user: AuthUser) {
+    await this.assertOwned(id, user);
     return this.prisma.auditProject.delete({ where: { id } });
+  }
+
+  // Aislamiento multi-organización (auditoría de seguridad 2026-10-18): antes
+  // update/remove/findOne operaban por id sin comprobar la organización, y las
+  // referencias del body (objetivo, línea, áreas) podían ser de otra.
+  private async assertOwned(id: string, user: AuthUser) {
+    const found = await this.prisma.auditProject.findFirst({
+      where: { id, organizationId: user.organizationId }, select: { id: true },
+    });
+    if (!found) throw new NotFoundException('Proyecto no encontrado');
+  }
+
+  private async assertRefsInOrg(
+    dto: { strategicObjectiveId?: string; strategicLineId?: string; responsibleEntityId?: string; supportEntityId?: string },
+    user: AuthUser,
+  ) {
+    const scope = { organizationId: user.organizationId };
+    await assertInOrg(this.prisma.strategicObjective, dto.strategicObjectiveId, scope, 'El objetivo estratégico');
+    await assertInOrg(this.prisma.strategicLine, dto.strategicLineId, scope, 'La línea estratégica');
+    await assertInOrg(this.prisma.auditEntity, dto.responsibleEntityId, scope, 'El área responsable');
+    await assertInOrg(this.prisma.auditEntity, dto.supportEntityId, scope, 'El área de apoyo');
   }
 
   async getStats(user: AuthUser) {

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInOrg } from '../common/utils/tenant.util';
 import { CreateAuditableUnitDto as LegacyCreateDto } from './dto/create-auditable-unit.dto';
 import { UpdateAuditableUnitDto as LegacyUpdateDto } from './dto/update-auditable-unit.dto';
 import {
@@ -70,6 +71,7 @@ export class AuditUniverseService {
   // ─── AuditEntity (legado — mantener compatibilidad) ─────────────────────────
 
   async create(dto: LegacyCreateDto, user: AuthUser) {
+    await this.assertEntityRefs(dto, user);
     return this.prisma.auditEntity.create({
       data: {
         organizationId: user.organizationId,
@@ -152,6 +154,10 @@ export class AuditUniverseService {
 
   async update(id: string, dto: LegacyUpdateDto, user: AuthUser) {
     await this.findOne(id, user);
+    await this.assertEntityRefs(dto, user);
+    if (dto.parentEntityId && dto.parentEntityId === id) {
+      throw new BadRequestException('Una entidad no puede ser su propia entidad padre.');
+    }
     return this.prisma.auditEntity.update({
       where: { id },
       data: {
@@ -222,6 +228,14 @@ export class AuditUniverseService {
     return roots;
   }
 
+  /** Aislamiento multi-organización (auditoría de seguridad 2026-10-18): la
+   *  entidad padre y el responsable deben ser de la propia organización. */
+  private async assertEntityRefs(dto: { parentEntityId?: string | null; ownerId?: string | null }, user: AuthUser) {
+    const scope = { organizationId: user.organizationId };
+    await assertInOrg(this.prisma.auditEntity, dto.parentEntityId, scope, 'La entidad padre');
+    await assertInOrg(this.prisma.user, dto.ownerId, scope, 'El responsable');
+  }
+
   // ─── AuditProcess ─────────────────────────────────────────────────────────
 
   async createProcess(dto: CreateAuditProcessDto, user: AuthUser) {
@@ -272,6 +286,7 @@ export class AuditUniverseService {
     ]);
     if (!entity) throw new NotFoundException('Entidad no encontrada');
     if (!process) throw new NotFoundException('Proceso no encontrado');
+    await assertInOrg(this.prisma.strategicLine, dto.strategicLineId, { organizationId: user.organizationId }, 'La línea estratégica');
 
     return this.prisma.auditableUnit.create({
       data: {
@@ -316,6 +331,10 @@ export class AuditUniverseService {
   async updateUnit(id: string, dto: UpdateAuditableUnitDto, user: AuthUser) {
     const unit = await this.prisma.auditableUnit.findFirst({ where: { id, organizationId: user.organizationId } });
     if (!unit) throw new NotFoundException('Unidad auditable no encontrada');
+    const scope = { organizationId: user.organizationId };
+    await assertInOrg(this.prisma.strategicLine, dto.strategicLineId, scope, 'La línea estratégica');
+    await assertInOrg(this.prisma.auditEntity, (dto as { auditEntityId?: string }).auditEntityId, scope, 'La entidad');
+    await assertInOrg(this.prisma.auditProcess, (dto as { auditProcessId?: string }).auditProcessId, scope, 'El proceso');
     return this.prisma.auditableUnit.update({ where: { id }, data: dto });
   }
 

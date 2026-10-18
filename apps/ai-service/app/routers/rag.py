@@ -13,6 +13,7 @@ import pdfplumber
 
 from app.config import settings
 from app.services.rag_pipeline import ingest_text, ingest_pdf, search_knowledge
+from app.services.url_guard import UnsafeUrlError, safe_get
 
 router = APIRouter()
 
@@ -172,14 +173,19 @@ async def ingest_url_endpoint(
         raise HTTPException(status_code=401, detail="Clave interna inválida")
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
-            resp = await client.get(
-                request.url,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; AuditMindRAG/1.0)"},
-            )
-            resp.raise_for_status()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"No se pudo descargar la URL: {e}")
+        resp = await safe_get(
+            request.url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; AuditMindRAG/1.0)"},
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+    except UnsafeUrlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=400, detail=f"La URL respondió HTTP {e.response.status_code}")
+    except Exception:
+        # Sin detalle del error de red: devolverlo servía para sondear puertos internos.
+        raise HTTPException(status_code=400, detail="No se pudo descargar la URL")
 
     content_type = resp.headers.get("content-type", "")
     is_pdf = "application/pdf" in content_type or request.url.lower().endswith(".pdf")

@@ -138,10 +138,25 @@ export class InvestigationGraphService {
    * así que hay que reasignar ANTES de borrar (un delete directo destruiría
    * las menciones/relaciones en vez de conservarlas en el sobreviviente).
    */
-  async mergeEntities(auditId: string, loserEntityId: string, survivorEntityId: string, user: AuthUser) {
-    const audit = await this.prisma.audit.findUnique({ where: { id: auditId }, select: { organizationId: true } });
+  /** Mismo criterio que AuditInvestigationAccessService: en un encargo en
+   *  modo investigación solo el equipo (o CAE/ADMIN/SUPER_ADMIN) ve el grafo
+   *  de personas y empresas. Antes bastaba con ser de la organización. */
+  private async assertAuditAccess(auditId: string, user: AuthUser) {
+    const audit = await this.prisma.audit.findFirst({
+      where:  { id: auditId, organizationId: user.organizationId },
+      select: { id: true, title: true, organizationId: true, isInvestigationMode: true, team: { select: { userId: true } } },
+    });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
-    if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    if (audit.isInvestigationMode) {
+      const onTeam     = audit.team.some((m) => m.userId === user.id);
+      const privileged = (['CAE', 'ADMIN', 'SUPER_ADMIN'] as string[]).includes(user.role);
+      if (!onTeam && !privileged) throw new ForbiddenException('Acceso restringido — modo investigación');
+    }
+    return audit;
+  }
+
+  async mergeEntities(auditId: string, loserEntityId: string, survivorEntityId: string, user: AuthUser) {
+    await this.assertAuditAccess(auditId, user);
     if (loserEntityId === survivorEntityId) throw new BadRequestException('No se puede fusionar una entidad consigo misma.');
 
     const [loser, survivor] = await Promise.all([
@@ -185,12 +200,7 @@ export class InvestigationGraphService {
   }
 
   async getAuditGraph(auditId: string, user: AuthUser) {
-    const audit = await this.prisma.audit.findUnique({
-      where: { id: auditId },
-      select: { id: true, title: true, organizationId: true },
-    });
-    if (!audit) throw new NotFoundException('Auditoría no encontrada');
-    if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    const audit = await this.assertAuditAccess(auditId, user);
 
     const entities = await this.prisma.graphEntity.findMany({
       where: { auditId },

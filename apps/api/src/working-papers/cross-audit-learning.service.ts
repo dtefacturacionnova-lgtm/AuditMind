@@ -69,8 +69,8 @@ export class CrossAuditLearningService {
     // ─── Contexto del papel actual (para contextualizar las sugerencias) ──
     let paperContext: { paperCode: string | null; title: string; type: string } | null = null;
     if (paperId) {
-      const wp = await this.prisma.workingPaper.findUnique({
-        where:  { id: paperId },
+      const wp = await this.prisma.workingPaper.findFirst({
+        where:  { id: paperId, auditId },
         select: { paperCode: true, title: true, type: true },
       });
       if (wp) {

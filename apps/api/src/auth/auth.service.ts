@@ -89,10 +89,12 @@ export class AuthService {
       where: { id: userId },
     });
 
-    // Actualiza app_metadata en Supabase Auth
-    await this.supabaseAdmin.auth.admin.updateUserById(user.supabaseUserId, {
-      app_metadata: { role: newRole },
+    // Actualiza app_metadata en Supabase Auth. Si falla, NO se toca la BD:
+    // antes el error se ignoraba y el rol de la BD y el del token divergían.
+    const { error } = await this.supabaseAdmin.auth.admin.updateUserById(user.supabaseUserId, {
+      app_metadata: { role: newRole, organization_id: user.organizationId },
     });
+    if (error) throw new BadRequestException(`No se pudo actualizar el rol: ${error.message}`);
 
     // Actualiza en nuestra BD
     return this.prisma.user.update({

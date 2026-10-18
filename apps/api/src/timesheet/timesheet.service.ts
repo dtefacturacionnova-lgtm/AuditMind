@@ -9,7 +9,7 @@ import {
   QueryTimesheetEntriesDto, QueryTimesheetReportDto, TimesheetReportGroupBy,
 } from './dto/timesheet.dto';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
-import { assertDailyHoursCap } from './daily-hours-cap.util';
+import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg } from './daily-hours-cap.util';
 
 // Mismo criterio de jerarquía que RolesGuard (apps/api/src/common/guards/roles.guard.ts).
 // Se replica aquí (en vez de importarlo) porque el guard no lo exporta — solo lo usa internamente.
@@ -74,6 +74,8 @@ export class TimesheetService {
   async createEntry(dto: CreateTimesheetEntryDto, user: AuthUser) {
     const error = this.validateCategoryLinkage(dto);
     if (error) throw new BadRequestException(error);
+    assertValidHours(dto.hours);
+    await assertTimeAnchorsInOrg(this.prisma, user.organizationId, [dto]);
 
     await assertDailyHoursCap(this.prisma, user.id, new Map([[dto.workDate, dto.hours]]));
 
@@ -107,6 +109,9 @@ export class TimesheetService {
         errors,
       });
     }
+
+    dto.entries.forEach((entry) => assertValidHours(entry.hours));
+    await assertTimeAnchorsInOrg(this.prisma, user.organizationId, dto.entries);
 
     const hoursByDate = new Map<string, number>();
     for (const entry of dto.entries) {
@@ -191,7 +196,7 @@ export class TimesheetService {
     if (query.groupBy === TimesheetReportGroupBy.PLAN) {
       if (!query.planId) throw new BadRequestException('planId es requerido para groupBy=plan');
       const planItems = await this.prisma.auditPlanItem.findMany({
-        where:  { planId: query.planId },
+        where:  { planId: query.planId, plan: { organizationId: user.organizationId } },
         select: { id: true },
       });
       where.planItemId = { in: planItems.map((i) => i.id) };
@@ -228,7 +233,7 @@ export class TimesheetService {
         });
         const userIds = [...new Set(rows.map((r) => r.userId))];
         const users = await this.prisma.user.findMany({
-          where:  { id: { in: userIds } },
+          where:  { id: { in: userIds }, organizationId: user.organizationId },
           select: { id: true, name: true, email: true },
         });
         breakdown = rows.map((r) => ({
@@ -248,7 +253,7 @@ export class TimesheetService {
         });
         const auditIds = [...new Set(rows.map((r) => r.auditId).filter((v): v is string => !!v))];
         const audits = await this.prisma.audit.findMany({
-          where:  { id: { in: auditIds } },
+          where:  { id: { in: auditIds }, organizationId: user.organizationId },
           select: { id: true, title: true },
         });
         breakdown = rows.map((r) => ({
@@ -268,7 +273,7 @@ export class TimesheetService {
         });
         const planItemIds = [...new Set(rows.map((r) => r.planItemId).filter((v): v is string => !!v))];
         const planItems = await this.prisma.auditPlanItem.findMany({
-          where:  { id: { in: planItemIds } },
+          where:  { id: { in: planItemIds }, plan: { organizationId: user.organizationId } },
           include: {
             auditEntity:  { select: { id: true, name: true } },
             auditProject: { select: { id: true, name: true, correlative: true } },

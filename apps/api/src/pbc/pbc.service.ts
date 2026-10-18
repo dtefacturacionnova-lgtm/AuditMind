@@ -7,6 +7,22 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { PbcRequestStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
+/**
+ * Lo único que ve el auditado en el portal público (sin login). Antes se
+ * devolvía el registro completo: token, organizationId, createdById, etc.
+ * (auditoría de seguridad 2026-10-18).
+ */
+const PORTAL_SELECT = {
+  id: true, title: true, description: true, status: true, dueDate: true,
+  submittedAt: true, acceptedAt: true, rejectionReason: true,
+  requestedToName: true, fileUrls: true,
+  audit:    { select: { title: true } },
+  messages: {
+    orderBy: { createdAt: 'asc' as const },
+    select:  { id: true, isAuditor: true, senderName: true, content: true, attachmentUrls: true, createdAt: true },
+  },
+};
+
 @Injectable()
 export class PbcService {
   constructor(private prisma: PrismaService) {}
@@ -208,9 +224,10 @@ export class PbcService {
     });
   }
 
-  async markOverdue() {
+  async markOverdue(user: AuthUser) {
     const result = await this.prisma.pbcRequest.updateMany({
       where: {
+        organizationId: user.organizationId,
         dueDate: { lt: new Date() },
         status:  { in: [PbcRequestStatus.PENDING, PbcRequestStatus.SUBMITTED] },
       },
@@ -224,10 +241,7 @@ export class PbcService {
   async findByToken(token: string) {
     const request = await this.prisma.pbcRequest.findUnique({
       where: { portalToken: token },
-      include: {
-        audit:    { select: { id: true, title: true, startDate: true, endDate: true } },
-        messages: { orderBy: { createdAt: 'asc' } },
-      },
+      select: PORTAL_SELECT,
     });
     if (!request) throw new NotFoundException('Solicitud no encontrada o token inválido');
     return request;
@@ -287,10 +301,7 @@ export class PbcService {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...(fileUrls?.length && { fileUrls: fileUrls as any }),
       },
-      include: {
-        audit:    { select: { id: true, title: true } },
-        messages: { orderBy: { createdAt: 'asc' } },
-      },
+      select: PORTAL_SELECT,
     });
   }
 }

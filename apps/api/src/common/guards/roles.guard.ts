@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { AuthUser } from '../../auth/jwt.strategy';
 
-const ROLE_HIERARCHY: Record<string, number> = {
+export const ROLE_HIERARCHY: Record<string, number> = {
   SUPER_ADMIN: 100,
   ADMIN: 90,
   CAE: 80,

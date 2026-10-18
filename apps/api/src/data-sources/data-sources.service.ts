@@ -9,6 +9,24 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { DataSourceType, ConnectorStatus, ImportStatus, Prisma } from '@prisma/client';
+import { assertPublicHttpUrl } from '../common/utils/ssrf.util';
+import { assertInOrg } from '../common/utils/tenant.util';
+
+/** Campos de `config` que son credenciales: se guardan, pero NUNCA vuelven al
+ *  navegador (auditoría de seguridad 2026-10-18). */
+const SECRET_KEYS = ['password', 'api_key', 'bearer_token', 'secret', 'client_secret', 'token'];
+const MASK = '••••••••';
+
+function maskConfig(config: unknown): unknown {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return config;
+  const out: Record<string, unknown> = { ...(config as Record<string, unknown>) };
+  for (const k of SECRET_KEYS) if (out[k]) out[k] = MASK;
+  return out;
+}
+
+function maskSource<T extends { config?: unknown }>(ds: T): T {
+  return { ...ds, config: maskConfig(ds.config) };
+}
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -49,7 +67,7 @@ export class DataSourcesService {
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
   async findAll(user: AuthUser) {
-    return this.prisma.dataSource.findMany({
+    const rows = await this.prisma.dataSource.findMany({
       where: { organizationId: user.organizationId },
       include: {
         createdBy: { select: { id: true, name: true } },
@@ -57,6 +75,7 @@ export class DataSourcesService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return rows.map(maskSource);
   }
 
   async findOne(id: string, user: AuthUser) {
@@ -71,11 +90,12 @@ export class DataSourcesService {
       },
     });
     if (!ds) throw new NotFoundException('Fuente de datos no encontrada');
-    return ds;
+    return maskSource(ds);
   }
 
   async create(dto: CreateDataSourceDto, user: AuthUser) {
-    return this.prisma.dataSource.create({
+    await this.assertSafeConfig(dto.type, dto.config);
+    const ds = await this.prisma.dataSource.create({
       data: {
         organizationId: user.organizationId,
         name: dto.name,
@@ -84,19 +104,32 @@ export class DataSourcesService {
         createdById: user.id,
       },
     });
+    return maskSource(ds);
   }
 
   async update(id: string, dto: UpdateDataSourceDto, user: AuthUser) {
-    await this.assertOwner(id, user);
-    return this.prisma.dataSource.update({
+    const current = await this.assertOwner(id, user);
+    let config: Record<string, unknown> | undefined;
+    if (dto.config) {
+      // El navegador solo ve las credenciales enmascaradas: si devuelve la
+      // máscara (o no manda el campo), se conserva la credencial guardada.
+      const stored = (current.config ?? {}) as Record<string, unknown>;
+      config = { ...dto.config };
+      for (const k of SECRET_KEYS) {
+        if (config[k] === MASK || (config[k] === undefined && stored[k] !== undefined)) config[k] = stored[k];
+      }
+      await this.assertSafeConfig(current.type, config);
+    }
+    const ds = await this.prisma.dataSource.update({
       where: { id },
       data: {
         ...(dto.name    ? { name: dto.name }                                          : {}),
-        ...(dto.config  ? { config: dto.config as Prisma.InputJsonValue }             : {}),
+        ...(config      ? { config: config as Prisma.InputJsonValue }                 : {}),
         ...(dto.status  ? { status: dto.status }                                      : {}),
         updatedAt: new Date(),
       },
     });
+    return maskSource(ds);
   }
 
   async remove(id: string, user: AuthUser) {
@@ -161,6 +194,7 @@ export class DataSourcesService {
     if (ds.status === ConnectorStatus.INACTIVE) {
       throw new BadRequestException('Activa y prueba la conexión antes de importar');
     }
+    await assertInOrg(this.prisma.audit, dto.auditId, { organizationId: user.organizationId }, 'La auditoría');
 
     // Registrar el import en DB como PENDING → RUNNING
     const importRecord = await this.prisma.connectorImport.create({
@@ -191,6 +225,16 @@ export class DataSourcesService {
   }
 
   // ─── Privados ─────────────────────────────────────────────────────────────
+
+  /** SSRF: las URLs de un conector REST deben apuntar a un host público. El
+   *  ai-service lo vuelve a validar en cada petición y redirección. */
+  private async assertSafeConfig(type: DataSourceType, config: Record<string, unknown>) {
+    if (type !== DataSourceType.REST_API) return;
+    const baseUrl = typeof config.base_url === 'string' ? config.base_url : '';
+    if (baseUrl) await assertPublicHttpUrl(baseUrl, 'La URL base');
+    const health = typeof config.health_endpoint === 'string' ? config.health_endpoint : '';
+    if (/^[a-z][a-z0-9+.-]*:/i.test(health)) await assertPublicHttpUrl(health, 'El endpoint de prueba');
+  }
 
   private async assertOwner(id: string, user: AuthUser) {
     const ds = await this.prisma.dataSource.findFirst({

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { assertCanGrantRole, assertCanManageUser } from '../common/utils/tenant.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserDto, UpdateUserRoleDto } from './dto/update-user.dto';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -87,6 +88,9 @@ export class UsersService {
   async updateRole(id: string, dto: UpdateUserRoleDto, requester: AuthUser) {
     const target = await this.findOne(id, requester);
     if (target.organizationId !== requester.organizationId) throw new ForbiddenException();
+    // Antes un ADMIN podía ascenderse (o ascender a otro) a SUPER_ADMIN, rol de plataforma.
+    assertCanManageUser(requester, target);
+    assertCanGrantRole(requester, dto.role);
     await this.authService.updateUserRole(target.id, dto.role);
     return this.prisma.user.update({
       where: { id },
@@ -96,7 +100,8 @@ export class UsersService {
   }
 
   async deactivate(id: string, requester: AuthUser) {
-    await this.findOne(id, requester);
+    const target = await this.findOne(id, requester);
+    assertCanManageUser(requester, target);
     return this.prisma.user.update({
       where: { id },
       data: { active: false },

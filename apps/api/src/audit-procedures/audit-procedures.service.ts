@@ -108,6 +108,27 @@ export class AuditProceduresService {
     return proc;
   }
 
+  /**
+   * "Realizado por" / "Revisado por" (ISA 230) son firmas: cada quien solo
+   * puede registrarse a SÍ MISMO (la UI ya lo hace con "Asignarme"). Antes el
+   * id venía libre del cliente — cualquiera podía firmar la revisión a nombre
+   * de otro (auditoría de seguridad 2026-10-18). Se acepta reenviar la firma
+   * que ya estaba (el formulario manda todo al guardar) o quitarla.
+   */
+  private assertSignature(
+    field: 'performedById' | 'reviewedById',
+    next: string | undefined,
+    current: string | null | undefined,
+    user: AuthUser,
+  ) {
+    if (next === undefined || next === '' || next === current || next === user.id) return;
+    throw new ForbiddenException(
+      field === 'reviewedById'
+        ? 'Solo puedes registrarte a ti mismo como revisor de la actividad.'
+        : 'Solo puedes registrarte a ti mismo como ejecutor de la actividad.',
+    );
+  }
+
   private async assertStepAccess(stepId: string, user: AuthUser) {
     const step = await this.prisma.auditStep.findUnique({
       where:   { id: stepId },
@@ -238,6 +259,8 @@ export class AuditProceduresService {
 
   async createStep(procedureId: string, dto: CreateStepDto, user: AuthUser) {
     await this.assertProcedureAccess(procedureId, user);
+    this.assertSignature('performedById', dto.performedById, null, user);
+    this.assertSignature('reviewedById', dto.reviewedById, null, user);
     const count = await this.prisma.auditStep.count({ where: { procedureId } });
     return this.prisma.auditStep.create({
       data: {
@@ -275,6 +298,8 @@ export class AuditProceduresService {
 
   async updateStep(id: string, dto: UpdateStepDto, user: AuthUser) {
     const existing = await this.assertStepAccess(id, user);
+    this.assertSignature('performedById', dto.performedById, existing.performedById, user);
+    this.assertSignature('reviewedById', dto.reviewedById, existing.reviewedById, user);
 
     // Status machine validation: SUBMITTED requires executor + date
     if (dto.status === StepStatus.SUBMITTED) {

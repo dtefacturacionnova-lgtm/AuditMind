@@ -13,7 +13,12 @@ import {
   UploadedFile,
   Headers,
   ForbiddenException,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
+import { assertPublicHttpUrl } from '../common/utils/ssrf.util';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import {
@@ -194,20 +199,22 @@ export class AiController {
 
   // ─── RAG — Subir PDF ─────────────────────────────────────────────────────────
   @Post('rag/ingest/pdf')
+  @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Subir PDF normativo al motor RAG (pgvector)' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
   async ingestPdf(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: { docTitle: string; ragBase: string; orgId?: string; subcategory?: string },
+    @CurrentUser() user: AuthUser,
   ) {
-    if (!file) throw new Error('No file uploaded');
+    if (!file) throw new BadRequestException('No se recibió ningún archivo');
     return this.aiService.ingestPdf(
       file.buffer,
       file.originalname,
       body.docTitle,
       body.ragBase,
-      body.orgId,
+      this.ragTargetOrg(user, body.orgId),
       body.subcategory,
     );
   }
@@ -222,34 +229,45 @@ export class AiController {
   // ─── RAG — Listar documentos ─────────────────────────────────────────────────
   @Get('rag/documents')
   @ApiOperation({ summary: 'Listar documentos en la base de conocimiento RAG' })
+  @Roles(UserRole.AUDITOR)
   async listRagDocuments(
-    @Query('orgId') orgId?: string,
+    @CurrentUser() user: AuthUser,
     @Query('ragBase') ragBase?: string,
   ) {
-    return this.aiService.listRagDocuments(orgId, ragBase);
+    // Siempre la organización del usuario (globales + propios): antes el
+    // cliente elegía `orgId` y podía listar los documentos privados de otra.
+    return this.aiService.listRagDocuments(user.organizationId, ragBase);
   }
 
   // ─── RAG — Un documento (polling de estado tras ingesta en segundo plano) ───
   @Get('rag/documents/:docId')
   @ApiOperation({ summary: 'Consultar un documento RAG — usado para hacer polling de status tras ingerir' })
-  async getRagDocument(@Param('docId') docId: string) {
-    return this.aiService.getRagDocument(docId);
+  @Roles(UserRole.AUDITOR)
+  async getRagDocument(@Param('docId') docId: string, @CurrentUser() user: AuthUser) {
+    return this.assertRagDocAccess(docId, user, 'read');
   }
 
   // ─── RAG — Activar/desactivar documento sin borrarlo ─────────────────────────
   @Patch('rag/documents/:docId/toggle')
   @ApiOperation({ summary: 'Activar/desactivar un documento RAG (no se borra, deja de usarse en búsquedas)' })
-  async toggleRagDocument(@Param('docId') docId: string) {
+  @Roles(UserRole.ADMIN)
+  async toggleRagDocument(@Param('docId') docId: string, @CurrentUser() user: AuthUser) {
+    await this.assertRagDocAccess(docId, user, 'write');
     return this.aiService.toggleRagDocument(docId);
   }
 
   // ─── RAG — Ingerir desde una URL ─────────────────────────────────────────────
   @Post('rag/ingest/url')
   @ApiOperation({ summary: 'Ingerir un documento normativo desde una URL (PDF o HTML)' })
+  @Roles(UserRole.ADMIN)
   async ingestRagUrl(
     @Body() body: { url: string; docTitle: string; ragBase: string; orgId?: string; subcategory?: string },
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.aiService.ingestRagUrl(body.url, body.docTitle, body.ragBase, body.orgId, body.subcategory);
+    await assertPublicHttpUrl(body.url);
+    return this.aiService.ingestRagUrl(
+      body.url, body.docTitle, body.ragBase, this.ragTargetOrg(user, body.orgId), body.subcategory,
+    );
   }
 
   // ─── RAG — Qué Especialistas IA usan la base de conocimiento ────────────────
@@ -262,8 +280,38 @@ export class AiController {
   // ─── RAG — Eliminar documento ────────────────────────────────────────────────
   @Delete('rag/documents/:docId')
   @ApiOperation({ summary: 'Eliminar documento de la base de conocimiento RAG' })
-  async deleteRagDocument(@Param('docId') docId: string) {
+  @Roles(UserRole.ADMIN)
+  async deleteRagDocument(@Param('docId') docId: string, @CurrentUser() user: AuthUser) {
+    await this.assertRagDocAccess(docId, user, 'write');
     return this.aiService.deleteRagDocument(docId);
+  }
+
+  // ─── RAG — control de acceso (auditoría de seguridad 2026-10-18) ─────────────
+  // Antes estos endpoints no tenían @Roles ni chequeo de propiedad: cualquier
+  // usuario podía desactivar o BORRAR documentos de la base normativa GLOBAL
+  // (compartida por todas las organizaciones) o de otra organización, y elegir
+  // en qué organización (o en la global) ingerir.
+
+  /** Organización destino de una ingesta: la propia; solo SUPER_ADMIN escribe en
+   *  la base GLOBAL (sin orgId) o en otra organización explícita. */
+  private ragTargetOrg(user: AuthUser, requestedOrgId?: string): string | undefined {
+    if (user.role === UserRole.SUPER_ADMIN) return requestedOrgId || undefined;
+    return user.organizationId;
+  }
+
+  private async assertRagDocAccess(docId: string, user: AuthUser, mode: 'read' | 'write') {
+    if (!/^[0-9a-f-]{36}$/i.test(docId)) throw new BadRequestException('Identificador de documento inválido');
+    const doc = (await this.aiService.getRagDocument(docId)) as { organization_id?: string | null } | null;
+    if (!doc) throw new NotFoundException('Documento no encontrado');
+    const orgId = doc.organization_id ?? null;
+    if (user.role === UserRole.SUPER_ADMIN) return doc;
+    if (orgId === null) {
+      // Documento GLOBAL: todos lo leen, solo el SUPER_ADMIN lo modifica.
+      if (mode === 'read') return doc;
+      throw new ForbiddenException('Los documentos de la base normativa global solo los gestiona el Super Admin.');
+    }
+    if (orgId !== user.organizationId) throw new NotFoundException('Documento no encontrado');
+    return doc;
   }
 
   // ─── ATLAS — Análisis Multi-Año ──────────────────────────────────────────────

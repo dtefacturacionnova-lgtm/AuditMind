@@ -1,4 +1,6 @@
 import { Controller, Post, Body, Get, ForbiddenException, HttpCode, HttpStatus } from '@nestjs/common';
+import { InviteUserDto } from './dto/invite-user.dto';
+import { assertCanGrantRole } from '../common/utils/tenant.util';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -42,11 +44,15 @@ export class AuthController {
   @Roles('ADMIN', 'CAE')
   @ApiOperation({ summary: 'Invita un nuevo usuario a la organización' })
   inviteUser(
-    @Body() dto: { email: string; name: string; role: string },
+    @Body() dto: InviteUserDto,
     @CurrentUser() currentUser: AuthUser,
   ) {
+    // Nadie invita con un rol superior al suyo; SUPER_ADMIN solo lo otorga otro SUPER_ADMIN.
+    assertCanGrantRole(currentUser, dto.role);
     return this.authService.inviteUser({
-      ...dto,
+      email: dto.email,
+      name: dto.name,
+      role: dto.role,
       organizationId: currentUser.organizationId,
     });
   }

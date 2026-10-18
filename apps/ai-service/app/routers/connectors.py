@@ -7,6 +7,8 @@ Endpoints:
   POST /connectors/import  — ejecutar importación y normalización
 """
 import httpx
+
+from app.services.url_guard import UnsafeUrlError, safe_get
 import io
 import csv
 import json
@@ -113,19 +115,25 @@ async def _test_rest_api(config: dict) -> dict:
     if not url:
         return {"ok": False, "message": "base_url es requerido"}
 
-    # Usar endpoint de health/ping si está configurado
-    test_endpoint = config.get("health_endpoint") or url.rstrip("/")
+    # Usar endpoint de health/ping si está configurado; si es relativo
+    # (ej. "/companyinfo/1", como sugiere la UI) se resuelve contra base_url.
+    health = (config.get("health_endpoint") or "").strip()
+    if health and "://" not in health:
+        test_endpoint = url.rstrip("/") + "/" + health.lstrip("/")
+    else:
+        test_endpoint = health or url.rstrip("/")
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(test_endpoint, headers=headers)
+        resp = await safe_get(test_endpoint, headers=headers, timeout=10)
         if resp.status_code < 400:
             return {"ok": True, "message": f"Conexión exitosa (HTTP {resp.status_code})"}
         return {"ok": False, "message": f"HTTP {resp.status_code}: {resp.text[:200]}"}
-    except httpx.ConnectError as e:
-        return {"ok": False, "message": f"No se pudo conectar: {str(e)[:200]}"}
-    except Exception as e:
-        return {"ok": False, "message": str(e)[:200]}
+    except UnsafeUrlError as e:
+        return {"ok": False, "message": str(e)}
+    except httpx.ConnectError:
+        return {"ok": False, "message": "No se pudo conectar con el servidor indicado"}
+    except Exception:
+        return {"ok": False, "message": "Error al probar la conexión"}
 
 
 def _test_sap_rfc(config: dict) -> dict:
@@ -167,12 +175,15 @@ async def _import_rest_api(config: dict, options: dict) -> dict:
     full_url = f"{url}{endpoint}" if endpoint else url
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(full_url, headers=headers)
+        resp = await safe_get(full_url, headers=headers, timeout=30)
         resp.raise_for_status()
         raw_data = resp.json()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Error al obtener datos: {str(e)}")
+    except UnsafeUrlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"La API respondió HTTP {e.response.status_code}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Error al obtener datos de la API")
 
     # Aplanar si la respuesta tiene un wrapper {"data": [...], "items": [...], etc.}
     if isinstance(raw_data, dict):

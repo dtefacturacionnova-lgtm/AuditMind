@@ -142,7 +142,10 @@ export class OrganizationsService {
       data: {
         name: dto.name,
         primaryColor: dto.primaryColor,
-        plan: dto.subscriptionTier?.toLowerCase(),
+        // El plan comercial lo define la plataforma, no la propia organización.
+        ...(dto.subscriptionTier !== undefined && user.role === UserRole.SUPER_ADMIN && {
+          plan: dto.subscriptionTier.toLowerCase(),
+        }),
         // Antes cada edición forzaba `active: true` (reactivaba en silencio una
         // organización desactivada). Ahora solo el SUPER_ADMIN cambia `active`, y solo si lo envía.
         ...(dto.active !== undefined && user.role === UserRole.SUPER_ADMIN && { active: dto.active }),

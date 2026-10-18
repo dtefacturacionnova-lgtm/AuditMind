@@ -17,8 +17,11 @@ export async function recalculateAuditActualHours(
   auditId: string | null | undefined,
 ): Promise<void> {
   if (!auditId) return;
+  const audit = await prisma.audit.findUnique({ where: { id: auditId }, select: { organizationId: true } });
+  if (!audit) return;
+  // Solo cuentan horas registradas dentro de la organización del encargo.
   const result = await prisma.timeEntry.aggregate({
-    where: { auditId },
+    where: { auditId, organizationId: audit.organizationId },
     _sum: { hours: true },
   });
   await prisma.audit.update({

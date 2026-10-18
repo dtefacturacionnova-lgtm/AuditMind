@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateFindingDto, UpdateFindingDto, AssignResponsibleDto, RejectFindingDto, CreateActionDto, UpdateActionDto } from './dto/create-finding.dto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { FindingStatus, UserRole, EscalationLevel, Finding } from '@prisma/client';
+import { assertInOrg } from '../common/utils/tenant.util';
 
 // ─── Quality Score Engine ────────────────────────────────────────────────────
 function computeQualityScore(data: {
@@ -86,6 +87,8 @@ export class FindingsService {
   // ─── CRUD ──────────────────────────────────────────────────────────────────
   async create(dto: CreateFindingDto, user: AuthUser) {
     await this.assertAuditAccess(dto.auditId, user);
+    // El papel de trabajo debe ser de ESTE encargo (antes se aceptaba cualquier id).
+    await assertInOrg(this.prisma.workingPaper, dto.workingPaperId, { auditId: dto.auditId }, 'El papel de trabajo');
 
     const score = computeQualityScore(dto);
     const isMaterial = dto.isMaterial ??
@@ -319,6 +322,7 @@ export class FindingsService {
     if (finding.status !== FindingStatus.APPROVED) {
       throw new ForbiddenException('Solo se puede asignar responsable a hallazgos aprobados');
     }
+    await assertInOrg(this.prisma.user, dto.responsibleId, { organizationId: user.organizationId }, 'El responsable');
 
     const dueDate = new Date(dto.dueDate);
 
@@ -351,6 +355,7 @@ export class FindingsService {
   // ─── FindingAction CRUD ────────────────────────────────────────────────────
   async createAction(findingId: string, dto: CreateActionDto, user: AuthUser) {
     await this.assertFindingAccess(findingId, user);
+    await assertInOrg(this.prisma.user, dto.responsibleId, { organizationId: user.organizationId }, 'El responsable');
     return this.prisma.findingAction.create({
       data: {
         findingId,
@@ -366,9 +371,15 @@ export class FindingsService {
   }
 
   async updateAction(actionId: string, dto: UpdateActionDto, user: AuthUser) {
-    const action = await this.prisma.findingAction.findUnique({ where: { id: actionId } });
+    const action = await this.prisma.findingAction.findUnique({
+      where: { id: actionId },
+      include: { finding: { select: { audit: { select: { organizationId: true } } } } },
+    });
     if (!action) throw new NotFoundException('Acción no encontrada');
-    if (action.organizationId !== user.organizationId) throw new ForbiddenException();
+    // Se valida contra la organización del ENCARGO (fuente de verdad), no solo
+    // contra la copia `organizationId` de la acción.
+    if (action.organizationId !== user.organizationId
+      || action.finding?.audit?.organizationId !== user.organizationId) throw new ForbiddenException();
 
     const data: Record<string, unknown> = {};
     if (dto.status      !== undefined) data.status      = dto.status;

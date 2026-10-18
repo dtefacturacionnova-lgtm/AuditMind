@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInOrg } from '../common/utils/tenant.util';
 import { AssignEqrReviewerDto, UpdateEqrChecklistDto, CompleteEqrDto } from './dto/eqr.dto';
 
 const EQR_INCLUDE = {
@@ -45,6 +46,7 @@ export class EqrService {
    */
   async assignReviewer(auditId: string, dto: AssignEqrReviewerDto, user: AuthUser) {
     await this.getAuditOrThrow(auditId, user);
+    await assertInOrg(this.prisma.user, dto.reviewerId, { organizationId: user.organizationId }, 'El revisor');
     const audit = await this.prisma.audit.findUnique({
       where: { id: auditId },
       select: { team: { select: { userId: true } } },

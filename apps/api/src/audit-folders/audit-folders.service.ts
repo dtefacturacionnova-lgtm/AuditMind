@@ -1,6 +1,7 @@
 import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
+import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PhaseStatus, PhaseType, WpKind, WorkingPaperType, WorkingPaperStatus } from '@prisma/client';
@@ -158,7 +159,7 @@ export class AuditFoldersService {
     let sections: SectionDef[] | null = null;
     if (audit?.templateId) {
       const template = await this.prisma.auditTemplate.findFirst({
-        where: { id: audit.templateId },
+        where: { id: audit.templateId, organizationId: user.organizationId },
         select: { sections: true },
       });
       if (template?.sections && Array.isArray(template.sections) && (template.sections as unknown[]).length > 0) {
@@ -449,9 +450,10 @@ export class AuditFoldersService {
     await this.verifyAuditAccess(auditId, user);
 
     // Validar profundidad máxima (3 niveles)
+    await assertInOrg(this.prisma.auditPhase, dto.phaseId, { auditId }, 'La fase');
     if (dto.parentId) {
-      const parent = await this.prisma.auditFolder.findUnique({
-        where: { id: dto.parentId },
+      const parent = await this.prisma.auditFolder.findFirst({
+        where: { id: dto.parentId, auditId },
         include: { parent: true },
       });
       if (!parent) throw new NotFoundException('Carpeta padre no encontrada');
@@ -487,6 +489,11 @@ export class AuditFoldersService {
     });
     if (!folder) throw new NotFoundException('Carpeta no encontrada');
     if (folder.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    await assertInOrg(this.prisma.auditPhase, dto.phaseId, { auditId: folder.auditId }, 'La fase');
+    await assertInOrg(this.prisma.auditFolder, dto.parentId, { auditId: folder.auditId }, 'La carpeta padre');
+    if (dto.parentId && dto.parentId === folderId) {
+      throw new BadRequestException('Una carpeta no puede ser su propia carpeta padre');
+    }
 
     return this.prisma.auditFolder.update({
       where: { id: folderId },
@@ -524,6 +531,11 @@ export class AuditFoldersService {
   }
 
   async reorderFolders(dto: ReorderFoldersDto, user: AuthUser) {
+    // Antes reordenaba carpetas de cualquier organización por id.
+    await assertAllInOrg(
+      this.prisma.auditFolder, dto.items.map((i) => i.id),
+      { audit: { organizationId: user.organizationId } }, 'Carpetas',
+    );
     const updates = dto.items.map(({ id, sortOrder }) =>
       this.prisma.auditFolder.update({
         where: { id },

@@ -625,7 +625,7 @@ export class AiService {
 
   // ─── RAG — Un documento (polling de estado tras ingesta en segundo plano) ───
   async getRagDocument(docId: string): Promise<unknown> {
-    const res = await fetch(`${this.aiServiceUrl}/rag/documents/${docId}`);
+    const res = await fetch(`${this.aiServiceUrl}/rag/documents/${encodeURIComponent(docId)}`);
     if (!res.ok) {
       if (res.status === 404) throw new HttpException('Documento no encontrado', HttpStatus.NOT_FOUND);
       throw new HttpException('RAG get error', HttpStatus.BAD_GATEWAY);
@@ -635,7 +635,7 @@ export class AiService {
 
   // ─── RAG — Activar/desactivar documento sin borrarlo ─────────────────────────
   async toggleRagDocument(docId: string): Promise<unknown> {
-    const res = await fetch(`${this.aiServiceUrl}/rag/documents/${docId}/toggle`, {
+    const res = await fetch(`${this.aiServiceUrl}/rag/documents/${encodeURIComponent(docId)}/toggle`, {
       method: 'PATCH',
       headers: { 'x-internal-key': this.internalKey },
     });
@@ -675,7 +675,7 @@ export class AiService {
 
   // ─── RAG — Eliminar documento ────────────────────────────────────────────────
   async deleteRagDocument(docId: string): Promise<unknown> {
-    const res = await fetch(`${this.aiServiceUrl}/rag/documents/${docId}`, {
+    const res = await fetch(`${this.aiServiceUrl}/rag/documents/${encodeURIComponent(docId)}`, {
       method: 'DELETE',
       headers: { 'x-internal-key': this.internalKey },
     });

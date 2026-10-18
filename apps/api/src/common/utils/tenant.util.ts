@@ -44,6 +44,19 @@ export async function assertAllInOrg(
   if (found !== unique.length) throw new BadRequestException(`${label}: uno o más no existen en tu organización.`);
 }
 
+/**
+ * Un auditor (o rol menor) no puede revisar ni aprobar un papel que él mismo
+ * preparó; los cargos superiores a AUDITOR (Auditor Senior, Gerente, CAE…) sí
+ * pueden auto-revisar (decisión del usuario, 2026-10-18).
+ */
+export function assertCanSelfReview(role: string): void {
+  if (roleLevel(role) <= roleLevel('AUDITOR')) {
+    throw new ForbiddenException(
+      'Un auditor no puede revisar ni aprobar un papel que él mismo preparó: debe hacerlo un cargo superior (Auditor Senior o más).',
+    );
+  }
+}
+
 export const roleLevel = (role: string | null | undefined): number => ROLE_HIERARCHY[role ?? ''] ?? 0;
 
 /**

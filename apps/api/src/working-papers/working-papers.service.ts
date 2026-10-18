@@ -1,7 +1,7 @@
 import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
-import { assertInOrg } from '../common/utils/tenant.util';
+import { assertInOrg, assertCanSelfReview } from '../common/utils/tenant.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -114,6 +114,8 @@ export class WorkingPapersService {
     // (auditoría de seguridad 2026-10-18 — antes se aceptaba cualquier id).
     await assertInOrg(this.prisma.auditFolder, dto.folderId, { auditId: dto.auditId }, 'La carpeta');
     await assertInOrg(this.prisma.user, dto.reviewerId, { organizationId: user.organizationId }, 'El revisor');
+    // Quien prepara el papel (el que lo crea) no puede quedar como su propio revisor salvo cargo superior.
+    if (dto.reviewerId && dto.reviewerId === user.id) assertCanSelfReview(user.role);
 
     // Resolve indexSection from folderId if not provided explicitly
     let indexSection = dto.indexSection;
@@ -764,6 +766,12 @@ export class WorkingPapersService {
 
     if (dto.reviewerId) {
       await assertInOrg(this.prisma.user, dto.reviewerId, { organizationId: user.organizationId }, 'El revisor');
+      if (dto.reviewerId === wp.preparedById) {
+        const reviewerRole = dto.reviewerId === user.id
+          ? user.role
+          : (await this.prisma.user.findUnique({ where: { id: dto.reviewerId }, select: { role: true } }))?.role ?? 'READ_ONLY';
+        assertCanSelfReview(reviewerRole);
+      }
     }
 
     // Snapshot version before updating
@@ -814,6 +822,8 @@ export class WorkingPapersService {
       const approverRoles: string[] = [UserRole.AUDIT_MANAGER, UserRole.CAE, UserRole.SENIOR_AUDITOR];
       const canApprove = wp.reviewedById === user.id || approverRoles.includes(user.role);
       if (!canApprove) throw new ForbiddenException('Solo el revisor asignado o un gerente puede aprobar este papel');
+      // Aun siendo el revisor asignado, un auditor no aprueba lo que él mismo preparó.
+      if (wp.preparedById === user.id) assertCanSelfReview(user.role);
     }
 
     if (dto.reviewNotes) {

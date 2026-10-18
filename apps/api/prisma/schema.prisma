@@ -2136,6 +2136,7 @@ model PbcRequest {
   dueDate          DateTime
   status           PbcRequestStatus @default(PENDING)
   portalToken      String           @unique
+  portalTokenExpiresAt DateTime? // vence el enlace del portal público; se renueva al regenerarlo
   fileUrls         Json             @default("[]")
   rejectionReason  String?
   submittedAt      DateTime?

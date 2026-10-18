@@ -2,7 +2,9 @@ import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { StorageUrlService } from './common/storage/storage-url.service';
+import { StorageUrlInterceptor } from './common/storage/storage-url.interceptor';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -100,6 +102,9 @@ import { WatchlistsModule } from './watchlists/watchlists.module';
     // Guards globales — aplican a todos los endpoints excepto los @Public()
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Bucket `audit-files` privado: firma las URLs de adjuntos al responder.
+    StorageUrlService,
+    { provide: APP_INTERCEPTOR, useClass: StorageUrlInterceptor },
   ],
 })
 export class AppModule {

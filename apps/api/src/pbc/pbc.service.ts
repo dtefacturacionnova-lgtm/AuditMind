@@ -1,11 +1,22 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException,
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, GoneException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePbcRequestDto } from './dto/create-pbc-request.dto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PbcRequestStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
+
+/**
+ * Vencimiento del enlace del portal público (decisión 2026-10-18): 30 días
+ * después de la fecha límite de la solicitud (o desde hoy, si esa fecha ya
+ * pasó). "Regenerar enlace" lo renueva. Antes los enlaces no vencían nunca.
+ */
+const PORTAL_LINK_GRACE_DAYS = 30;
+function portalExpiry(dueDate: Date): Date {
+  const base = Math.max(dueDate.getTime(), Date.now());
+  return new Date(base + PORTAL_LINK_GRACE_DAYS * 24 * 3600 * 1000);
+}
 
 /**
  * Lo único que ve el auditado en el portal público (sin login). Antes se
@@ -15,7 +26,7 @@ import { randomBytes } from 'crypto';
 const PORTAL_SELECT = {
   id: true, title: true, description: true, status: true, dueDate: true,
   submittedAt: true, acceptedAt: true, rejectionReason: true,
-  requestedToName: true, fileUrls: true,
+  requestedToName: true, fileUrls: true, portalTokenExpiresAt: true,
   audit:    { select: { title: true } },
   messages: {
     orderBy: { createdAt: 'asc' as const },
@@ -49,6 +60,7 @@ export class PbcService {
         requestedToName:  dto.assignedToName,
         dueDate:          new Date(dto.dueDate),
         portalToken:      this.generatePortalToken(),
+        portalTokenExpiresAt: portalExpiry(new Date(dto.dueDate)),
         status:           PbcRequestStatus.PENDING,
         createdById:      user.id,
       },
@@ -219,8 +231,8 @@ export class PbcService {
 
     return this.prisma.pbcRequest.update({
       where: { id },
-      data:   { portalToken: this.generatePortalToken() },
-      select: { id: true, portalToken: true },
+      data:   { portalToken: this.generatePortalToken(), portalTokenExpiresAt: portalExpiry(request.dueDate) },
+      select: { id: true, portalToken: true, portalTokenExpiresAt: true },
     });
   }
 
@@ -238,12 +250,19 @@ export class PbcService {
 
   // ─── Métodos públicos del portal (validados por token) ────────────────────────
 
+  private assertLinkActive(request: { portalTokenExpiresAt: Date | null }) {
+    if (request.portalTokenExpiresAt && request.portalTokenExpiresAt.getTime() < Date.now()) {
+      throw new GoneException('Este enlace venció. Pide uno nuevo al equipo auditor.');
+    }
+  }
+
   async findByToken(token: string) {
     const request = await this.prisma.pbcRequest.findUnique({
       where: { portalToken: token },
       select: PORTAL_SELECT,
     });
     if (!request) throw new NotFoundException('Solicitud no encontrada o token inválido');
+    this.assertLinkActive(request);
     return request;
   }
 
@@ -252,6 +271,7 @@ export class PbcService {
       where: { portalToken: token },
     });
     if (!request) throw new NotFoundException('Token inválido');
+    this.assertLinkActive(request);
     if (request.status === PbcRequestStatus.ACCEPTED) {
       throw new BadRequestException('Esta solicitud ya fue aceptada y no acepta más mensajes');
     }
@@ -274,6 +294,7 @@ export class PbcService {
       where: { portalToken: token },
     });
     if (!request) throw new NotFoundException('Token inválido');
+    this.assertLinkActive(request);
     if (request.status === PbcRequestStatus.ACCEPTED) {
       throw new BadRequestException('Esta solicitud ya fue aceptada');
     }

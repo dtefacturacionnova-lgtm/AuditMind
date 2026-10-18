@@ -13,7 +13,9 @@ export class PerformanceController {
   constructor(private readonly service: PerformanceService) {}
 
   @Get('performance')
-  @Roles(UserRole.AUDITOR)
+  // Decisión del usuario (2026-10-18): AUDITEE y solo lectura pueden ver QAIP.
+  // El roster de competencias y el Comité siguen siendo AUDIT_MANAGER+ por código.
+  @Roles(UserRole.READ_ONLY)
   @ApiQuery({ name: 'year', required: false })
   @ApiOperation({ summary: 'Tablero de KPIs de desempeño (Std. 12.2) — calculado, sin datos nuevos del usuario' })
   getDashboard(@Query('year') year: string | undefined, @CurrentUser() user: AuthUser) {

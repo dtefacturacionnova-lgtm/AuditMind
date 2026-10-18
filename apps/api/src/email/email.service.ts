@@ -38,6 +38,16 @@ export interface SendEmailResult {
   error?:  string;
 }
 
+/** Escapa texto que viene de usuarios antes de meterlo en HTML de correo. */
+export function escHtml(v: unknown): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -81,7 +91,7 @@ export class EmailService {
       const res = await this.client.emails.send({
         from:     input.from    ?? this.defaultFrom,
         to,
-        subject:  input.subject,
+        subject:  input.subject.replace(/[\r\n]+/g, ' '),
         html,
         text:     input.text,
         replyTo:  input.replyTo,
@@ -111,18 +121,19 @@ export class EmailService {
     ctaUrl?:     string;
     footer?:     string;
   }): string {
-    const heading = opts.heading ?? '';
+    const heading = escHtml(opts.heading ?? '');
     const paragraphs = opts.paragraphs ?? [];
-    const footer = opts.footer ?? 'AuditMind · Plataforma de Auditoría Inteligente';
+    const footer = escHtml(opts.footer ?? 'AuditMind · Plataforma de Auditoría Inteligente');
 
-    const ctaBlock = opts.ctaLabel && opts.ctaUrl ? `
+    const ctaOk = !!opts.ctaLabel && !!opts.ctaUrl && /^https?:\/\//i.test(opts.ctaUrl);
+    const ctaBlock = ctaOk ? `
       <tr>
         <td align="center" style="padding: 24px 0 8px 0;">
-          <a href="${opts.ctaUrl}" target="_blank"
+          <a href="${escHtml(opts.ctaUrl)}" target="_blank"
              style="display: inline-block; background: #0F2D4A; color: #ffffff;
                     padding: 12px 28px; border-radius: 12px; text-decoration: none;
                     font-weight: 600; font-size: 14px;">
-            ${opts.ctaLabel}
+            ${escHtml(opts.ctaLabel)}
           </a>
         </td>
       </tr>` : '';
@@ -198,12 +209,12 @@ export class EmailService {
   }) {
     return this.send({
       to,
-      subject: `🎯 Hallazgo asignado: ${params.findingTitle}`,
+      subject: `🎯 Hallazgo asignado: ${escHtml(params.findingTitle)}`,
       body: {
         heading: 'Se te asignó un hallazgo nuevo',
         paragraphs: [
-          `Has sido designado/a como responsable de remediar un hallazgo en la auditoría <strong>${params.auditTitle}</strong>.`,
-          `<strong>Hallazgo:</strong> ${params.findingTitle}<br/><strong>Severidad:</strong> ${params.severity}${params.dueDate ? `<br/><strong>Fecha límite:</strong> ${params.dueDate}` : ''}`,
+          `Has sido designado/a como responsable de remediar un hallazgo en la auditoría <strong>${escHtml(params.auditTitle)}</strong>.`,
+          `<strong>Hallazgo:</strong> ${escHtml(params.findingTitle)}<br/><strong>Severidad:</strong> ${escHtml(params.severity)}${params.dueDate ? `<br/><strong>Fecha límite:</strong> ${escHtml(params.dueDate)}` : ''}`,
         ],
         ctaLabel: 'Ver hallazgo',
         ctaUrl:   `${this.appUrl}/dashboard/findings/${params.findingId}`,
@@ -220,11 +231,11 @@ export class EmailService {
   }) {
     return this.send({
       to,
-      subject: `📋 ${params.auditTitle}: ${params.requestCount} solicitud(es) de información`,
+      subject: `📋 ${escHtml(params.auditTitle)}: ${params.requestCount} solicitud(es) de información`,
       body: {
         heading: `Hola ${params.auditeeName}`,
         paragraphs: [
-          `Tienes <strong>${params.requestCount} solicitud${params.requestCount > 1 ? 'es' : ''} de información</strong> pendiente${params.requestCount > 1 ? 's' : ''} en la auditoría <strong>${params.auditTitle}</strong>.`,
+          `Tienes <strong>${params.requestCount} solicitud${params.requestCount > 1 ? 'es' : ''} de información</strong> pendiente${params.requestCount > 1 ? 's' : ''} en la auditoría <strong>${escHtml(params.auditTitle)}</strong>.`,
           `Por favor accede al portal PBC para revisar las solicitudes y cargar los soportes correspondientes. El portal es seguro y no requiere registro adicional.`,
         ],
         ctaLabel: 'Abrir portal',
@@ -243,11 +254,11 @@ export class EmailService {
   }) {
     return this.send({
       to,
-      subject: `✍ Papel listo para revisión: ${params.paperCode}`,
+      subject: `✍ Papel listo para revisión: ${escHtml(params.paperCode)}`,
       body: {
         heading: 'Papel de trabajo enviado a revisión',
         paragraphs: [
-          `<strong>${params.preparedBy}</strong> envió a revisión el papel <strong>${params.paperCode} — ${params.paperTitle}</strong> de la auditoría <strong>${params.auditTitle}</strong>.`,
+          `<strong>${escHtml(params.preparedBy)}</strong> envió a revisión el papel <strong>${escHtml(params.paperCode)} — ${escHtml(params.paperTitle)}</strong> de la auditoría <strong>${escHtml(params.auditTitle)}</strong>.`,
           'Revisa el contenido, deja comentarios donde corresponda, y firma para aprobar.',
         ],
         ctaLabel: 'Revisar papel',
@@ -270,7 +281,7 @@ export class EmailService {
       body: {
         heading: 'Pruebas IA detectaron un hallazgo potencial',
         paragraphs: [
-          `<strong>Fuente:</strong> ${params.source}<br/><strong>Auditoría:</strong> ${params.auditTitle}<br/><strong>Severidad:</strong> ${params.severity}`,
+          `<strong>Fuente:</strong> ${escHtml(params.source)}<br/><strong>Auditoría:</strong> ${escHtml(params.auditTitle)}<br/><strong>Severidad:</strong> ${escHtml(params.severity)}`,
           `Se ha creado un borrador de hallazgo automáticamente. Por favor revisa, ajusta la narrativa y aprueba para incluirlo en el informe.`,
         ],
         ctaLabel: 'Revisar hallazgo',
@@ -289,12 +300,12 @@ export class EmailService {
   }) {
     return this.send({
       to,
-      subject: `🔐 Solicitud de confirmación: ${params.auditedEntity}`,
+      subject: `🔐 Solicitud de confirmación: ${escHtml(params.auditedEntity)}`,
       body: {
         heading: 'Solicitud de Confirmación Externa (NIA 505)',
         paragraphs: [
-          `En el marco de la auditoría de <strong>${params.auditedEntity}</strong>, solicitamos su confirmación sobre <strong>${params.confirmType}</strong>.`,
-          `Por favor acceda al enlace seguro y registre su respuesta antes del <strong>${params.deadline}</strong>.`,
+          `En el marco de la auditoría de <strong>${escHtml(params.auditedEntity)}</strong>, solicitamos su confirmación sobre <strong>${escHtml(params.confirmType)}</strong>.`,
+          `Por favor acceda al enlace seguro y registre su respuesta antes del <strong>${escHtml(params.deadline)}</strong>.`,
           'Esta solicitud cumple con la Norma Internacional de Auditoría 505 sobre Confirmaciones Externas.',
         ],
         ctaLabel: 'Responder confirmación',

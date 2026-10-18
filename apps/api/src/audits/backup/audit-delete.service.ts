@@ -105,6 +105,11 @@ export class AuditDeleteService {
     //    ya está limpia (mismo criterio que `removeRequestDocument`: la
     //    limpieza de Storage nunca bloquea la operación principal).
     const resultadoArchivos = await this.filesSvc.borrarArchivos(rutas);
+    // Firma por enlace: las filas ya se fueron por cascada; sus archivos (PDF originales, sellados, adjuntos de
+    // terceros) viven bajo signature-requests/<auditId>/ y no aparecen en los datos del encargo.
+    const archivosFirma = await this.filesSvc.borrarPrefijo(`signature-requests/${auditId}`);
+    resultadoArchivos.ok += archivosFirma.ok;
+    resultadoArchivos.error += archivosFirma.error;
 
     this.logger.log(
       `Encargo '${auditId}' ("${audit.title}") borrado COMPLETO por ${user.id}: ` +

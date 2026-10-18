@@ -81,6 +81,14 @@ module.exports = {
         AI_SERVICE_INTERNAL_KEY: e.AI_SERVICE_INTERNAL_KEY,
         // Stirling-PDF (OCR self-hosted) — contenedor Docker separado, mismo VPS
         STIRLING_PDF_URL:        'http://127.0.0.1:8090',
+        // Firma electrónica simple por enlace (docs/firma-externa-por-enlace.md §17).
+        // APAGADA por defecto: se enciende poniendo SIGNATURES_PUBLIC_ENABLED=true en /home/deploy/auditmind/.env
+        // y recargando (pm2 reload ... --update-env). Es el interruptor para abrir/cerrar la superficie pública.
+        SIGNATURES_PUBLIC_ENABLED: e.SIGNATURES_PUBLIC_ENABLED,
+        SIGNATURE_TSA_URLS:        e.SIGNATURE_TSA_URLS, // opcional; por defecto DigiCert y Sectigo
+        // ClamAV (antivirus de adjuntos de terceros) — contenedor Docker separado, solo 127.0.0.1
+        CLAMAV_HOST: '127.0.0.1',
+        CLAMAV_PORT: '3310',
       },
       max_memory_restart: '1G',
       autorestart: true,

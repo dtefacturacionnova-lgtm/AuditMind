@@ -5,7 +5,14 @@
 | Fase | Estado |
 |---|---|
 | F1a · Infraestructura y bases | **Hecha y aplicada en producción (2026-10-18), 62 pruebas.** SQL aplicado, ClamAV en `127.0.0.1:3310` (EICAR detectado; no accesible desde internet), API desplegada con `trust proxy` y límite de intentos registrado. Verificado el código compilado contra el ClamAV real y el cifrado con la clave real del servidor |
-| F1b · F1c · F1d · F1e · F2 · F3 · F4 · F5 · F5b · F6 | Pendientes |
+| F1b · Servicio y API | **Hecha en código (2026-10-18), 170 pruebas.** Servicio interno y público, adjuntos con antivirus, sellado, tareas programadas, controladores. Interruptor apagado por defecto. Pendiente de desplegar |
+| F1c · F1d · F1e · F2 · F3 · F4 · F5 · F5b · F6 | Pendientes |
+
+Precisiones surgidas al construir F1b:
+- **El ValidationPipe global convierte `"false"` en `true`** (`enableImplicitConversion`) antes de que `@IsBoolean` valide. Para el consentimiento y `reminderEnabled` se lee el valor original con `@Transform(({ obj, key }) => obj[key])`; una prueba de controlador lo exige. El mismo riesgo existe en todos los DTO del repo con booleanos (pendiente aparte).
+- La firma y el rechazo revisan el estado de la solicitud **dentro de la transacción, después de bloquearla**, antes de la sesión: si otra firma ya ganó, el mensaje es "ya fue firmada" (409) y no "verifica tu correo" (401). La condición del `updateMany` queda como segunda capa.
+- Los límites de adjuntos viven en un solo objeto (`ATTACHMENT_LIMITS`) para poder probarlos con tamaños pequeños.
+- Una prueba de mutaciones rompió a propósito 7 puntos críticos (intentos del código, firma tras vencimiento, verificación de la bitácora al sellar, fuga del hash del token, límite por IP, antivirus que falla abierto, aislamiento por organización): las pruebas detectaron los 7 (uno solo con las dos capas de la firma quitadas a la vez).
 
 Precisiones surgidas al construir F1a (el diseño no cambia, solo se concreta):
 - El HMAC del código de verificación se calcula sobre `requestId:código` (no solo el código), así un código de una solicitud no sirve en otra.
@@ -286,13 +293,10 @@ model SignatureAttachment {
 - `signature-requests/<scope>/<requestId>/attachments/<attId>.pdf` (reconstruido)
 - `signature-requests/<scope>/<requestId>/attachments/quarantine/<attId>.<ext>` (original)
 
-**Respaldo y borrado de encargos:**
-- En `AUDIT_SCOPED_MODELS` (`apps/api/src/audits/backup/audit-backup.types.ts`) se agregan:
-  - `signatureRequest`, con `auditId` propio;
-  - `signatureEvent` y `signatureAttachment`, por un filtro nuevo `via_requestId`.
-- `signatureSession` no se respalda: es efímera.
-- Las rutas llevan el `auditId` como carpeta, así que el filtro de rutas propias del respaldo ya las acepta.
-- **Restaurar no reactiva enlaces.** Al restaurar, toda solicitud `PENDING` o `VIEWED` pasa a `REVOKED`, con motivo "restaurada desde respaldo".
+**Respaldo y borrado de encargos — DECISIÓN REVISADA en F1b (2026-10-18):** las tablas `signature_*` quedan **FUERA** de `AUDIT_SCOPED_MODELS`, igual que `engagement`.
+- Motivo: la restauración de un encargo regenera los identificadores de las filas. La bitácora encadenada parte de `sha256("signature-request:" + requestId)`, así que restaurar con otros ids rompería la verificación de la cadena y destruiría justo la evidencia que se quiere proteger. La evidencia de firma es inmutable por diseño y no se restaura.
+- **Borrar un encargo:** las filas de firma se eliminan solas por cascada (`ON DELETE CASCADE` de `signature_requests.auditId`). Sus archivos en Storage (`signature-requests/<auditId>/…`) se borran aparte en `audit-delete.service.ts` con `AuditBackupFilesService.borrarPrefijo` (solo opera sobre ese prefijo; probado).
+- **Pendiente futuro:** que el respaldo del encargo incluya, como archivos sueltos bajo `firmas/`, los PDF firmados y un resumen de cada firma (sin filas de BD), para que un respaldo no pierda los documentos firmados.
 
 ---
 
@@ -704,7 +708,7 @@ Están en `apps/api/src/signatures/legal-texts.ts`. Cada firma guarda la versió
 3. Despliegue del código.
 4. Prueba de punta a punta.
 
-**Interruptor:** `SIGNATURES_PUBLIC_ENABLED` (`true` por defecto tras F5). Con `false`, los endpoints públicos responden 503 "Firma por enlace en mantenimiento"; sirve para apagar la superficie pública sin desplegar.
+**Interruptor:** `SIGNATURES_PUBLIC_ENABLED`. **APAGADO por defecto** (solo vale `true` si se escribe exactamente así): la superficie pública se abre a propósito, no por omisión. Con el interruptor apagado, TODOS los endpoints públicos y los de crear/reenviar responden 503 y las tareas programadas no hacen nada. Se enciende poniendo `SIGNATURES_PUBLIC_ENABLED=true` en `/home/deploy/auditmind/.env` y desplegando/recargando (`pm2 reload … --update-env`); se apaga igual de rápido. Se pasa al proceso desde `ecosystem.config.cjs`.
 
 ---
 

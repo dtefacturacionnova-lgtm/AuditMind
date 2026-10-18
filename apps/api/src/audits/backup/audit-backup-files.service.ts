@@ -173,6 +173,28 @@ export class AuditBackupFilesService {
    * `audits.service.ts`: la limpieza de Storage es best-effort, nunca
    * bloquea la operación principal).
    */
+  /**
+   * Borra TODO lo que cuelga de una carpeta del bucket (recorre las subcarpetas). Se usa al borrar un encargo para los
+   * archivos de la firma por enlace (`signature-requests/<auditId>/…`): no están referenciados por URL dentro de los
+   * datos del encargo, así que `extraerRutasDeArchivo` no los ve. Solo opera sobre el prefijo que se le da.
+   */
+  async borrarPrefijo(prefijo: string): Promise<{ ok: number; error: number }> {
+    const carpeta = prefijo.replace(/\/+$/, '');
+    if (!carpeta || carpeta.includes('..')) return { ok: 0, error: 0 };
+    const rutas: string[] = [];
+    const recorrer = async (dir: string, nivel: number): Promise<void> => {
+      const { data, error } = await this.supabaseAdmin.storage.from(BUCKET).list(dir, { limit: 1000 });
+      if (error || !data) { if (error) this.logger.warn(`No se pudo listar '${dir}': ${error.message}`); return; }
+      for (const item of data) {
+        const completa = `${dir}/${item.name}`;
+        if (item.id) rutas.push(completa);
+        else if (nivel < 5) await recorrer(completa, nivel + 1); // "carpeta"
+      }
+    };
+    await recorrer(carpeta, 0);
+    return this.borrarArchivos(rutas);
+  }
+
   async borrarArchivos(rutas: string[]): Promise<{ ok: number; error: number }> {
     if (rutas.length === 0) return { ok: 0, error: 0 };
     let ok = 0;

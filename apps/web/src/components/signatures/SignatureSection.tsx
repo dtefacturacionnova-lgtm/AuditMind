@@ -7,8 +7,8 @@ import { SendForSignatureModal, type SendForSignatureModalProps } from './SendFo
 import { SignatureRequestsPanel, type SignatureRequestsPanelProps } from './SignatureRequestsPanel';
 
 type SectionProps =
-  Pick<SignatureRequestsPanelProps, 'documentType' | 'title' | 'sendLabel' | 'sendDisabledReason' | 'canManage' | 'isManager' | 'renderResponse' | 'responseLabels' | 'emptyHint'> &
-  Pick<SendForSignatureModalProps, 'documentLabel' | 'documentTitle' | 'defaultSigner' | 'initialPayload' | 'renderPayloadFields' | 'validatePayload' | 'onSent'> &
+  Pick<SignatureRequestsPanelProps, 'documentType' | 'title' | 'sendLabel' | 'sendDisabledReason' | 'canManage' | 'isManager' | 'renderResponse' | 'responseLabels' | 'emptyHint' | 'allowInPerson'> &
+  Pick<SendForSignatureModalProps, 'documentLabel' | 'documentTitle' | 'defaultSigner' | 'initialPayload' | 'renderPayloadFields' | 'validatePayload' | 'onSent' | 'notice'> &
   {
     targetId: string;
     /** `false` oculta el botón de envío (p. ej. la carta ya se firmó). Por defecto se muestra. */
@@ -30,13 +30,14 @@ export function SignatureSection(props: SectionProps) {
         documentType={props.documentType} targetId={props.targetId} title={props.title}
         onSend={props.canSend === false ? undefined : () => setSending(true)} sendLabel={props.sendLabel} sendDisabledReason={props.sendDisabledReason}
         canManage={props.canManage} isManager={props.isManager} renderResponse={props.renderResponse}
-        responseLabels={props.responseLabels} emptyHint={props.emptyHint}
+        responseLabels={props.responseLabels} emptyHint={props.emptyHint} allowInPerson={props.allowInPerson}
       />
       <SendForSignatureModal
         open={sending} onClose={() => setSending(false)}
         documentType={props.documentType} targetId={props.targetId} documentLabel={props.documentLabel} documentTitle={props.documentTitle}
         defaultSigner={props.defaultSigner} replacesActive={replacesActive} initialPayload={props.initialPayload}
         renderPayloadFields={props.renderPayloadFields} validatePayload={props.validatePayload} onSent={props.onSent}
+        allowInPerson={props.allowInPerson} notice={props.notice}
       />
     </>
   );

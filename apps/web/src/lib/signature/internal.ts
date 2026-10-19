@@ -109,7 +109,15 @@ const str = (v: unknown, max = 200): string | null => (typeof v === 'string' && 
 export function eventLabel(e: Pick<SignatureEventView, 'type' | 'detail'>): string {
   const d = (e.detail ?? {}) as Record<string, unknown>;
   if (e.type === 'SEALED' && d.phase === 'timestamp') return 'Sello de tiempo aplicado';
+  if (e.type === 'CREATED' && d.inPerson === true) return 'Solicitud creada para firma presencial (sin correo)';
+  if (e.type === 'RESENT' && d.inPerson === true) return 'Enlace renovado para firma presencial (sin correo)';
   return EVENT_LABELS[e.type] ?? e.type;
+}
+
+/** ¿El enlace vigente se entregó en persona (sin correo)? Lo dice la última creación o renovación del enlace. */
+export function isInPersonRequest(events: Array<Pick<SignatureEventView, 'type' | 'detail'>>): boolean {
+  const last = [...events].reverse().find((e) => e.type === 'CREATED' || e.type === 'RESENT');
+  return ((last?.detail ?? {}) as Record<string, unknown>).inPerson === true;
 }
 
 /** Complemento de una línea de la bitácora (texto plano: se pinta escapado). Los textos del firmante vienen acotados. */

@@ -61,6 +61,8 @@ export interface SendResult {
   request: SignatureRequestView;
   signUrl: string;
   emailSent: boolean;
+  /** `true` en la firma presencial: no se pidió enviar correo con el enlace (no es un fallo). */
+  emailSkipped?: boolean;
 }
 
 export interface CreateSignatureData {
@@ -71,6 +73,8 @@ export interface CreateSignatureData {
   signerRole?: string;
   expiresInDays?: number;
   reminderEnabled?: boolean;
+  /** `false` = firma presencial: no se envía el correo con el enlace (el código de verificación sí llega al firmante). */
+  sendEmail?: boolean;
   /** Datos propios del tipo de documento (los valida su adaptador en el servidor). */
   payload?: Record<string, unknown>;
 }
@@ -148,6 +152,11 @@ export const useCreateSignatureRequest = () =>
 export const useResendSignatureRequest = () =>
   useRefreshing<{ id: string; expiresInDays?: number }, SendResult>(({ id, expiresInDays }) =>
     apiClient.post(`${base}/${id}/resend`, expiresInDays ? { expiresInDays } : {}));
+
+/** Firma presencial: rota el enlace SIN enviar correo y lo devuelve una vez, para abrirlo en el dispositivo del auditor. */
+export const useInPersonSignatureRequest = () =>
+  useRefreshing<{ id: string; expiresInDays?: number }, SendResult>(({ id, expiresInDays }) =>
+    apiClient.post(`${base}/${id}/in-person`, expiresInDays ? { expiresInDays } : {}));
 
 export const useRevokeSignatureRequest = () =>
   useRefreshing<{ id: string; reason: string }, SignatureRequestView>(({ id, reason }) =>

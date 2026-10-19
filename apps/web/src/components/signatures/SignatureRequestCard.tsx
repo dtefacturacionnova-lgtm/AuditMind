@@ -2,16 +2,16 @@
 
 import { useState, type ReactNode } from 'react';
 import {
-  ChevronDown, ChevronRight, CheckCircle2, ExternalLink, FileText, History, Loader2, Paperclip, RefreshCw, ShieldCheck, ShieldAlert, XCircle,
+  ChevronDown, ChevronRight, CheckCircle2, ExternalLink, FileText, History, Loader2, Paperclip, RefreshCw, ShieldCheck, ShieldAlert, UserCheck, XCircle,
 } from 'lucide-react';
 import {
   useResealSignatureRequest, useSignatureFileLink, useSignatureIntegrity, type SignatureAttachmentView, type SignatureRequestView,
 } from '@/hooks/useSignatureRequests';
 import {
-  canReseal, canResend, canRevoke, eventDetail, eventLabel, integrityLabel, responseEntries, sealLabel, STATUS_META, verifyPath,
+  canReseal, canResend, canRevoke, eventDetail, eventLabel, integrityLabel, isInPersonRequest, responseEntries, sealLabel, STATUS_META, verifyPath,
 } from '@/lib/signature/internal';
 import { formatBytes, formatDateSv, formatDateTimeSv } from '@/lib/signature/helpers';
-import { ResendDialog, RevokeDialog } from './RequestDialogs';
+import { InPersonDialog, ResendDialog, RevokeDialog } from './RequestDialogs';
 import { Chip, Note, dangerBtn, ghostBtn } from './ui';
 
 export interface RequestCardProps {
@@ -21,6 +21,8 @@ export interface RequestCardProps {
   /** Gerente o superior: verificar integridad y bajar adjuntos originales sin reconstruir. */
   isManager: boolean;
   defaultOpen?: boolean;
+  /** Ofrece «Abrir para firma presencial» (actas de entrevista). */
+  allowInPerson?: boolean;
   /** Vista propia de la respuesta del firmante (F2–F4). Si no se da, se muestra una lista genérica. */
   renderResponse?: (r: SignatureRequestView) => ReactNode;
   responseLabels?: Record<string, string>;
@@ -41,9 +43,9 @@ function Item({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function SignatureRequestCard({ request: r, canManage, isManager, defaultOpen = false, renderResponse, responseLabels }: RequestCardProps) {
+export function SignatureRequestCard({ request: r, canManage, isManager, defaultOpen = false, allowInPerson = false, renderResponse, responseLabels }: RequestCardProps) {
   const [open, setOpen] = useState(defaultOpen);
-  const [dialog, setDialog] = useState<'resend' | 'revoke' | null>(null);
+  const [dialog, setDialog] = useState<'resend' | 'revoke' | 'in-person' | null>(null);
   const [showLog, setShowLog] = useState(false);
   const [quarantine, setQuarantine] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -99,7 +101,7 @@ export function SignatureRequestCard({ request: r, canManage, isManager, default
         <div id={panelId} className="space-y-4 border-t border-gray-100 px-4 pb-4 pt-3">
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
             <Item label="Correo">{r.signerEmail}</Item>
-            <Item label="Enviada">{r.sentAt ? `${formatDateTimeSv(r.sentAt)}${r.sendCount > 1 ? ` · ${r.sendCount} envíos` : ''}` : 'El correo no llegó a enviarse'}</Item>
+            <Item label="Enviada">{r.sentAt ? `${formatDateTimeSv(r.sentAt)}${r.sendCount > 1 ? ` · ${r.sendCount} envíos` : ''}` : isInPersonRequest(r.events) ? 'Firma presencial: no se envió correo con el enlace' : 'El correo no llegó a enviarse'}</Item>
             <Item label="Vence">{formatDateSv(r.expiresAt) || '—'}{r.reminderEnabled && (r.status === 'PENDING' || r.status === 'VIEWED') ? ' · con recordatorio' : ''}</Item>
             {r.viewedAt && <Item label="Abierta por el firmante">{formatDateTimeSv(r.viewedAt)}</Item>}
           </dl>
@@ -193,6 +195,9 @@ export function SignatureRequestCard({ request: r, canManage, isManager, default
             {canManage && canResend(r.status) && (
               <button type="button" className={ghostBtn} onClick={() => setDialog('resend')}><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Reenviar</button>
             )}
+            {canManage && allowInPerson && canResend(r.status) && (
+              <button type="button" className={ghostBtn} onClick={() => setDialog('in-person')}><UserCheck className="h-3.5 w-3.5" aria-hidden="true" /> Abrir para firma presencial</button>
+            )}
             {canManage && canReseal(r.status, r.sealStatus) && (
               <button type="button" className={ghostBtn} onClick={() => void runReseal()} disabled={reseal.isPending}>
                 <RefreshCw className={`h-3.5 w-3.5 ${reseal.isPending ? 'animate-spin' : ''}`} aria-hidden="true" /> Reintentar sellado
@@ -252,6 +257,7 @@ export function SignatureRequestCard({ request: r, canManage, isManager, default
       )}
 
       {dialog === 'resend' && <ResendDialog request={r} onClose={() => setDialog(null)} />}
+      {dialog === 'in-person' && <InPersonDialog request={r} onClose={() => setDialog(null)} />}
       {dialog === 'revoke' && <RevokeDialog request={r} onClose={() => setDialog(null)} />}
     </article>
   );

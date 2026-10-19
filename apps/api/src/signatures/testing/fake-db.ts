@@ -42,6 +42,9 @@ const DEFAULTS: Record<string, () => Row> = {
     responseAmount: null, difference: null, differenceExplanation: null, alternativeProcedure: null, status: 'DRAFT', createdAt: now(), updatedAt: now(),
   }),
   audit: () => ({ title: 'Auditoría financiera 2025', isInvestigationMode: false }),
+  // Papeles de trabajo y sus secciones (actas de entrevista, F4).
+  workingPaper: () => ({ code: 'B-04', paperCode: 'PT-ENTREV', type: 'SUBSTANTIVE_TEST', title: 'Guía y Papel de Entrevista', createdAt: now(), updatedAt: now() }),
+  paperSection: () => ({ attachments: null, createdAt: now(), updatedAt: now() }),
 };
 
 const UNIQUE: Record<string, string[][]> = {
@@ -55,6 +58,8 @@ const UNIQUE: Record<string, string[][]> = {
   client: [['id']],
   externalConfirmation: [['id']],
   audit: [['id']],
+  workingPaper: [['id']],
+  paperSection: [['id'], ['paperId', 'sectionKey']],
 };
 
 const isOp = (v: any) => v && typeof v === 'object' && !(v instanceof Date) && Object.keys(v).some((k) => ['in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'not', 'equals'].includes(k));
@@ -64,7 +69,7 @@ const eq = (a: any, b: any) => (a instanceof Date && b instanceof Date ? a.getTi
 export class FakeDb {
   tables: Record<string, Row[]> = {
     signatureRequest: [], signatureSession: [], signatureEvent: [], signatureAttachment: [], organization: [], user: [],
-    engagementLetter: [], client: [], externalConfirmation: [], audit: [],
+    engagementLetter: [], client: [], externalConfirmation: [], audit: [], workingPaper: [], paperSection: [],
   };
   private chain: Promise<unknown> = Promise.resolve();
 
@@ -76,7 +81,7 @@ export class FakeDb {
         const req = this.tables.signatureRequest.find((r) => r.id === row.requestId);
         return !!req && this.match('signatureRequest', req, cond);
       }
-      if (key === 'audit' && table === 'externalConfirmation') {
+      if (key === 'audit' && (table === 'externalConfirmation' || table === 'workingPaper')) {
         const a = this.tables.audit.find((x) => x.id === row.auditId);
         return !!a && this.match('audit', a, cond);
       }
@@ -121,7 +126,7 @@ export class FakeDb {
 
   /** Solo `include: { audit: … }` en confirmaciones: lo único que los adaptadores reales necesitan. */
   private withInclude(table: string, row: Row, include?: Row): Row {
-    if (!include?.audit || table !== 'externalConfirmation') return row;
+    if (!include?.audit || (table !== 'externalConfirmation' && table !== 'workingPaper')) return row;
     const a = this.tables.audit.find((x) => x.id === row.auditId);
     return { ...row, audit: a ? this.pick(a, include.audit.select) : null };
   }
@@ -217,6 +222,8 @@ export class FakeDb {
     client: this.delegate('client'),
     externalConfirmation: this.delegate('externalConfirmation'),
     audit: this.delegate('audit'),
+    workingPaper: this.delegate('workingPaper'),
+    paperSection: this.delegate('paperSection'),
     $transaction: (fn: any) => this.transaction(fn),
     $queryRaw: async () => [],
   };
@@ -243,6 +250,16 @@ export class FakeDb {
       amount: 1250.5, accountRef: 'Cta. 001-234567-8', ...over,
     };
     this.tables.externalConfirmation.push(row);
+    return row;
+  }
+  seedPaper(over: Record<string, unknown> = {}) {
+    const row = { ...DEFAULTS.workingPaper(), id: 'wp1', auditId: 'aud1', ...over };
+    this.tables.workingPaper.push(row);
+    return row;
+  }
+  seedSection(over: Record<string, unknown> = {}) {
+    const row = { ...DEFAULTS.paperSection(), id: `sec-${this.tables.paperSection.length + 1}`, paperId: 'wp1', sectionKey: 'S2', label: 'Registro de Sesiones', ...over };
+    this.tables.paperSection.push(row);
     return row;
   }
   get requests() { return this.tables.signatureRequest; }

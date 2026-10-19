@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { useResendSignatureRequest, useRevokeSignatureRequest, type SendResult, type SignatureRequestView } from '@/hooks/useSignatureRequests';
+import { useInPersonSignatureRequest, useResendSignatureRequest, useRevokeSignatureRequest, type SendResult, type SignatureRequestView } from '@/hooks/useSignatureRequests';
 import { DEFAULT_EXPIRY_DAYS, EXPIRY_OPTIONS, validateReason } from '@/lib/signature/internal';
 import { formatDateSv } from '@/lib/signature/helpers';
 import { Dialog, FormField, Note, OneTimeLink, dangerBtn, ghostBtn, inputCls, primaryBtn } from './ui';
@@ -58,6 +58,47 @@ export function ResendDialog({ request, onClose }: { request: SignatureRequestVi
           </button>
         </div>
       </form>
+    </Dialog>
+  );
+}
+
+/**
+ * «Abrir para firma presencial»: rota el enlace SIN enviar correo y lo abre en una pestaña nueva del dispositivo del auditor.
+ * El código de verificación llega al correo del firmante, que lo lee en su teléfono.
+ */
+export function InPersonDialog({ request, onClose }: { request: SignatureRequestView; onClose: () => void }) {
+  const inPerson = useInPersonSignatureRequest();
+
+  const close = () => { inPerson.reset(); onClose(); };
+
+  const open = async () => {
+    if (inPerson.isPending) return;
+    // La pestaña se abre ya, dentro del clic (si no, el navegador la bloquea), y luego se le asigna el enlace.
+    const tab = window.open('about:blank', '_blank');
+    try {
+      const r = await inPerson.mutateAsync({ id: request.id });
+      if (tab) { tab.opener = null; tab.location.href = r.signUrl; }
+      onClose();
+    } catch {
+      tab?.close();
+    }
+  };
+
+  return (
+    <Dialog title="Abrir para firma presencial" subtitle={`${request.title} — ${request.signerName} <${request.signerEmail}>`} onClose={close} busy={inPerson.isPending}>
+      <div className="space-y-3">
+        <Note tone="info">
+          Se genera un enlace nuevo <strong>sin enviar ningún correo</strong> y se abre en otra pestaña de este dispositivo. El enlace anterior deja de funcionar.
+          Entrégale el dispositivo a la persona: el código de verificación le llega a <strong>{request.signerEmail}</strong> y lo puede leer en su teléfono.
+        </Note>
+        {inPerson.isError && <Note tone="error">{inPerson.error.message || 'No se pudo preparar la firma presencial. Inténtalo de nuevo.'}</Note>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={close} disabled={inPerson.isPending} className={ghostBtn}>Cancelar</button>
+          <button type="button" onClick={() => void open()} disabled={inPerson.isPending} className={primaryBtn}>
+            {inPerson.isPending ? 'Preparando…' : 'Abrir para firma presencial'}
+          </button>
+        </div>
+      </div>
     </Dialog>
   );
 }

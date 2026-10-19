@@ -160,6 +160,44 @@ describe('Controlador interno · disponibilidad de la firma', () => {
   });
 });
 
+describe('Controlador interno · crear y abrir para firma presencial', () => {
+  async function internalApp() {
+    const svc = { create: jest.fn(async () => ({ ok: 'create' })), inPerson: jest.fn(async () => ({ ok: 'inPerson' })) };
+    const moduleRef = await Test.createTestingModule({ controllers: [SignatureRequestsController], providers: [{ provide: SignatureRequestsService, useValue: svc }] }).compile();
+    const app: INestApplication = moduleRef.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true, transformOptions: { enableImplicitConversion: true } }));
+    app.setGlobalPrefix('api/v1');
+    await app.listen(0, '127.0.0.1');
+    return { app, svc, base: (await app.getUrl()).replace('[::1]', '127.0.0.1') + '/api/v1/signature-requests' };
+  }
+  const body = { documentType: 'INTERVIEW_RECORD', targetId: 'p1', signerName: 'Ana Pérez', signerEmail: 'ana@x.com' };
+
+  it('sendEmail solo acepta un booleano de verdad ("false" como texto NO vale como falso: el pipe lo volvería true)', async () => {
+    const { app, svc, base } = await internalApp();
+    try {
+      expect((await json(base, { method: 'POST', body: { ...body, sendEmail: 'false' } })).status).toBe(400);
+      expect((await json(base, { method: 'POST', body: { ...body, sendEmail: 0 } })).status).toBe(400);
+      expect(svc.create).not.toHaveBeenCalled();
+      expect((await json(base, { method: 'POST', body: { ...body, sendEmail: false } })).status).toBe(201);
+      expect((svc.create.mock.calls[0] as any[])[1].sendEmail).toBe(false);
+      expect((await json(base, { method: 'POST', body })).status).toBe(201);
+      expect((svc.create.mock.calls[1] as any[])[1].sendEmail).toBeUndefined();
+    } finally { await app.close(); }
+  });
+
+  it('POST :id/in-person existe, exige un uuid y acepta el plazo opcional', async () => {
+    const { app, svc, base } = await internalApp();
+    try {
+      const id = '0f8b2c1e-4d3a-4b6c-9a7e-1234567890ab';
+      expect((await json(`${base}/no-es-uuid/in-person`, { method: 'POST', body: {} })).status).toBe(400);
+      expect((await json(`${base}/${id}/in-person`, { method: 'POST', body: { expiresInDays: 3 } })).status).toBe(201);
+      expect((svc.inPerson.mock.calls[0] as any[])[1]).toBe(id);
+      expect((svc.inPerson.mock.calls[0] as any[])[2]).toEqual({ expiresInDays: 3 });
+      expect((await json(`${base}/${id}/in-person`, { method: 'POST', body: { expiresInDays: 99 } })).status).toBe(400);
+    } finally { await app.close(); }
+  });
+});
+
 describe('Metadatos de seguridad de las rutas', () => {
   const methods = (ctrl: any) => Object.getOwnPropertyNames(ctrl.prototype).filter((n) => n !== 'constructor');
 

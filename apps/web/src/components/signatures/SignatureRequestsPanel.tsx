@@ -23,12 +23,14 @@ export interface SignatureRequestsPanelProps {
   renderResponse?: (r: SignatureRequestView) => ReactNode;
   responseLabels?: Record<string, string>;
   emptyHint?: ReactNode;
+  /** Ofrece «Abrir para firma presencial» en cada solicitud vigente (actas de entrevista). */
+  allowInPerson?: boolean;
 }
 
 /** Solicitudes de firma de un documento: estado, respuesta, archivos, bitácora y acciones (docs/firma-externa-por-enlace.md §14). */
 export function SignatureRequestsPanel({
   documentType, targetId, title = 'Firma electrónica', onSend, sendLabel = 'Enviar para firma', sendDisabledReason,
-  canManage, isManager, renderResponse, responseLabels, emptyHint,
+  canManage, isManager, renderResponse, responseLabels, emptyHint, allowInPerson,
 }: SignatureRequestsPanelProps) {
   const { hasRole } = useUser();
   const manage = canManage ?? hasRole([MIN_ROLE_BY_TYPE[documentType]]);
@@ -76,7 +78,7 @@ export function SignatureRequestsPanel({
         <div className="space-y-2.5">
           {data.map((r, i) => (
             <SignatureRequestCard key={r.id} request={r} canManage={manage} isManager={manager} defaultOpen={i === 0}
-              renderResponse={renderResponse} responseLabels={responseLabels} />
+              allowInPerson={allowInPerson} renderResponse={renderResponse} responseLabels={responseLabels} />
           ))}
         </div>
       )}

@@ -1,6 +1,6 @@
 import {
   canResend, canReseal, canRevoke, DEFAULT_EXPIRY_DAYS, eventDetail, expiryChoices, eventLabel, EVENT_LABELS, integrityLabel, isActive, MIN_ROLE_BY_TYPE, pollInterval,
-  responseEntries, sealLabel, SEAL_POLL_MS, STATUS_META, WAITING_POLL_MS, validateReason, validateSendForm, verifyPath, type SendFormValues, type SignatureStatus,
+  isInPersonRequest, responseEntries, sealLabel, SEAL_POLL_MS, STATUS_META, WAITING_POLL_MS, validateReason, validateSendForm, verifyPath, type SendFormValues, type SignatureStatus,
 } from './internal';
 
 const ALL: SignatureStatus[] = ['PENDING', 'VIEWED', 'SIGNED', 'DECLINED', 'REVOKED', 'EXPIRED'];
@@ -122,6 +122,22 @@ describe('respuesta del firmante', () => {
     expect(responseEntries(null)).toEqual([]);
     expect(responseEntries([1, 2])).toEqual([]);
     expect(responseEntries({ a: '', b: null })).toEqual([['A', '—'], ['B', '—']]);
+  });
+});
+
+describe('firma presencial', () => {
+  it('las etiquetas de la bitácora distinguen la creación y la renovación sin correo', () => {
+    expect(eventLabel({ type: 'CREATED', detail: { inPerson: true } })).toMatch(/presencial/);
+    expect(eventLabel({ type: 'CREATED', detail: { documentType: 'X' } })).toBe('Solicitud creada');
+    expect(eventLabel({ type: 'RESENT', detail: { inPerson: true } })).toMatch(/presencial/);
+    expect(eventLabel({ type: 'RESENT', detail: null })).toBe('Enlace reenviado');
+  });
+  it('el enlace vigente es presencial según la última creación o renovación', () => {
+    const e = (type: string, inPerson?: boolean) => ({ type, detail: inPerson === undefined ? null : { inPerson } });
+    expect(isInPersonRequest([])).toBe(false);
+    expect(isInPersonRequest([e('CREATED', true)])).toBe(true);
+    expect(isInPersonRequest([e('CREATED', true), e('OTP_SENT'), e('RESENT', false)])).toBe(false); // luego se reenvió por correo
+    expect(isInPersonRequest([e('CREATED'), e('SENT'), e('RESENT', true), e('VIEWED')])).toBe(true);
   });
 });
 

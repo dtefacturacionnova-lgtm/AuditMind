@@ -7,7 +7,7 @@ import {
   DEFAULT_EXPIRY_DAYS, expiryChoices, validateSendForm, type SendFormValues, type SignatureDocumentType,
 } from '@/lib/signature/internal';
 import { formatDateSv } from '@/lib/signature/helpers';
-import { Dialog, FormField, Note, OneTimeLink, ghostBtn, inputCls, primaryBtn } from './ui';
+import { Dialog, FormField, Note, OneTimeLink, ghostBtn, inputCls, openSignUrl, primaryBtn } from './ui';
 
 export interface PayloadFieldsContext {
   payload: Record<string, unknown>;
@@ -28,6 +28,10 @@ export interface SendForSignatureModalProps {
   defaultSigner?: { name?: string; email?: string; role?: string };
   /** Si ya hay una solicitud activa de este documento, la nueva la reemplaza: se avisa antes de enviar. */
   replacesActive?: boolean;
+  /** Ofrece «firma presencial»: crear la solicitud SIN enviar el correo con el enlace (actas de entrevista). */
+  allowInPerson?: boolean;
+  /** Aviso propio del tipo de documento, arriba del formulario (p. ej. el modo investigación). */
+  notice?: ReactNode;
   /** Valores iniciales de los datos propios del tipo (F2–F4). */
   initialPayload?: Record<string, unknown>;
   /** Campos propios del tipo: acta completa, modo de la confirmación, carta de autorización… */
@@ -45,7 +49,7 @@ export function SendForSignatureModal(props: SendForSignatureModalProps) {
 
 function ModalBody({
   onClose, documentType, targetId, documentLabel, documentTitle, defaultSigner, replacesActive, initialPayload,
-  renderPayloadFields, validatePayload, onSent,
+  renderPayloadFields, validatePayload, onSent, allowInPerson, notice,
 }: SendForSignatureModalProps) {
   const defaultDays = DEFAULT_EXPIRY_DAYS[documentType];
   const create = useCreateSignatureRequest();
@@ -59,6 +63,7 @@ function ModalBody({
   const [result, setResult] = useState<SendResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [inPerson, setInPerson] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -84,7 +89,8 @@ function ModalBody({
         documentType, targetId,
         signerName: values.signerName.trim(), signerEmail: values.signerEmail.trim(),
         ...(values.signerRole.trim() ? { signerRole: values.signerRole.trim() } : {}),
-        expiresInDays: values.expiresInDays, reminderEnabled: values.reminderEnabled,
+        expiresInDays: values.expiresInDays, reminderEnabled: inPerson ? false : values.reminderEnabled,
+        ...(inPerson ? { sendEmail: false } : {}),
         ...(Object.keys(payload).length > 0 ? { payload } : {}),
       });
       setResult(r);
@@ -94,15 +100,16 @@ function ModalBody({
 
   // Cerrar sin copiar un enlace cuando el correo falló: confirmar (reenviar genera otro, pero conviene avisar).
   const requestClose = () => {
-    if (result && !result.emailSent && !copied && !confirmingClose) { setConfirmingClose(true); return; }
+    if (result && !result.emailSent && !result.emailSkipped && !copied && !confirmingClose) { setConfirmingClose(true); return; }
     create.reset();
     onClose();
   };
 
   if (result) {
     return (
-      <Dialog title={result.emailSent ? 'Enviada a firma' : 'Solicitud creada, correo no enviado'} subtitle={documentTitle} onClose={requestClose}>
-        <OneTimeLink url={result.signUrl} emailSent={result.emailSent} signerEmail={result.request.signerEmail} onCopied={() => setCopied(true)} />
+      <Dialog title={result.emailSent ? 'Enviada a firma' : result.emailSkipped ? 'Lista para firma presencial' : 'Solicitud creada, correo no enviado'} subtitle={documentTitle} onClose={requestClose}>
+        <OneTimeLink url={result.signUrl} emailSent={result.emailSent} emailSkipped={result.emailSkipped} signerEmail={result.request.signerEmail}
+          onCopied={() => setCopied(true)} onOpenInPerson={() => openSignUrl(result.signUrl)} />
         <p className="mt-3 text-[11px] text-gray-500">
           El documento quedó congelado: el firmante verá exactamente el PDF que se generó ahora. Si cambias el documento en AuditMind, esta solicitud se revoca y habrá que enviarla de nuevo.
         </p>
@@ -121,6 +128,7 @@ function ModalBody({
   return (
     <Dialog title={`Enviar «${documentLabel}» a firma`} subtitle={documentTitle} onClose={requestClose} busy={busy}>
       <form ref={formRef} onSubmit={(e) => void submit(e)} className="space-y-3" noValidate>
+        {notice}
         {replacesActive && (
           <Note tone="warn">Ya hay una solicitud vigente de este documento. Al enviar esta, la anterior se revoca y su enlace deja de funcionar.</Note>
         )}
@@ -143,6 +151,14 @@ function ModalBody({
         })}
         {payloadError && <Note tone="error">{payloadError}</Note>}
 
+        {allowInPerson && (
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-gray-200 px-3 py-2.5 text-xs text-gray-700">
+            <input type="checkbox" checked={inPerson} onChange={(e) => setInPerson(e.target.checked)} disabled={busy} className="mt-0.5 h-4 w-4 accent-blue-600" />
+            <span><span className="block font-medium text-gray-800">Firma presencial: no enviar el correo con el enlace</span>
+              Abrirás el enlace en tu dispositivo con la persona presente. El código de verificación sí llega a su correo y lo lee en su teléfono.</span>
+          </label>
+        )}
+
         <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2">
           <FormField label="Plazo para firmar" error={errors.expiresInDays} hint={`Vence el ${deadline}.`}>
             {(a) => (
@@ -151,10 +167,12 @@ function ModalBody({
               </select>
             )}
           </FormField>
-          <label className="flex cursor-pointer items-start gap-2 pb-5 text-xs text-gray-700">
-            <input type="checkbox" checked={values.reminderEnabled} onChange={(e) => set({ reminderEnabled: e.target.checked })} disabled={busy} className="mt-0.5 h-4 w-4 accent-blue-600" />
-            <span>Enviar un recordatorio 3 días antes de que venza, si todavía no firmó.</span>
-          </label>
+          {!inPerson && (
+            <label className="flex cursor-pointer items-start gap-2 pb-5 text-xs text-gray-700">
+              <input type="checkbox" checked={values.reminderEnabled} onChange={(e) => set({ reminderEnabled: e.target.checked })} disabled={busy} className="mt-0.5 h-4 w-4 accent-blue-600" />
+              <span>Enviar un recordatorio 3 días antes de que venza, si todavía no firmó.</span>
+            </label>
+          )}
         </div>
 
         <p className="text-[11px] leading-relaxed text-gray-500">
@@ -166,7 +184,7 @@ function ModalBody({
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={requestClose} disabled={busy} className={ghostBtn}>Cancelar</button>
           <button type="submit" disabled={busy} className={primaryBtn}>
-            <Send className="h-3.5 w-3.5" aria-hidden="true" /> {busy ? 'Preparando y enviando…' : 'Enviar a firma'}
+            <Send className="h-3.5 w-3.5" aria-hidden="true" /> {busy ? 'Preparando…' : inPerson ? 'Preparar firma presencial' : 'Enviar a firma'}
           </button>
         </div>
       </form>

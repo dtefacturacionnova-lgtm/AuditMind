@@ -22,6 +22,12 @@ export class CreateSignatureRequestDto {
   @IsOptional() @Transform(trim) @IsString() @MaxLength(120) signerRole?: string;
   @IsOptional() @IsInt() @Min(1) @Max(60) expiresInDays?: number;
   @IsOptional() @Transform(rawValue) @IsBoolean() reminderEnabled?: boolean;
+  /**
+   * `false` = firma PRESENCIAL: no se envía el correo con el enlace (ni recordatorios); el auditor abre el enlace en su
+   * dispositivo y el código de verificación igual llega al correo del firmante. Pensado para actas en modo investigación,
+   * donde un correo podría alertar a la persona investigada. Por defecto se envía.
+   */
+  @IsOptional() @Transform(rawValue) @IsBoolean() sendEmail?: boolean;
   /** Datos propios del tipo de documento: cada adaptador los valida; el servicio limita el tamaño total. */
   @IsOptional() @IsObject() payload?: Record<string, unknown>;
 }

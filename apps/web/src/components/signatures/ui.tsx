@@ -119,6 +119,11 @@ export function FormField({ label, required, hint, error, children }: {
   );
 }
 
+/** Abre el enlace de firma en una pestaña nueva del dispositivo del auditor (firma presencial). Sin Referer ni opener. */
+export function openSignUrl(url: string): void {
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
@@ -132,7 +137,10 @@ async function copyText(text: string): Promise<boolean> {
  * El enlace del firmante, en claro, UNA sola vez (docs/firma-externa-por-enlace.md §5): el servidor no vuelve a
  * entregarlo; si hace falta otro, se reenvía (lo que rota el enlace). Vive solo en el estado de este componente.
  */
-export function OneTimeLink({ url, emailSent, signerEmail, onCopied }: { url: string; emailSent: boolean; signerEmail: string; onCopied?: () => void }) {
+export function OneTimeLink({ url, emailSent, emailSkipped = false, signerEmail, onCopied, onOpenInPerson }: {
+  url: string; emailSent: boolean; /** firma presencial: no se pidió correo */ emailSkipped?: boolean; signerEmail: string;
+  onCopied?: () => void; onOpenInPerson?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -153,7 +161,13 @@ export function OneTimeLink({ url, emailSent, signerEmail, onCopied }: { url: st
 
   return (
     <div className="space-y-3">
-      {emailSent ? (
+      {emailSkipped ? (
+        <Note tone="info">
+          <strong>No se envió correo con el enlace</strong> (firma presencial). Ábrelo en tu dispositivo para que {signerEmail} firme ahí: el código de verificación
+          sí llega a su correo y lo puede leer en su teléfono.
+          {onOpenInPerson && <button type="button" onClick={onOpenInPerson} className="mt-2 block font-semibold text-blue-700 underline">Abrir para firma presencial ahora</button>}
+        </Note>
+      ) : emailSent ? (
         <Note tone="ok">Enviamos el enlace a <strong>{signerEmail}</strong>. El firmante deberá confirmar un código que le llega a ese mismo correo.</Note>
       ) : (
         <Note tone="error"><strong>No pudimos enviar el correo.</strong> La solicitud sí quedó creada: copia el enlace y envíaselo a {signerEmail} por otro medio. Revisa también que el correo esté bien escrito: el código de verificación le llega a esa misma dirección.</Note>

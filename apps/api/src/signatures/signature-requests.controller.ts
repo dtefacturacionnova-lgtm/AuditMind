@@ -54,6 +54,12 @@ export class SignatureRequestsController {
     return this.svc.resend(user, id, dto, getClientInfo(req));
   }
 
+  @Post(':id/in-person')
+  @ApiOperation({ summary: 'Firma presencial: rota el enlace SIN enviar correo y lo devuelve una vez para abrirlo en el dispositivo del auditor' })
+  inPerson(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: ResendSignatureRequestDto, @CurrentUser() user: AuthUser, @Req() req: Req) {
+    return this.svc.inPerson(user, id, dto, getClientInfo(req));
+  }
+
   @Post(':id/revoke')
   @ApiOperation({ summary: 'Revocar una solicitud pendiente' })
   revoke(@Param('id', new ParseUUIDPipe()) id: string, @Body() dto: RevokeSignatureRequestDto, @CurrentUser() user: AuthUser, @Req() req: Req) {

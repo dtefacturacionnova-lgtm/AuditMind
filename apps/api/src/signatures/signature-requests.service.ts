@@ -23,7 +23,8 @@ import { SignatureAttachmentsService } from './signature-attachments.service';
 import { requestFolder, SignatureStorageService } from './signature-storage.service';
 import { internalRequestView } from './signature-views';
 
-const MAX_PAYLOAD_BYTES = 60_000;
+// Un acta puede llegar a 50 000 caracteres (con tildes ocupan más bytes); el cuerpo de la petición ya está acotado a ~100 KB.
+const MAX_PAYLOAD_BYTES = 100_000;
 const ACTIVE = ['PENDING', 'VIEWED'] as const;
 const fmtDeadline = (d: Date) =>
   new Intl.DateTimeFormat('es-SV', { timeZone: 'America/El_Salvador', dateStyle: 'long' }).format(d);
@@ -115,7 +116,8 @@ export class SignatureRequestsService {
     if (Buffer.byteLength(JSON.stringify(dto.payload ?? {})) > MAX_PAYLOAD_BYTES) {
       throw new BadRequestException('Los datos adicionales de la solicitud son demasiado grandes.');
     }
-    await this.policy.assertDailyEmailCap(user.organizationId);
+    const sendMail = dto.sendEmail !== false; // false = firma presencial: no sale ningún correo con el enlace
+    if (sendMail) await this.policy.assertDailyEmailCap(user.organizationId);
 
     // El adaptador valida el origen (existe, es de la organización, estado permitido) y arma el documento.
     const prepared = await adapter.prepare({
@@ -170,12 +172,12 @@ export class SignatureRequestsService {
             payload: prepared.payload as Prisma.InputJsonValue,
             tokenHash: hashToken(token), tokenEncrypted: encryptSecret(token, encKey), expiresAt, status: 'PENDING',
             documentPath, documentSha256, documentPages: pages,
-            reminderEnabled: dto.reminderEnabled ?? true, createdById: user.id,
+            reminderEnabled: sendMail ? (dto.reminderEnabled ?? true) : false, createdById: user.id,
           },
         });
         await this.events.append(tx, id, {
           type: 'CREATED', ip: info.ip, userAgent: info.userAgent, actorId: user.id,
-          detail: { documentType: dto.documentType, expiresInDays: days, replaced: replaced.length },
+          detail: { documentType: dto.documentType, expiresInDays: days, replaced: replaced.length, ...(sendMail ? {} : { inPerson: true }) },
         });
         await adapter.onCreated?.(tx, created);
         return { created, replaced };
@@ -186,12 +188,13 @@ export class SignatureRequestsService {
     }
     await this.purgeAttachments(replaced);
 
-    const emailSent = await this.sendInvitation(created, token, adapter, user, false);
+    const emailSent = sendMail ? await this.sendInvitation(created, token, adapter, user, false) : false;
     const fresh = await this.prisma.signatureRequest.findUniqueOrThrow({ where: { id } });
     return {
       request: internalRequestView(fresh, { documentLabel: adapter.label }),
       signUrl: this.email.signUrl(token), // la ÚNICA vez que se entrega el enlace en claro
       emailSent,
+      emailSkipped: !sendMail,
     };
   }
 
@@ -241,15 +244,28 @@ export class SignatureRequestsService {
     });
   }
 
-  // ─── Reenviar ──────────────────────────────────────────────────────────────
+  // ─── Reenviar / abrir para firma presencial ────────────────────────────────
   /** Rota el token (el enlace anterior muere), reinicia el código de verificación y vuelve a enviar el correo. */
-  async resend(user: AuthUser, id: string, dto: ResendSignatureRequestDto, info: ClientInfo) {
+  resend(user: AuthUser, id: string, dto: ResendSignatureRequestDto, info: ClientInfo) {
+    return this.rotate(user, id, dto, info, false);
+  }
+
+  /**
+   * Firma PRESENCIAL: igual que reenviar (rota el token y reinicia el código) pero SIN enviar el correo con el enlace ni
+   * dejar recordatorios: el auditor abre el enlace nuevo en su dispositivo y el código de verificación llega al correo del
+   * firmante, que lo lee en su teléfono.
+   */
+  inPerson(user: AuthUser, id: string, dto: ResendSignatureRequestDto, info: ClientInfo) {
+    return this.rotate(user, id, dto, info, true);
+  }
+
+  private async rotate(user: AuthUser, id: string, dto: ResendSignatureRequestDto, info: ClientInfo, inPerson: boolean) {
     this.policy.assertEnabled();
     const encKey = this.policy.encryptionKey();
     const r0 = await this.load(user, id);
     const adapter = this.adapterFor(r0.documentType);
     this.assertRole(user, adapter);
-    await this.policy.assertDailyEmailCap(user.organizationId);
+    if (!inPerson) await this.policy.assertDailyEmailCap(user.organizationId);
 
     const token = generateToken();
     const now = new Date();
@@ -264,17 +280,21 @@ export class SignatureRequestsService {
         data: {
           tokenHash: hashToken(token), tokenEncrypted: encryptSecret(token, encKey), expiresAt, status: 'PENDING',
           lockedUntil: null, otpHash: null, otpExpiresAt: null, otpAttempts: 0, otpFailuresHour: 0, otpWindowStart: null,
-          otpSentCount: 0, otpLastSentAt: null, otpVerifiedAt: null, reminderSentAt: null, sendCount: { increment: 1 },
+          otpSentCount: 0, otpLastSentAt: null, otpVerifiedAt: null, reminderSentAt: null,
+          ...(inPerson ? { reminderEnabled: false } : { sendCount: { increment: 1 } }),
         },
       });
       if (res.count === 0) throw new ConflictException('Solo se puede reenviar una solicitud pendiente o vencida.');
       await tx.signatureSession.updateMany({ where: { requestId: id, revokedAt: null }, data: { revokedAt: now } });
-      await this.events.append(tx, id, { type: 'RESENT', ip: info.ip, userAgent: info.userAgent, actorId: user.id, detail: { expiresAt: expiresAt.toISOString() } });
+      await this.events.append(tx, id, {
+        type: 'RESENT', ip: info.ip, userAgent: info.userAgent, actorId: user.id,
+        detail: { expiresAt: expiresAt.toISOString(), ...(inPerson ? { inPerson: true } : {}) },
+      });
       return tx.signatureRequest.findUniqueOrThrow({ where: { id } });
     }, TX_OPTIONS);
 
-    const emailSent = await this.sendInvitation(updated, token, adapter, user, true);
-    return { request: await this.get(user, id), signUrl: this.email.signUrl(token), emailSent };
+    const emailSent = inPerson ? false : await this.sendInvitation(updated, token, adapter, user, true);
+    return { request: await this.get(user, id), signUrl: this.email.signUrl(token), emailSent, emailSkipped: inPerson };
   }
 
   // ─── Revocar ───────────────────────────────────────────────────────────────

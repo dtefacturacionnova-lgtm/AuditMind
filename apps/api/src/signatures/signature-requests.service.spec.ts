@@ -85,7 +85,9 @@ describe('Firma interna · crear', () => {
     await expect(h.create({}, user('AUDITOR'))).rejects.toMatchObject({ status: 403 });
     await expect(h.create({}, user('AUDIT_MANAGER'))).resolves.toBeDefined();
     await expect(h.create({ documentType: 'ENGAGEMENT_LETTER' }, user('CAE'))).rejects.toThrow(/todavía no se puede enviar/);
-    await expect(h.create({ payload: { x: 'a'.repeat(70_000) } }, user('CAE'))).rejects.toThrow(/demasiado grandes/);
+    await expect(h.create({ payload: { x: 'a'.repeat(100_001) } }, user('CAE'))).rejects.toThrow(/demasiado grandes/);
+    // un acta de 50 000 caracteres con tildes (hasta ~2 bytes por letra) todavía cabe
+    await expect(h.create({ payload: { x: 'á'.repeat(45_000) } }, user('CAE'))).resolves.toBeDefined();
     await expect(h.create({ targetId: 'missing' }, user('CAE'))).rejects.toMatchObject({ status: 404 });
     await expect(buildHarness({ SIGNATURES_PUBLIC_ENABLED: 'no' }).create()).rejects.toMatchObject({ status: 503 });
     await expect(buildHarness({ ENCRYPTION_KEY: '' }).create()).rejects.toMatchObject({ status: 503 });
@@ -323,5 +325,78 @@ describe('Firma interna · anexos y control de acceso del documento de origen', 
     await expect(h.requests.revoke(u, id, 'motivo suficiente', INFO)).rejects.toThrow(/modo investigación/);
     await expect(h.requests.resend(u, id, {} as any, INFO)).rejects.toThrow(/modo investigación/);
     expect(h.fake.requests.find((r) => r.id === id)!.status).toBe('PENDING'); // la revocación no se ejecutó
+  });
+});
+
+describe('Firma interna · firma presencial (sin correo con el enlace)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('crear con sendEmail:false no envía ningún correo ni deja recordatorios, y el firmante igual puede verificarse y firmar', async () => {
+    const h = buildHarness();
+    const { id, token, out } = await h.create({ sendEmail: false });
+    const row = h.fake.requests.find((r) => r.id === id)!;
+
+    expect(out).toMatchObject({ emailSent: false, emailSkipped: true });
+    expect(h.email.sendSignatureRequest).not.toHaveBeenCalled();
+    expect(row).toMatchObject({ reminderEnabled: false, sentAt: null, sendCount: 0 });
+    const types = h.fake.events.filter((e) => e.requestId === id).map((e) => e.type);
+    expect(types).toEqual(['CREATED']); // sin SENT
+    expect(h.fake.events.find((e) => e.type === 'CREATED')!.detail).toMatchObject({ inPerson: true });
+
+    // El código de verificación SÍ llega al correo del firmante: así se confirma quién es, aunque el auditor abra el enlace.
+    const session = await h.openSession(token);
+    expect(h.email.sendSignatureOtp).toHaveBeenCalledTimes(1);
+    expect(session).toBeTruthy();
+  });
+
+  it('el tope diario de correos no frena una firma presencial (no envía correo con el enlace)', async () => {
+    const h = buildHarness();
+    jest.spyOn(h.policy, 'assertDailyEmailCap').mockRejectedValue(new Error('tope'));
+    await expect(h.create()).rejects.toThrow('tope');
+    await expect(h.create({ sendEmail: false })).resolves.toBeDefined();
+  });
+
+  it('sendEmail omitido o true envía el correo como siempre', async () => {
+    const h = buildHarness();
+    expect((await h.create()).out).toMatchObject({ emailSent: true, emailSkipped: false });
+    expect((await h.create({ sendEmail: true })).out.emailSkipped).toBe(false);
+    expect(h.email.sendSignatureRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('abrir para firma presencial rota el enlace SIN correo: el anterior muere, no suma envíos y se apagan los recordatorios', async () => {
+    const h = buildHarness();
+    const { id, token } = await h.create();
+    h.email.sendSignatureRequest.mockClear();
+    const sendCountBefore = h.fake.requests.find((r) => r.id === id)!.sendCount;
+
+    const r = await h.requests.inPerson(user('AUDITOR'), id, {} as any, INFO);
+    const newToken = h.tokenOf(r.signUrl);
+    expect(newToken).not.toBe(token);
+    expect(r).toMatchObject({ emailSent: false, emailSkipped: true });
+    expect(h.email.sendSignatureRequest).not.toHaveBeenCalled();
+    const row = h.fake.requests.find((x) => x.id === id)!;
+    expect(row).toMatchObject({ reminderEnabled: false, sendCount: sendCountBefore, status: 'PENDING' });
+    expect(row.tokenHash).toBe(hashToken(newToken));
+    expect(h.fake.events.filter((e) => e.requestId === id && e.type === 'RESENT').at(-1)!.detail).toMatchObject({ inPerson: true });
+
+    await expect(h.public.sendOtp(token, INFO)).rejects.toBeDefined(); // el enlace anterior ya no sirve
+    await expect(h.public.sendOtp(newToken, INFO)).resolves.toBeDefined();
+  });
+
+  it('solo se abre para firma presencial una solicitud pendiente, abierta o vencida; firmada o revocada, no; y exige el rol del tipo', async () => {
+    const h = buildHarness();
+    const { id } = await h.create();
+    const row = () => h.fake.requests.find((x) => x.id === id)!;
+    for (const status of ['SIGNED', 'DECLINED', 'REVOKED']) {
+      row().status = status;
+      await expect(h.requests.inPerson(user('AUDITOR'), id, {} as any, INFO)).rejects.toMatchObject({ status: 409 });
+    }
+    row().status = 'EXPIRED';
+    row().expiresAt = new Date(Date.now() - DAY);
+    const r = await h.requests.inPerson(user('AUDITOR'), id, { expiresInDays: 3 } as any, INFO);
+    expect(row()).toMatchObject({ status: 'PENDING' });
+    expect(row().expiresAt.getTime()).toBeGreaterThan(Date.now() + 2 * DAY);
+    expect(r.emailSkipped).toBe(true);
+    await expect(h.requests.inPerson(user('READ_ONLY'), id, {} as any, INFO)).rejects.toMatchObject({ status: 403 });
   });
 });

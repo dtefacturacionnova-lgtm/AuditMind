@@ -23,6 +23,8 @@ import {
   type WpStatus, type TickMarkKey, type WpKind, type WpSyncStatus,
 } from '@/hooks/useWorkingPapers';
 import { SmartPaperSections }     from '@/components/working-papers/SmartPaperSections';
+import { InterviewSignature }     from '@/components/working-papers/InterviewSignature';
+import { isInterviewPaper }       from '@/lib/signature/interview';
 import { MasterPaperView }         from '@/components/working-papers/MasterPaperView';
 import { PaperGraphPanel }         from '@/components/working-papers/PaperGraphPanel';
 import { QualityGatePanel }        from '@/components/working-papers/QualityGatePanel';
@@ -1798,6 +1800,13 @@ export default function WpDetailPage() {
                 readonly={wp.status === 'APPROVED'}
               />
               <CrossAuditSuggestions auditId={wp.auditId} paperId={params.id} />
+            </div>
+          )}
+
+          {/* ── Actas de entrevista para firma electrónica (PT-ENTREV, tipo entrevista, B-INT-*) ── */}
+          {isInterviewPaper(wp) && (effectiveTab === 'sections' || effectiveTab === 'content') && (
+            <div className="mt-4 max-w-3xl">
+              <InterviewSignature paperId={params.id} paperTitle={`${wp.paperCode ?? wp.code} — ${wp.title}`} investigationMode={!!wp.audit?.isInvestigationMode} />
             </div>
           )}
 

@@ -119,6 +119,7 @@ export interface WorkingPaper {
   audit?: {
     id: string;
     title: string;
+    isInvestigationMode?: boolean;
     type?: string;
     scope?: string;
     auditPeriodStart?: string | null;

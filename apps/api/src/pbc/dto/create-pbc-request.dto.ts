@@ -4,6 +4,9 @@ import {
   IsDateString,
   IsEmail,
   IsArray,
+  ArrayMaxSize,
+  MaxLength,
+  MinLength,
 } from 'class-validator';
 import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -41,39 +44,36 @@ export class CreatePbcRequestDto {
   isConfidential?: boolean;
 }
 
-export class SubmitPbcResponseDto {
-  @ApiProperty()
-  @IsString()
-  portalToken: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  auditeeNotes?: string;
-}
-
+// Lo que escribe el auditado en el portal PÚBLICO: se acota el tamaño de todo (sin login, cualquiera con el enlace puede enviar).
 export class AddPortalMessageDto {
-  @ApiProperty()
+  @ApiProperty({ maxLength: 5000 })
   @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
   content: string;
 
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(10)
   @IsString({ each: true })
+  @MaxLength(500, { each: true })
   attachmentUrls?: string[];
 }
 
 export class SubmitPortalDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ maxLength: 5000 })
   @IsOptional()
   @IsString()
+  @MaxLength(5000)
   auditeeNotes?: string;
 
   @ApiPropertyOptional({ type: [String], description: 'Array of file names or URLs adjuntos' })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(10)
   @IsString({ each: true })
+  @MaxLength(500, { each: true })
   fileUrls?: string[];
 }
 

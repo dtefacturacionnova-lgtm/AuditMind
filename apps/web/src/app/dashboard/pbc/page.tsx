@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
-  usePbcRequestsForOrg, useCreatePbcRequest, PBC_STATUS_CONFIG,
+  usePbcRequestsForOrg, useCreatePbcRequest, usePortalLink, PBC_STATUS_CONFIG,
   type PbcStatus, type CreatePbcData,
 } from '@/hooks/usePbc';
 import { formatDate } from '@/lib/utils';
@@ -150,26 +150,46 @@ function CreatePbcModal({
 }
 
 // ─── Copy link button ─────────────────────────────────────────────────────────
-function CopyLinkButton({ token }: { token: string }) {
-  const [copied, setCopied] = useState(false);
+// El listado ya no trae el token (en la base solo existe su huella): al pulsar, la API descifra el enlace vigente.
+function CopyLinkButton({ id }: { id: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'no-link' | 'no-clipboard'>('idle');
+  const link = usePortalLink();
 
-  const copy = (e: React.MouseEvent) => {
+  const copy = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const url = `${window.location.origin}/portal/${token}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    let url: string | null = null;
+    try {
+      ({ url } = await link.mutateAsync(id));
+    } catch {
+      setState('no-link');
+    }
+    if (url) {
+      try {
+        await navigator.clipboard.writeText(url);
+        setState('copied');
+      } catch {
+        setState('no-clipboard');
+      }
+    }
+    setTimeout(() => setState('idle'), 2500);
   };
 
   return (
     <button
       onClick={copy}
-      title="Copiar enlace del portal"
-      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+      disabled={link.isPending}
+      title={
+        state === 'no-link' ? 'No hay un enlace guardado para esta solicitud: ábrela y usa «Regenerar enlace»'
+        : state === 'no-clipboard' ? 'El navegador no dejó copiar: ábrela y copia el enlace desde ahí'
+        : 'Copiar enlace del portal'
+      }
+      aria-label="Copiar enlace del portal"
+      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
     >
-      {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+      {state === 'copied' ? <Check className="w-3.5 h-3.5 text-emerald-500" />
+        : state !== 'idle' ? <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+        : <Copy className="w-3.5 h-3.5" />}
     </button>
   );
 }
@@ -348,7 +368,7 @@ export default function PbcPage() {
 
                       {/* Actions */}
                       <div className="col-span-1 flex items-center justify-end gap-1">
-                        <CopyLinkButton token={req.portalToken} />
+                        <CopyLinkButton id={req.id} />
                         <Link href={`/dashboard/pbc/${req.id}`} className="p-1.5 rounded-lg text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors">
                           <ChevronRight className="w-4 h-4" />
                         </Link>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { CheckCircle2, Clock, Copy, Download, FileSignature, Hourglass, LinkIcon, Mail, ServerCrash, ShieldAlert, XCircle, Ban } from 'lucide-react';
+import { captureFragmentToken } from '@/lib/fragment-token';
 import { SignatureApiError, signatureApi } from '@/lib/signature/api';
 import { classifyApiError, reducer, type CodePurpose, type Stage } from '@/lib/signature/flow';
 import { buildResponse, fileProblem, formatDateSv, formatDateTimeSv, validateSigner } from '@/lib/signature/helpers';
@@ -10,7 +11,6 @@ import { CodeStep } from './CodeStep';
 import { DocumentStep, emptyForm, type SignForm } from './DocumentStep';
 import { Alert, Card, Heading, Spinner, StatusScreen, Stepper, primaryButton, secondaryButton } from './ui';
 
-const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const POLL_MS = 4000;
 const POLL_MAX_MS = 5 * 60_000;
 
@@ -66,19 +66,10 @@ export function SignFlow() {
   useEffect(() => {
     if (startedRef.current) return; // React StrictMode ejecuta el efecto dos veces en desarrollo
     startedRef.current = true;
-    const fragment = window.location.hash.replace(/^#/, '');
-    if (fragment) {
-      tokenRef.current = fragment;
-      // Fuera de la barra de direcciones y del historial desde el primer instante…
-      const clean = window.location.pathname + window.location.search;
-      window.history.replaceState(null, '', clean);
-      // …y otra vez un instante después: el efecto de un hijo corre ANTES que el del router de Next, que apenas
-      // entonces envuelve history.replaceState para sincronizar su propia copia de la URL. Sin esta segunda llamada
-      // el router conserva la URL con el #token y la reescribe en la barra ante cualquier actualización suya.
-      setTimeout(() => window.history.replaceState(null, '', clean), 0);
-    }
-    if (!tokenRef.current) { dispatch({ type: 'TERMINAL', stage: { kind: 'no-token' } }); return; }
-    if (!TOKEN_RE.test(tokenRef.current)) { dispatch({ type: 'TERMINAL', stage: { kind: 'invalid' } }); return; }
+    const captured = captureFragmentToken(); // lee el #token y lo borra de la URL (dos veces; ver lib/fragment-token.ts)
+    if (captured.kind === 'missing') { dispatch({ type: 'TERMINAL', stage: { kind: 'no-token' } }); return; }
+    if (captured.kind === 'malformed') { dispatch({ type: 'TERMINAL', stage: { kind: 'invalid' } }); return; }
+    tokenRef.current = captured.token;
     void load();
   }, [load]);
 

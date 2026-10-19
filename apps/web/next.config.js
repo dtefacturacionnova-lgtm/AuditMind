@@ -11,7 +11,7 @@ function supabaseOrigin() {
 }
 
 /**
- * Encabezados de las páginas PÚBLICAS de firma y verificación (docs/firma-externa-por-enlace.md §14.3):
+ * Encabezados de las páginas PÚBLICAS (firma, verificación y portal PBC; docs/firma-externa-por-enlace.md §14.3):
  *  - nada puede incrustar estas páginas (clickjacking sobre el botón "Firmar"): frame-ancestors 'none' + X-Frame-Options;
  *  - la página solo incrusta su propio contenido, blobs (el PDF ya verificado) y Storage;
  *  - sin Referer (el fragmento #token nunca viaja, pero así tampoco la dirección de la página);
@@ -26,11 +26,10 @@ function supabaseOrigin() {
  * pudieron probar, y quedarse sin ver el documento en un teléfono pesa más que lo que aporta esa directiva (estas
  * páginas no contienen <object> ni <embed> propios).
  */
-function signaturePageHeaders() {
-  const storage = supabaseOrigin();
+function publicPageHeaders(frameSrc) {
   const csp = [
     "frame-ancestors 'none'",
-    `frame-src 'self' blob:${storage ? ` ${storage}` : ''}`,
+    `frame-src ${frameSrc}`,
     "base-uri 'self'",
     "form-action 'self'",
   ].join('; ');
@@ -64,10 +63,14 @@ const nextConfig = {
     ];
   },
   async headers() {
+    const storage = supabaseOrigin();
+    // La firma incrusta el PDF a firmar (blob ya verificado o URL firmada de Storage); el portal PBC no incrusta nada.
+    const signFrames = `'self' blob:${storage ? ` ${storage}` : ''}`;
     return [
-      // `:path*` también coincide con la ruta sin subruta (/firmar, /verificar).
-      { source: '/firmar/:path*', headers: signaturePageHeaders() },
-      { source: '/verificar/:path*', headers: signaturePageHeaders() },
+      // `:path*` también coincide con la ruta sin subruta (/firmar, /verificar, /portal).
+      { source: '/firmar/:path*', headers: publicPageHeaders(signFrames) },
+      { source: '/verificar/:path*', headers: publicPageHeaders(signFrames) },
+      { source: '/portal/:path*', headers: publicPageHeaders("'none'") },
     ];
   },
 };

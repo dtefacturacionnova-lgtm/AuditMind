@@ -1,11 +1,15 @@
 import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException, GoneException,
+  ConflictException, ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import { CreatePbcRequestDto } from './dto/create-pbc-request.dto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PbcRequestStatus } from '@prisma/client';
-import { randomBytes } from 'crypto';
+import { decryptSecret, encryptSecret } from '../common/utils/signing-key.util';
+import { generateToken, hashToken, isWellFormedToken } from '../signatures/signature-crypto.util';
 
 /**
  * Vencimiento del enlace del portal público (decisión 2026-10-18): 30 días
@@ -34,12 +38,32 @@ const PORTAL_SELECT = {
   },
 };
 
+/**
+ * Campos que NUNCA salen de la API: el token del portal no se guarda en claro (sha256 para buscarlo + copia cifrada
+ * para que el equipo pueda volver a copiar el enlace), y ninguna de las dos formas debe viajar en una respuesta.
+ */
+export function withoutPortalSecrets<T extends object>(row: T): Omit<T, 'portalTokenHash' | 'portalTokenEncrypted'> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
+  const { portalTokenHash, portalTokenEncrypted, ...rest } = row as any;
+  return rest;
+}
+
+const TOKEN_ERROR = 'Solicitud no encontrada o token inválido';
+
 @Injectable()
 export class PbcService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private config: ConfigService,
+    private email: EmailService,
+  ) {}
 
-  private generatePortalToken(): string {
-    return randomBytes(32).toString('hex');
+  /** Genera un token nuevo y devuelve el token en claro (para el enlace) junto con lo único que se guarda de él. */
+  private issueToken(): { token: string; stored: { portalTokenHash: string; portalTokenEncrypted: string } } {
+    const key = this.config.get<string>('ENCRYPTION_KEY', '');
+    if (!key) throw new ServiceUnavailableException('Falta la clave de cifrado del servidor (ENCRYPTION_KEY).');
+    const token = generateToken();
+    return { token, stored: { portalTokenHash: hashToken(token), portalTokenEncrypted: encryptSecret(token, key) } };
   }
 
   // ─── Métodos autenticados (auditor) ──────────────────────────────────────────
@@ -50,7 +74,8 @@ export class PbcService {
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
 
-    return this.prisma.pbcRequest.create({
+    const { stored } = this.issueToken();
+    const created = await this.prisma.pbcRequest.create({
       data: {
         auditId:          dto.auditId,
         organizationId:   user.organizationId,
@@ -59,7 +84,7 @@ export class PbcService {
         requestedToEmail: dto.assignedToEmail,
         requestedToName:  dto.assignedToName,
         dueDate:          new Date(dto.dueDate),
-        portalToken:      this.generatePortalToken(),
+        ...stored,
         portalTokenExpiresAt: portalExpiry(new Date(dto.dueDate)),
         status:           PbcRequestStatus.PENDING,
         createdById:      user.id,
@@ -68,6 +93,7 @@ export class PbcService {
         audit: { select: { id: true, title: true } },
       },
     });
+    return withoutPortalSecrets(created);
   }
 
   async findAllForAudit(auditId: string, user: AuthUser) {
@@ -76,8 +102,9 @@ export class PbcService {
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
 
-    return this.prisma.pbcRequest.findMany({
-      where: { auditId },
+    const rows = await this.prisma.pbcRequest.findMany({
+      // organizationId además del auditId: el id de auditoría ya se validó arriba, esto es la segunda capa.
+      where: { auditId, organizationId: user.organizationId },
       orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
       include: {
         messages: {
@@ -86,6 +113,7 @@ export class PbcService {
         },
       },
     });
+    return rows.map(withoutPortalSecrets);
   }
 
   async findAllForOrg(
@@ -114,7 +142,7 @@ export class PbcService {
     ]);
 
     return {
-      data,
+      data: data.map(withoutPortalSecrets),
       meta: { total, page, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -129,7 +157,7 @@ export class PbcService {
     });
     if (!request) throw new NotFoundException('Solicitud PBC no encontrada');
     if (request.organizationId !== user.organizationId) throw new ForbiddenException();
-    return request;
+    return withoutPortalSecrets(request);
   }
 
   async addAuditorMessage(
@@ -207,7 +235,7 @@ export class PbcService {
       });
     }
 
-    return this.prisma.pbcRequest.update({
+    const updated = await this.prisma.pbcRequest.update({
       where: { id },
       data: {
         status,
@@ -219,21 +247,48 @@ export class PbcService {
         messages: { orderBy: { createdAt: 'asc' } },
       },
     });
+    return withoutPortalSecrets(updated);
   }
 
+  /** Rota el enlace: el anterior deja de servir al instante. Devuelve el enlace nuevo UNA vez y su vencimiento. */
   async regenerateToken(id: string, user: AuthUser) {
-    const request = await this.prisma.pbcRequest.findUnique({
-      where: { id },
-      include: { audit: { select: { organizationId: true } } },
+    const request = await this.prisma.pbcRequest.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true, dueDate: true },
     });
     if (!request) throw new NotFoundException('Solicitud no encontrada');
-    if (request.audit.organizationId !== user.organizationId) throw new ForbiddenException();
 
-    return this.prisma.pbcRequest.update({
+    const { token, stored } = this.issueToken();
+    const updated = await this.prisma.pbcRequest.update({
       where: { id },
-      data:   { portalToken: this.generatePortalToken(), portalTokenExpiresAt: portalExpiry(request.dueDate) },
-      select: { id: true, portalToken: true, portalTokenExpiresAt: true },
+      data:   { ...stored, portalTokenExpiresAt: portalExpiry(request.dueDate) },
+      select: { id: true, portalTokenExpiresAt: true },
     });
+    return { id: updated.id, portalUrl: this.email.portalUrl(token), portalTokenExpiresAt: updated.portalTokenExpiresAt };
+  }
+
+  /**
+   * El equipo auditor vuelve a copiar el enlace vigente de una solicitud. Se descifra la copia guardada; la BD sola
+   * no revela el token. Solo de la propia organización. Una solicitud sin copia (creada antes del cambio) debe regenerarse.
+   */
+  async getPortalLink(id: string, user: AuthUser) {
+    const request = await this.prisma.pbcRequest.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true, portalTokenEncrypted: true, portalTokenExpiresAt: true },
+    });
+    if (!request) throw new NotFoundException('Solicitud no encontrada');
+    const key = this.config.get<string>('ENCRYPTION_KEY', '');
+    if (!key) throw new ServiceUnavailableException('Falta la clave de cifrado del servidor (ENCRYPTION_KEY).');
+    if (!request.portalTokenEncrypted) {
+      throw new ConflictException('Esta solicitud no tiene un enlace guardado. Usa «Regenerar enlace» para crear uno nuevo.');
+    }
+    let token: string;
+    try {
+      token = decryptSecret(request.portalTokenEncrypted, key);
+    } catch {
+      throw new ConflictException('No se pudo recuperar el enlace. Usa «Regenerar enlace» para crear uno nuevo.');
+    }
+    return { url: this.email.portalUrl(token), expiresAt: request.portalTokenExpiresAt };
   }
 
   async markOverdue(user: AuthUser) {
@@ -256,22 +311,28 @@ export class PbcService {
     }
   }
 
-  async findByToken(token: string) {
-    const request = await this.prisma.pbcRequest.findUnique({
-      where: { portalToken: token },
-      select: PORTAL_SELECT,
-    });
-    if (!request) throw new NotFoundException('Solicitud no encontrada o token inválido');
+  /** Busca por la HUELLA del token (nunca se compara el token en claro) y descarta basura antes de tocar la BD. */
+  private async loadByToken(token: unknown) {
+    if (!isWellFormedToken(token)) throw new NotFoundException(TOKEN_ERROR);
+    const request = await this.prisma.pbcRequest.findUnique({ where: { portalTokenHash: hashToken(token) } });
+    if (!request) throw new NotFoundException(TOKEN_ERROR);
     this.assertLinkActive(request);
     return request;
   }
 
-  async addMessageByToken(token: string, content: string, attachmentUrls?: string[]) {
+  async findByToken(token: unknown) {
+    if (!isWellFormedToken(token)) throw new NotFoundException(TOKEN_ERROR);
     const request = await this.prisma.pbcRequest.findUnique({
-      where: { portalToken: token },
+      where: { portalTokenHash: hashToken(token) },
+      select: PORTAL_SELECT,
     });
-    if (!request) throw new NotFoundException('Token inválido');
+    if (!request) throw new NotFoundException(TOKEN_ERROR);
     this.assertLinkActive(request);
+    return request;
+  }
+
+  async addMessageByToken(token: unknown, content: string, attachmentUrls?: string[]) {
+    const request = await this.loadByToken(token);
     if (request.status === PbcRequestStatus.ACCEPTED) {
       throw new BadRequestException('Esta solicitud ya fue aceptada y no acepta más mensajes');
     }
@@ -289,12 +350,8 @@ export class PbcService {
     });
   }
 
-  async submitByToken(token: string, fileUrls?: string[], auditeeNotes?: string) {
-    const request = await this.prisma.pbcRequest.findUnique({
-      where: { portalToken: token },
-    });
-    if (!request) throw new NotFoundException('Token inválido');
-    this.assertLinkActive(request);
+  async submitByToken(token: unknown, fileUrls?: string[], auditeeNotes?: string) {
+    const request = await this.loadByToken(token);
     if (request.status === PbcRequestStatus.ACCEPTED) {
       throw new BadRequestException('Esta solicitud ya fue aceptada');
     }

@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
+import { portalApi } from '@/lib/portal-api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type PbcStatus = 'PENDING' | 'SUBMITTED' | 'ACCEPTED' | 'REJECTED' | 'OVERDUE';
@@ -27,7 +28,6 @@ export interface PbcRequest {
   requestedToName?: string;
   dueDate: string;
   status: PbcStatus;
-  portalToken: string;
   fileUrls: string[];
   rejectionReason?: string;
   submittedAt?: string;
@@ -101,11 +101,14 @@ export function usePbcStats(auditId: string) {
   });
 }
 
-/** Portal público — sin autenticación (apiClient envía sin Bearer si no hay sesión) */
-export function usePortalRequest(token: string) {
+/**
+ * Portal público — sin sesión. El token del enlace (que llega en el #fragmento) viaja en la cabecera X-Portal-Token.
+ * La clave de la caché NO lleva el token: solo hay un enlace por página y no debe quedar en herramientas de depuración.
+ */
+export function usePortalRequest(token: string | null) {
   return useQuery<PbcRequest>({
-    queryKey: ['portal', token],
-    queryFn:  () => apiClient.get(`/pbc/portal/${token}`),
+    queryKey: ['portal'],
+    queryFn:  () => portalApi.get<PbcRequest>(token as string),
     enabled:  !!token,
     staleTime: 15_000,
     retry: false,
@@ -148,36 +151,56 @@ export function useReviewPbc() {
   });
 }
 
+/** Rota el enlace del portal: el anterior deja de servir. Devuelve el enlace nuevo (el token no se guarda en claro). */
 export function useRegenerateToken() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiClient.post<{ id: string; portalToken: string }>(`/pbc/${id}/regenerate-token`, {}),
+    mutationFn: (id: string) => apiClient.post<PortalLink>(`/pbc/${id}/regenerate-token`, {}),
     onSuccess: (_: unknown, id: string) => {
       qc.invalidateQueries({ queryKey: ['pbc', id] });
       qc.invalidateQueries({ queryKey: ['pbc', 'org'] });
     },
+    // El enlace en claro no debe quedarse en la caché de mutaciones.
+    gcTime: 0,
+  });
+}
+
+export interface PortalLink {
+  id: string;
+  portalUrl: string;
+  portalTokenExpiresAt: string | null;
+}
+
+/**
+ * Pide el enlace vigente del portal para copiarlo o abrirlo. El listado ya no trae el token: la API lo descifra al pedirlo
+ * (solo el equipo auditor de la misma organización).
+ */
+export function usePortalLink() {
+  return useMutation({
+    mutationFn: (id: string) => apiClient.get<{ url: string; expiresAt: string | null }>(`/pbc/${id}/portal-link`),
+    gcTime: 0,
   });
 }
 
 // ─── Mutations públicas del portal ────────────────────────────────────────────
-export function useAddPortalMessage(token: string) {
+export function useAddPortalMessage(token: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ content, attachmentUrls }: { content: string; attachmentUrls?: string[] }) =>
-      apiClient.post(`/pbc/portal/${token}/message`, { content, attachmentUrls }),
+      portalApi.post(token as string, '/message', { content, attachmentUrls }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['portal', token] });
+      qc.invalidateQueries({ queryKey: ['portal'] });
     },
   });
 }
 
-export function useSubmitPortal(token: string) {
+export function useSubmitPortal(token: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ auditeeNotes, fileUrls }: { auditeeNotes?: string; fileUrls?: string[] }) =>
-      apiClient.post<PbcRequest>(`/pbc/portal/${token}/submit`, { auditeeNotes, fileUrls }),
+      portalApi.post<PbcRequest>(token as string, '/submit', { auditeeNotes, fileUrls }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['portal', token] });
+      qc.invalidateQueries({ queryKey: ['portal'] });
     },
   });
 }

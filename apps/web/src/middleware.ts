@@ -12,9 +12,9 @@ const ROLE_HOME: Record<string, string> = {
   READ_ONLY: '/dashboard',
 };
 
-// Páginas públicas de la firma por enlace: no usan la sesión de AuditMind. Se salta Supabase por completo
-// (ni consulta de usuario ni cookies de sesión en una página que abre un firmante externo).
-const PUBLIC_SIGNATURE_PATHS = ['/firmar', '/verificar'];
+// Páginas públicas para externos (firma por enlace, verificación y portal PBC): no usan la sesión de AuditMind.
+// Se salta Supabase por completo (ni consulta de usuario ni cookies de sesión en una página que abre un tercero).
+const PUBLIC_SIGNATURE_PATHS = ['/firmar', '/verificar', '/portal'];
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;

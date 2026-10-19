@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useParams } from 'next/navigation';
 import {
   Send, Paperclip, X, CheckCircle2, Clock, AlertTriangle,
-  FileText, Upload, ShieldCheck,
+  FileText, Upload, ShieldCheck, Link as LinkIcon,
 } from 'lucide-react';
 import { usePortalRequest, useAddPortalMessage, useSubmitPortal, PBC_STATUS_CONFIG } from '@/hooks/usePbc';
+import { captureFragmentToken, type FragmentToken } from '@/lib/fragment-token';
+import { PortalApiError } from '@/lib/portal-api';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
@@ -86,14 +87,59 @@ function FileTag({ name, onRemove }: { name: string; onRemove: () => void }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-export default function PortalPage() {
-  const params  = useParams<{ token: string }>();
-  const token   = params.token;
+// ─── Pantalla de problema con el enlace ───────────────────────────────────────
+function LinkProblem({ icon, title, children, onRetry }: { icon: React.ReactNode; title: string; children: React.ReactNode; onRetry?: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4 text-center" role="alert">
+      {icon}
+      <h2 className="text-lg font-semibold text-gray-700">{title}</h2>
+      <p className="text-gray-500 text-sm max-w-sm">{children}</p>
+      {onRetry && (
+        <button onClick={onRetry} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-xl hover:bg-blue-700">Reintentar</button>
+      )}
+    </div>
+  );
+}
 
-  const { data: request, isLoading, error } = usePortalRequest(token);
+// ─── Page ─────────────────────────────────────────────────────────────────────
+/**
+ * El token del enlace llega en el FRAGMENTO de la URL (`/portal#<token>`): no viaja al servidor ni a los logs. Se lee una
+ * vez, se borra de la barra de direcciones y vive solo en memoria (recargar la página lo pierde: hay que abrir de nuevo
+ * el enlace que te enviaron).
+ */
+export default function PortalPage() {
+  const [captured, setCaptured] = useState<FragmentToken | null>(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (started.current) return; // React StrictMode ejecuta el efecto dos veces en desarrollo
+    started.current = true;
+    setCaptured(captureFragmentToken());
+  }, []);
+
+  if (!captured) return null;
+  if (captured.kind === 'missing') {
+    return (
+      <LinkProblem icon={<LinkIcon className="w-12 h-12 text-amber-300" />} title="Abre el enlace completo que te enviaron">
+        Esta página necesita el enlace completo. Si recargaste la página o copiaste solo una parte de la dirección, vuelve a abrir el enlace original o pide uno nuevo al equipo auditor.
+      </LinkProblem>
+    );
+  }
+  if (captured.kind === 'malformed') {
+    return (
+      <LinkProblem icon={<AlertTriangle className="w-12 h-12 text-red-300" />} title="Enlace inválido">
+        Este enlace no es válido. Pide uno nuevo al equipo auditor.
+      </LinkProblem>
+    );
+  }
+  return <PortalContent token={captured.token} />;
+}
+
+function PortalContent({ token }: { token: string }) {
+  const { data: request, isLoading, error, refetch } = usePortalRequest(token);
   const addMessage = useAddPortalMessage(token);
   const submit     = useSubmitPortal(token);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const [msgText, setMsgText]         = useState('');
   const [files, setFiles]             = useState<string[]>([]);
@@ -117,14 +163,20 @@ export default function PortalPage() {
   }
 
   if (error || !request) {
+    const status = error instanceof PortalApiError ? error.status : 404;
+    if (status === 0 || status >= 500 || status === 429) {
+      return (
+        <LinkProblem icon={<AlertTriangle className="w-12 h-12 text-amber-300" />} title="No pudimos abrir la solicitud" onRetry={() => void refetch()}>
+          {error instanceof PortalApiError ? error.message : 'Inténtalo de nuevo en un momento.'}
+        </LinkProblem>
+      );
+    }
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-        <AlertTriangle className="w-12 h-12 text-red-300" />
-        <h2 className="text-lg font-semibold text-gray-700">Enlace inválido o expirado</h2>
-        <p className="text-gray-500 text-sm max-w-sm">
-          Este enlace no es válido o ya no está disponible. Contacta al equipo auditor para obtener un nuevo enlace.
-        </p>
-      </div>
+      <LinkProblem icon={<AlertTriangle className="w-12 h-12 text-red-300" />} title={status === 410 ? 'Este enlace venció' : 'Enlace inválido o reemplazado'}>
+        {status === 410
+          ? 'El plazo de este enlace terminó. Contacta al equipo auditor para obtener uno nuevo.'
+          : 'Este enlace no es válido o fue reemplazado por uno más reciente. Revisa el último mensaje que recibiste o contacta al equipo auditor.'}
+      </LinkProblem>
     );
   }
 
@@ -134,10 +186,15 @@ export default function PortalPage() {
   const isOverdue = !isLocked && new Date(request.dueDate) < new Date();
 
   const handleSendMessage = async () => {
-    if (!msgText.trim()) return;
-    await addMessage.mutateAsync({ content: msgText.trim(), attachmentUrls: files.length ? files : undefined });
-    setMsgText('');
-    setFiles([]);
+    if (!msgText.trim() || addMessage.isPending) return;
+    setSendError(null);
+    try {
+      await addMessage.mutateAsync({ content: msgText.trim(), attachmentUrls: files.length ? files : undefined });
+      setMsgText('');
+      setFiles([]);
+    } catch (e) {
+      setSendError((e as Error).message || 'No se pudo enviar el mensaje.');
+    }
   };
 
   const handleAddFile = () => {
@@ -154,10 +211,16 @@ export default function PortalPage() {
   };
 
   const handleSubmit = async () => {
-    await submit.mutateAsync({ auditeeNotes: submitNotes || undefined, fileUrls: files.length ? files : undefined });
-    setShowSubmit(false);
-    setSubmitNotes('');
-    setFiles([]);
+    if (submit.isPending) return;
+    setSendError(null);
+    try {
+      await submit.mutateAsync({ auditeeNotes: submitNotes || undefined, fileUrls: files.length ? files : undefined });
+      setShowSubmit(false);
+      setSubmitNotes('');
+      setFiles([]);
+    } catch (e) {
+      setSendError((e as Error).message || 'No se pudo enviar la respuesta.');
+    }
   };
 
   return (
@@ -259,6 +322,8 @@ export default function PortalPage() {
                 ))}
               </div>
             )}
+
+            {sendError && <p role="alert" className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{sendError}</p>}
 
             {/* Message row */}
             <div className="flex gap-2 items-end">
@@ -362,6 +427,8 @@ export default function PortalPage() {
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+
+              {sendError && <p role="alert" className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{sendError}</p>}
 
               <div className="flex gap-2">
                 <button

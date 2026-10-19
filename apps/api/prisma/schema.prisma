@@ -2143,7 +2143,11 @@ model PbcRequest {
   requestedToName  String?
   dueDate          DateTime
   status           PbcRequestStatus @default(PENDING)
-  portalToken      String           @unique
+  // El token del enlace NO se guarda en claro: `portalTokenHash` (sha256 hex) sirve para buscarla y
+  // `portalTokenEncrypted` (AES-256-GCM con ENCRYPTION_KEY) permite al equipo volver a copiar el enlace.
+  // Nulos por compatibilidad mientras dura el cambio (SQL: 2026-10-pbc-token-hash.sql). Nunca salen en las respuestas.
+  portalTokenHash      String?          @unique
+  portalTokenEncrypted String?
   portalTokenExpiresAt DateTime? // vence el enlace del portal público; se renueva al regenerarlo
   fileUrls         Json             @default("[]")
   rejectionReason  String?

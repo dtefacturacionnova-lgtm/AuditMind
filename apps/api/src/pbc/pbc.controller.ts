@@ -1,14 +1,13 @@
 import {
-  Controller, Get, Post, Patch, Body, Param, Query, ParseIntPipe, DefaultValuePipe,
+  Controller, Get, Post, Patch, Body, Param, Query, ParseIntPipe, DefaultValuePipe, Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PbcService } from './pbc.service';
 import {
-  CreatePbcRequestDto, AddPortalMessageDto, SubmitPortalDto,
+  CreatePbcRequestDto,
   AddAuditorMessageDto,
 } from './dto/create-pbc-request.dto';
 import { Roles } from '../common/decorators/roles.decorator';
-import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PbcRequestStatus, UserRole } from '@prisma/client';
@@ -105,10 +104,20 @@ export class PbcController {
     return this.service.review(id, dto.status, dto.notes, user);
   }
 
+  @Get(':id/portal-link')
+  @ApiBearerAuth()
+  @Roles(UserRole.AUDITOR)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Enlace vigente del portal para copiarlo (se descifra al pedirlo; nunca va en los listados)' })
+  getPortalLink(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.getPortalLink(id, user);
+  }
+
   @Post(':id/regenerate-token')
   @ApiBearerAuth()
   @Roles(UserRole.AUDITOR)
-  @ApiOperation({ summary: 'Regenerar token del portal' })
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Regenerar el enlace del portal (el anterior deja de servir); devuelve el enlace nuevo' })
   regenerateToken(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.regenerateToken(id, user);
   }
@@ -119,31 +128,5 @@ export class PbcController {
   @ApiOperation({ summary: 'Marcar como vencidas las solicitudes expiradas' })
   markOverdue(@CurrentUser() user: AuthUser) {
     return this.service.markOverdue(user);
-  }
-
-  // ─── Endpoints públicos del portal (sin autenticación) ───────────────────────
-
-  @Get('portal/:token')
-  @Public()
-  @ApiOperation({ summary: '[Portal] Obtener solicitud por token (sin autenticación)' })
-  findByToken(@Param('token') token: string) {
-    return this.service.findByToken(token);
-  }
-
-  @Post('portal/:token/message')
-  @Public()
-  @ApiOperation({ summary: '[Portal] Auditado envía mensaje en el hilo' })
-  addMessageByToken(
-    @Param('token') token: string,
-    @Body() dto: AddPortalMessageDto,
-  ) {
-    return this.service.addMessageByToken(token, dto.content, dto.attachmentUrls);
-  }
-
-  @Post('portal/:token/submit')
-  @Public()
-  @ApiOperation({ summary: '[Portal] Auditado envía su respuesta final (marca SUBMITTED)' })
-  submitByToken(@Param('token') token: string, @Body() dto: SubmitPortalDto) {
-    return this.service.submitByToken(token, dto.fileUrls, dto.auditeeNotes);
   }
 }

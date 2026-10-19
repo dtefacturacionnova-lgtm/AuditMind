@@ -1,6 +1,10 @@
+// Página PÚBLICA para el auditado externo: nunca debe indexarse ni enviar Referer
+// (los encabezados HTTP equivalentes se fijan en next.config.js).
 export const metadata = {
   title: 'Portal del Auditado — AuditMind',
   description: 'Portal seguro para respuesta de solicitudes de auditoría',
+  robots: { index: false, follow: false, nocache: true },
+  referrer: 'no-referrer' as const,
 };
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
-  usePbcRequest, useAddAuditorMessage, useReviewPbc, useRegenerateToken,
+  usePbcRequest, useAddAuditorMessage, useReviewPbc, useRegenerateToken, usePortalLink,
   PBC_STATUS_CONFIG,
 } from '@/hooks/usePbc';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
@@ -83,6 +83,10 @@ export default function PbcDetailPage() {
   const addMessage    = useAddAuditorMessage();
   const review        = useReviewPbc();
   const regenerate    = useRegenerateToken();
+  const portalLink    = usePortalLink();
+  const [linkNote, setLinkNote] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  // Si el navegador no deja copiar solo (sin HTTPS o sin permiso), el enlace se muestra para copiarlo a mano.
+  const [manualUrl, setManualUrl] = useState<string | null>(null);
 
   const [msgText, setMsgText]         = useState('');
   const [reviewNotes, setReviewNotes] = useState('');
@@ -94,13 +98,40 @@ export default function PbcDetailPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [request?.messages?.length]);
 
-  const copyPortalLink = () => {
+  // El token ya no está en la respuesta de la solicitud (en la base solo existe su huella): al pedirlo, la API descifra
+  // el enlace vigente. El enlace lleva el token en el #fragmento, que no llega a los logs del servidor.
+  const copyPortalLink = async () => {
     if (!request) return;
-    const url = `${window.location.origin}/portal/${request.portalToken}`;
-    navigator.clipboard.writeText(url).then(() => {
+    setLinkNote(null);
+    setManualUrl(null);
+    let url: string;
+    try {
+      ({ url } = await portalLink.mutateAsync(params.id));
+    } catch (e) {
+      setLinkNote({ tone: 'error', text: (e as Error).message || 'No se pudo obtener el enlace.' });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
       setCopiedToken(true);
       setTimeout(() => setCopiedToken(false), 2500);
-    });
+    } catch {
+      setManualUrl(url);
+      setLinkNote({ tone: 'error', text: 'No pudimos copiarlo automáticamente: selecciónalo y cópialo con Ctrl+C.' });
+    }
+  };
+
+  const openPortal = async () => {
+    // Se abre la pestaña de inmediato (dentro del clic) y luego se le asigna el enlace: así el navegador no la bloquea.
+    const tab = window.open('about:blank', '_blank');
+    setLinkNote(null);
+    try {
+      const { url } = await portalLink.mutateAsync(params.id);
+      if (tab) { tab.opener = null; tab.location.href = url; }
+    } catch (e) {
+      tab?.close();
+      setLinkNote({ tone: 'error', text: (e as Error).message || 'No se pudo abrir el portal.' });
+    }
   };
 
   const handleSendMessage = async () => {
@@ -122,8 +153,15 @@ export default function PbcDetailPage() {
   };
 
   const handleRegenerate = async () => {
-    if (!confirm('¿Regenerar el token? El enlace anterior dejará de funcionar.')) return;
-    await regenerate.mutateAsync(params.id);
+    if (!confirm('¿Regenerar el enlace? El enlace anterior dejará de funcionar y tendrás que volver a enviarlo al auditado.')) return;
+    setLinkNote(null);
+    setManualUrl(null);
+    try {
+      await regenerate.mutateAsync(params.id);
+      setLinkNote({ tone: 'ok', text: 'Enlace regenerado. Usa «Copiar enlace» para obtener el nuevo.' });
+    } catch (e) {
+      setLinkNote({ tone: 'error', text: (e as Error).message || 'No se pudo regenerar el enlace.' });
+    }
   };
 
   if (isLoading) {
@@ -337,29 +375,41 @@ export default function PbcDetailPage() {
               <div className="flex gap-2">
                 <button
                   onClick={copyPortalLink}
+                  disabled={portalLink.isPending}
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 transition-colors"
                 >
                   {copiedToken
                     ? <><Check className="w-3.5 h-3.5" /> Copiado</>
                     : <><Copy className="w-3.5 h-3.5" /> Copiar enlace</>}
                 </button>
-                <a
-                  href={`/portal/${request.portalToken}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-2 border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                <button
+                  type="button"
+                  onClick={openPortal}
+                  disabled={portalLink.isPending}
+                  className="p-2 border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 hover:border-blue-200 transition-colors disabled:opacity-50"
                   title="Abrir portal"
+                  aria-label="Abrir portal"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                </button>
               </div>
+              {linkNote && (
+                <p role={linkNote.tone === 'error' ? 'alert' : 'status'}
+                  className={`text-xs rounded-lg px-3 py-2 ${linkNote.tone === 'error' ? 'text-red-600 bg-red-50' : 'text-emerald-700 bg-emerald-50'}`}>
+                  {linkNote.text}
+                </p>
+              )}
+              {manualUrl && (
+                <input readOnly value={manualUrl} aria-label="Enlace del portal" onFocus={(e) => e.currentTarget.select()}
+                  className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-mono text-gray-600" />
+              )}
               <button
                 onClick={handleRegenerate}
                 disabled={regenerate.isPending}
                 className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors py-1"
               >
                 <RefreshCw className="w-3 h-3" />
-                Regenerar token
+                Regenerar enlace
               </button>
             </div>
 

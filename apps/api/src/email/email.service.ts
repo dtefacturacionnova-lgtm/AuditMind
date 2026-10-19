@@ -320,6 +320,8 @@ export class EmailService {
 
   /** Enlace de firma. El token en claro solo existe en el correo y en esta URL. */
   signUrl(token: string): string { return `${this.appUrl}/firmar#${token}`; }
+  /** Enlace del portal PBC del auditado. Igual que la firma: el token va en el FRAGMENTO (#), nunca en la ruta. */
+  portalUrl(token: string): string { return `${this.appUrl}/portal#${token}`; }
   /** Página pública de verificación de un documento firmado. */
   verifyUrl(): string { return `${this.appUrl}/verificar`; }
   panelUrl(path: string): string { return `${this.appUrl}${path.startsWith('/') ? path : `/${path}`}`; }

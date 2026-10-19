@@ -17,5 +17,7 @@ import { InvestigationGraphModule } from '../investigation-graph/investigation-g
   providers: [
     InvestigationReportService, CaatsAutoRunService, CaatsHistoryService, AuditInvestigationAccessService,
   ],
+  // El criterio de equipo del modo investigación también lo aplican otros módulos (p. ej. la firma de confirmaciones).
+  exports: [AuditInvestigationAccessService],
 })
 export class InvestigationReportModule {}

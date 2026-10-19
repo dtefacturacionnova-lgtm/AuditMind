@@ -10,6 +10,8 @@ export interface FormField {
   label: string;
   type: FormFieldType;
   required?: boolean;
+  /** Obligatorio solo cuando otro campo (sí/no) tiene ese valor: el saldo si NO está de acuerdo, por ejemplo. */
+  requiredIf?: { field: string; equals: boolean };
   maxLength?: number;
   help?: string;
 }

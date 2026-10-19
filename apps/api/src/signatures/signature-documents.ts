@@ -17,6 +17,8 @@ export interface FormField {
   label: string;
   type: FormFieldType;
   required?: boolean;
+  /** Obligatorio solo cuando otro campo (booleano) tiene ese valor, p. ej. el saldo si el firmante NO está de acuerdo. */
+  requiredIf?: { field: string; equals: boolean };
   maxLength?: number;
   help?: string;
 }
@@ -46,6 +48,11 @@ export interface PreparedDocument {
   bodyHtml: string;
   /** Payload normalizado que se guarda en la solicitud (inmutable una vez enviada). */
   payload: Record<string, unknown>;
+  /**
+   * PDF ya limpios (pasaron antivirus y reconstrucción) que se UNEN al final del documento congelado, p. ej. la carta de
+   * autorización del cliente en una confirmación. El firmante ve y firma el conjunto.
+   */
+  appendPdfs?: Buffer[];
 }
 
 export interface SignedContext {
@@ -67,6 +74,11 @@ export interface SignatureDocumentAdapter {
 
   /** Valida el origen (existe, es de la organización, estado permitido, modo investigación…) y arma el documento. */
   prepare(ctx: PrepareContext): Promise<PreparedDocument>;
+  /**
+   * ¿Puede este usuario ver las solicitudes de este documento? (p. ej. auditorías en modo investigación: solo el equipo del
+   * encargo). Lanza Forbidden/NotFound si no. Si el adaptador no lo define, basta con pertenecer a la organización.
+   */
+  assertAccess?(user: AuthUser, targetId: string): Promise<void>;
   /** Valida y normaliza la respuesta del firmante; lanza BadRequestException si es inválida. */
   validateResponse(payload: Record<string, unknown>, response: unknown): Record<string, unknown>;
   /** Campos del formulario que ve el firmante. */

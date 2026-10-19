@@ -122,6 +122,26 @@ export function useUpdateConfirmation(id: string) {
   });
 }
 
+/**
+ * Carta de autorización del cliente (se anexa al enviar la confirmación a firma). La API pasa el archivo por antivirus y
+ * reconstrucción, y devuelve la ruta del PDF limpio. Solo hay una por confirmación: subir otra reemplaza la anterior.
+ */
+export function useUploadAuthorizationLetter(id: string) {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return apiClient.postForm<{ authorizationPath: string; name: string; sizeBytes: number }>(`/confirmations/${id}/authorization-letter`, form);
+    },
+  });
+}
+
+export function useRemoveAuthorizationLetter(id: string) {
+  return useMutation({
+    mutationFn: () => apiClient.delete<{ removed: true }>(`/confirmations/${id}/authorization-letter`),
+  });
+}
+
 export function useSendConfirmation() {
   const qc = useQueryClient();
   return useMutation({

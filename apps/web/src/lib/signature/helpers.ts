@@ -62,25 +62,32 @@ export interface BuiltResponse {
   errors: Record<string, string>;
 }
 
+/** ¿Es obligatorio ahora? Fijo (`required`) o condicionado al valor de otro campo (`requiredIf`). */
+export function isFieldRequired(field: FormField, values: FieldValues): boolean {
+  if (field.required) return true;
+  return !!field.requiredIf && values[field.requiredIf.field] === field.requiredIf.equals;
+}
+
 /** Valida los campos que describe el servidor y arma el objeto `response` que se envía al firmar. */
 export function buildResponse(fields: FormField[], values: FieldValues): BuiltResponse {
   const response: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
   for (const f of fields) {
     const v = values[f.key];
+    const required = isFieldRequired(f, values);
     if (f.type === 'boolean') {
       if (typeof v === 'boolean') response[f.key] = v;
-      else if (f.required) errors[f.key] = 'Elige una opción.';
+      else if (required) errors[f.key] = 'Elige una opción.';
     } else if (f.type === 'amount') {
       const text = typeof v === 'string' ? v.trim() : '';
-      if (!text) { if (f.required) errors[f.key] = 'Escribe el monto.'; continue; }
+      if (!text) { if (required) errors[f.key] = 'Escribe el monto.'; continue; }
       const n = parseAmount(text);
       if (n === null) errors[f.key] = 'Monto no válido. Ejemplo: 1,250.00';
       else response[f.key] = n;
     } else {
       const text = typeof v === 'string' ? v.trim() : '';
       const max = f.maxLength ?? (f.type === 'textarea' ? 4000 : 500);
-      if (!text) { if (f.required) errors[f.key] = 'Este campo es obligatorio.'; continue; }
+      if (!text) { if (required) errors[f.key] = 'Este campo es obligatorio.'; continue; }
       if (text.length > max) errors[f.key] = `Máximo ${max} caracteres.`;
       else response[f.key] = text;
     }

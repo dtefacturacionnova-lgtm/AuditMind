@@ -65,6 +65,8 @@ export class SignatureRequestsService {
   private async load(user: AuthUser, id: string): Promise<SignatureRequest> {
     const r = await this.prisma.signatureRequest.findFirst({ where: { id, organizationId: user.organizationId } });
     if (!r) throw new NotFoundException('Solicitud de firma no encontrada');
+    // Además de la organización, el documento de origen puede restringir el acceso (modo investigación).
+    await this.registry.find(r.documentType)?.assertAccess?.(user, r.targetId);
     return r;
   }
 
@@ -126,10 +128,16 @@ export class SignatureRequestsService {
     let frozen: Buffer;
     let pages: number;
     try {
-      const raw = await this.pdf.generateBranded({
+      let raw = await this.pdf.generateBranded({
         title: prepared.title, subtitle: prepared.subtitle, body: prepared.bodyHtml,
         options: { printPageNumbers: true, format: 'A4' },
       });
+      if (prepared.appendPdfs?.length) {
+        raw = await this.pdfTools.mergePdfs([
+          { buffer: raw, filename: 'documento.pdf' },
+          ...prepared.appendPdfs.map((buffer, i) => ({ buffer, filename: `anexo-${i + 1}.pdf` })),
+        ]);
+      }
       frozen = await this.pdfTools.sanitizePdf(raw, 'documento.pdf', { removeJavaScript: true, removeEmbeddedFiles: true });
       pages = (await PDFDocument.load(frozen, { ignoreEncryption: true })).getPageCount();
     } catch (err) {
@@ -212,6 +220,7 @@ export class SignatureRequestsService {
   }
 
   async list(user: AuthUser, documentType: SignatureDocumentType, targetId: string) {
+    await this.registry.find(documentType)?.assertAccess?.(user, targetId);
     const rows = await this.prisma.signatureRequest.findMany({
       where: { organizationId: user.organizationId, documentType, targetId }, orderBy: { createdAt: 'desc' }, take: 50,
     });

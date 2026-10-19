@@ -7,6 +7,7 @@ import {
   Building2, CreditCard, FileText, AlertTriangle, Lock,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
+import { ConfirmationSignature } from '@/components/confirmations/ConfirmationSignature';
 import {
   useConfirmation, useSendConfirmation, useReceiveResponse,
   useReconcileConfirmation, useMarkNoResponse, useAltProcedure,
@@ -259,6 +260,9 @@ export default function ConfirmationDetailPage() {
                 </div>
               )}
 
+              {/* ── Firma electrónica por enlace (NIA 505) ── */}
+              <ConfirmationSignature confirmation={conf} />
+
               {/* ── Action: Send ── */}
               {conf.status === 'DRAFT' && (
                 <div className="bg-blue-50 rounded-2xl border border-blue-200 p-4">
@@ -267,8 +271,8 @@ export default function ConfirmationDetailPage() {
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-blue-800">Enviar confirmación</p>
                       <p className="text-xs text-blue-600 mt-0.5">
-                        Marca la confirmación como enviada al confirmante. Asegúrate de haber enviado
-                        la carta de confirmación a <strong>{conf.respondentEmail}</strong>.
+                        Úsalo si enviaste la carta de confirmación a <strong>{conf.respondentEmail}</strong> por otro medio.
+                        Para enviarla por correo con firma electrónica, usa el panel «Firma electrónica» de arriba.
                       </p>
                       <button
                         onClick={handleSend}
@@ -289,6 +293,10 @@ export default function ConfirmationDetailPage() {
                   <p className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
                     <Mail className="w-4 h-4 text-amber-600" />
                     Registrar respuesta recibida
+                  </p>
+                  <p className="text-xs text-gray-400 -mt-1 mb-3">
+                    Para respuestas que llegaron por otro medio. Si hay una solicitud de firma por enlace vigente, se cancela al registrar la respuesta a mano
+                    (y con «Sin respuesta»).
                   </p>
                   <form onSubmit={handleReceive} className="space-y-3">
                     <div>

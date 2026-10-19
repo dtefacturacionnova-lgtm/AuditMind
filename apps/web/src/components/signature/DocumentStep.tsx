@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Ban, FileText, Paperclip, PenLine, Trash2 } from 'lucide-react';
 import type { FieldValues } from '@/lib/signature/helpers';
-import { formatBytes, formatDateSv, formatTimeSv, MAX_FILES } from '@/lib/signature/helpers';
+import { formatBytes, formatDateSv, formatTimeSv, isFieldRequired, MAX_FILES } from '@/lib/signature/helpers';
 import type { FormField, PublicAttachment, PublicDocument } from '@/lib/signature/types';
 import { PdfViewer, type Integrity } from './PdfViewer';
 import { Alert, Card, Field, Heading, Stepper, inputClass, primaryButton, secondaryButton } from './ui';
@@ -33,16 +33,16 @@ interface Props {
   onRemoveAttachment: (id: string) => void;
 }
 
-function DynamicField({ field, value, error, onChange }: {
-  field: FormField; value: string | boolean | undefined; error?: string; onChange: (v: string | boolean) => void;
+function DynamicField({ field, required, value, error, onChange }: {
+  field: FormField; required: boolean; value: string | boolean | undefined; error?: string; onChange: (v: string | boolean) => void;
 }) {
   const id = `f-${field.key}`;
   if (field.type === 'boolean') {
     return (
       <fieldset aria-describedby={error ? `${id}-error` : field.help ? `${id}-help` : undefined}>
         <legend className="mb-1.5 text-sm font-medium text-gray-800">
-          {field.label}{field.required && <span className="text-red-600" aria-hidden="true"> *</span>}
-          {field.required && <span className="sr-only"> (obligatorio)</span>}
+          {field.label}{required && <span className="text-red-600" aria-hidden="true"> *</span>}
+          {required && <span className="sr-only"> (obligatorio)</span>}
         </legend>
         <div className="flex gap-3">
           {([['Sí', true], ['No', false]] as const).map(([label, v]) => (
@@ -59,7 +59,7 @@ function DynamicField({ field, value, error, onChange }: {
     );
   }
   return (
-    <Field id={id} label={field.label} required={field.required} help={field.help} error={error}>
+    <Field id={id} label={field.label} required={required} help={field.help} error={error}>
       {(a11y) =>
         field.type === 'textarea' ? (
           <textarea {...a11y} rows={4} maxLength={field.maxLength ?? 4000} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} className={inputClass} />
@@ -118,7 +118,7 @@ export function DocumentStep(p: Props) {
                 <h2 className="mb-4 text-base font-semibold text-gray-900">Tu respuesta</h2>
                 <div className="space-y-5">
                   {doc.form.fields.map((f) => (
-                    <DynamicField key={f.key} field={f} value={form.values[f.key]} error={p.fieldErrors[f.key]} onChange={(v) => setValue(f.key, v)} />
+                    <DynamicField key={f.key} field={f} required={isFieldRequired(f, form.values)} value={form.values[f.key]} error={p.fieldErrors[f.key]} onChange={(v) => setValue(f.key, v)} />
                   ))}
                 </div>
               </Card>

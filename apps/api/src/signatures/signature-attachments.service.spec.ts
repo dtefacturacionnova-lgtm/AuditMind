@@ -166,3 +166,54 @@ describe('Adjuntos del tercero · cadena de defensa', () => {
     await expect(h.public.removeAttachment(token, session, b.id)).rejects.toMatchObject({ status: 404 });
   });
 });
+
+describe('Archivo suelto (carta de autorización del auditor) · misma cadena de defensa', () => {
+  afterEach(() => jest.restoreAllMocks());
+  const FOLDER = 'signature-requests/aud1/authorizations/conf1';
+  const files = (h: ReturnType<typeof buildHarness>) => [...h.storage.files.keys()].filter((k) => k.startsWith(FOLDER));
+
+  it('un PDF limpio queda reconstruido en la carpeta, con el original en cuarentena y sus huellas', async () => {
+    const h = buildHarness();
+    const r = await h.attachments.acceptStandalone({ originalname: '../Carta de autorización.pdf', buffer: await makePdf(1) }, FOLDER);
+    expect(r).toMatchObject({ name: 'Carta de autorización.pdf', safePath: `${FOLDER}/${r.id}.pdf` });
+    expect(r.safeSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(h.clam.scans).toBe(1);
+    expect(files(h).sort()).toEqual([`${FOLDER}/${r.id}.pdf`, `${FOLDER}/quarantine/${r.id}.pdf`].sort());
+    expect(h.fake.tables.signatureAttachment).toHaveLength(0); // no es un adjunto de ninguna solicitud
+  });
+
+  it('una imagen se convierte a PDF', async () => {
+    const h = buildHarness();
+    const spy = jest.spyOn(h.pdfTools, 'imageToPdf');
+    await h.attachments.acceptStandalone({ originalname: 'carta.png', buffer: PNG }, FOLDER);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rechaza por los bytes (sin antivirus ni Storage), por virus y cuando el antivirus no responde (falla cerrado)', async () => {
+    const h = buildHarness();
+    await expect(h.attachments.acceptStandalone({ originalname: 'x.pdf', buffer: Buffer.from('MZ\x90\x00 programa') }, FOLDER)).rejects.toThrow(/Tipo de archivo no permitido/);
+    expect(h.clam.scans).toBe(0);
+    expect(files(h)).toHaveLength(0);
+
+    h.clam.result = { status: 'INFECTED', signature: 'Win.Test.EICAR_HDB-1' };
+    await expect(h.attachments.acceptStandalone({ originalname: 'x.pdf', buffer: EICAR_LIKE }, FOLDER)).rejects.toMatchObject({ status: 422 });
+    h.clam.result = { status: 'ERROR', error: 'ECONNREFUSED' };
+    await expect(h.attachments.acceptStandalone({ originalname: 'x.pdf', buffer: await makePdf(1) }, FOLDER)).rejects.toMatchObject({ status: 503 });
+    expect(files(h)).toHaveLength(0); // nada queda en cuarentena
+  });
+
+  it('si la reconstrucción falla se limpia todo; vacío y demasiado grande se rechazan', async () => {
+    const h = buildHarness();
+    jest.spyOn(h.pdfTools, 'sanitizePdf').mockRejectedValueOnce(new Error('stirling caído'));
+    await expect(h.attachments.acceptStandalone({ originalname: 'x.pdf', buffer: await makePdf(1) }, FOLDER)).rejects.toThrow(/No se pudo procesar el archivo/);
+    expect(files(h)).toHaveLength(0);
+    await expect(h.attachments.acceptStandalone({ originalname: 'x.pdf', buffer: Buffer.alloc(0) }, FOLDER)).rejects.toThrow(/vacío/);
+    const prev = ATTACHMENT_LIMITS.maxBytes;
+    ATTACHMENT_LIMITS.maxBytes = 100;
+    try {
+      await expect(h.attachments.acceptStandalone({ originalname: 'x.pdf', buffer: Buffer.concat([Buffer.from('%PDF-'), Buffer.alloc(200)]) }, FOLDER)).rejects.toThrow(/10 MB/);
+    } finally {
+      ATTACHMENT_LIMITS.maxBytes = prev;
+    }
+  });
+});

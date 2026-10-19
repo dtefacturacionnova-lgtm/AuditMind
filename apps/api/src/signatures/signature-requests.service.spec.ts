@@ -276,3 +276,52 @@ describe('Firma interna · archivos e integridad', () => {
     expect(spy).toHaveBeenCalledWith(id);
   });
 });
+
+describe('Firma interna · anexos y control de acceso del documento de origen', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('los PDF que el adaptador pide anexar se UNEN al documento congelado antes de limpiarlo y calcular su huella', async () => {
+    const h = buildHarness();
+    const annex = await makePdf(2);
+    const base = h.adapter.prepare.bind(h.adapter);
+    h.adapter.prepare = async (ctx) => ({ ...(await base(ctx)), appendPdfs: [annex] });
+    const merge = jest.spyOn(h.pdfTools, 'mergePdfs');
+    const { id } = await h.create();
+    expect(merge).toHaveBeenCalledTimes(1);
+    expect(merge.mock.calls[0][0].map((f: any) => f.filename)).toEqual(['documento.pdf', 'anexo-1.pdf']);
+    const row = h.fake.requests.find((r) => r.id === id)!;
+    expect(row.documentPages).toBe(3); // 1 página del documento + 2 del anexo
+    expect(row.documentSha256).toBe(sha256Hex(await h.storage.download(row.documentPath)));
+  });
+
+  it('sin anexos no se fusiona nada', async () => {
+    const h = buildHarness();
+    const merge = jest.spyOn(h.pdfTools, 'mergePdfs');
+    await h.create();
+    expect(merge).not.toHaveBeenCalled();
+  });
+
+  it('el gancho assertAccess del adaptador se aplica al listar y a toda consulta o acción sobre una solicitud', async () => {
+    const h = buildHarness();
+    const { id } = await h.create();
+    const spy = jest.fn(async () => undefined);
+    h.adapter.assertAccess = spy;
+    const u = user('AUDIT_MANAGER');
+
+    await h.requests.list(u, 'EXTERNAL_CONFIRMATION' as any, 'conf1');
+    await h.requests.get(u, id);
+    await h.requests.getFile(u, id, 'original');
+    await h.requests.integrity(u, id);
+    expect(spy).toHaveBeenCalledTimes(4);
+    expect(spy).toHaveBeenCalledWith(u, 'conf1');
+
+    // Si el adaptador lo prohíbe (modo investigación y no es del equipo), nada se entrega.
+    h.adapter.assertAccess = async () => { throw new (require('@nestjs/common').ForbiddenException)('Acceso restringido — modo investigación'); };
+    await expect(h.requests.list(u, 'EXTERNAL_CONFIRMATION' as any, 'conf1')).rejects.toThrow(/modo investigación/);
+    await expect(h.requests.get(u, id)).rejects.toThrow(/modo investigación/);
+    await expect(h.requests.getFile(u, id, 'original')).rejects.toThrow(/modo investigación/);
+    await expect(h.requests.revoke(u, id, 'motivo suficiente', INFO)).rejects.toThrow(/modo investigación/);
+    await expect(h.requests.resend(u, id, {} as any, INFO)).rejects.toThrow(/modo investigación/);
+    expect(h.fake.requests.find((r) => r.id === id)!.status).toBe('PENDING'); // la revocación no se ejecutó
+  });
+});

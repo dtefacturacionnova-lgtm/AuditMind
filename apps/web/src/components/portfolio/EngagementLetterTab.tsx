@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { FileText, PenTool, CheckCircle2, AlertTriangle } from 'lucide-react';
 import {
   useCreateEngagementLetter, useUpdateEngagementLetter, useSignEngagementLetter,
   ENGAGEMENT_LETTER_STATUS_CONFIG, CLIENT_KEY, ClientDetail,
 } from '@/hooks/usePortfolio';
-import { useSignatureRequests } from '@/hooks/useSignatureRequests';
+import { useOnSignatureStatusChange, useSignatureRequests } from '@/hooks/useSignatureRequests';
 import { SignatureSection } from '@/components/signatures/SignatureSection';
 import { isActive } from '@/lib/signature/internal';
 import { formatDate } from '@/lib/utils';
@@ -88,15 +88,7 @@ export function EngagementLetterTab({ client }: { client: ClientDetail }) {
   // más reciente (el cliente firmó, rechazó, se revocó…), se recarga la carta para que su estado y su PDF se vean al día.
   const { data: requests } = useSignatureRequests('ENGAGEMENT_LETTER', letter?.id);
   const hasActiveRequest = !!requests?.some(r => isActive(r.status));
-  const latestStatus = requests?.[0]?.status;
-  const seenStatus = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (!latestStatus) return;
-    if (seenStatus.current !== undefined && seenStatus.current !== latestStatus) {
-      void qc.invalidateQueries({ queryKey: [CLIENT_KEY, client.id] });
-    }
-    seenStatus.current = latestStatus;
-  }, [latestStatus, client.id, qc]);
+  useOnSignatureStatusChange('ENGAGEMENT_LETTER', letter?.id, () => { void qc.invalidateQueries({ queryKey: [CLIENT_KEY, client.id] }); });
 
   if (!letter) {
     return (

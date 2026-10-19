@@ -30,6 +30,9 @@ import { SignatureStorageService } from './signature-storage.service';
     SignatureAdapterRegistry, SignatureStorageService, SignatureEventsService, SignaturePolicyService,
     SignatureAttachmentsService, SignatureSealingService, SignatureRequestsService, SignaturePublicService, SignatureScheduler,
   ],
-  exports: [SignatureAdapterRegistry, SignatureRequestsService, OrganizationSealService, ClamAvService, PublicThrottlerGuard],
+  exports: [
+    SignatureAdapterRegistry, SignatureRequestsService, OrganizationSealService, ClamAvService, PublicThrottlerGuard,
+    SignatureAttachmentsService, SignatureStorageService, // la confirmación sube la carta de autorización con la misma cadena de defensa
+  ],
 })
 export class SignaturesModule {}

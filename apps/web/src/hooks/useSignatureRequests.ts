@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import {
@@ -110,6 +111,24 @@ export function useSignatureRequests(documentType: SignatureDocumentType, target
     staleTime: 15_000,
     refetchInterval: (query) => pollInterval(query.state.data),
   });
+}
+
+/**
+ * Avisa cuando CAMBIA el estado de la solicitud más reciente (el firmante firmó o rechazó, se revocó, venció…): el documento
+ * de origen (carta, confirmación) ya cambió en el servidor y hay que recargarlo para que se vea al día. No avisa en la
+ * primera carga.
+ */
+export function useOnSignatureStatusChange(documentType: SignatureDocumentType, targetId: string | undefined, onChange: () => void) {
+  const { data } = useSignatureRequests(documentType, targetId);
+  const latest = data?.[0]?.status;
+  const seen = useRef<string | undefined>(undefined);
+  const callback = useRef(onChange);
+  callback.current = onChange;
+  useEffect(() => {
+    if (!latest) return;
+    if (seen.current !== undefined && seen.current !== latest) callback.current();
+    seen.current = latest;
+  }, [latest]);
 }
 
 // ─── Acciones ────────────────────────────────────────────────────────────────

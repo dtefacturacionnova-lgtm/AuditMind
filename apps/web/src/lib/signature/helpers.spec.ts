@@ -1,5 +1,5 @@
 import {
-  buildResponse, fileProblem, formatBytes, formatDateTimeSv, formatVerificationInput, isCompleteVerificationCode,
+  buildResponse, isFieldRequired, fileProblem, formatBytes, formatDateTimeSv, formatVerificationInput, isCompleteVerificationCode,
   MAX_FILE_BYTES, MAX_FILES, parseAmount, sameHash, sha256Hex, validateSigner,
 } from './helpers';
 import type { FormField } from './types';
@@ -123,5 +123,37 @@ describe('fechas en hora de El Salvador', () => {
   it('convierte de UTC a UTC−6', () => {
     expect(formatDateTimeSv('2026-10-19T03:30:00.000Z')).toMatch(/18 de octubre de 2026/); // 21:30 del día 18 en El Salvador
     expect(formatDateTimeSv(null)).toBe('—');
+  });
+});
+
+describe('campos obligatorios según otro campo (requiredIf)', () => {
+  const FIELDS: FormField[] = [
+    { key: 'agrees', label: '¿De acuerdo?', type: 'boolean', required: true },
+    { key: 'confirmedAmount', label: 'Saldo', type: 'amount', requiredIf: { field: 'agrees', equals: false } },
+    { key: 'blank', label: 'Saldo en blanco', type: 'amount', required: true },
+  ];
+  const [agrees, conditional, fixed] = FIELDS;
+
+  it('isFieldRequired: fijo, condicionado y no obligatorio', () => {
+    expect(isFieldRequired(fixed, {})).toBe(true);
+    expect(isFieldRequired(conditional, {})).toBe(false); // aún no contestó
+    expect(isFieldRequired(conditional, { agrees: true })).toBe(false);
+    expect(isFieldRequired(conditional, { agrees: false })).toBe(true);
+    expect(isFieldRequired({ key: 'x', label: 'x', type: 'text' }, { agrees: false })).toBe(false);
+    expect(isFieldRequired(agrees, {})).toBe(true);
+  });
+
+  it('el saldo se pide solo en desacuerdo; de acuerdo puede dejarse vacío', () => {
+    const base = { blank: '10' };
+    expect(buildResponse(FIELDS, { ...base, agrees: true }).ok).toBe(true);
+    expect(buildResponse(FIELDS, { ...base, agrees: true }).response).toEqual({ agrees: true, blank: 10 });
+    const r = buildResponse(FIELDS, { ...base, agrees: false });
+    expect(r.ok).toBe(false);
+    expect(r.errors.confirmedAmount).toBe('Escribe el monto.');
+    expect(buildResponse(FIELDS, { ...base, agrees: false, confirmedAmount: '1,300.00' }).response).toMatchObject({ agrees: false, confirmedAmount: 1300 });
+  });
+
+  it('un monto escrito de más pero no obligatorio se valida igual (no se manda basura)', () => {
+    expect(buildResponse(FIELDS, { blank: '10', agrees: true, confirmedAmount: 'abc' }).errors.confirmedAmount).toMatch(/Monto no válido/);
   });
 });

@@ -36,6 +36,12 @@ const DEFAULTS: Record<string, () => Row> = {
     status: 'DRAFT', year: 2026, createdAt: now(), updatedAt: now(),
   }),
   client: () => ({ status: 'PENDING_SIGNATURE' }),
+  // Confirmaciones externas (NIA 505, F3) y la auditoría a la que pertenecen.
+  externalConfirmation: () => ({
+    type: 'BANK', amount: null, accountRef: null, sentAt: null, sentBy: null, responseReceivedAt: null, responseContent: null,
+    responseAmount: null, difference: null, differenceExplanation: null, alternativeProcedure: null, status: 'DRAFT', createdAt: now(), updatedAt: now(),
+  }),
+  audit: () => ({ title: 'Auditoría financiera 2025', isInvestigationMode: false }),
 };
 
 const UNIQUE: Record<string, string[][]> = {
@@ -47,6 +53,8 @@ const UNIQUE: Record<string, string[][]> = {
   user: [['id']],
   engagementLetter: [['id']],
   client: [['id']],
+  externalConfirmation: [['id']],
+  audit: [['id']],
 };
 
 const isOp = (v: any) => v && typeof v === 'object' && !(v instanceof Date) && Object.keys(v).some((k) => ['in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'not', 'equals'].includes(k));
@@ -56,7 +64,7 @@ const eq = (a: any, b: any) => (a instanceof Date && b instanceof Date ? a.getTi
 export class FakeDb {
   tables: Record<string, Row[]> = {
     signatureRequest: [], signatureSession: [], signatureEvent: [], signatureAttachment: [], organization: [], user: [],
-    engagementLetter: [], client: [],
+    engagementLetter: [], client: [], externalConfirmation: [], audit: [],
   };
   private chain: Promise<unknown> = Promise.resolve();
 
@@ -67,6 +75,10 @@ export class FakeDb {
       if (key === 'request') {
         const req = this.tables.signatureRequest.find((r) => r.id === row.requestId);
         return !!req && this.match('signatureRequest', req, cond);
+      }
+      if (key === 'audit' && table === 'externalConfirmation') {
+        const a = this.tables.audit.find((x) => x.id === row.auditId);
+        return !!a && this.match('audit', a, cond);
       }
       const v = row[key];
       if (isOp(cond)) {
@@ -107,6 +119,13 @@ export class FakeDb {
     return Object.fromEntries(Object.keys(select).filter((k) => select[k]).map((k) => [k, row[k]]));
   }
 
+  /** Solo `include: { audit: … }` en confirmaciones: lo único que los adaptadores reales necesitan. */
+  private withInclude(table: string, row: Row, include?: Row): Row {
+    if (!include?.audit || table !== 'externalConfirmation') return row;
+    const a = this.tables.audit.find((x) => x.id === row.auditId);
+    return { ...row, audit: a ? this.pick(a, include.audit.select) : null };
+  }
+
   private order(rows: Row[], orderBy?: Row): Row[] {
     if (!orderBy) return rows;
     const [[field, dir]] = Object.entries(orderBy) as [string, 'asc' | 'desc'][];
@@ -125,13 +144,13 @@ export class FakeDb {
         t().push(row);
         return { ...row };
       },
-      findFirst: async ({ where, orderBy, select }: any = {}) => {
+      findFirst: async ({ where, orderBy, select, include }: any = {}) => {
         const rows = this.order(t().filter((r) => this.match(table, r, where)), orderBy);
-        return rows[0] ? this.pick(rows[0], select) : null;
+        return rows[0] ? this.withInclude(table, this.pick(rows[0], select), include) : null;
       },
-      findUnique: async ({ where, select }: any) => {
+      findUnique: async ({ where, select, include }: any) => {
         const row = t().find((r) => this.match(table, r, where));
-        return row ? this.pick(row, select) : null;
+        return row ? this.withInclude(table, this.pick(row, select), include) : null;
       },
       findUniqueOrThrow: async ({ where, select }: any) => {
         const row = t().find((r) => this.match(table, r, where));
@@ -196,6 +215,8 @@ export class FakeDb {
     user: this.delegate('user'),
     engagementLetter: this.delegate('engagementLetter'),
     client: this.delegate('client'),
+    externalConfirmation: this.delegate('externalConfirmation'),
+    audit: this.delegate('audit'),
     $transaction: (fn: any) => this.transaction(fn),
     $queryRaw: async () => [],
   };
@@ -209,6 +230,19 @@ export class FakeDb {
   seedLetter(over: Record<string, unknown> = {}) {
     const row = { ...DEFAULTS.engagementLetter(), id: 'letter1', organizationId: 'org1', clientId: 'cli1', content: 'CARTA DE COMPROMISO\nTexto con <b>HTML</b> & más.', ...over };
     this.tables.engagementLetter.push(row);
+    return row;
+  }
+  seedAudit(over: Record<string, unknown> = {}) {
+    const row = { ...DEFAULTS.audit(), id: 'aud1', organizationId: 'org1', ...over };
+    this.tables.audit.push(row);
+    return row;
+  }
+  seedConfirmation(over: Record<string, unknown> = {}) {
+    const row = {
+      ...DEFAULTS.externalConfirmation(), id: 'conf1', auditId: 'aud1', respondentName: 'Banco <Cuscatlán> & Cía', respondentEmail: 'confirmaciones@banco.com',
+      amount: 1250.5, accountRef: 'Cta. 001-234567-8', ...over,
+    };
+    this.tables.externalConfirmation.push(row);
     return row;
   }
   get requests() { return this.tables.signatureRequest; }

@@ -1,8 +1,11 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Body, Param, Query,
+  Body, Param, Query, UploadedFile, UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { MAX_ATTACHMENT_BYTES } from '../signatures/signature-attachments.service';
+import { ConfirmationAuthorizationService } from './confirmation-authorization.service';
 import { ConfirmationsService } from './confirmations.service';
 import {
   CreateConfirmationDto, UpdateConfirmationDto,
@@ -17,7 +20,10 @@ import { ConfirmationStatus, UserRole } from '@prisma/client';
 @ApiBearerAuth()
 @Controller('confirmations')
 export class ConfirmationsController {
-  constructor(private readonly service: ConfirmationsService) {}
+  constructor(
+    private readonly service: ConfirmationsService,
+    private readonly authorization: ConfirmationAuthorizationService,
+  ) {}
 
   // ── Stats org ──────────────────────────────────────────────────────────────
   @Get('org/stats')
@@ -49,6 +55,26 @@ export class ConfirmationsController {
   @ApiOperation({ summary: 'Listar confirmaciones de una auditoría' })
   findAllForAudit(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
     return this.service.findAllForAudit(auditId, user);
+  }
+
+  // ── Carta de autorización del cliente (se anexa al enviar a firma) ──────────
+  @Post(':id/authorization-letter')
+  @Roles(UserRole.AUDITOR)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1 } }))
+  @ApiOperation({ summary: 'Subir la carta de autorización del cliente (PDF, JPG o PNG): antivirus + reconstrucción; reemplaza la anterior' })
+  uploadAuthorization(
+    @Param('id') id: string,
+    @UploadedFile() file: { originalname: string; buffer: Buffer } | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.authorization.upload(id, file, user);
+  }
+
+  @Delete(':id/authorization-letter')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Quitar la carta de autorización de una confirmación en borrador' })
+  removeAuthorization(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.authorization.remove(id, user);
   }
 
   // ── Get one ────────────────────────────────────────────────────────────────

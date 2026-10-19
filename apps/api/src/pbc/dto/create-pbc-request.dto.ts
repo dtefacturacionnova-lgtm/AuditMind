@@ -7,6 +7,7 @@ import {
   ArrayMaxSize,
   MaxLength,
   MinLength,
+  Matches,
 } from 'class-validator';
 import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -44,6 +45,13 @@ export class CreatePbcRequestDto {
   isConfidential?: boolean;
 }
 
+/**
+ * Los nombres o enlaces que escribe el auditado no pueden ser direcciones del almacenamiento interno: el equipo auditor
+ * los vería después como enlaces firmados a archivos del bucket privado (revisión de seguridad F5b, 2026-10-19).
+ */
+const NO_STORAGE_URL = /^(?![\s\S]*\/storage\/v1\/object\/)/;
+const NO_STORAGE_URL_MSG = 'Los adjuntos no pueden ser direcciones del almacenamiento interno de AuditMind.';
+
 // Lo que escribe el auditado en el portal PÚBLICO: se acota el tamaño de todo (sin login, cualquiera con el enlace puede enviar).
 export class AddPortalMessageDto {
   @ApiProperty({ maxLength: 5000 })
@@ -58,6 +66,7 @@ export class AddPortalMessageDto {
   @ArrayMaxSize(10)
   @IsString({ each: true })
   @MaxLength(500, { each: true })
+  @Matches(NO_STORAGE_URL, { each: true, message: NO_STORAGE_URL_MSG })
   attachmentUrls?: string[];
 }
 
@@ -74,6 +83,7 @@ export class SubmitPortalDto {
   @ArrayMaxSize(10)
   @IsString({ each: true })
   @MaxLength(500, { each: true })
+  @Matches(NO_STORAGE_URL, { each: true, message: NO_STORAGE_URL_MSG })
   fileUrls?: string[];
 }
 

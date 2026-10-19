@@ -98,14 +98,13 @@ export class EngagementLettersService {
         organizationId: user.organizationId, documentType: SignatureDocumentType.ENGAGEMENT_LETTER, targetId: id,
         reason: 'El texto de la carta cambió después de enviarla', actorId: user.id,
       });
-      return tx.engagementLetter.update({
-        where: { id },
-        data: {
-          content: dto.content,
-          ...(letter.status !== EngagementLetterStatus.DRAFT && { status: EngagementLetterStatus.DRAFT, declineReason: null }),
-        },
-        include: LETTER_INCLUDE,
+      // Condicional (revisión F5b, 2026-10-19): si el cliente firmó justo mientras se guardaba, la carta firmada no se pisa.
+      const res = await tx.engagementLetter.updateMany({
+        where: { id, organizationId: user.organizationId, status: { not: EngagementLetterStatus.SIGNED } },
+        data: { content: dto.content, status: EngagementLetterStatus.DRAFT, declineReason: null },
       });
+      if (res.count === 0) throw new BadRequestException('No se puede editar una carta ya firmada.');
+      return tx.engagementLetter.findUniqueOrThrow({ where: { id }, include: LETTER_INCLUDE });
     }, TX_OPTIONS);
   }
 

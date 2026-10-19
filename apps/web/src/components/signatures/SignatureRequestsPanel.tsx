@@ -23,7 +23,7 @@ export interface SignatureRequestsPanelProps {
   renderResponse?: (r: SignatureRequestView) => ReactNode;
   responseLabels?: Record<string, string>;
   emptyHint?: ReactNode;
-  /** Ofrece «Abrir para firma presencial» en cada solicitud vigente (actas de entrevista). */
+  /** Ofrece «Firma presencial» en cada solicitud vigente (actas de entrevista). */
   allowInPerson?: boolean;
 }
 

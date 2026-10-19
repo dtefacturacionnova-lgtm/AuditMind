@@ -92,7 +92,7 @@ export function InterviewSignature({ paperId, paperTitle, investigationMode }: {
       renderResponse={(r) => <ResponseView request={r} />}
       allowInPerson
       notice={investigationMode ? (
-        <Note tone="warn"><strong>Modo investigación.</strong> Enviar el acta por correo puede alertar a la persona investigada. Considera la firma presencial: marca la opción de abajo y abre el enlace en tu dispositivo.</Note>
+        <Note tone="warn"><strong>Modo investigación.</strong> Enviar el acta por correo puede alertar a la persona investigada. Considera la firma presencial: marca la opción de abajo y que la persona abra el enlace en su teléfono (o en una ventana privada de tu equipo).</Note>
       ) : undefined}
       emptyHint="Todavía no se ha enviado ningún acta de este papel para firma electrónica."
     />

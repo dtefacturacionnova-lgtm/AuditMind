@@ -9,6 +9,7 @@ import { CreatePbcRequestDto } from './dto/create-pbc-request.dto';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PbcRequestStatus } from '@prisma/client';
 import { decryptSecret, encryptSecret } from '../common/utils/signing-key.util';
+import { assertInvestigationAccess, INVESTIGATION_SELECT, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 import { generateToken, hashToken, isWellFormedToken } from '../signatures/signature-crypto.util';
 
 /**
@@ -66,13 +67,35 @@ export class PbcService {
     return { token, stored: { portalTokenHash: hashToken(token), portalTokenEncrypted: encryptSecret(token, key) } };
   }
 
+  /**
+   * La auditoría es de la organización y, si está en modo investigación, el usuario es del equipo (o CAE/ADMIN).
+   * Revisión de seguridad F5b (2026-10-19): antes cualquiera de la organización podía leer la solicitud, recuperar el
+   * enlace del auditado y escribir en el portal como si fuera él.
+   */
+  private async assertAuditVisible(auditId: string, user: AuthUser) {
+    const audit = await this.prisma.audit.findFirst({
+      where: { id: auditId, organizationId: user.organizationId },
+      select: INVESTIGATION_SELECT,
+    });
+    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    assertInvestigationAccess(audit, user);
+  }
+
+  /** Solicitud PBC de la organización y visible para el usuario; devuelve su id de auditoría. */
+  private async assertRequestVisible(id: string, user: AuthUser): Promise<{ id: string; auditId: string }> {
+    const request = await this.prisma.pbcRequest.findFirst({
+      where: { id, organizationId: user.organizationId },
+      select: { id: true, auditId: true },
+    });
+    if (!request) throw new NotFoundException('Solicitud PBC no encontrada');
+    await this.assertAuditVisible(request.auditId, user);
+    return request;
+  }
+
   // ─── Métodos autenticados (auditor) ──────────────────────────────────────────
 
   async create(dto: CreatePbcRequestDto, user: AuthUser) {
-    const audit = await this.prisma.audit.findFirst({
-      where: { id: dto.auditId, organizationId: user.organizationId },
-    });
-    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    await this.assertAuditVisible(dto.auditId, user);
 
     const { stored } = this.issueToken();
     const created = await this.prisma.pbcRequest.create({
@@ -97,10 +120,7 @@ export class PbcService {
   }
 
   async findAllForAudit(auditId: string, user: AuthUser) {
-    const audit = await this.prisma.audit.findFirst({
-      where: { id: auditId, organizationId: user.organizationId },
-    });
-    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    await this.assertAuditVisible(auditId, user);
 
     const rows = await this.prisma.pbcRequest.findMany({
       // organizationId además del auditId: el id de auditoría ya se validó arriba, esto es la segunda capa.
@@ -124,6 +144,7 @@ export class PbcService {
   ) {
     const where = {
       organizationId: user.organizationId,
+      audit: visibleAuditWhere(user), // sin las auditorías en modo investigación ajenas a su equipo
       ...(status && { status }),
     };
 
@@ -157,6 +178,7 @@ export class PbcService {
     });
     if (!request) throw new NotFoundException('Solicitud PBC no encontrada');
     if (request.organizationId !== user.organizationId) throw new ForbiddenException();
+    await this.assertAuditVisible(request.auditId, user);
     return withoutPortalSecrets(request);
   }
 
@@ -172,6 +194,7 @@ export class PbcService {
     });
     if (!request) throw new NotFoundException('Solicitud PBC no encontrada');
     if (request.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    await this.assertAuditVisible(request.auditId, user);
 
     return this.prisma.pbcMessage.create({
       data: {
@@ -187,10 +210,7 @@ export class PbcService {
   }
 
   async getStats(auditId: string, user: AuthUser) {
-    const audit = await this.prisma.audit.findFirst({
-      where: { id: auditId, organizationId: user.organizationId },
-    });
-    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    await this.assertAuditVisible(auditId, user);
 
     const [stats, overdue] = await Promise.all([
       this.prisma.pbcRequest.groupBy({
@@ -222,6 +242,7 @@ export class PbcService {
     });
     if (!request) throw new NotFoundException('Solicitud PBC no encontrada');
     if (request.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    await this.assertAuditVisible(request.auditId, user);
 
     if (notes) {
       await this.prisma.pbcMessage.create({
@@ -252,6 +273,7 @@ export class PbcService {
 
   /** Rota el enlace: el anterior deja de servir al instante. Devuelve el enlace nuevo UNA vez y su vencimiento. */
   async regenerateToken(id: string, user: AuthUser) {
+    await this.assertRequestVisible(id, user);
     const request = await this.prisma.pbcRequest.findFirst({
       where: { id, organizationId: user.organizationId },
       select: { id: true, dueDate: true },
@@ -272,6 +294,7 @@ export class PbcService {
    * no revela el token. Solo de la propia organización. Una solicitud sin copia (creada antes del cambio) debe regenerarse.
    */
   async getPortalLink(id: string, user: AuthUser) {
+    await this.assertRequestVisible(id, user);
     const request = await this.prisma.pbcRequest.findFirst({
       where: { id, organizationId: user.organizationId },
       select: { id: true, portalTokenEncrypted: true, portalTokenExpiresAt: true },

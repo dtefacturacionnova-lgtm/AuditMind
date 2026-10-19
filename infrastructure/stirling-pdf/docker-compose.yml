@@ -31,4 +31,11 @@ services:
     environment:
       - SECURITY_ENABLELOGIN=false
       - SYSTEM_DEFAULTLOCALE=es-ES
+      # Con el tope de abajo la JVM tomaría solo el 25 % para su heap; 60 % deja el resto a LibreOffice/Tesseract.
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60
+    # Tope de memoria (revisión de seguridad F5b, 2026-10-19): Stirling reconstruye los adjuntos que suben TERCEROS
+    # desde el enlace de firma. Sin tope, un archivo armado para descomprimirse en varios GB golpeaba a todo el VPS
+    # (32 GB) y, con él, a la API y al sellado de todas las firmas. En reposo usa ~1,4 GB.
+    mem_limit: 6g
+    pids_limit: 512
     restart: unless-stopped

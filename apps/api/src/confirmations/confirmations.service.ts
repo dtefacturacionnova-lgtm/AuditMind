@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SignatureRequestsService } from '../signatures/signature-requests.service';
+import { assertInvestigationAccess, INVESTIGATION_SELECT, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 import {
   CreateConfirmationDto, UpdateConfirmationDto,
   ReceiveResponseDto, ReconcileDto, AltProcedureDto,
@@ -31,6 +32,16 @@ export class ConfirmationsService {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
+  /** La auditoría es de la organización y, si está en modo investigación, el usuario es del equipo (o CAE/ADMIN). */
+  private async assertAuditVisible(auditId: string, user: AuthUser) {
+    const audit = await this.prisma.audit.findFirst({
+      where: { id: auditId, organizationId: user.organizationId },
+      select: INVESTIGATION_SELECT,
+    });
+    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    assertInvestigationAccess(audit, user);
+  }
+
   private async getConfirmationOrThrow(id: string, user: AuthUser) {
     const conf = await this.prisma.externalConfirmation.findUnique({
       where: { id },
@@ -38,15 +49,18 @@ export class ConfirmationsService {
     });
     if (!conf) throw new NotFoundException('Confirmación no encontrada');
     if (conf.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    await this.assertAuditVisible(conf.auditId, user);
     return conf;
+  }
+
+  /** Error de estado cuando una escritura condicional no encontró la confirmación en el estado esperado (carrera). */
+  private static stateChanged(): ConflictException {
+    return new ConflictException('La confirmación cambió de estado mientras se guardaba (por ejemplo, el confirmante acaba de responder). Recarga la página.');
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────
   async create(dto: CreateConfirmationDto, user: AuthUser) {
-    const audit = await this.prisma.audit.findFirst({
-      where: { id: dto.auditId, organizationId: user.organizationId },
-    });
-    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    await this.assertAuditVisible(dto.auditId, user);
 
     return this.prisma.externalConfirmation.create({
       data: {
@@ -64,10 +78,7 @@ export class ConfirmationsService {
 
   // ── List by audit ──────────────────────────────────────────────────────────
   async findAllForAudit(auditId: string, user: AuthUser) {
-    const audit = await this.prisma.audit.findFirst({
-      where: { id: auditId, organizationId: user.organizationId },
-    });
-    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    await this.assertAuditVisible(auditId, user);
 
     return this.prisma.externalConfirmation.findMany({
       where: { auditId },
@@ -79,7 +90,7 @@ export class ConfirmationsService {
   // ── List org (all audits) ──────────────────────────────────────────────────
   async findAllForOrg(user: AuthUser, page = 1, limit = 20, status?: ConfirmationStatus) {
     const where = {
-      audit: { organizationId: user.organizationId },
+      audit: visibleAuditWhere(user), // sin las auditorías en modo investigación ajenas a su equipo
       ...(status && { status }),
     };
     const [data, total] = await Promise.all([
@@ -115,16 +126,18 @@ export class ConfirmationsService {
     return this.prisma.$transaction(async (tx) => {
       // Si cambia lo que el confirmante ve (monto, cuenta, nombre o correo), nadie debe firmar lo anterior.
       if (changed) await this.revokeSignatures(tx, id, user, 'Los datos de la confirmación cambiaron después de enviarla');
-      return tx.externalConfirmation.update({
-        where: { id },
+      // Condicional: si mientras tanto se envió a firma (pasó a SENT), no se edita lo que ya se envió.
+      const res = await tx.externalConfirmation.updateMany({
+        where: { id, status: ConfirmationStatus.DRAFT },
         data: {
           ...(dto.respondentName  && { respondentName:  dto.respondentName }),
           ...(dto.respondentEmail && { respondentEmail: dto.respondentEmail }),
           ...(dto.amount          != null && { amount:  dto.amount }),
           ...(dto.accountRef      && { accountRef:      dto.accountRef }),
         },
-        include: INCLUDE_FULL,
       });
+      if (res.count === 0) throw ConfirmationsService.stateChanged();
+      return tx.externalConfirmation.findUniqueOrThrow({ where: { id }, include: INCLUDE_FULL });
     }, TX_OPTIONS);
   }
 
@@ -169,8 +182,9 @@ export class ConfirmationsService {
       difference = Math.abs(Number(conf.amount) - data.responseAmount);
     }
 
-    return tx.externalConfirmation.update({
-      where: { id },
+    // Condicional: solo una respuesta gana (registro manual y firma por enlace al mismo tiempo).
+    const res = await tx.externalConfirmation.updateMany({
+      where: { id, status: ConfirmationStatus.SENT },
       data: {
         status:             ConfirmationStatus.RECEIVED,
         responseContent:    data.responseContent,
@@ -178,8 +192,9 @@ export class ConfirmationsService {
         responseReceivedAt: data.at ?? new Date(),
         ...(difference != null && { difference }),
       },
-      include: INCLUDE_FULL,
     });
+    if (res.count === 0) throw ConfirmationsService.stateChanged();
+    return tx.externalConfirmation.findUniqueOrThrow({ where: { id }, include: INCLUDE_FULL });
   }
 
   /** Registro MANUAL de la respuesta (llegó por otro medio). Cierra la solicitud por enlace vigente. */
@@ -218,11 +233,13 @@ export class ConfirmationsService {
     }
     return this.prisma.$transaction(async (tx) => {
       await this.revokeSignatures(tx, id, user, 'Se marcó la confirmación como sin respuesta');
-      return tx.externalConfirmation.update({
-        where: { id },
+      // Condicional: si el confirmante firmó justo ahora (RECEIVED), su respuesta no se pisa.
+      const res = await tx.externalConfirmation.updateMany({
+        where: { id, status: ConfirmationStatus.SENT },
         data: { status: ConfirmationStatus.NO_RESPONSE },
-        include: INCLUDE_FULL,
       });
+      if (res.count === 0) throw ConfirmationsService.stateChanged();
+      return tx.externalConfirmation.findUniqueOrThrow({ where: { id }, include: INCLUDE_FULL });
     }, TX_OPTIONS);
   }
 
@@ -248,13 +265,21 @@ export class ConfirmationsService {
     if (conf.status !== ConfirmationStatus.DRAFT) {
       throw new ForbiddenException('Solo se puede eliminar una confirmación en estado DRAFT');
     }
-    await this.prisma.externalConfirmation.delete({ where: { id } });
+    // Las solicitudes de firma (rechazos, revocaciones, vencidas) son evidencia: sin la confirmación nadie podría verlas.
+    const signatureHistory = await this.prisma.signatureRequest.count({
+      where: { organizationId: user.organizationId, documentType: SignatureDocumentType.EXTERNAL_CONFIRMATION, targetId: id },
+    });
+    if (signatureHistory > 0) {
+      throw new ConflictException('Esta confirmación tiene historial de firma electrónica y se conserva como evidencia: no se puede eliminar.');
+    }
+    const res = await this.prisma.externalConfirmation.deleteMany({ where: { id, status: ConfirmationStatus.DRAFT } });
+    if (res.count === 0) throw ConfirmationsService.stateChanged();
     return { message: 'Confirmación eliminada' };
   }
 
   // ── Stats org ──────────────────────────────────────────────────────────────
   async getOrgStats(user: AuthUser) {
-    const base = { audit: { organizationId: user.organizationId } };
+    const base = { audit: visibleAuditWhere(user) };
     const [total, draft, sent, received, reconciled, noResponse, altProcedure] = await Promise.all([
       this.prisma.externalConfirmation.count({ where: base }),
       this.prisma.externalConfirmation.count({ where: { ...base, status: ConfirmationStatus.DRAFT } }),

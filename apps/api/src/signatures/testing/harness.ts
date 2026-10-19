@@ -85,7 +85,7 @@ export function makeEmail() {
   const ok = async () => ({ sent: true, emailId: 'e1' });
   const m: any = {};
   for (const n of ['sendSignatureRequest', 'sendSignatureReminder', 'sendSignatureOtp', 'sendSignatureCompleted',
-    'sendSignatureOutcome', 'sendSignatureSealFailed', 'sendSignatureIntegrityAlert']) m[n] = jest.fn(ok);
+    'sendSignatureOutcome', 'sendSignatureSealFailed', 'sendSignatureIntegrityAlert', 'sendSignatureLockedAlert']) m[n] = jest.fn(ok);
   m.signUrl = (t: string) => `https://app.test/firmar#${t}`;
   m.verifyUrl = () => 'https://app.test/verificar';
   m.panelUrl = (p: string) => `https://app.test${p}`;

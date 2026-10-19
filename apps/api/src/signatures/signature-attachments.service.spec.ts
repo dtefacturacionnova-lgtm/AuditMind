@@ -1,12 +1,40 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { buildHarness, INFO, makePdf } from './testing/harness';
 import {
-  ATTACHMENT_LIMITS, detectFileType, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_ATTACHMENTS_TOTAL_BYTES, sanitizeFilename,
+  ATTACHMENT_LIMITS, detectFileType, imageDimensions, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_ATTACHMENTS_TOTAL_BYTES,
+  sanitizeFilename,
 } from './signature-attachments.service';
 
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]);
-const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]);
+/** Cabecera PNG real (firma + IHDR con ancho y alto); el resto no importa: la "reconstrucción" es falsa en las pruebas. */
+function pngOf(width: number, height: number): Buffer {
+  const ihdr = Buffer.alloc(25);
+  ihdr.writeUInt32BE(13, 0); ihdr.write('IHDR', 4, 'latin1'); ihdr.writeUInt32BE(width, 8); ihdr.writeUInt32BE(height, 12);
+  ihdr[16] = 8; ihdr[17] = 6;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), ihdr, Buffer.alloc(32)]);
+}
+/** Cabecera JPEG real: SOI + APP0 (JFIF) + SOF0 con alto y ancho. */
+function jpgOf(width: number, height: number): Buffer {
+  const app0 = Buffer.from([0xff, 0xe0, 0x00, 0x10, ...Buffer.from('JFIF\0', 'latin1'), 1, 1, 0, 0, 1, 0, 1, 0, 0]);
+  const sof = Buffer.alloc(19);
+  sof[0] = 0xff; sof[1] = 0xc0; sof.writeUInt16BE(17, 2); sof[4] = 8; sof.writeUInt16BE(height, 5); sof.writeUInt16BE(width, 7); sof[9] = 3;
+  return Buffer.concat([Buffer.from([0xff, 0xd8]), app0, sof, Buffer.alloc(32)]);
+}
+
+const PNG = pngOf(800, 600);
+const JPG = jpgOf(800, 600);
 const EICAR_LIKE = Buffer.from('%PDF-1.4\n' + 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
+
+describe('imageDimensions (tamaño declarado, sin decodificar)', () => {
+  it('lee ancho y alto de PNG y JPEG', () => {
+    expect(imageDimensions(pngOf(1234, 567), 'png')).toEqual({ width: 1234, height: 567 });
+    expect(imageDimensions(jpgOf(4032, 3024), 'jpeg')).toEqual({ width: 4032, height: 3024 });
+  });
+  it('cabeceras rotas o truncadas: null', () => {
+    expect(imageDimensions(Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]), 'png')).toBeNull();
+    expect(imageDimensions(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64)]), 'jpeg')).toBeNull();
+    expect(imageDimensions(Buffer.from([0xff, 0xd8, 0xff, 0xda, 0x00, 0x08, 0, 0, 0, 0, 0, 0]), 'jpeg')).toBeNull();
+  });
+});
 
 describe('detectFileType (por los bytes, no por la extensión)', () => {
   it('reconoce PDF, JPEG y PNG', async () => {
@@ -136,6 +164,47 @@ describe('Adjuntos del tercero · cadena de defensa', () => {
     } finally {
       Object.assign(ATTACHMENT_LIMITS, saved);
     }
+  });
+
+  it('imágenes: más de 50 megapíxeles o sin tamaño legible se rechazan ANTES de llegar a Stirling (ni al antivirus)', async () => {
+    const { h, upload, files } = await open();
+    const spy = jest.spyOn(h.pdfTools, 'imageToPdf');
+    await expect(upload('bomba.png', pngOf(10_000, 10_000))).rejects.toThrow(/50 megapíxeles/); // 100 MP en pocos bytes
+    await expect(upload('bomba.jpg', jpgOf(65_000, 60_000))).rejects.toThrow(/50 megapíxeles/);
+    await expect(upload('rota.png', Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64)]))).rejects.toThrow(/No se pudo leer la imagen/);
+    expect(spy).not.toHaveBeenCalled();
+    expect(h.clam.scans).toBe(0);
+    expect(files()).toHaveLength(0);
+    await upload('telefono.jpg', jpgOf(8_000, 6_000)); // 48 MP: una foto de teléfono sí pasa
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('subidas en paralelo no pasan el límite de archivos: se vuelve a contar bajo el bloqueo de la solicitud', async () => {
+    const saved = { ...ATTACHMENT_LIMITS };
+    try {
+      const { h, upload, files } = await open();
+      Object.assign(ATTACHMENT_LIMITS, { maxFiles: 2 });
+      const pdfs = await Promise.all([1, 2, 3, 4].map(() => makePdf(1)));
+      const results = await Promise.allSettled(pdfs.map((b, i) => upload(`p${i}.pdf`, b)));
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+      expect(h.fake.tables.signatureAttachment).toHaveLength(2);
+      expect(files()).toHaveLength(4); // solo los 2 aceptados (cuarentena + reconstruido); los demás se borraron
+    } finally {
+      Object.assign(ATTACHMENT_LIMITS, saved);
+    }
+  });
+
+  it('una subida que termina DESPUÉS de firmar no se registra (ni deja archivos)', async () => {
+    const { h, token, session, upload, files } = await open();
+    // El antivirus "tarda": mientras tanto el firmante firma con su otra pestaña.
+    jest.spyOn(h.clam, 'scan').mockImplementationOnce(async () => {
+      await h.public.sign(token, session, { signedName: 'Juan Pérez', signedRole: 'Gerente', consent: true, response: { agrees: true } } as any, INFO);
+      return { status: 'CLEAN' };
+    });
+    await expect(upload('tarde.pdf', await makePdf(1))).rejects.toMatchObject({ status: 409 });
+    expect(h.fake.tables.signatureAttachment).toHaveLength(0);
+    expect(files()).toHaveLength(0);
+    expect(h.fake.events.some((e) => e.type === 'ATTACHMENT_ACCEPTED')).toBe(false);
   });
 
   it('el nombre se sanea al guardarlo', async () => {

@@ -62,11 +62,19 @@ describe('Confirmación · la carta de autorización solo puede ser de ESTA conf
 });
 
 describe('Confirmación · respuesta del confirmante', () => {
-  const resp = (raw: unknown, mode: 'POSITIVE_WITH_AMOUNT' | 'POSITIVE_BLANK' = 'POSITIVE_WITH_AMOUNT') => parseResponse(raw, mode);
+  const SHOWN = 1250.5;
+  const resp = (raw: unknown, mode: 'POSITIVE_WITH_AMOUNT' | 'POSITIVE_BLANK' = 'POSITIVE_WITH_AMOUNT') =>
+    parseResponse(raw, mode, mode === 'POSITIVE_WITH_AMOUNT' ? SHOWN : null);
 
   it('de acuerdo con el saldo mostrado: basta con indicarlo (el monto es opcional)', () => {
     expect(resp({ agrees: true })).toEqual({ agrees: true, confirmedAmount: null, comments: '' });
     expect(resp({ agrees: true, confirmedAmount: 1250.5, comments: '  todo bien  ' })).toEqual({ agrees: true, confirmedAmount: 1250.5, comments: 'todo bien' });
+  });
+
+  it('«de acuerdo» con un saldo DISTINTO al mostrado es contradictorio y se rechaza (no queda una conciliación sin diferencia)', () => {
+    expect(msg(() => resp({ agrees: true, confirmedAmount: 999 }))).toMatch(/de acuerdo con el saldo, pero escribiste uno distinto/);
+    expect(msg(() => resp({ agrees: true, confirmedAmount: 0 }))).toMatch(/escribiste uno distinto/);
+    expect(resp({ agrees: false, confirmedAmount: 999 }).confirmedAmount).toBe(999); // en desacuerdo, sí
   });
 
   it('en desacuerdo exige el saldo; con saldo en blanco SIEMPRE lo exige', () => {

@@ -18,6 +18,8 @@ export const emptyForm: SignForm = { signedName: '', signedRole: '', values: {},
 
 interface Props {
   doc: PublicDocument;
+  /** Trae los bytes del PDF a firmar (la API; nunca un enlace de Storage). */
+  loadPdf: () => Promise<ArrayBuffer>;
   sessionExpiresAt: string;
   form: SignForm;
   onChange: (next: SignForm) => void;
@@ -92,7 +94,8 @@ export function DocumentStep(p: Props) {
 
   const set = (patch: Partial<SignForm>) => onChange({ ...form, ...patch });
   const setValue = (key: string, v: string | boolean) => onChange({ ...form, values: { ...form.values, [key]: v } });
-  const blocked = integrity === 'mismatch' || integrity === 'checking';
+  // Solo se firma un documento que se vio y cuya huella se verificó en el navegador.
+  const blocked = integrity !== 'ok';
   const canSign = form.consent && !blocked && !p.busy && !p.uploading;
   const canAttachMore = p.attachments.length < MAX_FILES;
 
@@ -107,7 +110,7 @@ export function DocumentStep(p: Props) {
       <div className="space-y-5" ref={formRef}>
         <Card>
           <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900"><FileText className="h-4 w-4 text-gray-400" aria-hidden="true" /> Documento</h2>
-          <PdfViewer pdfUrl={doc.pdfUrl} expectedSha256={doc.documentSha256} onIntegrity={setIntegrity} />
+          <PdfViewer load={p.loadPdf} expectedSha256={doc.documentSha256} onIntegrity={setIntegrity} />
         </Card>
 
         {/* Si el documento no coincide con el enviado no hay nada que responder ni firmar: se ocultan los formularios. */}
@@ -179,6 +182,7 @@ export function DocumentStep(p: Props) {
                 <div className="mt-4"><Alert tone="red">Revisa los campos marcados en rojo antes de firmar.</Alert></div>
               )}
               {integrity === 'checking' && <p className="mt-3 text-xs text-gray-500">Espera a que termine la verificación del documento para poder firmar.</p>}
+              {integrity === 'error' && <p className="mt-3 text-xs text-gray-500">Para firmar, primero tiene que cargarse el documento (usa «Reintentar» arriba).</p>}
 
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={p.onSign} disabled={!canSign} className={primaryButton}>

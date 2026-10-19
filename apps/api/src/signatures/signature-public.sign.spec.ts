@@ -180,11 +180,14 @@ describe('Firma pública · documento y copia firmada', () => {
   beforeEach(() => { clock = useClock(); });
   afterEach(() => { clock.restore(); jest.restoreAllMocks(); });
 
-  it('GET /document exige sesión y devuelve el formulario, el consentimiento literal y un PDF con enlace firmado', async () => {
-    const { h, token, session } = await setup();
+  it('GET /document exige sesión y devuelve el formulario y el consentimiento literal; el PDF sale de /document/file', async () => {
+    const { h, id, token, session } = await setup();
     await expect(h.public.getDocument(token, undefined)).rejects.toMatchObject({ status: 401 });
     const doc = await h.public.getDocument(token, session);
-    expect(doc.pdfUrl).toMatch(/^https:\/\/storage\.test\/sign\//);
+    expect(JSON.stringify(doc)).not.toMatch(/storage|signature-requests\//); // ninguna ruta ni enlace de Storage
+    await expect(h.public.getDocumentFile(token, undefined)).rejects.toMatchObject({ status: 401 });
+    const bytes = await h.public.getDocumentFile(token, session);
+    expect(sha256Hex(bytes)).toBe(h.fake.requests.find((r) => r.id === id)!.documentSha256); // los bytes de la huella registrada
     expect(doc.consentText).toBe(renderConsentText(doc.title));
     expect(doc.consentVersion).toBe(CONSENT_VERSION);
     expect(doc.privacyNotice).toContain('Pérez Cortez y Asociados');
@@ -198,13 +201,17 @@ describe('Firma pública · documento y copia firmada', () => {
     await expect(h.public.getSigned(token, session)).rejects.toMatchObject({ status: 401 }); // sesión revocada al firmar
     clock.advance(61_000);
     const s2 = await h.openSession(token); // el estado SIGNED sí permite pedir código
-    await expect(h.public.getSigned(token, s2)).resolves.toEqual({ sealing: true, failed: false });
+    await expect(h.public.getSigned(token, s2)).resolves.toEqual({ sealing: true, failed: false, ready: false });
+    await expect(h.public.getSignedFile(token, s2)).rejects.toMatchObject({ status: 409 });
 
-    // sellada → entrega el enlace
+    // sellada → lista; los bytes salen de /signed/file (nunca un enlace con la ruta de Storage)
+    const signedPdf = await makePdf(2);
+    h.storage.files.set('signature-requests/aud1/x/signed.pdf', signedPdf);
     Object.assign(h.fake.requests.find((r) => r.id === id)!, { sealStatus: 'SEALED', signedPdfPath: 'signature-requests/aud1/x/signed.pdf' });
     const done = await h.public.getSigned(token, s2);
-    expect(done).toMatchObject({ sealing: false, failed: false });
-    expect((done as any).pdfUrl).toContain('signed.pdf');
+    expect(done).toEqual({ sealing: false, failed: false, ready: true });
+    expect(sha256Hex(await h.public.getSignedFile(token, s2))).toBe(sha256Hex(signedPdf));
+    await expect(h.public.getSignedFile(token, undefined)).rejects.toMatchObject({ status: 401 });
   });
 
   it('la copia firmada deja de estar disponible a los 30 días', async () => {

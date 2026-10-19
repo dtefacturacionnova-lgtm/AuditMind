@@ -220,3 +220,56 @@ describe('Carta de compromiso · sellado', () => {
     });
   });
 });
+
+describe('Carta de compromiso · revisión de seguridad F5b', () => {
+  it('editar la carta cierra también las solicitudes VENCIDAS: «Reenviar» ya no resucita el PDF con el texto viejo', async () => {
+    const { h, letters, letter, request, send } = setup();
+    const { id } = await send();
+    request(id).status = 'EXPIRED'; // el cron la venció; la carta sigue ENVIADA
+    await letters.update('letter1', { content: 'Texto B, distinto del que se envió' } as any, manager);
+    expect(letter()).toMatchObject({ status: 'DRAFT', content: 'Texto B, distinto del que se envió' });
+    expect(request(id)).toMatchObject({ status: 'REVOKED', revokedReason: 'El texto de la carta cambió después de enviarla' });
+    await expect(h.requests.resend(manager, id, {}, INFO)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('aunque una vencida sobreviviera (datos viejos), reenviarla exige que la carta siga ENVIADA y con el mismo texto', async () => {
+    const { h, letter, request, send } = setup();
+    const { id } = await send();
+    request(id).status = 'EXPIRED';
+    letter().content = 'Texto cambiado por otra vía';
+    await expect(h.requests.resend(manager, id, {}, INFO)).rejects.toThrow(/La carta cambió/);
+    letter().status = 'DRAFT'; // tampoco si ya no está enviada; y la firma presencial sigue la misma regla
+    await expect(h.requests.inPerson(manager, id, {}, INFO)).rejects.toThrow(/La carta cambió/);
+  });
+
+  it('si el texto cambia MIENTRAS se arma el PDF, la solicitud no se crea', async () => {
+    const { h, letter, send } = setup();
+    const generate = h.pdf.generateBranded.bind(h.pdf);
+    jest.spyOn(h.pdf, 'generateBranded').mockImplementationOnce(async (args: any) => {
+      letter().content = 'Otro texto guardado en ese instante';
+      return generate(args);
+    });
+    await expect(send()).rejects.toThrow(/cambió mientras se preparaba el documento/);
+    expect(h.fake.requests).toHaveLength(0);
+    expect(letter().status).toBe('DRAFT');
+  });
+
+  it('al firmar, si la carta ya no es la que se congeló, NO queda firmada otra cosa (la firma entera se revierte)', async () => {
+    const { letter, client, request, send, signAs } = setup();
+    const { id, token } = await send();
+    letter().content = 'Texto que nadie le envió al cliente';
+    await expect(signAs(token)).rejects.toThrow(/La carta cambió después de que se te envió/);
+    expect(letter().status).toBe('SENT');
+    expect(client().status).toBe('PENDING_SIGNATURE');
+    expect(request(id).status).not.toBe('SIGNED');
+  });
+
+  it('nunca dos enlaces vivos: una vencida no se reactiva si hay otra solicitud vigente del mismo documento', async () => {
+    const { h, request, send } = setup();
+    const first = await send();
+    const second = await send(); // reemplaza a la primera (REVOKED)
+    request(first.id).status = 'EXPIRED'; // datos de antes de este cambio: vencida y vigente a la vez
+    await expect(h.requests.resend(manager, first.id, {}, INFO)).rejects.toThrow(/otra solicitud vigente/);
+    expect(request(second.id).status).toBe('PENDING');
+  });
+});

@@ -37,7 +37,7 @@ export function publicRequestView(r: SignatureRequest, orgName: string, document
 export function publicDocumentView(
   r: SignatureRequest,
   p: {
-    orgName: string; documentLabel: string; pdfUrl: string;
+    orgName: string; documentLabel: string;
     consentText: string; consentVersion: string; privacyNotice: string; declineNotice: string;
     form: FormSpec; attachments: Pick<SignatureAttachment, 'id' | 'originalName' | 'sizeBytes'>[];
   },
@@ -50,7 +50,7 @@ export function publicDocumentView(
     signerRole: r.signerRole,
     expiresAt: iso(r.expiresAt),
     documentSha256: r.documentSha256,
-    pdfUrl: p.pdfUrl,
+    // El PDF NO va como enlace de Storage (su ruta revela ids internos): se pide a GET /document/file.
     consentVersion: p.consentVersion,
     consentText: p.consentText,
     privacyNotice: p.privacyNotice,

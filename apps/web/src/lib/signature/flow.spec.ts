@@ -7,7 +7,7 @@ const request = (over: Partial<PublicRequest> = {}): PublicRequest => ({
   expiresAt: '2026-11-01T00:00:00Z', status: 'PENDING', requiresOtp: true, signedAt: null, canDownloadSigned: false, ...over,
 });
 const doc = {
-  title: 'T', documentLabel: 'L', orgName: 'O', signerName: 'S', signerRole: null, expiresAt: null, documentSha256: 'a'.repeat(64), pdfUrl: 'https://x/y.pdf',
+  title: 'T', documentLabel: 'L', orgName: 'O', signerName: 'S', signerRole: null, expiresAt: null, documentSha256: 'a'.repeat(64),
   consentVersion: 'v1', consentText: 'c', privacyNotice: 'p', declineNotice: 'd', form: { fields: [], allowAttachments: false, signedRoleRequired: true }, attachments: [],
 } as PublicDocument;
 

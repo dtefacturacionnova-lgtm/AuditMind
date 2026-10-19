@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, FindingSeverity, FindingStatus, ConfirmationStatus, ConfirmationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInvestigationAccess, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
 import { PaperGraphService } from './paper-graph.service';
 import { PAPER_TEMPLATES } from './paper-templates';
 import { AiService } from '../ai/ai.service';
@@ -32,10 +33,12 @@ export class PaperSectionsService {
   private async assertPaperAccess(paperId: string, user: AuthUser) {
     const wp = await this.prisma.workingPaper.findUnique({
       where:   { id: paperId },
-      include: { audit: { select: { organizationId: true } } },
+      include: { audit: { select: { organizationId: true, ...INVESTIGATION_SELECT } } },
     });
     if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
     if (wp.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    // Modo investigación: las secciones (incluida el acta firmada que se agrega a S2) solo para el equipo y CAE/ADMIN.
+    assertInvestigationAccess(wp.audit, user);
     return wp;
   }
 

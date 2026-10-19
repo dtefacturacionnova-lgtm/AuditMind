@@ -1,10 +1,11 @@
 import {
-  Body, Controller, Delete, Get, Headers, Header, HttpCode, Param, Post, Req, UploadedFile, UseGuards, UseInterceptors,
+  Body, Controller, Delete, Get, Headers, Header, HttpCode, Param, Post, Req, StreamableFile, UploadedFile, UseGuards, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
+import { SkipStorageSigning } from '../common/storage/skip-storage-signing.decorator';
 import { DeclineDto, OtpVerifyDto, SignDto } from './dto/signature.dto';
 import { getClientInfo } from './request-info.util';
 import { PUBLIC_LIMITS, PublicThrottlerGuard } from './public-throttle';
@@ -12,6 +13,10 @@ import { SignaturePublicService } from './signature-public.service';
 import { MAX_ATTACHMENT_BYTES } from './signature-attachments.service';
 
 type Req = { ip?: string; headers?: Record<string, unknown> };
+
+/** Respuesta binaria de un PDF (el interceptor de Storage no toca este controlador). */
+const pdfFile = (buf: Buffer, filename: string) =>
+  new StreamableFile(buf, { type: 'application/pdf', disposition: `inline; filename="${filename}"`, length: buf.length });
 
 /**
  * Endpoints PÚBLICOS de la firma por enlace (docs/firma-externa-por-enlace.md §9.1). Sin login.
@@ -21,6 +26,7 @@ type Req = { ip?: string; headers?: Record<string, unknown> };
  *  - Fuera de la documentación Swagger.
  */
 @ApiExcludeController()
+@SkipStorageSigning() // los enlaces a archivos los genera el servicio, nunca el interceptor global
 @Controller('public/signatures')
 @UseGuards(PublicThrottlerGuard)
 export class SignaturePublicController {
@@ -44,6 +50,12 @@ export class SignaturePublicController {
   @Public() @Get('document') @Throttle(PUBLIC_LIMITS.read) @Header('Cache-Control', 'no-store')
   getDocument(@Headers('x-signature-token') token: string, @Headers('x-signature-session') session: string) {
     return this.svc.getDocument(token, session);
+  }
+
+  /** El PDF a firmar, en bytes (nunca un enlace de Storage: su ruta revela ids internos). */
+  @Public() @Get('document/file') @Throttle(PUBLIC_LIMITS.read) @Header('Cache-Control', 'no-store')
+  async getDocumentFile(@Headers('x-signature-token') token: string, @Headers('x-signature-session') session: string) {
+    return pdfFile(await this.svc.getDocumentFile(token, session), 'documento.pdf');
   }
 
   @Public() @Post('attachments') @HttpCode(201) @Throttle(PUBLIC_LIMITS.upload) @Header('Cache-Control', 'no-store')
@@ -75,6 +87,11 @@ export class SignaturePublicController {
   @Public() @Get('signed') @Throttle(PUBLIC_LIMITS.read) @Header('Cache-Control', 'no-store')
   getSigned(@Headers('x-signature-token') token: string, @Headers('x-signature-session') session: string) {
     return this.svc.getSigned(token, session);
+  }
+
+  @Public() @Get('signed/file') @Throttle(PUBLIC_LIMITS.read) @Header('Cache-Control', 'no-store')
+  async getSignedFile(@Headers('x-signature-token') token: string, @Headers('x-signature-session') session: string) {
+    return pdfFile(await this.svc.getSignedFile(token, session), 'documento-firmado.pdf');
   }
 
   /** Verificación pública de un documento por su código (el código va en la ruta: es público por diseño). */

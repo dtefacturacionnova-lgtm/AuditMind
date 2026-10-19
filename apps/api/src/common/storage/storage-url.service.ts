@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { PrismaService } from '../../prisma/prisma.service';
 
 /**
  * Bucket `audit-files` PRIVADO (auditoría de seguridad 2026-10-18).
@@ -27,14 +28,49 @@ const SIGNED_RE = new RegExp(`(https?:\\/\\/${URL_BODY}+?\\/storage\\/v1\\/objec
 
 const safeDecode = (s: string): string => { try { return decodeURIComponent(s); } catch { return s; } };
 
+/**
+ * Archivos de la firma por enlace (docs/firma-externa-por-enlace.md §4). Los originales, adjuntos y la cuarentena SOLO
+ * salen por `GET /signature-requests/:id/file/...`, que valida rol y acceso (revisión de seguridad F5b, 2026-10-19:
+ * el interceptor firmaba cualquier ruta que apareciera en una respuesta, p. ej. una pegada en un campo de texto).
+ * Lo único que se firma aquí es el PDF sellado que la carta o el papel de entrevista enlazan, y solo si la solicitud es
+ * de la organización de quien consulta.
+ */
+const SIGNATURE_PREFIX = 'signature-requests/';
+const SIGNED_PDF_RE = /^signature-requests\/[^/]+\/([0-9a-f-]{36})\/signed\.pdf$/;
+
+/** Ruta "normal" del bucket: sin `..`, sin segmentos vacíos, sin barras invertidas ni barra inicial. */
+export function isPlainStoragePath(p: string): boolean {
+  return p.length > 0 && !p.startsWith('/') && !p.includes('\\') && p.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
+}
+
+export interface SigningScope {
+  /** Organización de quien hace la petición (null en rutas sin sesión). */
+  organizationId?: string | null;
+}
+
 @Injectable()
 export class StorageUrlService {
   private readonly logger = new Logger(StorageUrlService.name);
   private readonly supabase: SupabaseClient;
   private readonly cache = new Map<string, { url: string; at: number }>();
 
-  constructor() {
+  constructor(private readonly prisma: PrismaService) {
     this.supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  }
+
+  /** Qué rutas de las encontradas en la respuesta se pueden firmar para quien consulta. */
+  async allowedPaths(paths: string[], scope: SigningScope): Promise<string[]> {
+    const plain = paths.filter(isPlainStoragePath);
+    const out = plain.filter((p) => !p.startsWith(SIGNATURE_PREFIX));
+    const signedPdfs = plain.filter((p) => SIGNED_PDF_RE.test(p));
+    if (signedPdfs.length > 0 && scope.organizationId) {
+      const rows = await this.prisma.signatureRequest.findMany({
+        where: { organizationId: scope.organizationId, signedPdfPath: { in: signedPdfs } },
+        select: { signedPdfPath: true },
+      });
+      for (const r of rows) if (r.signedPdfPath) out.push(r.signedPdfPath);
+    }
+    return out;
   }
 
   // ─── Recorrido de strings (solo objetos planos y arrays) ───────────────────
@@ -66,7 +102,7 @@ export class StorageUrlService {
   }
 
   // ─── Salida: forma canónica -> enlace firmado ──────────────────────────────
-  async signResponse<T>(data: T): Promise<T> {
+  async signResponse<T>(data: T, scope: SigningScope = {}): Promise<T> {
     const paths = new Set<string>();
     this.mapStrings(data, (s) => {
       if (s.includes(PUBLIC_MARK)) for (const m of s.matchAll(PUBLIC_RE)) paths.add(safeDecode(m[1]));
@@ -74,7 +110,9 @@ export class StorageUrlService {
     }, new WeakSet());
     if (paths.size === 0) return data;
 
-    const signed = await this.signPaths([...paths]);
+    const allowed = await this.allowedPaths([...paths], scope);
+    if (allowed.length === 0) return data;
+    const signed = await this.signPaths(allowed);
     return this.mapStrings(
       data,
       (s) => (s.includes(PUBLIC_MARK)

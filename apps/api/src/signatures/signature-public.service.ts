@@ -30,11 +30,25 @@ export const OTP_MAX_FAILS_PER_HOUR = 10;
 export const OTP_LOCK_MS = 3_600_000;
 export const SESSION_TTL_MS = 30 * 60_000;
 export const SIGNED_DOWNLOAD_DAYS = 30;
+/**
+ * Topes extra de la revisión de seguridad F5b (2026-10-19):
+ *  - códigos por solicitud y día (además de 5/hora): con pocos enlaces nadie agota el presupuesto de la organización;
+ *  - ya firmada, el código solo sirve para descargar la copia: muy pocos por día;
+ *  - bloqueos acumulados: al tercer bloqueo de 1 h el enlace queda inservible hasta que el equipo lo reenvíe (sin esto se
+ *    podían probar ~240 códigos por día durante toda la vigencia).
+ */
+export const OTP_MAX_SENDS_PER_DAY = 10;
+export const OTP_MAX_SENDS_PER_DAY_SIGNED = 3;
+export const OTP_MAX_LOCKS = 3;
 const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
 const ACTIVE = ['PENDING', 'VIEWED'] as const;
 
 const INVALID_LINK = 'Enlace no válido o reemplazado por uno más reciente. Revisa el último correo que recibiste.';
 const locked = () => new HttpException('Demasiados intentos. Vuelve a intentarlo en una hora.', 423);
+const lockedForGood = () => new HttpException(
+  'Este enlace se bloqueó por demasiados intentos fallidos. Pide a quien te lo envió que te lo reenvíe.', 423,
+);
 
 /**
  * Flujo PÚBLICO del firmante (sin cuenta). Cada operación parte del token del enlace (cabecera X-Signature-Token) y,
@@ -110,6 +124,14 @@ export class SignaturePublicService {
     return (await this.prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { name: true } })).name;
   }
 
+  /** Bloqueos (OTP_LOCKED) desde la última vez que el equipo generó el enlace (creación o reenvío). */
+  private async locksSinceRotation(tx: Prisma.TransactionClient, requestId: string): Promise<number> {
+    const rotated = await tx.signatureEvent.findFirst({
+      where: { requestId, type: { in: ['CREATED', 'RESENT'] } }, orderBy: { seq: 'desc' }, select: { seq: true },
+    });
+    return tx.signatureEvent.count({ where: { requestId, type: 'OTP_LOCKED', seq: { gt: rotated?.seq ?? 0 } } });
+  }
+
   // ═══ GET /request ═══════════════════════════════════════════════════════════
   async getRequest(token: unknown) {
     this.policy.assertEnabled();
@@ -125,7 +147,8 @@ export class SignaturePublicService {
     const key = deriveOtpKey(this.policy.encryptionKey());
     const r0 = await this.loadByToken(token);
     this.assertOtpAllowed(r0);
-    await this.policy.assertDailyEmailCap(r0.organizationId);
+    // Presupuesto PROPIO de los códigos: un tercero que los pide en bucle no puede dejar a la organización sin invitaciones.
+    await this.policy.assertDailyOtpCap(r0.organizationId);
 
     const code = generateOtp();
     const outcome = await this.prisma.$transaction(async (tx) => {
@@ -133,7 +156,13 @@ export class SignaturePublicService {
       const cur = await tx.signatureRequest.findUniqueOrThrow({ where: { id: r0.id } });
       this.assertOtpAllowed(cur);
       const now = new Date();
+      if (await this.locksSinceRotation(tx, cur.id) >= OTP_MAX_LOCKS) return { kind: 'lockedForGood' as const };
       if (cur.lockedUntil && cur.lockedUntil > now) return { kind: 'locked' as const };
+      // Ya firmada, solo cuentan los códigos pedidos después de firmar (para descargar la copia).
+      const dayAgo = now.getTime() - DAY_MS;
+      const since = new Date(cur.status === 'SIGNED' && cur.signedAt ? Math.max(dayAgo, cur.signedAt.getTime()) : dayAgo);
+      const sentToday = await tx.signatureEvent.count({ where: { requestId: cur.id, type: 'OTP_SENT', at: { gte: since } } });
+      if (sentToday >= (cur.status === 'SIGNED' ? OTP_MAX_SENDS_PER_DAY_SIGNED : OTP_MAX_SENDS_PER_DAY)) return { kind: 'limit' as const };
 
       const fresh = !cur.otpWindowStart || now.getTime() - cur.otpWindowStart.getTime() > HOUR_MS;
       const windowStart = fresh ? now : cur.otpWindowStart!;
@@ -157,6 +186,7 @@ export class SignaturePublicService {
       return { kind: 'ok' as const };
     }, TX_OPTIONS);
 
+    if (outcome.kind === 'lockedForGood') throw lockedForGood();
     if (outcome.kind === 'locked') throw locked();
     if (outcome.kind === 'wait') throw new HttpException(`Espera ${outcome.seconds} segundos para pedir otro código.`, 429);
     if (outcome.kind === 'limit') throw new HttpException('Pediste demasiados códigos. Inténtalo de nuevo más tarde.', 429);
@@ -180,6 +210,8 @@ export class SignaturePublicService {
       const cur = await tx.signatureRequest.findUniqueOrThrow({ where: { id: r0.id } });
       this.assertOtpAllowed(cur);
       const now = new Date();
+      const priorLocks = await this.locksSinceRotation(tx, cur.id);
+      if (priorLocks >= OTP_MAX_LOCKS) return { kind: 'lockedForGood' as const };
       if (cur.lockedUntil && cur.lockedUntil > now) return { kind: 'locked' as const };
       if (!cur.otpHash || !cur.otpExpiresAt || cur.otpExpiresAt <= now) return { kind: 'none' as const };
 
@@ -193,7 +225,10 @@ export class SignaturePublicService {
         await tx.signatureRequest.update({
           where: { id: cur.id },
           data: {
-            otpHash: null, otpExpiresAt: null, otpAttempts: 0, otpVerifiedAt: now,
+            otpHash: null, otpExpiresAt: null, otpAttempts: 0,
+            // La hora de «correo verificado» de la evidencia es la de ANTES de firmar: verificar después (para descargar
+            // la copia) no la cambia (revisión F5b, 2026-10-19).
+            ...(cur.status === 'SIGNED' ? {} : { otpVerifiedAt: now }),
             otpWindowStart: windowStart, otpSentCount: sentCount, otpFailuresHour: failuresBefore,
             ...(cur.status === 'PENDING' ? { status: 'VIEWED' as const, viewedAt: now } : {}),
           },
@@ -219,12 +254,19 @@ export class SignaturePublicService {
         },
       });
       await this.events.append(tx, cur.id, { type: 'OTP_FAILED', ip: info.ip, userAgent: info.userAgent, detail: { attempt: attempts } });
-      if (lockNow) await this.events.append(tx, cur.id, { type: 'OTP_LOCKED', ip: info.ip, userAgent: info.userAgent, detail: { failuresInWindow: failures } });
+      if (lockNow) {
+        const lockNumber = priorLocks + 1;
+        await this.events.append(tx, cur.id, { type: 'OTP_LOCKED', ip: info.ip, userAgent: info.userAgent, detail: { failuresInWindow: failures, lockNumber } });
+        if (lockNumber >= OTP_MAX_LOCKS) return { kind: 'lockedForGood' as const, notify: true };
+      }
       return lockNow ? { kind: 'locked' as const } : burned ? { kind: 'burned' as const } : { kind: 'wrong' as const, left: OTP_MAX_FAILS_PER_CODE - attempts };
     }, TX_OPTIONS);
 
     switch (outcome.kind) {
       case 'ok': return { sessionToken: outcome.sessionToken, sessionExpiresAt: outcome.sessionExpiresAt.toISOString() };
+      case 'lockedForGood':
+        if ('notify' in outcome) void this.notifyCreator(r0, 'locked');
+        throw lockedForGood();
       case 'locked': throw locked();
       case 'none': throw new BadRequestException('El código venció o no se solicitó. Pide uno nuevo.');
       case 'burned': throw new BadRequestException('Demasiados intentos con este código. Pide uno nuevo.');
@@ -243,7 +285,6 @@ export class SignaturePublicService {
     return publicDocumentView(r, {
       orgName,
       documentLabel: adapter.label,
-      pdfUrl: await this.storage.signedUrl(r.documentPath),
       consentText: renderConsentText(r.title),
       consentVersion: CONSENT_VERSION,
       privacyNotice: renderPrivacyNotice(orgName),
@@ -253,15 +294,29 @@ export class SignaturePublicService {
     });
   }
 
+  /**
+   * GET /document/file — los BYTES del PDF a firmar, servidos por la API (token y sesión en cabeceras). Antes se daba un
+   * enlace firmado de Storage cuya ruta revelaba ids internos (encargo u organización, solicitud): §9.1 lo prohíbe
+   * (revisión de seguridad F5b, 2026-10-19). El navegador calcula la huella sobre estos mismos bytes.
+   */
+  async getDocumentFile(token: unknown, sessionToken: unknown): Promise<Buffer> {
+    this.policy.assertEnabled();
+    const r = await this.loadByToken(token);
+    this.assertOpen(r);
+    await this.requireSession(r, sessionToken);
+    try { return await this.storage.download(r.documentPath); }
+    catch { throw new ServiceUnavailableException('No se pudo cargar el documento. Inténtalo de nuevo.'); }
+  }
+
   // ═══ Adjuntos ═══════════════════════════════════════════════════════════════
   async uploadAttachment(token: unknown, sessionToken: unknown, file: { originalname: string; buffer: Buffer } | undefined, info: ClientInfo) {
     this.policy.assertEnabled();
     const r = await this.loadByToken(token);
     this.assertOpen(r);
-    await this.requireSession(r, sessionToken);
+    const session = await this.requireSession(r, sessionToken);
     if (!this.adapter(r).allowsAttachments) throw new ForbiddenException('Este documento no admite archivos adjuntos.');
     if (!file?.buffer) throw new BadRequestException('No se recibió ningún archivo.');
-    const att = await this.attachments.accept(r, file, info);
+    const att = await this.attachments.accept(r, file, info, session.id);
     return { id: att.id, originalName: att.originalName, sizeBytes: att.sizeBytes, status: 'accepted' as const };
   }
 
@@ -335,7 +390,8 @@ export class SignaturePublicService {
 
     await this.attachments.purgeUnsubmitted(r0.id).catch(() => undefined);
     void this.notifyCreator(result, 'signed');
-    void this.sealing.sealRequest(result.id); // en segundo plano; si falla, el cron lo reintenta
+    // En segundo plano; si falla, el cron lo reintenta. Un error de BD aquí NO debe tumbar el proceso (promesa sin manejar).
+    void this.sealing.sealRequest(result.id).catch((e) => this.logger.error(`Sellado de ${result.id} falló: ${(e as Error).message}`));
     return { status: 'SIGNED' as const, verificationCode: result.verificationCode!, sealing: true as const };
   }
 
@@ -386,8 +442,20 @@ export class SignaturePublicService {
     this.assertNotGone(r);
     if (r.status !== 'SIGNED') throw new ConflictException({ message: 'Este documento todavía no está firmado.', status: r.status });
     await this.requireSession(r, sessionToken);
-    if (r.sealStatus !== 'SEALED' || !r.signedPdfPath) return { sealing: r.sealStatus !== 'FAILED', failed: r.sealStatus === 'FAILED' };
-    return { sealing: false, failed: false, pdfUrl: await this.storage.signedUrl(r.signedPdfPath) };
+    if (r.sealStatus !== 'SEALED' || !r.signedPdfPath) return { sealing: r.sealStatus !== 'FAILED', failed: r.sealStatus === 'FAILED', ready: false };
+    return { sealing: false, failed: false, ready: true };
+  }
+
+  /** GET /signed/file — los bytes de la copia sellada (misma regla que /document/file: nada de rutas de Storage). */
+  async getSignedFile(token: unknown, sessionToken: unknown): Promise<Buffer> {
+    this.policy.assertEnabled();
+    const r = await this.loadByToken(token);
+    this.assertNotGone(r);
+    if (r.status !== 'SIGNED') throw new ConflictException({ message: 'Este documento todavía no está firmado.', status: r.status });
+    await this.requireSession(r, sessionToken);
+    if (r.sealStatus !== 'SEALED' || !r.signedPdfPath) throw new ConflictException('Tu copia firmada todavía se está preparando.');
+    try { return await this.storage.download(r.signedPdfPath); }
+    catch { throw new ServiceUnavailableException('No se pudo cargar tu copia firmada. Inténtalo de nuevo.'); }
   }
 
   // ═══ GET /verify/:code ══════════════════════════════════════════════════════
@@ -414,12 +482,13 @@ export class SignaturePublicService {
   }
 
   // ═══ Avisos al equipo ═══════════════════════════════════════════════════════
-  private async notifyCreator(r: SignatureRequest, kind: 'signed' | 'declined' | 'integrity', reason?: string) {
+  private async notifyCreator(r: SignatureRequest, kind: 'signed' | 'declined' | 'integrity' | 'locked', reason?: string) {
     try {
       const creator = await this.prisma.user.findUnique({ where: { id: r.createdById }, select: { email: true } });
       if (!creator?.email) return;
       const panelPath = r.auditId ? `/dashboard/audits/${r.auditId}` : '/dashboard/portfolio';
       if (kind === 'integrity') await this.email.sendSignatureIntegrityAlert(creator.email, { title: r.title, panelPath });
+      else if (kind === 'locked') await this.email.sendSignatureLockedAlert(creator.email, { title: r.title, signerEmail: r.signerEmail, panelPath });
       else await this.email.sendSignatureOutcome(creator.email, {
         title: r.title, signerName: r.signedName ?? r.signerName, signerEmail: r.signerEmail,
         outcome: kind === 'signed' ? 'SIGNED' : 'DECLINED', reason, panelPath,

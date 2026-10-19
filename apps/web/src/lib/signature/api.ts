@@ -83,11 +83,41 @@ async function call<T>(path: string, opts: CallOptions = {}): Promise<T> {
   return body as T;
 }
 
+/**
+ * Bytes de un PDF (documento a firmar o copia sellada). La API los sirve directamente: el firmante nunca recibe un
+ * enlace de Storage, cuya ruta revelaría identificadores internos (revisión de seguridad F5b, 2026-10-19).
+ */
+async function callFile(path: string, token: string, session: string): Promise<ArrayBuffer> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      headers: { Accept: 'application/pdf', 'X-Signature-Token': token, 'X-Signature-Session': session },
+      credentials: 'omit',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
+      signal: controller.signal,
+    });
+  } catch {
+    throw new SignatureApiError(0, NETWORK_MESSAGE);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) {
+    let body: unknown = null;
+    try { body = await res.json(); } catch { /* sin cuerpo JSON */ }
+    throw toApiError(res.status, body);
+  }
+  return res.arrayBuffer();
+}
+
 export const signatureApi = {
   getRequest: (token: string) => call<PublicRequest>('/request', { token }),
   sendOtp: (token: string) => call<OtpSent>('/otp/send', { method: 'POST', token }),
   verifyOtp: (token: string, code: string) => call<OtpVerified>('/otp/verify', { method: 'POST', token, json: { code } }),
   getDocument: (token: string, session: string) => call<PublicDocument>('/document', { token, session }),
+  getDocumentFile: (token: string, session: string) => callFile('/document/file', token, session),
   uploadAttachment: (token: string, session: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
@@ -99,6 +129,7 @@ export const signatureApi = {
   decline: (token: string, session: string, reason: string) =>
     call<{ status: 'DECLINED' }>('/decline', { method: 'POST', token, session, json: { reason } }),
   getSigned: (token: string, session: string) => call<SignedDownload>('/signed', { token, session }),
+  getSignedFile: (token: string, session: string) => callFile('/signed/file', token, session),
   /** El código es público por diseño: va en la ruta. */
   verify: (code: string) => call<VerifyResult>(`/verify/${encodeURIComponent(code)}`),
 };

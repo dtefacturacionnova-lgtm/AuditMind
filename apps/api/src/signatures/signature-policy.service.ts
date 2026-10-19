@@ -2,8 +2,14 @@ import { HttpException, HttpStatus, Injectable, ServiceUnavailableException } fr
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** Tope de correos de firma por organización y día (§7): envíos, reenvíos, recordatorios y códigos. Defensa contra spam. */
+/** Tope de correos de firma por organización y día (§7): envíos, reenvíos y recordatorios. Defensa contra spam. */
 export const MAX_EMAILS_PER_ORG_PER_DAY = 300;
+/**
+ * Tope APARTE para los códigos de verificación, que pide el tercero sin sesión. Revisión de seguridad F5b (2026-10-19):
+ * antes contaban en el mismo tope y alguien con unos pocos enlaces podía agotarlo y dejar a la organización sin poder
+ * enviar documentos. Además hay topes por solicitud (5/hora, 10/día) en SignaturePublicService.
+ */
+export const MAX_OTP_EMAILS_PER_ORG_PER_DAY = 1000;
 
 /**
  * Reglas transversales de la firma por enlace: interruptor general y tope diario de correos.
@@ -33,10 +39,21 @@ export class SignaturePolicyService {
   async assertDailyEmailCap(organizationId: string): Promise<void> {
     const since = new Date(Date.now() - 24 * 3600 * 1000);
     const sent = await this.prisma.signatureEvent.count({
-      where: { type: { in: ['SENT', 'RESENT', 'REMINDER_SENT', 'OTP_SENT'] }, at: { gte: since }, request: { organizationId } },
+      where: { type: { in: ['SENT', 'RESENT', 'REMINDER_SENT'] }, at: { gte: since }, request: { organizationId } },
     });
     if (sent >= MAX_EMAILS_PER_ORG_PER_DAY) {
       throw new HttpException('Se alcanzó el límite diario de correos de firma de tu organización.', HttpStatus.TOO_MANY_REQUESTS);
+    }
+  }
+
+  /** Códigos de verificación: presupuesto propio, no compite con las invitaciones. */
+  async assertDailyOtpCap(organizationId: string): Promise<void> {
+    const since = new Date(Date.now() - 24 * 3600 * 1000);
+    const sent = await this.prisma.signatureEvent.count({
+      where: { type: 'OTP_SENT', at: { gte: since }, request: { organizationId } },
+    });
+    if (sent >= MAX_OTP_EMAILS_PER_ORG_PER_DAY) {
+      throw new HttpException('No podemos enviar más códigos por hoy. Inténtalo mañana o avisa a quien te envió el documento.', HttpStatus.TOO_MANY_REQUESTS);
     }
   }
 }

@@ -16,6 +16,10 @@ const ROLE_LABELS: Record<string, string> = {
 
 const ACTIVE_LETTER = [EngagementLetterStatus.DRAFT, EngagementLetterStatus.SENT];
 
+const contentSha = (content: string) => createHash('sha256').update(content).digest('hex');
+/** Huella del texto que se congeló al enviar (la guarda `prepare` en el payload). */
+const frozenContentSha = (r: SignatureRequest) => (r.payload as Record<string, unknown> | null)?.contentSha256;
+
 /** Fecha larga en la zona del país, para el bloque «Por el despacho». */
 const longDate = (d: Date) => new Intl.DateTimeFormat('es-SV', { timeZone: 'America/El_Salvador', dateStyle: 'long' }).format(d);
 
@@ -87,7 +91,7 @@ export class EngagementLetterSignatureAdapter implements SignatureDocumentAdapte
       bodyHtml,
       payload: {
         letterId: letter.id, year: letter.year, clientName,
-        contentSha256: createHash('sha256').update(letter.content).digest('hex'),
+        contentSha256: contentSha(letter.content),
         sentBy: ctx.user.name, sentByRole: senderRole,
       },
     };
@@ -108,6 +112,16 @@ export class EngagementLetterSignatureAdapter implements SignatureDocumentAdapte
     return [];
   }
 
+  // ─── Reenviar ──────────────────────────────────────────────────────────────
+  /** Solo se reenvía si la carta sigue ENVIADA y con el MISMO texto que se congeló en el PDF. */
+  async assertResendable(request: SignatureRequest): Promise<void> {
+    const letter = await this.prisma.engagementLetter.findFirst({ where: { id: request.targetId, organizationId: request.organizationId } });
+    if (!letter) throw new NotFoundException('Carta de compromiso no encontrada');
+    if (letter.status !== EngagementLetterStatus.SENT || contentSha(letter.content) !== frozenContentSha(request)) {
+      throw new ConflictException('La carta cambió (o ya no está enviada) desde que se creó esta solicitud: envía una solicitud nueva.');
+    }
+  }
+
   // ─── Efectos sobre la carta (dentro de la transacción de la firma) ─────────
   async onCreated(tx: Prisma.TransactionClient, request: SignatureRequest): Promise<void> {
     const res = await tx.engagementLetter.updateMany({
@@ -115,9 +129,20 @@ export class EngagementLetterSignatureAdapter implements SignatureDocumentAdapte
       data: { status: EngagementLetterStatus.SENT, declineReason: null },
     });
     if (res.count === 0) throw new ConflictException('La carta cambió de estado mientras se enviaba. Inténtalo de nuevo.');
+    // La fila ya quedó bloqueada por la escritura: si el texto cambió entre armar el PDF y ahora, no se envía.
+    const now = await tx.engagementLetter.findUniqueOrThrow({ where: { id: request.targetId } });
+    if (contentSha(now.content) !== frozenContentSha(request)) {
+      throw new ConflictException('El texto de la carta cambió mientras se preparaba el documento. Vuelve a enviarla.');
+    }
   }
 
   async onSigned(tx: Prisma.TransactionClient, ctx: SignedContext): Promise<void> {
+    // Defensa en profundidad: lo que se firma es el texto congelado; si la carta ya no es esa (o no está enviada), no se
+    // marca firmada otra cosa. Dentro de la transacción de la firma, que revierte todo.
+    const letter = await tx.engagementLetter.findFirst({ where: { id: ctx.request.targetId, organizationId: ctx.request.organizationId } });
+    if (!letter || letter.status !== EngagementLetterStatus.SENT || contentSha(letter.content) !== frozenContentSha(ctx.request)) {
+      throw new ConflictException('La carta cambió después de que se te envió. Pide al despacho un enlace nuevo.');
+    }
     await this.letters.markSigned(tx, ctx.request.targetId, ctx.request.organizationId, {
       name: ctx.signedName, role: ctx.signedRole ?? ctx.request.signerRole ?? '', at: ctx.at,
     });

@@ -4,6 +4,8 @@ import { Test } from '@nestjs/testing';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
+import { SKIP_STORAGE_SIGNING_KEY } from '../common/storage/skip-storage-signing.decorator';
+import { PbcPortalController } from '../pbc/pbc-portal.controller';
 import { PublicThrottlerGuard } from './public-throttle';
 import { SignaturePublicController } from './signature-public.controller';
 import { SignaturePublicService } from './signature-public.service';
@@ -20,6 +22,8 @@ function mockService() {
     getRequest: fn('getRequest'), sendOtp: fn('sendOtp'), verifyOtp: fn('verifyOtp'), getDocument: fn('getDocument'),
     uploadAttachment: fn('uploadAttachment'), removeAttachment: fn('removeAttachment'), sign: fn('sign'),
     decline: fn('decline'), getSigned: fn('getSigned'), verify: fn('verify'),
+    getDocumentFile: jest.fn(async (..._a: any[]) => Buffer.from('%PDF-1.7 documento')),
+    getSignedFile: jest.fn(async (..._a: any[]) => Buffer.from('%PDF-1.7 firmado')),
   };
 }
 
@@ -54,6 +58,21 @@ describe('Controlador público · cabeceras, validación, IP real y subida', () 
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(svc.getDocument).toHaveBeenCalledWith(TOKEN, SESSION);
+  });
+
+  it('el PDF sale en BYTES por la API (sin enlace de Storage), con token y sesión en cabeceras y sin caché', async () => {
+    for (const [path, fnName, body, filename] of [
+      ['document/file', 'getDocumentFile', '%PDF-1.7 documento', 'documento.pdf'],
+      ['signed/file', 'getSignedFile', '%PDF-1.7 firmado', 'documento-firmado.pdf'],
+    ] as const) {
+      const res = await fetch(`${url}/${path}`, { headers: { 'x-signature-token': TOKEN, 'x-signature-session': SESSION, ...XFF } });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/pdf');
+      expect(res.headers.get('content-disposition')).toBe(`inline; filename="${filename}"`);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      expect(await res.text()).toBe(body);
+      expect((svc as any)[fnName]).toHaveBeenCalledWith(TOKEN, SESSION);
+    }
   });
 
   it('el token NUNCA se acepta por la ruta ni por la query', async () => {
@@ -211,6 +230,12 @@ describe('Metadatos de seguridad de las rutas', () => {
     }
     const guards = Reflect.getMetadata('__guards__', SignaturePublicController) as unknown[];
     expect(guards).toContain(PublicThrottlerGuard);
+  });
+
+  it('los controladores públicos (firma y portal PBC) quedan FUERA del interceptor que firma URLs de Storage', () => {
+    expect(Reflect.getMetadata(SKIP_STORAGE_SIGNING_KEY, SignaturePublicController)).toBe(true);
+    expect(Reflect.getMetadata(SKIP_STORAGE_SIGNING_KEY, PbcPortalController)).toBe(true);
+    expect(Reflect.getMetadata(SKIP_STORAGE_SIGNING_KEY, SignatureRequestsController)).toBeUndefined();
   });
 
   it('NINGUNA ruta del controlador interno es pública, todas exigen al menos AUDITOR, y la integridad exige gerente', () => {

@@ -1,50 +1,52 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, ExternalLink, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Download, ExternalLink, RefreshCw, ShieldCheck } from 'lucide-react';
 import { sameHash, sha256Hex } from '@/lib/signature/helpers';
 import { Alert, Spinner } from './ui';
 
-export type Integrity = 'checking' | 'ok' | 'mismatch' | 'unverified';
+export type Integrity = 'checking' | 'ok' | 'mismatch' | 'error';
 
 /**
- * Muestra el PDF a firmar y COMPRUEBA en el navegador que es el que el servidor registró: baja el archivo,
+ * Muestra el PDF a firmar y COMPRUEBA en el navegador que es el que el servidor registró: pide los bytes a la API,
  * calcula su SHA-256 y lo compara con la huella que el servidor guardó al enviar el documento (docs/firma-externa-
- * por-enlace.md §3). Si no coinciden, el padre bloquea la firma. Si el navegador no puede bajarlo (red, CORS),
- * se muestra directo desde Storage con un aviso: el servidor repite la verificación al firmar.
+ * por-enlace.md §3). Lo que se muestra es exactamente lo que se verificó (el mismo buffer).
+ * Si no coinciden, o si no se pudo cargar, no se muestra nada y el padre bloquea la firma: nadie firma lo que no vio.
  */
-export function PdfViewer({ pdfUrl, expectedSha256, onIntegrity }: {
-  pdfUrl: string; expectedSha256: string; onIntegrity: (i: Integrity) => void;
+export function PdfViewer({ load, expectedSha256, onIntegrity }: {
+  load: () => Promise<ArrayBuffer>; expectedSha256: string; onIntegrity: (i: Integrity) => void;
 }) {
-  const [state, setState] = useState<{ phase: Integrity; blobUrl: string | null; actual: string | null }>({ phase: 'checking', blobUrl: null, actual: null });
+  const [state, setState] = useState<{ phase: Integrity; blobUrl: string | null }>({ phase: 'checking', blobUrl: null });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     let created: string | null = null;
+    setState({ phase: 'checking', blobUrl: null });
+    onIntegrity('checking');
     (async () => {
       try {
-        const res = await fetch(pdfUrl, { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const buf = await res.arrayBuffer();
+        const buf = await load();
         const actual = await sha256Hex(buf);
         if (cancelled) return;
         if (!sameHash(actual, expectedSha256)) {
-          setState({ phase: 'mismatch', blobUrl: null, actual });
+          setState({ phase: 'mismatch', blobUrl: null });
           onIntegrity('mismatch');
           return;
         }
         created = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
-        setState({ phase: 'ok', blobUrl: created, actual });
+        setState({ phase: 'ok', blobUrl: created });
         onIntegrity('ok');
       } catch {
         if (cancelled) return;
-        setState({ phase: 'unverified', blobUrl: null, actual: null });
-        onIntegrity('unverified');
+        setState({ phase: 'error', blobUrl: null });
+        onIntegrity('error');
       }
     })();
     return () => { cancelled = true; if (created) URL.revokeObjectURL(created); };
+    // `load` cambia en cada render del padre: el documento se vuelve a pedir solo al reintentar o si cambia la huella.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfUrl, expectedSha256]);
+  }, [expectedSha256, attempt]);
 
   if (state.phase === 'checking') return <Spinner label="Cargando el documento y verificando su huella…" />;
 
@@ -57,7 +59,19 @@ export function PdfViewer({ pdfUrl, expectedSha256, onIntegrity }: {
     );
   }
 
-  const src = state.blobUrl ?? pdfUrl;
+  if (state.phase === 'error' || !state.blobUrl) {
+    return (
+      <Alert tone="amber">
+        <p className="font-semibold">No pudimos cargar el documento.</p>
+        <p className="mt-1">Revisa tu conexión y vuelve a intentarlo. No podrás firmar hasta verlo.</p>
+        <button type="button" onClick={() => setAttempt((n) => n + 1)} className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-amber-900 underline underline-offset-2 hover:no-underline">
+          <RefreshCw className="h-4 w-4" aria-hidden="true" /> Reintentar
+        </button>
+      </Alert>
+    );
+  }
+
+  const src = state.blobUrl;
   return (
     <div>
       <div className="overflow-hidden rounded-xl border border-gray-300 bg-gray-100">
@@ -74,23 +88,13 @@ export function PdfViewer({ pdfUrl, expectedSha256, onIntegrity }: {
         <span className="text-xs text-gray-500 sm:ml-auto">En el teléfono, si no ves todas las páginas aquí, ábrelo en una pestaña nueva.</span>
       </div>
 
-      {state.phase === 'ok' ? (
-        <div className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs text-emerald-900">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="font-semibold">Huella verificada en tu navegador</p>
-            <p className="mt-0.5 break-all font-mono text-[11px] text-emerald-800">SHA-256: {expectedSha256}</p>
-          </div>
+      <div className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs text-emerald-900">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="font-semibold">Huella verificada en tu navegador</p>
+          <p className="mt-0.5 break-all font-mono text-[11px] text-emerald-800">SHA-256: {expectedSha256}</p>
         </div>
-      ) : (
-        <div className="mt-3">
-          <Alert tone="amber">
-            <span className="flex items-start gap-2"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>No pudimos verificar la huella desde tu navegador. Puedes continuar: el servidor la comprueba otra vez antes de registrar tu firma.</span></span>
-            <span className="mt-1 block break-all font-mono text-[11px]">SHA-256 registrada: {expectedSha256}</span>
-          </Alert>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

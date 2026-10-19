@@ -1,5 +1,5 @@
 import {
-  BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException,
+  BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Injectable, Logger, NotFoundException,
 } from '@nestjs/common';
 import { Prisma, SignatureDocumentType, SignatureRequest } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -26,6 +26,7 @@ import { internalRequestView } from './signature-views';
 // Un acta puede llegar a 50 000 caracteres (con tildes ocupan más bytes); el cuerpo de la petición ya está acotado a ~100 KB.
 const MAX_PAYLOAD_BYTES = 100_000;
 const ACTIVE = ['PENDING', 'VIEWED'] as const;
+const RESEAL_COOLDOWN_MS = 60_000;
 const fmtDeadline = (d: Date) =>
   new Intl.DateTimeFormat('es-SV', { timeZone: 'America/El_Salvador', dateStyle: 'long' }).format(d);
 
@@ -75,22 +76,27 @@ export class SignatureRequestsService {
     return (await this.prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { name: true } })).name;
   }
 
-  /** Cierra las solicitudes activas que cumplan `where`: estado, sesiones, bitácora y gancho del documento. */
+  /**
+   * Cierra las solicitudes activas que cumplan `where`: estado, sesiones, bitácora y gancho del documento.
+   * `includeExpired`: también las VENCIDAS (cuando el documento cambia o se reemplaza), para que «Reenviar» no pueda
+   * resucitar un PDF que ya no representa el documento (revisión de seguridad F5b, 2026-10-19).
+   */
   private async revokeActive(
     tx: Prisma.TransactionClient,
     where: Prisma.SignatureRequestWhereInput,
     reason: string,
     actorId: string,
     info: Partial<ClientInfo>,
-    opts: { adapterHook: boolean; targetUpdated: boolean },
+    opts: { adapterHook: boolean; targetUpdated: boolean; includeExpired?: boolean },
   ): Promise<SignatureRequest[]> {
-    const active = await tx.signatureRequest.findMany({ where: { ...where, status: { in: [...ACTIVE] } } });
+    const closable = opts.includeExpired ? [...ACTIVE, 'EXPIRED' as const] : [...ACTIVE];
+    const active = await tx.signatureRequest.findMany({ where: { ...where, status: { in: closable } } });
     const closed: SignatureRequest[] = [];
     for (const r of active) {
       await this.events.lock(tx, r.id);
       const now = new Date();
       const res = await tx.signatureRequest.updateMany({
-        where: { id: r.id, status: { in: [...ACTIVE] } },
+        where: { id: r.id, status: { in: closable } },
         data: { status: 'REVOKED', revokedAt: now, revokedById: actorId, revokedReason: reason },
       });
       if (res.count === 0) continue;
@@ -160,10 +166,10 @@ export class SignatureRequestsService {
     let replaced: SignatureRequest[] = [];
     try {
       ({ created, replaced } = await this.prisma.$transaction(async (tx) => {
-        // Una sola solicitud activa por documento: la nueva reemplaza a la anterior.
+        // Una sola solicitud activa por documento: la nueva reemplaza a la anterior (y a las vencidas, que ya no se reenvían).
         const replaced = await this.revokeActive(
           tx, { organizationId: user.organizationId, documentType: dto.documentType, targetId: dto.targetId },
-          'Reemplazada por una solicitud nueva', user.id, info, { adapterHook: false, targetUpdated: false },
+          'Reemplazada por una solicitud nueva', user.id, info, { adapterHook: false, targetUpdated: false, includeExpired: true },
         );
         const created = await tx.signatureRequest.create({
           data: {
@@ -265,6 +271,8 @@ export class SignatureRequestsService {
     const r0 = await this.load(user, id);
     const adapter = this.adapterFor(r0.documentType);
     this.assertRole(user, adapter);
+    // El documento de origen debe seguir siendo el que se congeló en el PDF y seguir esperando esta firma.
+    if (['PENDING', 'VIEWED', 'EXPIRED'].includes(r0.status)) await adapter.assertResendable?.(r0);
     if (!inPerson) await this.policy.assertDailyEmailCap(user.organizationId);
 
     const token = generateToken();
@@ -275,6 +283,11 @@ export class SignatureRequestsService {
 
     const updated = await this.prisma.$transaction(async (tx) => {
       await this.events.lock(tx, id);
+      // Nunca dos enlaces vivos para el mismo documento (una vencida no se reactiva si ya hay otra vigente).
+      const others = await tx.signatureRequest.count({
+        where: { organizationId: user.organizationId, documentType: r0.documentType, targetId: r0.targetId, id: { not: id }, status: { in: [...ACTIVE] } },
+      });
+      if (others > 0) throw new ConflictException('Ya hay otra solicitud vigente para este documento: reenvía esa o revócala primero.');
       const res = await tx.signatureRequest.updateMany({
         where: { id, organizationId: user.organizationId, status: { in: ['PENDING', 'VIEWED', 'EXPIRED'] } },
         data: {
@@ -322,7 +335,7 @@ export class SignatureRequestsService {
   ): Promise<SignatureRequest[]> {
     return this.revokeActive(
       tx, { organizationId: p.organizationId, documentType: p.documentType, targetId: p.targetId },
-      p.reason, p.actorId, {}, { adapterHook: false, targetUpdated: true },
+      p.reason, p.actorId, {}, { adapterHook: false, targetUpdated: true, includeExpired: true },
     );
   }
 
@@ -376,10 +389,27 @@ export class SignatureRequestsService {
   }
 
   // ─── Sellado manual ────────────────────────────────────────────────────────
+  /**
+   * «Reintentar sellado». Con freno (revisión de seguridad F5b, 2026-10-19): cada intento corre Chromium, Stirling y la
+   * autoridad de sello de tiempo, y un fallo de integridad avisa por correo; antes se podía repetir sin límite.
+   *  - un fallo de INTEGRIDAD (alguien tocó el PDF o la bitácora) solo lo reintenta un gerente o superior;
+   *  - entre un intento y el siguiente pasa al menos un minuto.
+   */
   async reseal(user: AuthUser, id: string) {
     const r = await this.load(user, id);
+    const last = await this.prisma.signatureEvent.findFirst({
+      where: { requestId: r.id, type: { in: ['SEAL_FAILED', 'INTEGRITY_FAILED', 'SEALED'] } },
+      orderBy: { seq: 'desc' }, select: { type: true, at: true },
+    });
+    if (last?.type === 'INTEGRITY_FAILED' && roleLevel(user.role) < roleLevel('AUDIT_MANAGER')) {
+      throw new ForbiddenException('La verificación de integridad falló: solo un gerente o superior puede reintentar el sellado.');
+    }
+    if (last && Date.now() - last.at.getTime() < RESEAL_COOLDOWN_MS) {
+      throw new HttpException('Espera un minuto antes de volver a intentar el sellado.', HttpStatus.TOO_MANY_REQUESTS);
+    }
     if (!(await this.sealing.requeue(r.id, user.organizationId))) throw new ConflictException('Solo se puede reintentar el sellado de una solicitud firmada con sellado pendiente o fallido.');
-    void this.sealing.sealRequest(r.id); // en segundo plano; el panel consulta el estado
+    // En segundo plano; el panel consulta el estado. Un error aquí nunca debe tumbar el proceso.
+    void this.sealing.sealRequest(r.id).catch((e) => this.logger.error(`Sellado manual de ${r.id} falló: ${(e as Error).message}`));
     return this.get(user, id);
   }
 }

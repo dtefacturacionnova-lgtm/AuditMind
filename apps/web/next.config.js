@@ -1,19 +1,9 @@
 /** @type {import('next').NextConfig} */
 
-// Origen de Supabase Storage (de donde sale el PDF a firmar, por URL firmada de 10 min). Se permite en frame-src
-// de las páginas de firma; el resto de orígenes externos NO se pueden incrustar.
-function supabaseOrigin() {
-  try {
-    return process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Encabezados de las páginas PÚBLICAS (firma, verificación y portal PBC; docs/firma-externa-por-enlace.md §14.3):
  *  - nada puede incrustar estas páginas (clickjacking sobre el botón "Firmar"): frame-ancestors 'none' + X-Frame-Options;
- *  - la página solo incrusta su propio contenido, blobs (el PDF ya verificado) y Storage;
+ *  - la página solo incrusta su propio contenido y blobs (el PDF ya verificado, servido por la API);
  *  - sin Referer (el fragmento #token nunca viaja, pero así tampoco la dirección de la página);
  *  - sin caché, sin indexado.
  *
@@ -54,18 +44,13 @@ const nextConfig = {
       },
     ],
   },
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/:path*`,
-      },
-    ];
-  },
+  // Sin rewrite de `/api/*` hacia la API (revisión F5b, 2026-10-19): nadie lo usaba (el navegador llama a
+  // NEXT_PUBLIC_API_URL) y Next compara rutas sin distinguir mayúsculas: `/API/...` esquivaba el `location /api/` de
+  // nginx, entraba por Next y llegaba a la API desde el propio servidor, con la IP del VPS en la evidencia de la firma.
   async headers() {
-    const storage = supabaseOrigin();
-    // La firma incrusta el PDF a firmar (blob ya verificado o URL firmada de Storage); el portal PBC no incrusta nada.
-    const signFrames = `'self' blob:${storage ? ` ${storage}` : ''}`;
+    // La firma incrusta SOLO el PDF ya verificado (blob:, bytes servidos por la API); ningún origen externo, ni Storage
+    // (revisión F5b, 2026-10-19). El portal PBC no incrusta nada.
+    const signFrames = "'self' blob:";
     return [
       // `:path*` también coincide con la ruta sin subruta (/firmar, /verificar, /portal).
       { source: '/firmar/:path*', headers: publicPageHeaders(signFrames) },

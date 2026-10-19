@@ -65,6 +65,11 @@ export class SignatureSealingService {
   }
 
   // ─── Sellado principal ─────────────────────────────────────────────────────
+  /**
+   * Nunca rechaza: se llama en segundo plano (`void`) y una promesa rechazada sin manejar tumba el proceso de Node
+   * (revisión de seguridad F5b, 2026-10-19). Si la BD falla incluso al registrar el fallo, se registra en el log y el cron
+   * lo vuelve a intentar.
+   */
   async sealRequest(id: string): Promise<SealOutcome> {
     if (this.inFlight.has(id)) return 'SKIPPED';
     this.inFlight.add(id);
@@ -81,6 +86,9 @@ export class SignatureSealingService {
       } catch (err) {
         return await this.handleFailure(req, err);
       }
+    } catch (err) {
+      this.logger.error(`Sellado de ${id} no pudo completarse ni registrarse: ${(err as Error).message?.slice(0, 200)}`);
+      return 'RETRY';
     } finally {
       this.inFlight.delete(id);
     }
@@ -227,6 +235,15 @@ export class SignatureSealingService {
       if (!req?.signedPdfPath) return false;
       await this.prisma.signatureRequest.update({ where: { id }, data: { sealAttempts: { increment: 1 } } });
       const current = await this.storage.download(req.signedPdfPath);
+      // Se sella el tiempo SOLO sobre el PDF que se selló: si el archivo guardado ya no es ese, no se "legitima" otro
+      // con una huella nueva (revisión de seguridad F5b, 2026-10-19).
+      if (!req.signedPdfSha256 || sha256Hex(current) !== req.signedPdfSha256) {
+        this.logger.error(`INTEGRIDAD: el PDF sellado de ${id} cambió; no se aplica el sello de tiempo`);
+        await this.events.appendStandalone(id, { type: 'INTEGRITY_FAILED', detail: { phase: 'timestamp', reason: 'la huella del PDF sellado no coincide' } });
+        await this.prisma.signatureRequest.update({ where: { id }, data: { sealAttempts: MAX_TIMESTAMP_ATTEMPTS } }); // no reintentar
+        await this.notifyCreator(req, 'integrity');
+        return false;
+      }
       const { pdf, tsa } = await this.timestamp(current);
       if (!tsa) return false;
       const sha = sha256Hex(pdf);

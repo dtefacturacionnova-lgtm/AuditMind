@@ -45,7 +45,8 @@ module.exports = {
       name: 'auditmind-web',
       cwd: '/home/deploy/auditmind/apps/web',
       script: '../../node_modules/.bin/next',
-      args: 'start -p 3008',
+      // Solo 127.0.0.1: el único camino de entrada es nginx (además del cortafuegos; revisión F5b, 2026-10-19).
+      args: 'start -H 127.0.0.1 -p 3008',
       env: {
         ...envBase,
         PORT: 3008,
@@ -74,6 +75,10 @@ module.exports = {
         ...envBase,
         DATABASE_URL: withPoolLimit(e.DATABASE_URL, 8),
         PORT: 4003,
+        // Solo 127.0.0.1: el único camino de entrada es nginx (además del cortafuegos; revisión F5b, 2026-10-19).
+        API_HOST: '127.0.0.1',
+        // Swagger está apagado en producción; SWAGGER_ENABLED=true en el .env lo vuelve a montar.
+        SWAGGER_ENABLED: e.SWAGGER_ENABLED,
         // CORS: permite el frontend VPS
         APP_URL: 'https://auditoria.ianovatechsystems.com',
         // ai-service corre internamente en el mismo VPS

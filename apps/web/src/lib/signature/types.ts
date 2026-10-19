@@ -48,7 +48,7 @@ export interface PublicDocument {
   signerRole: string | null;
   expiresAt: string | null;
   documentSha256: string;
-  pdfUrl: string;
+  // El PDF no viene como enlace: se pide a GET /document/file (signatureApi.getDocumentFile).
   consentVersion: string;
   consentText: string;
   privacyNotice: string;
@@ -60,7 +60,8 @@ export interface PublicDocument {
 export interface OtpSent { sent: true; maskedEmail: string; resendInSeconds: number }
 export interface OtpVerified { sessionToken: string; sessionExpiresAt: string }
 export interface SignResult { status: 'SIGNED'; verificationCode: string; sealing: true }
-export interface SignedDownload { sealing: boolean; failed: boolean; pdfUrl?: string }
+/** `ready`: la copia sellada se puede pedir a GET /signed/file. */
+export interface SignedDownload { sealing: boolean; failed: boolean; ready: boolean }
 
 export interface VerifyResult {
   valid: boolean;

@@ -21,7 +21,7 @@ export interface RequestCardProps {
   /** Gerente o superior: verificar integridad y bajar adjuntos originales sin reconstruir. */
   isManager: boolean;
   defaultOpen?: boolean;
-  /** Ofrece «Abrir para firma presencial» (actas de entrevista). */
+  /** Ofrece «Firma presencial» (actas de entrevista). */
   allowInPerson?: boolean;
   /** Vista propia de la respuesta del firmante (F2–F4). Si no se da, se muestra una lista genérica. */
   renderResponse?: (r: SignatureRequestView) => ReactNode;
@@ -196,7 +196,7 @@ export function SignatureRequestCard({ request: r, canManage, isManager, default
               <button type="button" className={ghostBtn} onClick={() => setDialog('resend')}><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Reenviar</button>
             )}
             {canManage && allowInPerson && canResend(r.status) && (
-              <button type="button" className={ghostBtn} onClick={() => setDialog('in-person')}><UserCheck className="h-3.5 w-3.5" aria-hidden="true" /> Abrir para firma presencial</button>
+              <button type="button" className={ghostBtn} onClick={() => setDialog('in-person')}><UserCheck className="h-3.5 w-3.5" aria-hidden="true" /> Firma presencial</button>
             )}
             {canManage && canReseal(r.status, r.sealStatus) && (
               <button type="button" className={ghostBtn} onClick={() => void runReseal()} disabled={reseal.isPending}>

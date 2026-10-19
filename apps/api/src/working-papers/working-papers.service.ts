@@ -1,7 +1,8 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException,
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException,
 } from '@nestjs/common';
 import { assertInOrg, assertCanSelfReview } from '../common/utils/tenant.util';
+import { assertInvestigationAccess, INVESTIGATION_SELECT, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -9,7 +10,7 @@ import {
 } from './dto/create-working-paper.dto';
 import { UpdateWorkingPaperDto, UpdateWorkingPaperStatusDto } from './dto/update-working-paper.dto';
 import { AuthUser } from '../auth/jwt.strategy';
-import { WorkingPaperStatus, UserRole, TickMark, WpKind, SyncStatus, Prisma } from '@prisma/client';
+import { WorkingPaperStatus, UserRole, TickMark, WpKind, SyncStatus, Prisma, SignatureDocumentType } from '@prisma/client';
 import { PaperGraphService } from './paper-graph.service';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PAPER_CATALOGUE, ALLOWED_CODES_BY_AUDIT_TYPE } from './paper-catalogue';
@@ -185,7 +186,7 @@ export class WorkingPapersService {
     auditId?: string,
   ) {
     const where = {
-      audit: { organizationId: user.organizationId },
+      audit: visibleAuditWhere(user), // sin las auditorías en modo investigación ajenas a su equipo
       ...(status  && { status }),
       ...(auditId && { auditId }),
     };
@@ -231,6 +232,9 @@ export class WorkingPapersService {
     });
     if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
     if (wp.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    // Modo investigación: el papel (y todo lo que pasa por findOne) solo para el equipo, CAE, ADMIN y SUPER_ADMIN
+    // (revisión de seguridad F5b, 2026-10-19: antes bastaba con ser de la organización).
+    assertInvestigationAccess(wp.audit, user);
     return wp;
   }
 
@@ -847,9 +851,17 @@ export class WorkingPapersService {
   async remove(id: string, user: AuthUser): Promise<{ deleted: boolean }> {
     const wp = await this.prisma.workingPaper.findFirst({
       where: { id, audit: { organizationId: user.organizationId } },
-      select: { id: true },
+      select: { id: true, audit: { select: INVESTIGATION_SELECT } },
     });
     if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
+    assertInvestigationAccess(wp.audit, user);
+    // Las actas enviadas a firma (firmadas, rechazadas o revocadas) son evidencia: sin el papel nadie podría verlas.
+    const signatureHistory = await this.prisma.signatureRequest.count({
+      where: { organizationId: user.organizationId, documentType: SignatureDocumentType.INTERVIEW_RECORD, targetId: id },
+    });
+    if (signatureHistory > 0) {
+      throw new ConflictException('Este papel tiene actas enviadas a firma electrónica y se conserva como evidencia: no se puede eliminar.');
+    }
 
     // All child records (PaperSection, WorkingPaperVersion, WorkingPaperComment,
     // TickMarkEntry, PaperLink) have onDelete: Cascade — one delete suffices.

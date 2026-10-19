@@ -1,7 +1,7 @@
 import { Controller, Get, INestApplication, UseGuards } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Throttle, ThrottlerModule } from '@nestjs/throttler';
-import { PublicThrottlerGuard } from './public-throttle';
+import { PublicThrottlerGuard, throttleKey } from './public-throttle';
 
 @Controller('t')
 @UseGuards(PublicThrottlerGuard)
@@ -66,5 +66,20 @@ describe('sin trust proxy (el error que evita main.ts)', () => {
   it('todas las IP parecen una sola y se bloquean entre sí', async () => {
     await hit(url, 'a', '10.0.0.1'); await hit(url, 'a', '10.0.0.2'); await hit(url, 'a', '10.0.0.3');
     expect((await hit(url, 'a', '10.0.0.4')).status).toBe(429); // otro cliente distinto, bloqueado igual
+  });
+});
+
+describe('throttleKey: qué cuenta como "la misma IP"', () => {
+  it('IPv4 tal cual; IPv4 mapeada en IPv6 cuenta como su IPv4', () => {
+    expect(throttleKey('203.0.113.7')).toBe('203.0.113.7');
+    expect(throttleKey('::ffff:203.0.113.7')).toBe('203.0.113.7');
+    expect(throttleKey('')).toBe('unknown');
+  });
+  it('IPv6 cuenta por su /64: rotar direcciones dentro del mismo /64 no da cupos nuevos', () => {
+    const a = throttleKey('2001:db8:abcd:12::1');
+    expect(a).toBe('2001:db8:abcd:12::/64');
+    expect(throttleKey('2001:db8:abcd:12:ffff:ffff:ffff:fffe')).toBe(a);
+    expect(throttleKey('2001:DB8:ABCD:0012:0:0:0:99')).toBe(a);
+    expect(throttleKey('2001:db8:abcd:13::1')).not.toBe(a); // otro /64, otro cliente
   });
 });

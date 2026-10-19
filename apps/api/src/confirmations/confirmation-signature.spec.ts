@@ -13,7 +13,7 @@ const SIGN = { signedName: 'Juan Banco Pérez', signedRole: 'Gerente de Cumplimi
 /** Arnés de firma + confirmación + auditoría reales (BD falsa), con el adaptador REAL de la confirmación registrado. */
 function setup(opts: { investigation?: boolean; team?: string[] } = {}) {
   const h = buildHarness();
-  h.fake.seedAudit({ isInvestigationMode: !!opts.investigation });
+  h.fake.seedAudit({ isInvestigationMode: !!opts.investigation, team: (opts.team ?? []).map((userId) => ({ userId })) });
   h.fake.seedConfirmation();
   const confirmations = new ConfirmationsService(h.prisma as any, h.requests);
   // El criterio de equipo es el servicio REAL, con una BD mínima que le responde lo que necesita.
@@ -309,6 +309,90 @@ describe('Confirmación externa · modo investigación', () => {
     const ctx = setup({ investigation: false });
     await ctx.send({}, {}, user('AUDITOR', 'cualquiera'));
     expect(ctx.conf().status).toBe('SENT');
+  });
+});
+
+describe('Confirmación externa · revisión de seguridad F5b', () => {
+  it('firma el confirmante REGISTRADO: otro correo se rechaza (quien envía no puede responder por el banco)', async () => {
+    const { h, conf, send } = setup();
+    await expect(send({}, { signerEmail: 'cuenta.propia@gmail.com' })).rejects.toThrow(/correo del confirmante registrado \(confirmaciones@banco\.com\)/);
+    expect(h.fake.requests).toHaveLength(0);
+    expect(conf().status).toBe('DRAFT');
+    await expect(send({}, { signerEmail: '  Confirmaciones@BANCO.com ' })).resolves.toBeDefined(); // mayúsculas y espacios no importan
+  });
+
+  it('el servicio de confirmaciones aplica el modo investigación en cada entrada y en los listados', async () => {
+    const ctx = setup({ investigation: true, team: ['u-team'] });
+    const outsider = user('AUDITOR', 'u-fuera');
+    const member = user('AUDITOR', 'u-team');
+    await ctx.send({}, {}, member);
+    const c = ctx.confirmations;
+    await expect(c.findOne('conf1', outsider)).rejects.toThrow(/modo investigación/);
+    await expect(c.findAllForAudit('aud1', outsider)).rejects.toThrow(/modo investigación/);
+    await expect(c.markNoResponse('conf1', outsider)).rejects.toThrow(/modo investigación/);
+    await expect(c.receiveResponse('conf1', { responseContent: 'Inventada', responseAmount: 1250.5 } as any, outsider)).rejects.toThrow(/modo investigación/);
+    await expect(c.update('conf1', { respondentEmail: 'suyo@x.com' } as any, outsider)).rejects.toThrow(/modo investigación/);
+    await expect(c.create({ auditId: 'aud1', type: 'BANK', respondentName: 'X', respondentEmail: 'x@x.com' } as any, outsider)).rejects.toThrow(/modo investigación/);
+    expect((await c.findAllForOrg(outsider)).data).toHaveLength(0);
+    expect((await c.getOrgStats(outsider)).total).toBe(0);
+    expect(ctx.conf().status).toBe('SENT'); // nada cambió: el enlace del banco sigue vivo
+    expect(ctx.h.fake.requests[0].status).toBe('PENDING');
+
+    expect((await c.findAllForOrg(member)).data).toHaveLength(1);
+    expect((await c.findAllForOrg(user('CAE', 'u-cae'))).data).toHaveLength(1);
+    await expect(c.findOne('conf1', member)).resolves.toBeDefined();
+  });
+
+  it('una confirmación con historial de firma no se puede eliminar (es evidencia); sin historial, sí', async () => {
+    const ctx = setup();
+    const { id } = await ctx.send();
+    await ctx.h.requests.revoke(auditor, id, 'Me equivoqué de fecha de corte', INFO); // vuelve a borrador
+    expect(ctx.conf().status).toBe('DRAFT');
+    await expect(ctx.confirmations.remove('conf1', auditor)).rejects.toThrow(/historial de firma electrónica/);
+    expect(ctx.h.fake.tables.externalConfirmation).toHaveLength(1);
+
+    ctx.h.fake.seedConfirmation({ id: 'conf2' });
+    await expect(ctx.confirmations.remove('conf2', auditor)).resolves.toEqual({ message: 'Confirmación eliminada' });
+  });
+
+  it('una solicitud VENCIDA no se reenvía si la confirmación cambió; y editarla cierra también las vencidas', async () => {
+    const ctx = setup();
+    const { id } = await ctx.send();
+    ctx.request(id).status = 'EXPIRED';
+    ctx.conf().amount = 2000; // el dato que vio el banco ya no es el vigente
+    await expect(ctx.h.requests.resend(auditor, id, {}, INFO)).rejects.toThrow(/La confirmación cambió/);
+    expect(ctx.request(id).status).toBe('EXPIRED');
+
+    ctx.conf().amount = 1250.5;
+    ctx.conf().status = 'DRAFT';
+    await ctx.confirmations.update('conf1', { amount: 1999 } as any, auditor);
+    expect(ctx.request(id)).toMatchObject({ status: 'REVOKED', revokedReason: 'Los datos de la confirmación cambiaron después de enviarla' });
+  });
+
+  it('si la confirmación se edita MIENTRAS se arma el PDF, la solicitud no se crea (el PDF congelado ya no la representa)', async () => {
+    const ctx = setup();
+    const generate = ctx.h.pdf.generateBranded.bind(ctx.h.pdf);
+    jest.spyOn(ctx.h.pdf, 'generateBranded').mockImplementationOnce(async (args: any) => {
+      ctx.conf().amount = 9999; // otra pestaña guarda un monto nuevo justo ahora
+      return generate(args);
+    });
+    await expect(ctx.send()).rejects.toThrow(/cambió mientras se preparaba el documento/);
+    expect(ctx.h.fake.requests).toHaveLength(0);
+    expect(ctx.conf().status).toBe('DRAFT');
+    expect([...ctx.h.storage.files.keys()].some((k) => k.endsWith('/original.pdf'))).toBe(false);
+  });
+
+  it('«sin respuesta» no pisa una respuesta firmada que llegó en el mismo instante', async () => {
+    const ctx = setup();
+    await ctx.send();
+    const revoke = ctx.h.requests.revokeActiveForTarget.bind(ctx.h.requests);
+    jest.spyOn(ctx.h.requests, 'revokeActiveForTarget').mockImplementationOnce(async (tx: any, p: any) => {
+      ctx.conf().status = 'RECEIVED'; // el banco firmó mientras el auditor pulsaba «sin respuesta»
+      return revoke(tx, p);
+    });
+    await expect(ctx.confirmations.markNoResponse('conf1', auditor)).rejects.toThrow(/cambió de estado/);
+    // La BD falsa deshace la transacción entera (también el cambio simulado); lo que importa: nunca quedó NO_RESPONSE.
+    expect(ctx.conf().status).not.toBe('NO_RESPONSE');
   });
 });
 

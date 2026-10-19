@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
+import { safeAfterLoginPath } from '@/lib/safe-redirect';
 
 /**
  * Reemplaza el antiguo route.ts (servidor, solo sabía leer `?code=` — flujo
@@ -32,7 +33,7 @@ export default function AuthCallbackPage() {
     );
 
     const params = new URLSearchParams(window.location.search);
-    const next = params.get('next') ?? '/dashboard';
+    const next = safeAfterLoginPath(params.get('next')); // solo rutas del panel: nunca otro sitio ni javascript:
     const code = params.get('code');
 
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));

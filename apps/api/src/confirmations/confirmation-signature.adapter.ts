@@ -35,6 +35,18 @@ const longDateTimeSv = (d: Date) =>
 type StoredPayload = { mode: ConfirmationMode; currency: string; asOfDate: string; amountShown: number | null };
 const payloadOf = (p: Record<string, unknown>) => p as unknown as StoredPayload;
 
+const sameEmail = (a: string, b: string | null | undefined) => !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Huella de lo que el confirmante ve de la confirmación: si cambia entre preparar el PDF y crear la solicitud, se aborta. */
+export function confirmationFingerprint(c: {
+  type: string; respondentName: string; respondentEmail: string; amount: unknown; accountRef: string | null;
+}): string {
+  const amount = c.amount == null ? null : Number(c.amount);
+  return createHash('sha256')
+    .update(JSON.stringify([c.type, c.respondentName, c.respondentEmail.trim().toLowerCase(), amount, c.accountRef ?? null]))
+    .digest('hex');
+}
+
 /**
  * Firma electrónica de la CONFIRMACIÓN EXTERNA (NIA 505) — docs/firma-externa-por-enlace.md §11.2 y §12.
  *
@@ -85,6 +97,14 @@ export class ConfirmationSignatureAdapter implements SignatureDocumentAdapter, O
     await this.access.assertAccess(conf.auditId, ctx.user);
     if (!SENDABLE.includes(conf.status)) {
       throw new ConflictException('Solo se envía a firma una confirmación en borrador o ya enviada que todavía no tiene respuesta.');
+    }
+    // NIA 505: firma el confirmante REGISTRADO. Si el enlace pudiera ir a otro correo, quien envía podría responder por
+    // el banco desde su propio buzón (revisión de seguridad F5b, 2026-10-19).
+    if (!sameEmail(ctx.signer.email, conf.respondentEmail)) {
+      throw new BadRequestException(
+        `La confirmación se firma desde el correo del confirmante registrado (${conf.respondentEmail}). ` +
+        'Si ese correo no es el correcto, corrígelo en la confirmación (en borrador) antes de enviarla.',
+      );
     }
 
     const amount = conf.amount != null ? Number(conf.amount) : null;
@@ -138,9 +158,23 @@ Responda <strong>directamente a ${escHtml(org.name)}</strong>, no a la entidad a
       payload: {
         mode: p.mode, asOfDate: p.asOfDate, currency: p.currency, amountShown: shown, accountRef: conf.accountRef,
         confirmationType: conf.type, recipientVerified: true, authorizationPath: p.authorizationPath, authorizationSha256,
+        sourceFingerprint: confirmationFingerprint(conf),
       },
       appendPdfs,
     };
+  }
+
+  // ─── Reenviar ──────────────────────────────────────────────────────────────
+  /** Solo se reenvía si la confirmación sigue ENVIADA (sin respuesta) y con los mismos datos que se congelaron en el PDF. */
+  async assertResendable(request: SignatureRequest): Promise<void> {
+    const conf = await this.prisma.externalConfirmation.findFirst({
+      where: { id: request.targetId, audit: { organizationId: request.organizationId } },
+    });
+    if (!conf) throw new NotFoundException('Confirmación no encontrada');
+    const expected = (request.payload as Record<string, unknown> | null)?.sourceFingerprint;
+    if (conf.status !== ConfirmationStatus.SENT || expected !== confirmationFingerprint(conf)) {
+      throw new ConflictException('La confirmación cambió (o ya tiene respuesta) desde que se creó esta solicitud: envía una solicitud nueva.');
+    }
   }
 
   // ─── Formulario del firmante ───────────────────────────────────────────────
@@ -166,7 +200,8 @@ Responda <strong>directamente a ${escHtml(org.name)}</strong>, no a la entidad a
   }
 
   validateResponse(payload: Record<string, unknown>, response: unknown): Record<string, unknown> {
-    return { ...parseResponse(response, payloadOf(payload).mode) };
+    const { mode, amountShown } = payloadOf(payload);
+    return { ...parseResponse(response, mode, amountShown) };
   }
 
   summarizeResponse(payload: Record<string, unknown>, response: Record<string, unknown>): Array<[string, string]> {
@@ -188,6 +223,13 @@ Responda <strong>directamente a ${escHtml(org.name)}</strong>, no a la entidad a
       data: { status: ConfirmationStatus.SENT, sentAt: new Date(), sentBy: sender?.name ?? sender?.email ?? 'AuditMind' },
     });
     if (res.count === 0) throw new ConflictException('La confirmación cambió de estado mientras se enviaba. Inténtalo de nuevo.');
+    // La fila ya quedó bloqueada por la escritura: si alguien editó la confirmación entre que se armó el PDF y ahora,
+    // el PDF congelado ya no la representa y la solicitud no se crea.
+    const now = await tx.externalConfirmation.findUniqueOrThrow({ where: { id: request.targetId } });
+    const expected = (request.payload as Record<string, unknown> | null)?.sourceFingerprint;
+    if (expected !== confirmationFingerprint(now)) {
+      throw new ConflictException('La confirmación cambió mientras se preparaba el documento. Revisa los datos y vuelve a enviarla.');
+    }
   }
 
   async onSigned(tx: Prisma.TransactionClient, ctx: SignedContext): Promise<void> {

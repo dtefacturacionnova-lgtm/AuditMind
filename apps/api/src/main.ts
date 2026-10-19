@@ -51,21 +51,27 @@ async function bootstrap() {
   // Prefijo global de la API
   app.setGlobalPrefix('api/v1');
 
-  // Swagger/OpenAPI
-  const config = new DocumentBuilder()
-    .setTitle('AuditMind API')
-    .setDescription('API de la plataforma de auditoría inteligente AuditMind')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger/OpenAPI: en producción NO se publica el mapa de endpoints y DTOs internos salvo SWAGGER_ENABLED=true
+  // (revisión de seguridad F5b, 2026-10-19).
+  const swagger = process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true';
+  if (swagger) {
+    const config = new DocumentBuilder()
+      .setTitle('AuditMind API')
+      .setDescription('API de la plataforma de auditoría inteligente AuditMind')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
-  // Railway inyecta PORT automáticamente; PORT_API es el fallback local
+  // Railway inyecta PORT automáticamente; PORT_API es el fallback local.
+  // En el VPS API_HOST=127.0.0.1 (ecosystem): solo nginx llega a la API. En local escucha en todas las interfaces.
   const port = process.env.PORT ?? process.env.PORT_API ?? 3001;
-  await app.listen(port, '0.0.0.0');
-  console.log(`🚀 AuditMind API corriendo en http://0.0.0.0:${port}/api/v1`);
-  console.log(`📚 Swagger en http://localhost:${port}/api/docs`);
+  const host = process.env.API_HOST || '0.0.0.0';
+  await app.listen(port, host);
+  console.log(`🚀 AuditMind API corriendo en http://${host}:${port}/api/v1`);
+  if (swagger) console.log(`📚 Swagger en http://localhost:${port}/api/docs`);
 }
 
 bootstrap();

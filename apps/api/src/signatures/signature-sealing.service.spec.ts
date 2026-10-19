@@ -7,6 +7,9 @@ import { MAX_SEAL_ATTEMPTS } from './signature-sealing.service';
 
 const SIGN = { signedName: 'Juan Pérez', signedRole: 'Gerente', consent: true, response: { agrees: true, comments: 'Conforme' } } as any;
 
+/** El freno de «Reintentar sellado» mira Date.now(): se adelanta sin tocar la hora de los eventos (que va en su huella). */
+const twoMinutesLater = () => { const t = Date.now() + 2 * 60_000; jest.spyOn(Date, 'now').mockReturnValue(t); };
+
 /** Una solicitud ya firmada, lista para sellar (el sellado automático se desactiva para controlarlo desde la prueba). */
 async function signed(env: Record<string, string> = {}) {
   const h = buildHarness(env);
@@ -143,11 +146,41 @@ describe('Sellado', () => {
     expect(h.email.sendSignatureSealFailed).toHaveBeenCalledTimes(1);
     expect(await h.sealing.sealRequest(id)).toBe('SKIPPED'); // ya no se toca solo
 
-    // el auditor reintenta desde el panel y esta vez funciona
+    // el auditor reintenta desde el panel: recién falló, así que primero debe esperar un minuto…
     (h.pdf.generateBranded as any).mockRestore?.();
-    await h.requests.reseal(user('AUDITOR'), id); // dispara el sellado en segundo plano
+    await expect(h.requests.reseal(user('AUDITOR'), id)).rejects.toMatchObject({ status: 429 });
+    twoMinutesLater(); // …pasan dos minutos (sin tocar la bitácora encadenada)
+    await h.requests.reseal(user('AUDITOR'), id); // dispara el sellado en segundo plano y esta vez funciona
     for (let i = 0; i < 100 && row().sealStatus !== 'SEALED'; i++) await new Promise((r) => setTimeout(r, 20));
     expect(row().sealStatus).toBe('SEALED');
+  });
+
+  it('tras un fallo de INTEGRIDAD solo un gerente puede reintentar el sellado', async () => {
+    const { h, id, row } = await signed();
+    h.storage.files.set(row().documentPath, await makePdf(5)); // alguien reemplazó el original
+    expect(await h.sealing.sealRequest(id)).toBe('FAILED');
+    twoMinutesLater();
+    await expect(h.requests.reseal(user('AUDITOR'), id)).rejects.toMatchObject({ status: 403 });
+    await expect(h.requests.reseal(user('AUDIT_MANAGER'), id)).resolves.toBeDefined();
+  });
+
+  it('un error de la base de datos al sellar en segundo plano NO rechaza la promesa (no tumba el proceso)', async () => {
+    const { h, id } = await signed();
+    jest.spyOn(h.prisma.signatureRequest, 'updateMany').mockRejectedValueOnce(new Error('EMAXCONNSESSION'));
+    await expect(h.sealing.sealRequest(id)).resolves.toBe('RETRY');
+  });
+
+  it('el sello de tiempo pendiente NO se aplica si el PDF sellado guardado cambió', async () => {
+    const { h, id, row } = await signed();
+    jest.spyOn(h.pdfTools, 'timestampPdf').mockRejectedValue(new Error('TSA caída'));
+    expect(await h.sealing.sealRequest(id)).toBe('SEALED');
+    expect(row().tsaUrlUsed).toBeNull();
+    (h.pdfTools.timestampPdf as any).mockRestore?.();
+    h.storage.files.set(row().signedPdfPath!, await makePdf(7)); // alguien reemplazó la copia sellada
+    expect(await h.sealing.retryTimestamp(id)).toBe(false);
+    expect(row().tsaUrlUsed).toBeNull();
+    expect(h.fake.events.at(-1)).toMatchObject({ type: 'INTEGRITY_FAILED', detail: { phase: 'timestamp' } });
+    expect(h.email.sendSignatureIntegrityAlert).toHaveBeenCalled();
   });
 
   it('dos ejecuciones simultáneas sellan UNA sola vez', async () => {

@@ -8,8 +8,8 @@ const ORG = 'org1';
 const user = { id: 'u1', organizationId: ORG, email: 'a@x.com', name: 'Aud', role: 'AUDITOR' } as any;
 const otherOrgUser = { ...user, organizationId: 'org2' } as any;
 
-/** BD falsa en memoria: solo lo que usa PbcService. */
-function fakePrisma() {
+/** BD falsa en memoria: solo lo que usa PbcService. `audit` es la auditoría aud1 (modo investigación y equipo). */
+function fakePrisma(audit: { isInvestigationMode: boolean; team: Array<{ userId: string }> } = { isInvestigationMode: false, team: [] }) {
   const rows: any[] = [];
   const messages: any[] = [];
   let n = 0;
@@ -23,7 +23,7 @@ function fakePrisma() {
   };
   return {
     rows, messages,
-    audit: { findFirst: async ({ where }: any) => (where.id === 'aud1' && where.organizationId === ORG ? { id: 'aud1' } : null) },
+    audit: { findFirst: async ({ where }: any) => (where.id === 'aud1' && where.organizationId === ORG ? { id: 'aud1', ...audit } : null) },
     pbcRequest: {
       create: async ({ data }: any) => { const r = { id: `p${++n}`, createdAt: new Date(), updatedAt: new Date(), fileUrls: [], ...data, audit: { id: data.auditId, title: 'Auditoría' } }; rows.push(r); return { ...r }; },
       findUnique: async ({ where, select }: any) => { const r = rows.find((x) => (where.id ? x.id === where.id : x.portalTokenHash === where.portalTokenHash)); return r ? project(r, select) : null; },
@@ -36,8 +36,8 @@ function fakePrisma() {
   };
 }
 
-function makeService(env: Record<string, string> = { ENCRYPTION_KEY: KEY }) {
-  const prisma = fakePrisma();
+function makeService(env: Record<string, string> = { ENCRYPTION_KEY: KEY }, audit?: Parameters<typeof fakePrisma>[0]) {
+  const prisma = fakePrisma(audit);
   const config = { get: (k: string, d?: string) => env[k] ?? d } as any;
   const email = { portalUrl: (t: string) => `https://app.test/portal#${t}` } as any;
   return { svc: new PbcService(prisma as any, config, email), prisma };
@@ -168,6 +168,32 @@ describe('Portal PBC · el equipo auditor y su organización', () => {
     await expect(svc.getPortalLink(id, user)).rejects.toBeInstanceOf(ConflictException);
     prisma.rows[0].portalTokenEncrypted = 'basura.basura.basura';
     await expect(svc.getPortalLink(id, user)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('modo investigación: fuera del equipo nadie ve la solicitud, recupera ni regenera el enlace del auditado, ni escribe', async () => {
+    const investigation = { isInvestigationMode: true, team: [{ userId: 'u2' }] };
+    const { svc, prisma } = makeService({ ENCRYPTION_KEY: KEY }, investigation);
+    const teamMember = { ...user, id: 'u2' };
+    await svc.create(dto, teamMember);
+    const id = prisma.rows[0].id;
+    prisma.rows[0].organizationId = ORG;
+    prisma.rows[0].audit = { ...prisma.rows[0].audit, organizationId: ORG };
+    const before = prisma.rows[0].portalTokenHash;
+
+    await expect(svc.create(dto, user)).rejects.toThrow(/modo investigación/);
+    await expect(svc.findAllForAudit('aud1', user)).rejects.toThrow(/modo investigación/);
+    await expect(svc.findOneForAuditor(id, user)).rejects.toThrow(/modo investigación/);
+    await expect(svc.getPortalLink(id, user)).rejects.toThrow(/modo investigación/);
+    await expect(svc.regenerateToken(id, user)).rejects.toThrow(/modo investigación/);
+    await expect(svc.addAuditorMessage(id, user, 'hola')).rejects.toThrow(/modo investigación/);
+    await expect(svc.review(id, 'ACCEPTED' as any, undefined, user)).rejects.toThrow(/modo investigación/);
+    await expect(svc.getStats('aud1', user)).rejects.toThrow(/modo investigación/);
+    expect(prisma.rows[0].portalTokenHash).toBe(before); // el enlace del auditado sigue intacto
+    expect(prisma.messages).toHaveLength(0);
+
+    // El equipo y CAE sí.
+    await expect(svc.getPortalLink(id, teamMember)).resolves.toMatchObject({ url: expect.stringContaining('#') });
+    await expect(svc.getPortalLink(id, { ...user, role: 'CAE' })).resolves.toBeDefined();
   });
 
   it('con otra ENCRYPTION_KEY la copia no se puede descifrar (la BD sola no revela el enlace)', async () => {

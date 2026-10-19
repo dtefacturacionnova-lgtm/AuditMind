@@ -83,8 +83,10 @@ export interface ConfirmationResponse {
 /**
  * `agrees` es obligatorio. `confirmedAmount` es obligatorio si no está de acuerdo o si el saldo venía en blanco; si se manda,
  * debe ser un número ≥ 0 con a lo sumo 2 decimales. `comments` ≤ 4000.
+ * «De acuerdo» con el saldo mostrado y a la vez un saldo DISTINTO es contradictorio y se rechaza: si no, la confirmación
+ * quedaba sin diferencia mientras el PDF sellado mostraba el otro saldo (revisión de seguridad F5b, 2026-10-19).
  */
-export function parseResponse(raw: unknown, mode: ConfirmationMode): ConfirmationResponse {
+export function parseResponse(raw: unknown, mode: ConfirmationMode, amountShown: number | null = null): ConfirmationResponse {
   const r = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
   const allowed = new Set(['agrees', 'confirmedAmount', 'comments']);
   if (Object.keys(r).some((k) => !allowed.has(k))) throw bad('La respuesta contiene datos que no corresponden a este documento.');
@@ -102,6 +104,9 @@ export function parseResponse(raw: unknown, mode: ConfirmationMode): Confirmatio
   }
   if (mustWriteAmount && confirmedAmount === null) {
     throw bad(mode === 'POSITIVE_BLANK' ? 'Escribe el saldo según tus registros.' : 'Si no estás de acuerdo, escribe el saldo según tus registros.');
+  }
+  if (mode === 'POSITIVE_WITH_AMOUNT' && r.agrees === true && confirmedAmount !== null && confirmedAmount !== amountShown) {
+    throw bad('Marcaste que estás de acuerdo con el saldo, pero escribiste uno distinto. Si tu saldo es otro, marca que no estás de acuerdo; si estás de acuerdo, deja vacío el saldo.');
   }
 
   const comments = typeof r.comments === 'string' ? r.comments.trim() : '';

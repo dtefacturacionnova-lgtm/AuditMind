@@ -79,6 +79,12 @@ export interface SignatureDocumentAdapter {
    * encargo). Lanza Forbidden/NotFound si no. Si el adaptador no lo define, basta con pertenecer a la organización.
    */
   assertAccess?(user: AuthUser, targetId: string): Promise<void>;
+  /**
+   * Antes de REENVIAR (o abrir para firma presencial) una solicitud, sobre todo una vencida: ¿el documento de origen sigue
+   * siendo lo que se congeló en el PDF y sigue esperando esta firma? Lanza Conflict si no (p. ej. la carta se editó
+   * después). Revisión de seguridad F5b (2026-10-19): reenviar resucitaba el PDF viejo sin mirar el origen.
+   */
+  assertResendable?(request: SignatureRequest): Promise<void>;
   /** Valida y normaliza la respuesta del firmante; lanza BadRequestException si es inválida. */
   validateResponse(payload: Record<string, unknown>, response: unknown): Record<string, unknown>;
   /** Campos del formulario que ve el firmante. */

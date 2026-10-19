@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { buildHarness, INFO, OTP_KEY, useClock } from './testing/harness';
+import { buildHarness, INFO, OTP_KEY, useClock, user } from './testing/harness';
 import { deriveOtpKey, hmacOtp, hashToken, generateToken } from './signature-crypto.util';
 
 const MIN = 60_000;
@@ -148,12 +148,81 @@ describe('Firma pública · código de verificación por correo', () => {
     await expect(h.public.sendOtp(token, INFO)).rejects.toMatchObject({ status: 503 });
   });
 
-  it('el tope diario de correos de la organización también frena los códigos', async () => {
+  const pushEvents = (h: ReturnType<typeof buildHarness>, requestId: string, type: string, n: number) => {
+    for (let i = 0; i < n; i++) {
+      h.fake.tables.signatureEvent.push({ id: `${type}${i}`, requestId, seq: 1000 + i, type, at: new Date(), ip: null, userAgent: null, actorId: null, detail: null, prevHash: '', hash: '' });
+    }
+  };
+
+  it('los códigos tienen su PROPIO tope por organización: agotar las invitaciones no los frena, ni ellos a las invitaciones', async () => {
+    const h = buildHarness();
+    const { id, token } = await h.create();
+    pushEvents(h, id, 'SENT', 300); // tope de invitaciones agotado…
+    await expect(h.public.sendOtp(token, INFO)).resolves.toMatchObject({ sent: true }); // …el firmante igual recibe su código
+    await expect(h.create({ targetId: 'conf9' })).rejects.toMatchObject({ status: 429 }); // y el equipo sí está frenado
+
+    const h2 = buildHarness();
+    const r2 = await h2.create();
+    pushEvents(h2, r2.id, 'OTP_SENT', 1000); // un tercero pidió 1000 códigos hoy: ya no salen más códigos…
+    await expect(h2.public.sendOtp(r2.token, INFO)).rejects.toMatchObject({ status: 429 });
+    await expect(h2.create({ targetId: 'conf2' })).resolves.toBeDefined(); // …pero el equipo sigue enviando documentos
+  });
+
+  it('máximo 10 códigos por día por solicitud (aunque se respete el de 5 por hora)', async () => {
     const h = buildHarness();
     const { token } = await h.create();
-    const reqId = h.fake.requests[0].id;
-    for (let i = 0; i < 300; i++) h.fake.tables.signatureEvent.push({ id: `x${i}`, requestId: reqId, seq: 100 + i, type: 'SENT', at: new Date(), ip: null, userAgent: null, actorId: null, detail: null, prevHash: '', hash: '' });
-    await expect(h.public.sendOtp(token, INFO)).rejects.toMatchObject({ status: 429 });
+    for (let i = 0; i < 10; i++) { await h.public.sendOtp(token, INFO); clock.advance(i % 5 === 4 ? HOUR : 61_000); }
+    await expect(h.public.sendOtp(token, INFO)).rejects.toThrow(/demasiados códigos/);
+    clock.advance(24 * HOUR);
+    await expect(h.public.sendOtp(token, INFO)).resolves.toMatchObject({ sent: true });
+  });
+
+  it('ya firmada, el código solo sirve para descargar: 3 por día; y la hora de «correo verificado» no cambia', async () => {
+    const h = buildHarness();
+    const { id, token } = await h.create();
+    const session = await h.openSession(token);
+    const verifiedAt = h.fake.requests.find((r) => r.id === id)!.otpVerifiedAt;
+    clock.advance(5_000); // el código de antes de firmar no cuenta en el tope de después
+    await h.public.sign(token, session, { signedName: 'Juan Pérez', signedRole: 'Gerente', consent: true, response: { agrees: true } } as any, INFO);
+    for (let i = 0; i < 3; i++) {
+      clock.advance(HOUR);
+      await h.public.sendOtp(token, INFO);
+      await h.public.verifyOtp(token, h.lastOtp(), INFO);
+    }
+    expect(h.fake.requests.find((r) => r.id === id)!.otpVerifiedAt).toEqual(verifiedAt); // la evidencia conserva la de antes de firmar
+    clock.advance(HOUR);
+    await expect(h.public.sendOtp(token, INFO)).rejects.toThrow(/demasiados códigos/);
+  });
+
+  it('al TERCER bloqueo el enlace queda inservible hasta que el equipo lo reenvíe, y se avisa a quien lo envió', async () => {
+    const h = buildHarness();
+    const { id, token } = await h.create();
+    const lockOnce = async () => {
+      for (let round = 0; round < 2; round++) {
+        await h.public.sendOtp(token, INFO);
+        const wrong = h.lastOtp() === '000000' ? '000001' : '000000';
+        for (let i = 0; i < 5; i++) await h.public.verifyOtp(token, wrong, INFO).catch(() => undefined);
+        clock.advance(61_000);
+      }
+      clock.advance(HOUR + MIN); // vence el bloqueo de 1 h y la ventana de fallos
+    };
+    await lockOnce();
+    await lockOnce();
+    expect(h.email.sendSignatureLockedAlert).not.toHaveBeenCalled();
+    await lockOnce();
+    expect(h.fake.events.filter((e) => e.type === 'OTP_LOCKED')).toHaveLength(3);
+    expect(h.email.sendSignatureLockedAlert).toHaveBeenCalledWith('auditor@despacho.com', expect.objectContaining({ signerEmail: 'juan@banco.com' }));
+
+    // Ni pasado el bloqueo de 1 h: el enlace ya no sirve.
+    clock.advance(5 * HOUR);
+    await expect(h.public.sendOtp(token, INFO)).rejects.toThrow(/Pide a quien te lo envió que te lo reenvíe/);
+    await expect(h.public.verifyOtp(token, '123456', INFO)).rejects.toMatchObject({ status: 423 });
+
+    // El equipo reenvía: enlace nuevo, la cuenta de bloqueos vuelve a cero.
+    const r = await h.requests.resend(user('AUDITOR'), id, {}, INFO);
+    const fresh = h.tokenOf(r.signUrl);
+    await expect(h.public.sendOtp(fresh, INFO)).resolves.toMatchObject({ sent: true });
+    await expect(h.public.verifyOtp(fresh, h.lastOtp(), INFO)).resolves.toBeDefined();
   });
 });
 

@@ -5,7 +5,7 @@ import { RefreshCw } from 'lucide-react';
 import { useInPersonSignatureRequest, useResendSignatureRequest, useRevokeSignatureRequest, type SendResult, type SignatureRequestView } from '@/hooks/useSignatureRequests';
 import { DEFAULT_EXPIRY_DAYS, EXPIRY_OPTIONS, validateReason } from '@/lib/signature/internal';
 import { formatDateSv } from '@/lib/signature/helpers';
-import { Dialog, FormField, Note, OneTimeLink, dangerBtn, ghostBtn, inputCls, primaryBtn } from './ui';
+import { Dialog, FormField, InPersonWarning, Note, OneTimeLink, dangerBtn, ghostBtn, inputCls, openSignUrl, primaryBtn } from './ui';
 
 /** «Reenviar»: rota el enlace (el anterior deja de servir), reinicia el código y vuelve a enviar el correo. */
 export function ResendDialog({ request, onClose }: { request: SignatureRequestView; onClose: () => void }) {
@@ -63,39 +63,45 @@ export function ResendDialog({ request, onClose }: { request: SignatureRequestVi
 }
 
 /**
- * «Abrir para firma presencial»: rota el enlace SIN enviar correo y lo abre en una pestaña nueva del dispositivo del auditor.
- * El código de verificación llega al correo del firmante, que lo lee en su teléfono.
+ * «Firma presencial»: rota el enlace SIN enviar correo y lo muestra UNA vez, para abrirlo en el teléfono de la persona o en
+ * una ventana privada. Ya no se abre solo en una pestaña del navegador del auditor: esa pestaña compartiría su sesión de
+ * AuditMind con quien reciba el equipo (revisión de seguridad F5b, 2026-10-19). El código llega al correo del firmante.
  */
 export function InPersonDialog({ request, onClose }: { request: SignatureRequestView; onClose: () => void }) {
   const inPerson = useInPersonSignatureRequest();
+  const [result, setResult] = useState<SendResult | null>(null);
 
   const close = () => { inPerson.reset(); onClose(); };
 
-  const open = async () => {
+  const prepare = async () => {
     if (inPerson.isPending) return;
-    // La pestaña se abre ya, dentro del clic (si no, el navegador la bloquea), y luego se le asigna el enlace.
-    const tab = window.open('about:blank', '_blank');
     try {
-      const r = await inPerson.mutateAsync({ id: request.id });
-      if (tab) { tab.opener = null; tab.location.href = r.signUrl; }
-      onClose();
-    } catch {
-      tab?.close();
-    }
+      setResult(await inPerson.mutateAsync({ id: request.id }));
+    } catch { /* se muestra abajo */ }
   };
 
+  if (result) {
+    return (
+      <Dialog title="Lista para firma presencial" subtitle={request.title} onClose={close}>
+        <OneTimeLink url={result.signUrl} emailSent={false} emailSkipped signerEmail={result.request.signerEmail} onOpenInPerson={() => openSignUrl(result.signUrl)} />
+        <div className="mt-5 flex justify-end"><button type="button" className={primaryBtn} onClick={close}>Listo</button></div>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog title="Abrir para firma presencial" subtitle={`${request.title} — ${request.signerName} <${request.signerEmail}>`} onClose={close} busy={inPerson.isPending}>
+    <Dialog title="Firma presencial" subtitle={`${request.title} — ${request.signerName} <${request.signerEmail}>`} onClose={close} busy={inPerson.isPending}>
       <div className="space-y-3">
         <Note tone="info">
-          Se genera un enlace nuevo <strong>sin enviar ningún correo</strong> y se abre en otra pestaña de este dispositivo. El enlace anterior deja de funcionar.
-          Entrégale el dispositivo a la persona: el código de verificación le llega a <strong>{request.signerEmail}</strong> y lo puede leer en su teléfono.
+          Se genera un enlace nuevo <strong>sin enviar ningún correo</strong>; el enlace anterior deja de funcionar. El código de verificación le llega a
+          <strong> {request.signerEmail}</strong>, que lo puede leer en su teléfono.
         </Note>
+        <InPersonWarning />
         {inPerson.isError && <Note tone="error">{inPerson.error.message || 'No se pudo preparar la firma presencial. Inténtalo de nuevo.'}</Note>}
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={close} disabled={inPerson.isPending} className={ghostBtn}>Cancelar</button>
-          <button type="button" onClick={() => void open()} disabled={inPerson.isPending} className={primaryBtn}>
-            {inPerson.isPending ? 'Preparando…' : 'Abrir para firma presencial'}
+          <button type="button" onClick={() => void prepare()} disabled={inPerson.isPending} className={primaryBtn}>
+            {inPerson.isPending ? 'Preparando…' : 'Generar enlace'}
           </button>
         </div>
       </div>

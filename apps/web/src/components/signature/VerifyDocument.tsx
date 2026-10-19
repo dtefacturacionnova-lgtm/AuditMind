@@ -49,7 +49,10 @@ export function VerifyDocument() {
   useEffect(() => {
     if (startedRef.current) return; // React StrictMode ejecuta los efectos dos veces en desarrollo
     startedRef.current = true;
-    const fromHash = formatVerificationInput(decodeURIComponent(window.location.hash.replace(/^#/, '')));
+    const raw = window.location.hash.replace(/^#/, '');
+    let decoded = raw;
+    try { decoded = decodeURIComponent(raw); } catch { /* `#%E0` y similares: se usa tal cual; no debe tumbar la página */ }
+    const fromHash = formatVerificationInput(decoded);
     if (!fromHash) return;
     setCode(fromHash);
     if (isCompleteVerificationCode(fromHash)) void lookup(fromHash);

@@ -41,7 +41,8 @@ const DEFAULTS: Record<string, () => Row> = {
     type: 'BANK', amount: null, accountRef: null, sentAt: null, sentBy: null, responseReceivedAt: null, responseContent: null,
     responseAmount: null, difference: null, differenceExplanation: null, alternativeProcedure: null, status: 'DRAFT', createdAt: now(), updatedAt: now(),
   }),
-  audit: () => ({ title: 'Auditoría financiera 2025', isInvestigationMode: false }),
+  // `team` imita la relación AuditTeam: [{ userId }] (lo que piden los filtros del modo investigación).
+  audit: () => ({ title: 'Auditoría financiera 2025', isInvestigationMode: false, team: [] }),
   // Papeles de trabajo y sus secciones (actas de entrevista, F4).
   workingPaper: () => ({ code: 'B-04', paperCode: 'PT-ENTREV', type: 'SUBSTANTIVE_TEST', title: 'Guía y Papel de Entrevista', createdAt: now(), updatedAt: now() }),
   paperSection: () => ({ attachments: null, createdAt: now(), updatedAt: now() }),
@@ -77,6 +78,12 @@ export class FakeDb {
   private match(table: string, row: Row, where: Row = {}): boolean {
     return Object.entries(where).every(([key, cond]) => {
       if (cond === undefined) return true;
+      if (key === 'OR') return (cond as Row[]).some((sub) => this.match(table, row, sub));
+      // Relación a-muchos guardada como arreglo en la fila (p. ej. `audit.team: [{ userId }]`): `{ some: { … } }`.
+      if (cond && typeof cond === 'object' && 'some' in cond) {
+        const items = Array.isArray(row[key]) ? row[key] : [];
+        return items.some((item: Row) => Object.entries(cond.some as Row).every(([k, c]) => eq(item[k], c)));
+      }
       if (key === 'request') {
         const req = this.tables.signatureRequest.find((r) => r.id === row.requestId);
         return !!req && this.match('signatureRequest', req, cond);
@@ -121,7 +128,14 @@ export class FakeDb {
 
   private pick(row: Row, select?: Row): Row {
     if (!select) return { ...row };
-    return Object.fromEntries(Object.keys(select).filter((k) => select[k]).map((k) => [k, row[k]]));
+    return Object.fromEntries(Object.keys(select).filter((k) => select[k]).map((k) => {
+      // `select: { audit: { select: … } }` en filas que cuelgan de una auditoría: se resuelve la relación.
+      if (k === 'audit' && typeof select[k] === 'object' && 'auditId' in row) {
+        const a = this.tables.audit.find((x) => x.id === row.auditId);
+        return [k, a ? this.pick(a, select[k].select) : null];
+      }
+      return [k, row[k]];
+    }));
   }
 
   /** Solo `include: { audit: … }` en confirmaciones: lo único que los adaptadores reales necesitan. */

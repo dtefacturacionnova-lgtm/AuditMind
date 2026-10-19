@@ -2,6 +2,7 @@ import { Body, Controller, Get, Header, Headers, Post, UseGuards } from '@nestjs
 import { ApiExcludeController } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
+import { SkipStorageSigning } from '../common/storage/skip-storage-signing.decorator';
 import { PUBLIC_LIMITS, PublicThrottlerGuard } from '../signatures/public-throttle';
 import { AddPortalMessageDto, SubmitPortalDto } from './dto/create-pbc-request.dto';
 import { PbcService } from './pbc.service';
@@ -14,8 +15,10 @@ import { PbcService } from './pbc.service';
  *  - cada ruta lleva su límite de intentos por IP y responde sin caché;
  *  - fuera de la documentación Swagger.
  * Las rutas viejas `pbc/portal/:token…` (token en la ruta) se eliminaron a propósito.
+ * Fuera del interceptor de Storage: lo que escribe el auditado nunca se convierte en un enlace firmado del bucket.
  */
 @ApiExcludeController()
+@SkipStorageSigning()
 @Controller('pbc-portal')
 @UseGuards(PublicThrottlerGuard)
 export class PbcPortalController {

@@ -124,6 +124,20 @@ export function openSignUrl(url: string): void {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
+/**
+ * Firma presencial en el equipo del auditor: el navegador comparte la sesión de AuditMind entre pestañas, así que quien
+ * reciba el equipo podría abrir el panel con el rol del auditor (revisión de seguridad F5b, 2026-10-19). Por eso el
+ * enlace ya no se abre solo: se recomienda el teléfono de la persona o una ventana privada.
+ */
+export function InPersonWarning() {
+  return (
+    <Note tone="warn">
+      <strong>Si la persona va a firmar en tu equipo</strong>, abre el enlace en una <strong>ventana privada</strong> (Ctrl+Shift+N en Chrome o Edge,
+      Ctrl+Shift+P en Firefox) y ciérrala al terminar. En una pestaña normal, quien use el equipo podría entrar a tu sesión de AuditMind.
+    </Note>
+  );
+}
+
 async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
@@ -162,11 +176,18 @@ export function OneTimeLink({ url, emailSent, emailSkipped = false, signerEmail,
   return (
     <div className="space-y-3">
       {emailSkipped ? (
-        <Note tone="info">
-          <strong>No se envió correo con el enlace</strong> (firma presencial). Ábrelo en tu dispositivo para que {signerEmail} firme ahí: el código de verificación
-          sí llega a su correo y lo puede leer en su teléfono.
-          {onOpenInPerson && <button type="button" onClick={onOpenInPerson} className="mt-2 block font-semibold text-blue-700 underline">Abrir para firma presencial ahora</button>}
-        </Note>
+        <>
+          <Note tone="info">
+            <strong>No se envió correo con el enlace</strong> (firma presencial). Lo mejor es que {signerEmail} abra el enlace en <strong>su propio
+            teléfono</strong> (envíaselo por el medio que tengan a mano): ahí mismo le llega el código de verificación.
+          </Note>
+          <InPersonWarning />
+          {onOpenInPerson && (
+            <button type="button" onClick={onOpenInPerson} className="block text-xs font-semibold text-blue-700 underline">
+              Abrir en una pestaña de este navegador de todos modos
+            </button>
+          )}
+        </>
       ) : emailSent ? (
         <Note tone="ok">Enviamos el enlace a <strong>{signerEmail}</strong>. El firmante deberá confirmar un código que le llega a ese mismo correo.</Note>
       ) : (

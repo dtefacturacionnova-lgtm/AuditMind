@@ -454,6 +454,23 @@ export class EmailService {
     });
   }
 
+  /** El enlace quedó bloqueado por demasiados códigos incorrectos (posible intento de adivinarlo). */
+  sendSignatureLockedAlert(to: string, p: { title: string; signerEmail: string; panelPath: string }) {
+    return this.send({
+      to,
+      subject: `Enlace de firma bloqueado: «${p.title}»`,
+      body: {
+        heading: 'El enlace de firma se bloqueó',
+        paragraphs: [
+          `El enlace que enviaste a ${escHtml(p.signerEmail)} para firmar «${escHtml(p.title)}» recibió demasiados códigos de verificación incorrectos y quedó bloqueado.`,
+          'Puede ser un error de la persona o un intento de adivinar el código. Confirma con ella antes de usar «Reenviar», que genera un enlace nuevo.',
+        ],
+        ctaLabel: 'Abrir en AuditMind',
+        ctaUrl: this.panelUrl(p.panelPath),
+      },
+    });
+  }
+
   /** Email de prueba — útil para verificar configuración */
   async sendTestEmail(to: string) {
     return this.send({

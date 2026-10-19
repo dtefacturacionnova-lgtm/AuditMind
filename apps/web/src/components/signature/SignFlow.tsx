@@ -154,7 +154,13 @@ export function SignFlow() {
       try {
         const r = await signatureApi.getSigned(token, current.sessionToken);
         if (cancelled) return;
-        if (r.pdfUrl) { dispatch({ type: 'DOWNLOAD_STATE', state: 'ready', pdfUrl: r.pdfUrl }); return; }
+        if (r.ready) {
+          // La copia sellada llega en bytes por la API (nunca un enlace de Storage) y se ofrece desde el navegador.
+          const buf = await signatureApi.getSignedFile(token, current.sessionToken);
+          if (cancelled) return;
+          dispatch({ type: 'DOWNLOAD_STATE', state: 'ready', pdfUrl: URL.createObjectURL(new Blob([buf], { type: 'application/pdf' })) });
+          return;
+        }
         if (r.failed || Date.now() - startedAt > POLL_MAX_MS) { dispatch({ type: 'DOWNLOAD_STATE', state: 'failed' }); return; }
         dispatch({ type: 'DOWNLOAD_STATE', state: 'sealing' });
         timer = setTimeout(tick, POLL_MS);
@@ -167,6 +173,10 @@ export function SignFlow() {
     void tick();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [polling, handleError]);
+
+  // La copia descargable vive en memoria (blob:): se libera al salir de la pantalla.
+  const downloadUrl = stage.kind === 'download' ? stage.pdfUrl : null;
+  useEffect(() => () => { if (downloadUrl?.startsWith('blob:')) URL.revokeObjectURL(downloadUrl); }, [downloadUrl]);
 
   // ─── Adjuntos ──────────────────────────────────────────────────────────────
   const upload = useCallback(async (files: File[]) => {
@@ -368,7 +378,8 @@ export function SignFlow() {
     case 'document':
       return (
         <DocumentStep
-          doc={stage.doc} sessionExpiresAt={stage.sessionExpiresAt} form={form} onChange={onFormChange}
+          doc={stage.doc} loadPdf={() => signatureApi.getDocumentFile(tokenRef.current ?? '', stage.sessionToken)}
+          sessionExpiresAt={stage.sessionExpiresAt} form={form} onChange={onFormChange}
           attachments={attachments} fieldErrors={fieldErrors} submitError={submitError} uploadError={uploadError}
           busy={busy} uploading={uploading} onSign={() => void sign()} onDecline={(r) => void decline(r)}
           onUpload={(f) => void upload(f)} onRemoveAttachment={(id) => void removeAttachment(id)}
@@ -384,8 +395,8 @@ export function SignFlow() {
           <Stepper current={3} />
           {stage.state === 'ready' && stage.pdfUrl ? (
             <StatusScreen tone="green" icon={<FileSignature className="h-7 w-7" />} title="Tu copia firmada está lista"
-              action={<a href={stage.pdfUrl} target="_blank" rel="noopener noreferrer" className={primaryButton}><Download className="h-4 w-4" aria-hidden="true" /> Descargar PDF firmado</a>}>
-              El enlace de descarga dura 10 minutos. Si vence, vuelve a abrir el enlace de tu correo.
+              action={<a href={stage.pdfUrl} download="documento-firmado.pdf" className={primaryButton}><Download className="h-4 w-4" aria-hidden="true" /> Descargar PDF firmado</a>}>
+              Guárdala en tu equipo. Si cierras esta página, puedes volver a abrir el enlace de tu correo durante 30 días.
             </StatusScreen>
           ) : stage.state === 'failed' ? (
             <StatusScreen tone="amber" icon={<Hourglass className="h-7 w-7" />} title="Todavía no pudimos preparar tu copia">

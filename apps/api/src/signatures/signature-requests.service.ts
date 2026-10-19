@@ -206,6 +206,11 @@ export class SignatureRequestsService {
   }
 
   // ─── Consultar ─────────────────────────────────────────────────────────────
+  /** ¿Está encendida la firma por enlace? La interfaz oculta el botón de envío mientras el interruptor esté apagado. */
+  availability() {
+    return { enabled: this.policy.isEnabled() };
+  }
+
   async list(user: AuthUser, documentType: SignatureDocumentType, targetId: string) {
     const rows = await this.prisma.signatureRequest.findMany({
       where: { organizationId: user.organizationId, documentType, targetId }, orderBy: { createdAt: 'desc' }, take: 50,

@@ -89,6 +89,18 @@ const KEY = 'signature-requests';
 const base = '/signature-requests';
 
 // ─── Consultas ───────────────────────────────────────────────────────────────
+/**
+ * ¿Está habilitada la firma por enlace en el servidor? (interruptor SIGNATURES_PUBLIC_ENABLED). Mientras esté apagada,
+ * la interfaz no ofrece enviar nada: sería un botón que solo devuelve un error.
+ */
+export function useSignatureAvailability() {
+  return useQuery<{ enabled: boolean }>({
+    queryKey: [KEY, 'availability'],
+    queryFn: () => apiClient.get(`${base}/availability`),
+    staleTime: 5 * 60_000,
+  });
+}
+
 /** Solicitudes de firma de un documento. Se refresca sola mientras alguna se está sellando. */
 export function useSignatureRequests(documentType: SignatureDocumentType, targetId: string | undefined) {
   return useQuery<SignatureRequestView[]>({

@@ -140,6 +140,26 @@ describe('Controlador público · límite de intentos por ruta', () => {
   });
 });
 
+describe('Controlador interno · disponibilidad de la firma', () => {
+  it('GET /signature-requests/availability responde el estado del interruptor y NO se confunde con ":id"', async () => {
+    const svc = { availability: jest.fn(() => ({ enabled: false })), get: jest.fn() };
+    const moduleRef = await Test.createTestingModule({ controllers: [SignatureRequestsController], providers: [{ provide: SignatureRequestsService, useValue: svc }] }).compile();
+    const app: INestApplication = moduleRef.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    app.setGlobalPrefix('api/v1');
+    await app.listen(0, '127.0.0.1');
+    try {
+      const base = (await app.getUrl()).replace('[::1]', '127.0.0.1') + '/api/v1/signature-requests';
+      const res = await fetch(`${base}/availability`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ enabled: false });
+      expect(svc.get).not.toHaveBeenCalled(); // no se trató "availability" como un id (habría dado 400 por no ser UUID)
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe('Metadatos de seguridad de las rutas', () => {
   const methods = (ctrl: any) => Object.getOwnPropertyNames(ctrl.prototype).filter((n) => n !== 'constructor');
 

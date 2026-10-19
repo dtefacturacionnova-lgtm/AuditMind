@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { Loader2, PenLine, Send } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
-import { useSignatureRequests, type SignatureRequestView } from '@/hooks/useSignatureRequests';
+import { useSignatureAvailability, useSignatureRequests, type SignatureRequestView } from '@/hooks/useSignatureRequests';
 import { MANAGER_ROLE, MIN_ROLE_BY_TYPE, type SignatureDocumentType } from '@/lib/signature/internal';
 import { SignatureRequestCard } from './SignatureRequestCard';
 import { Note, primaryBtn } from './ui';
@@ -34,19 +34,26 @@ export function SignatureRequestsPanel({
   const manage = canManage ?? hasRole([MIN_ROLE_BY_TYPE[documentType]]);
   const manager = isManager ?? hasRole([MANAGER_ROLE]);
   const { data, isLoading, isError, error, refetch } = useSignatureRequests(documentType, targetId);
+  // El botón de envío solo aparece cuando el servidor confirma que la firma está habilitada (si no, solo devolvería un error).
+  const availability = useSignatureAvailability();
+  const enabled = availability.data?.enabled === true;
+  const notEnabled = availability.data?.enabled === false;
 
   return (
     <section aria-label={title} className="rounded-2xl border border-gray-200 bg-white p-5">
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <PenLine className="h-4 w-4 text-gray-400" aria-hidden="true" />
         <h2 className="flex-1 text-sm font-semibold text-gray-800">{title}</h2>
-        {onSend && manage && (
+        {onSend && manage && enabled && (
           <button type="button" onClick={onSend} disabled={!!sendDisabledReason} title={sendDisabledReason ?? undefined} className={primaryBtn}>
             <Send className="h-3.5 w-3.5" aria-hidden="true" /> {sendLabel}
           </button>
         )}
       </div>
-      {onSend && manage && sendDisabledReason && <div className="mb-3"><Note tone="warn">{sendDisabledReason}</Note></div>}
+      {onSend && manage && enabled && sendDisabledReason && <div className="mb-3"><Note tone="warn">{sendDisabledReason}</Note></div>}
+      {onSend && manage && notEnabled && (
+        <div className="mb-3"><Note tone="info">La firma electrónica por enlace todavía no está habilitada en este servidor. Cuando se active, aquí aparecerá el botón para enviar el documento.</Note></div>
+      )}
 
       {isLoading && (
         <p className="flex items-center gap-2 py-6 text-sm text-gray-400" role="status"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Cargando solicitudes…</p>

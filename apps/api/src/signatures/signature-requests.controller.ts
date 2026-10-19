@@ -30,6 +30,13 @@ export class SignatureRequestsController {
     return this.svc.create(user, dto, getClientInfo(req));
   }
 
+  // Va ANTES de ':id': de lo contrario "availability" se interpretaría como un id.
+  @Get('availability')
+  @ApiOperation({ summary: '¿Está habilitada la firma por enlace? (interruptor del servidor)' })
+  availability() {
+    return this.svc.availability();
+  }
+
   @Get()
   @ApiOperation({ summary: 'Solicitudes de firma de un documento, con su bitácora' })
   list(@Query() q: ListSignatureRequestsQuery, @CurrentUser() user: AuthUser) {

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Download, ExternalLink, RefreshCw, ShieldCheck } from 'lucide-react';
-import { sameHash, sha256Hex } from '@/lib/signature/helpers';
+import { sameHash, sha256Hex, shouldUseCanvasViewer } from '@/lib/signature/helpers';
+import { PdfPages } from './PdfPages';
 import { Alert, Spinner } from './ui';
 
 export type Integrity = 'checking' | 'ok' | 'mismatch' | 'error';
@@ -16,13 +17,16 @@ export type Integrity = 'checking' | 'ok' | 'mismatch' | 'error';
 export function PdfViewer({ load, expectedSha256, onIntegrity }: {
   load: () => Promise<ArrayBuffer>; expectedSha256: string; onIntegrity: (i: Integrity) => void;
 }) {
-  const [state, setState] = useState<{ phase: Integrity; blobUrl: string | null }>({ phase: 'checking', blobUrl: null });
+  // `data`: los bytes verificados, solo cuando hay que dibujarlos con el lector propio (teléfonos y tabletas).
+  const [state, setState] = useState<{ phase: Integrity; blobUrl: string | null; data: ArrayBuffer | null }>({ phase: 'checking', blobUrl: null, data: null });
   const [attempt, setAttempt] = useState(0);
+  const [readerFailed, setReaderFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     let created: string | null = null;
-    setState({ phase: 'checking', blobUrl: null });
+    setState({ phase: 'checking', blobUrl: null, data: null });
+    setReaderFailed(false);
     onIntegrity('checking');
     (async () => {
       try {
@@ -30,16 +34,16 @@ export function PdfViewer({ load, expectedSha256, onIntegrity }: {
         const actual = await sha256Hex(buf);
         if (cancelled) return;
         if (!sameHash(actual, expectedSha256)) {
-          setState({ phase: 'mismatch', blobUrl: null });
+          setState({ phase: 'mismatch', blobUrl: null, data: null });
           onIntegrity('mismatch');
           return;
         }
         created = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
-        setState({ phase: 'ok', blobUrl: created });
+        setState({ phase: 'ok', blobUrl: created, data: shouldUseCanvasViewer(navigator) ? buf : null });
         onIntegrity('ok');
       } catch {
         if (cancelled) return;
-        setState({ phase: 'error', blobUrl: null });
+        setState({ phase: 'error', blobUrl: null, data: null });
         onIntegrity('error');
       }
     })();
@@ -72,11 +76,22 @@ export function PdfViewer({ load, expectedSha256, onIntegrity }: {
   }
 
   const src = state.blobUrl;
+  const useReader = state.data !== null && !readerFailed;
   return (
     <div>
-      <div className="overflow-hidden rounded-xl border border-gray-300 bg-gray-100">
-        <iframe src={src} title="Documento a firmar (PDF)" className="block h-[65vh] min-h-[420px] w-full bg-white" />
-      </div>
+      {useReader ? (
+        // Teléfonos y tabletas: el navegador no incrusta PDF, así que se dibujan las páginas aquí mismo.
+        <PdfPages data={state.data!} onFailed={() => setReaderFailed(true)} />
+      ) : readerFailed ? (
+        <Alert tone="amber">
+          <p className="font-semibold">No pudimos mostrar el documento en esta página.</p>
+          <p className="mt-1">Ábrelo en una pestaña nueva o descárgalo con los enlaces de abajo, léelo completo y vuelve aquí para firmar.</p>
+        </Alert>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-gray-300 bg-gray-100">
+          <iframe src={src} title="Documento a firmar (PDF)" className="block h-[65vh] min-h-[420px] w-full bg-white" />
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <a href={src} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-medium text-blue-700 hover:underline">
@@ -85,7 +100,9 @@ export function PdfViewer({ load, expectedSha256, onIntegrity }: {
         <a href={src} download="documento.pdf" className="inline-flex items-center gap-1.5 font-medium text-blue-700 hover:underline">
           <Download className="h-4 w-4" aria-hidden="true" /> Descargar PDF
         </a>
-        <span className="text-xs text-gray-500 sm:ml-auto">En el teléfono, si no ves todas las páginas aquí, ábrelo en una pestaña nueva.</span>
+        {!useReader && !readerFailed && (
+          <span className="text-xs text-gray-500 sm:ml-auto">Si no ves todas las páginas aquí, ábrelo en una pestaña nueva.</span>
+        )}
       </div>
 
       <div className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs text-emerald-900">

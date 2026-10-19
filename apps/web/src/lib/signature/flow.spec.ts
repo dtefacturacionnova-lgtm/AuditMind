@@ -22,7 +22,25 @@ describe('máquina de estados del firmante', () => {
       { type: 'VERIFIED_SIGN', doc, sessionToken: 'S'.repeat(43), sessionExpiresAt: '2026-10-19T12:30:00Z' },
       { type: 'SIGNED', verificationCode: 'ABCD-EFGH-JKMN-PQRS' },
     ]);
-    expect(s).toMatchObject({ kind: 'signed', verificationCode: 'ABCD-EFGH-JKMN-PQRS' });
+    expect(s).toMatchObject({ kind: 'signed', verificationCode: 'ABCD-EFGH-JKMN-PQRS', sessionToken: 'S'.repeat(43) });
+  });
+
+  it('recién firmado: «Descargar copia firmada» reutiliza la sesión de la firma, sin pedir otro código', () => {
+    const signed = run([
+      { type: 'LOADED', request: request() }, { type: 'GO_CODE', purpose: 'sign' },
+      { type: 'VERIFIED_SIGN', doc, sessionToken: 'SESION', sessionExpiresAt: 'x' }, { type: 'SIGNED', verificationCode: 'ABCD-EFGH-JKMN-PQRS' },
+    ]);
+    const dl = reducer(signed, { type: 'START_DOWNLOAD' });
+    expect(dl).toMatchObject({ kind: 'download', sessionToken: 'SESION', state: 'checking', pdfUrl: null });
+    // Si esa sesión venció, el flujo normal vuelve a pedir el código (para descargar).
+    expect(reducer(dl, { type: 'SESSION_EXPIRED' })).toMatchObject({ kind: 'code', purpose: 'download', notice: SESSION_EXPIRED_NOTICE });
+  });
+
+  it('START_DOWNLOAD sin sesión guardada, o fuera de la pantalla «firmado», no hace nada', () => {
+    const noSession: Stage = { kind: 'signed', request: request(), verificationCode: 'X', sessionToken: null };
+    expect(reducer(noSession, { type: 'START_DOWNLOAD' })).toBe(noSession);
+    const intro: Stage = { kind: 'intro', request: request() };
+    expect(reducer(intro, { type: 'START_DOWNLOAD' })).toBe(intro);
   });
 
   it('una solicitud ya firmada se abre en "ya firmada" (permite descargar); ya rechazada, en "rechazada"', () => {

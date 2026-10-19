@@ -1,5 +1,5 @@
 import {
-  buildResponse, isFieldRequired, fileProblem, formatBytes, formatDateTimeSv, formatVerificationInput, isCompleteVerificationCode,
+  buildResponse, isFieldRequired, fileProblem, formatBytes, shouldUseCanvasViewer, formatDateTimeSv, formatVerificationInput, isCompleteVerificationCode,
   MAX_FILE_BYTES, MAX_FILES, parseAmount, sameHash, sha256Hex, validateSigner,
 } from './helpers';
 import type { FormField } from './types';
@@ -155,5 +155,26 @@ describe('campos obligatorios según otro campo (requiredIf)', () => {
 
   it('un monto escrito de más pero no obligatorio se valida igual (no se manda basura)', () => {
     expect(buildResponse(FIELDS, { blank: '10', agrees: true, confirmedAmount: 'abc' }).errors.confirmedAmount).toMatch(/Monto no válido/);
+  });
+});
+
+describe('shouldUseCanvasViewer', () => {
+  const nav = (userAgent: string, extra: Record<string, unknown> = {}) => ({ userAgent, ...extra });
+  it('teléfonos y tabletas: lector propio', () => {
+    expect(shouldUseCanvasViewer(nav('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36'))).toBe(true);
+    expect(shouldUseCanvasViewer(nav('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1'))).toBe(true);
+    expect(shouldUseCanvasViewer(nav('Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15'))).toBe(true);
+  });
+  it('iPadOS que se hace pasar por Mac: se detecta por la pantalla táctil', () => {
+    expect(shouldUseCanvasViewer(nav('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15', { maxTouchPoints: 5 }))).toBe(true);
+    expect(shouldUseCanvasViewer(nav('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15', { maxTouchPoints: 0, pdfViewerEnabled: true }))).toBe(false);
+  });
+  it('escritorio con visor de PDF: se conserva el nativo', () => {
+    const chromeWin = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36';
+    expect(shouldUseCanvasViewer(nav(chromeWin, { pdfViewerEnabled: true }))).toBe(false);
+    expect(shouldUseCanvasViewer(nav(chromeWin))).toBe(false); // el navegador no informa: se asume que sí
+  });
+  it('un navegador que declara no tener visor incrustado: lector propio', () => {
+    expect(shouldUseCanvasViewer(nav('Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/127.0', { pdfViewerEnabled: false }))).toBe(true);
   });
 });

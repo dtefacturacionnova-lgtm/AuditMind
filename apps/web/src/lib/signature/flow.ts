@@ -19,7 +19,9 @@ export type Stage =
   | { kind: 'already-signed'; request: PublicRequest }
   | { kind: 'code'; request: PublicRequest; purpose: CodePurpose; maskedEmail: string; sent: boolean; error: string | null; notice: string | null; locked: boolean }
   | { kind: 'document'; request: PublicRequest; doc: PublicDocument; sessionToken: string; sessionExpiresAt: string }
-  | { kind: 'signed'; request: PublicRequest; verificationCode: string }
+  // `sessionToken`: la sesión con la que se firmó. Sigue valiendo (solo para pedir la copia sellada) hasta que venza: quien
+  // acaba de firmar descarga su copia sin pedir otro código. null si no se tiene (no ocurre al firmar en esta pantalla).
+  | { kind: 'signed'; request: PublicRequest; verificationCode: string; sessionToken: string | null }
   | { kind: 'download'; request: PublicRequest; sessionToken: string; state: 'checking' | 'sealing' | 'failed' | 'ready'; pdfUrl: string | null };
 
 export type FlowEvent =
@@ -33,6 +35,7 @@ export type FlowEvent =
   | { type: 'DOWNLOAD_STATE'; state: 'checking' | 'sealing' | 'failed' | 'ready'; pdfUrl?: string }
   | { type: 'SESSION_EXPIRED' }
   | { type: 'SIGNED'; verificationCode: string }
+  | { type: 'START_DOWNLOAD' }
   | { type: 'ALREADY_SIGNED' }
   | { type: 'RESTART' };
 
@@ -87,8 +90,17 @@ export function reducer(state: Stage, ev: FlowEvent): Stage {
 
     case 'SIGNED': {
       const request = requestOf(state);
-      return request ? { kind: 'signed', request, verificationCode: ev.verificationCode } : state;
+      return request
+        ? { kind: 'signed', request, verificationCode: ev.verificationCode, sessionToken: state.kind === 'document' ? state.sessionToken : null }
+        : state;
     }
+
+    // «Descargar copia firmada» justo después de firmar: se reutiliza la sesión de la firma (sin pedir otro código).
+    // Si ya venció, la primera petición responde 401 y el flujo normal vuelve a pedir el código.
+    case 'START_DOWNLOAD':
+      return state.kind === 'signed' && state.sessionToken
+        ? { kind: 'download', request: state.request, sessionToken: state.sessionToken, state: 'checking', pdfUrl: null }
+        : state;
 
     case 'ALREADY_SIGNED': {
       // Un doble clic en "Firmar" hace que la 2.ª petición responda "ya firmado": no debe tapar la constancia recién mostrada.

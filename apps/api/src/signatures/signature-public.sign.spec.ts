@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { buildHarness, INFO, makePdf, useClock, user } from './testing/harness';
-import { sha256Hex } from './signature-crypto.util';
+import { hashToken, sha256Hex } from './signature-crypto.util';
 import { verifyChain } from './signature-event-chain.util';
 import { CONSENT_VERSION, renderConsentText } from './legal-texts';
 
@@ -37,8 +37,10 @@ describe('Firma pública · firmar', () => {
     expect(row.response).toEqual({ agrees: true, comments: 'Conforme con el saldo' });
     expect(row.signedAt).toBeInstanceOf(Date);
 
-    // sesiones cerradas: para descargar la copia hay que verificar el correo otra vez
-    expect(h.fake.tables.signatureSession.every((s) => s.revokedAt)).toBe(true);
+    // La sesión con la que se firmó sigue viva (solo sirve para la copia sellada); no queda ninguna otra abierta.
+    const open = h.fake.tables.signatureSession.filter((s) => !s.revokedAt);
+    expect(open).toHaveLength(1);
+    expect(open[0].tokenHash).toBe(hashToken(session));
     // la bitácora sigue íntegra y registra la firma con su IP
     const chain = await h.events.listChain(id);
     expect(verifyChain(id, chain).ok).toBe(true);
@@ -195,11 +197,42 @@ describe('Firma pública · documento y copia firmada', () => {
     expect(doc.form.fields[0].key).toBe('agrees');
   });
 
-  it('antes del sellado dice "sellando"; sin sesión, 401; tras firmar hay que verificar el correo otra vez', async () => {
+  it('quien acaba de firmar descarga su copia con la MISMA sesión, sin pedir otro código; la sesión no sirve para nada más', async () => {
     const { h, id, token, session } = await setup();
     await h.public.sign(token, session, SIGN, INFO);
-    await expect(h.public.getSigned(token, session)).rejects.toMatchObject({ status: 401 }); // sesión revocada al firmar
+    // Sin otro código: la sesión de la firma ve el estado del sellado…
+    await expect(h.public.getSigned(token, session)).resolves.toEqual({ sealing: true, failed: false, ready: false });
+    // …pero ya firmada la solicitud no permite firmar de nuevo, rechazar, ver el documento ni subir archivos.
+    await expect(h.public.sign(token, session, SIGN, INFO)).rejects.toMatchObject({ status: 409 });
+    await expect(h.public.decline(token, session, { reason: 'me arrepentí' }, INFO)).rejects.toMatchObject({ status: 409 });
+    await expect(h.public.getDocument(token, session)).rejects.toMatchObject({ status: 409 });
+    await expect(h.public.getDocumentFile(token, session)).rejects.toMatchObject({ status: 409 });
+    await expect(h.public.uploadAttachment(token, session, { originalname: 'x.pdf', buffer: await makePdf(1) }, INFO)).rejects.toMatchObject({ status: 409 });
+
+    const signedPdf = await makePdf(2);
+    h.storage.files.set('signature-requests/aud1/x/signed.pdf', signedPdf);
+    Object.assign(h.fake.requests.find((r) => r.id === id)!, { sealStatus: 'SEALED', signedPdfPath: 'signature-requests/aud1/x/signed.pdf' });
+    expect(sha256Hex(await h.public.getSignedFile(token, session))).toBe(sha256Hex(signedPdf));
+
+    // La sesión vence a los 30 minutos como siempre: después hace falta verificar el correo otra vez.
+    clock.advance(31 * 60_000);
+    await expect(h.public.getSigned(token, session)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('las OTRAS sesiones abiertas (otro dispositivo o pestaña) se cierran al firmar', async () => {
+    const { h, token, session } = await setup();
     clock.advance(61_000);
+    const other = (await (async () => { await h.public.sendOtp(token, INFO); return h.public.verifyOtp(token, h.lastOtp(), INFO); })()).sessionToken;
+    await h.public.sign(token, session, SIGN, INFO);
+    await expect(h.public.getSigned(token, other)).rejects.toMatchObject({ status: 401 });
+    await expect(h.public.getSigned(token, session)).resolves.toMatchObject({ sealing: true });
+  });
+
+  it('antes del sellado dice "sellando"; sin sesión, 401; con el enlace del correo hay que verificar el correo de nuevo', async () => {
+    const { h, id, token, session } = await setup();
+    await h.public.sign(token, session, SIGN, INFO);
+    await expect(h.public.getSigned(token, undefined)).rejects.toMatchObject({ status: 401 });
+    clock.advance(31 * 60_000); // la sesión de la firma ya venció (llega otro día con el enlace del correo)
     const s2 = await h.openSession(token); // el estado SIGNED sí permite pedir código
     await expect(h.public.getSigned(token, s2)).resolves.toEqual({ sealing: true, failed: false, ready: false });
     await expect(h.public.getSignedFile(token, s2)).rejects.toMatchObject({ status: 409 });

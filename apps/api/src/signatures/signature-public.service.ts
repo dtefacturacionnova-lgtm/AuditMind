@@ -377,7 +377,11 @@ export class SignaturePublicService {
       });
       if (res.count === 0) throw new ConflictException('Esta solicitud ya fue firmada o venció.');
 
-      await tx.signatureSession.updateMany({ where: { requestId: r0.id, revokedAt: null }, data: { revokedAt: signedAt } });
+      // Se cierran las DEMÁS sesiones (otro dispositivo u otra pestaña). La sesión con la que se firmó se conserva hasta su
+      // vencimiento natural (30 min): ya firmada la solicitud, solo sirve para pedir la copia sellada (GET /signed y
+      // /signed/file); firmar, rechazar, ver el documento o subir archivos responden «ya fue firmada». Así quien acaba de
+      // firmar descarga su copia sin pedir otro código (antes: «Espera 14 segundos», prueba real 2026-10-19).
+      await tx.signatureSession.updateMany({ where: { requestId: r0.id, revokedAt: null, id: { not: session.id } }, data: { revokedAt: signedAt } });
       const submitted = await this.attachments.markSubmitted(tx, r0.id);
       await this.events.append(tx, r0.id, {
         type: 'SIGNED', ip: info.ip, userAgent: info.userAgent,

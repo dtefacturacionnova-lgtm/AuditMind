@@ -136,3 +136,22 @@ export const formatDateTimeSv = (iso: string | null | undefined) =>
   iso ? new Intl.DateTimeFormat('es-SV', { timeZone: SV, dateStyle: 'long', timeStyle: 'short' }).format(new Date(iso)) : '—';
 export const formatTimeSv = (iso: string | null | undefined) =>
   iso ? new Intl.DateTimeFormat('es-SV', { timeZone: SV, hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '—';
+
+// ─── Visor del PDF ───────────────────────────────────────────────────────────
+/** Lo mínimo de `navigator` que decide el visor (para poder probarlo sin navegador). */
+export interface ViewerNavigator { userAgent: string; maxTouchPoints?: number; pdfViewerEnabled?: boolean }
+
+/**
+ * ¿Hay que dibujar las páginas del PDF con el lector propio (pdf.js) en vez de incrustarlo con el visor del navegador?
+ * Los navegadores de teléfono (Android, iPhone, iPad) NO incrustan PDF en la página: muestran un recuadro vacío o solo la
+ * primera página, y el firmante no podía leer lo que iba a firmar (prueba real, 2026-10-19). En escritorio el visor nativo
+ * es mejor (búsqueda, zoom, imprimir), así que se conserva donde existe.
+ */
+export function shouldUseCanvasViewer(nav: ViewerNavigator): boolean {
+  const ua = nav.userAgent ?? '';
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+  // iPadOS se presenta como Mac, pero con pantalla táctil.
+  if (/Macintosh/i.test(ua) && (nav.maxTouchPoints ?? 0) > 1) return true;
+  // Un navegador que declara no tener visor de PDF incrustado.
+  return nav.pdfViewerEnabled === false;
+}

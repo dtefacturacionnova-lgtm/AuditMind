@@ -387,7 +387,12 @@ export function SignFlow() {
       );
 
     case 'signed':
-      return <SignedScreen orgName={stage.request.orgName} code={stage.verificationCode} onDownload={() => goToCode('download')} />;
+      return (
+        <SignedScreen
+          orgName={stage.request.orgName} code={stage.verificationCode}
+          onDownload={() => (stage.sessionToken ? dispatch({ type: 'START_DOWNLOAD' }) : goToCode('download'))}
+        />
+      );
 
     case 'download':
       return (
@@ -435,7 +440,7 @@ function SignedScreen({ orgName, code, onDownload }: { orgName: string; code: st
         </div>
         <div className="mx-auto mt-5 max-w-md">
           <Alert tone="blue" live={false}>
-            Estamos sellando el documento. Cuando esté listo te enviaremos una constancia por correo. También puedes pedir tu copia ahora: te pediremos verificar tu correo otra vez.
+            Estamos sellando el documento. Cuando esté listo te enviaremos una constancia por correo. También puedes descargar tu copia firmada ahora mismo.
           </Alert>
         </div>
         <div className="mt-6 flex flex-wrap justify-center gap-3">

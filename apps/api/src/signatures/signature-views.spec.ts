@@ -37,11 +37,11 @@ describe('vistas públicas: solo lo imprescindible', () => {
 
   it('GET /document: claves exactas, sin rutas ni identificadores', () => {
     const v = publicDocumentView(row(), {
-      orgName: 'Org', documentLabel: 'Confirmación', pdfUrl: 'https://storage.test/sign/x?token=t', consentText: 'texto', consentVersion: 'v1', privacyNotice: 'aviso',
+      orgName: 'Org', documentLabel: 'Confirmación', pdfUrl: 'https://storage.test/sign/x?token=t', consentText: 'texto', consentVersion: 'v1', privacyNotice: 'aviso', declineNotice: 'rechazo',
       form: { fields: [], allowAttachments: true, signedRoleRequired: true },
       attachments: [{ id: 'att1', originalName: 'estado.pdf', sizeBytes: 123, quarantinePath: 'SENT-Q', safePath: 'SENT-S' } as any],
     });
-    expect(Object.keys(v).sort()).toEqual(['attachments', 'consentText', 'consentVersion', 'documentLabel', 'documentSha256', 'expiresAt', 'form', 'orgName', 'pdfUrl', 'privacyNotice', 'signerName', 'signerRole', 'title']);
+    expect(Object.keys(v).sort()).toEqual(['attachments', 'consentText', 'consentVersion', 'declineNotice', 'documentLabel', 'documentSha256', 'expiresAt', 'form', 'orgName', 'pdfUrl', 'privacyNotice', 'signerName', 'signerRole', 'title']);
     expect(v.attachments).toEqual([{ id: 'att1', originalName: 'estado.pdf', sizeBytes: 123 }]); // sin rutas de Storage
     const dump = JSON.stringify(v);
     for (const s of [...FORBIDDEN, 'SENT-Q', 'SENT-S']) expect(dump).not.toContain(s);

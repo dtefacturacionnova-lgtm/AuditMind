@@ -6,7 +6,17 @@
 |---|---|
 | F1a · Infraestructura y bases | **Hecha y aplicada en producción (2026-10-18), 62 pruebas.** SQL aplicado, ClamAV en `127.0.0.1:3310` (EICAR detectado; no accesible desde internet), API desplegada con `trust proxy` y límite de intentos registrado. Verificado el código compilado contra el ClamAV real y el cifrado con la clave real del servidor |
 | F1b · Servicio y API | **Hecha y DESPLEGADA en producción (2026-10-19), 192 pruebas.** Servicio interno y público, adjuntos con antivirus, sellado, tareas programadas, controladores. Interruptor APAGADO por defecto (rutas públicas → 503, internas → 401). Verificado en producción a través de nginx: validación de cuerpos (400), límite por IP real (el VPS se bloquea tras 30 peticiones y otra IP en la misma ventana sigue pasando) |
-| F1c · F1d · F1e · F2 · F3 · F4 · F5 · F5b · F6 | Pendientes |
+| F1c · Páginas públicas | **Construida y verificada en el navegador contra un API de prueba (2026-10-19), 63 pruebas web; PENDIENTE de despliegue.** `/firmar` y `/verificar`, cabeceras de seguridad, middleware sin Supabase para estas rutas |
+| F1d · F1e · F2 · F3 · F4 · F5 · F5b · F6 | Pendientes |
+
+Precisiones surgidas al construir F1c:
+- **El token del #fragmento se borra dos veces.** Next 15 envuelve `history.replaceState` en un efecto del componente raíz del router, que corre DESPUÉS del efecto de un hijo: una sola llamada deja al router con la URL con `#token` y la reescribe en la barra ante cualquier actualización suya (se reprodujo con una recarga en caliente). Se llama una vez al instante y otra en `setTimeout(0)`; comprobado también con `next build` + `next start`.
+- **No se fija `object-src 'none'` en el CSP** (el plan lo traía): los blobs heredan la política y el visor de PDF de algunos navegadores usa `<embed>`. Chromium 152 sí lo permitía, pero Safari y Firefox no se pudieron probar; no aporta nada porque estas páginas no tienen `<object>`/`<embed>` propios. El resto del CSP, `X-Frame-Options`, `Referrer-Policy`, `noindex`, `no-store` y `nosniff` sí se aplican y se verificaron con curl contra `next start`.
+- El middleware salta Supabase para `/firmar` y `/verificar`: un firmante externo no recibe ni envía cookies de sesión.
+- Las pantallas se decidieron en una máquina de estados pura (`lib/signature/flow.ts`, con pruebas propias): qué hacer ante 401, 404, 409, 410, 423 y fallos de red no depende del navegador.
+- Si el SHA-256 del PDF bajado no coincide con el registrado, la página oculta el PDF y los formularios y bloquea la firma (el servidor lo vuelve a comprobar al firmar).
+- La respuesta de `GET /document` ahora incluye `declineNotice` (aviso de lo que pasa al no firmar), igual que ya incluía `consentText` y `privacyNotice`.
+- Un cierre por doble clic: `inFlight` en el cliente + 409 tardío ignorado por la máquina de estados cuando ya se muestra la constancia.
 
 Precisiones surgidas al construir F1b:
 - **El ValidationPipe global convierte `"false"` en `true`** (`enableImplicitConversion`) antes de que `@IsBoolean` valide. Para el consentimiento y `reminderEnabled` se lee el valor original con `@Transform(({ obj, key }) => obj[key])`; una prueba de controlador lo exige. El mismo riesgo existía en 19 archivos de DTO del repo: se corrigió en todos con `@StrictBoolean()` (`common/validators/strict-boolean.decorator.ts`; ver Fix 40 en la memoria).

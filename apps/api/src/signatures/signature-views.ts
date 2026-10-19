@@ -38,7 +38,7 @@ export function publicDocumentView(
   r: SignatureRequest,
   p: {
     orgName: string; documentLabel: string; pdfUrl: string;
-    consentText: string; consentVersion: string; privacyNotice: string;
+    consentText: string; consentVersion: string; privacyNotice: string; declineNotice: string;
     form: FormSpec; attachments: Pick<SignatureAttachment, 'id' | 'originalName' | 'sizeBytes'>[];
   },
 ) {
@@ -54,6 +54,7 @@ export function publicDocumentView(
     consentVersion: p.consentVersion,
     consentText: p.consentText,
     privacyNotice: p.privacyNotice,
+    declineNotice: p.declineNotice,
     form: p.form,
     attachments: p.attachments.map((a) => ({ id: a.id, originalName: a.originalName, sizeBytes: a.sizeBytes })),
   };

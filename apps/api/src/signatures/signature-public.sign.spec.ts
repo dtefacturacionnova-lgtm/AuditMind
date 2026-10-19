@@ -188,6 +188,7 @@ describe('Firma pública · documento y copia firmada', () => {
     expect(doc.consentText).toBe(renderConsentText(doc.title));
     expect(doc.consentVersion).toBe(CONSENT_VERSION);
     expect(doc.privacyNotice).toContain('Pérez Cortez y Asociados');
+    expect(doc.declineNotice).toBe('Al no firmar, se informará a Pérez Cortez y Asociados tu decisión y el motivo que escribas.');
     expect(doc.form.fields[0].key).toBe('agrees');
   });
 

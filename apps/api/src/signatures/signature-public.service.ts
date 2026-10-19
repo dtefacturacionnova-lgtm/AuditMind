@@ -18,7 +18,7 @@ import { SignatureSealingService } from './signature-sealing.service';
 import { SignatureAttachmentsService } from './signature-attachments.service';
 import { SignatureStorageService } from './signature-storage.service';
 import { OrganizationSealService } from './organization-seal.service';
-import { CONSENT_VERSION, renderConsentText, renderPrivacyNotice } from './legal-texts';
+import { CONSENT_VERSION, renderConsentText, renderDeclineNotice, renderPrivacyNotice } from './legal-texts';
 import { publicDocumentView, publicRequestView, publicVerifyView } from './signature-views';
 
 // ─── Parámetros de seguridad (docs/firma-externa-por-enlace.md §6) ───────────
@@ -247,6 +247,7 @@ export class SignaturePublicService {
       consentText: renderConsentText(r.title),
       consentVersion: CONSENT_VERSION,
       privacyNotice: renderPrivacyNotice(orgName),
+      declineNotice: renderDeclineNotice(orgName),
       form: adapter.buildForm((r.payload ?? {}) as Record<string, unknown>),
       attachments: await this.attachments.list(r.id),
     });

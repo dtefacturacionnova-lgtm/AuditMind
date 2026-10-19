@@ -30,6 +30,13 @@ export class AuditFoldersController {
     return this.service.getExpediente(auditId, user);
   }
 
+  @Get('orphan-papers')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Papeles del encargo que no están en ninguna carpeta («Sin carpeta»)' })
+  getOrphanPapers(@Param('auditId') auditId: string, @CurrentUser() user: AuthUser) {
+    return this.service.getOrphanPapers(auditId, user);
+  }
+
   @Post('initialize')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Inicializar expediente (se puede pasar templateId opcional)' })

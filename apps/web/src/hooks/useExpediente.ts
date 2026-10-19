@@ -78,6 +78,18 @@ export function useExpediente(auditId: string) {
   });
 }
 
+/**
+ * Papeles del encargo que no están en ninguna carpeta (su sección de índice no tiene carpeta). Cuelga de la clave
+ * `['expediente', auditId]`: cualquier mutación que refresque el expediente refresca también esta lista.
+ */
+export function useOrphanPapers(auditId: string) {
+  return useQuery<WpStub[]>({
+    queryKey: ['expediente', auditId, 'orphans'],
+    queryFn: () => apiClient.get(`/audits/${auditId}/expediente/orphan-papers`),
+    enabled: !!auditId,
+  });
+}
+
 export function useInitializeExpediente(auditId: string) {
   const qc = useQueryClient();
   return useMutation({

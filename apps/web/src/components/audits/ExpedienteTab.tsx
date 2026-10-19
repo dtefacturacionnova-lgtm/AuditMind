@@ -1,8 +1,8 @@
 'use client';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
-  FolderOpen, FolderPlus, Folder, FileText, Plus, ChevronRight, ChevronDown,
+  Search, FolderOpen, FolderPlus, Folder, FileText, Plus, ChevronRight, ChevronDown,
   MoreHorizontal, Pencil, Trash2, CheckCircle2, Lock, AlertCircle, Clock,
   Loader2, FilePlus, Upload, X, Music, Image as ImageIcon, FileSpreadsheet,
   Presentation, File, Star, Settings2, Download, ExternalLink, Video,
@@ -12,9 +12,10 @@ import {
   useExpediente, useInitializeExpediente, useInitializeFromAuditTemplate,
   useCreateFolder, useUpdateFolder, useDeleteFolder, useSignOffPhase,
   useUploadFileToFolder, useDeleteWorkingPaper, useRenamePaper,
-  useAssignPaperToFolder,
+  useAssignPaperToFolder, useOrphanPapers,
   AuditPhase, AuditFolder, WpStub, PHASE_CONFIG, PHASE_STATUS_CONFIG,
 } from '@/hooks/useExpediente';
+import { NO_FOLDER_LABEL, searchPapers, searchTokens } from '@/lib/paper-search';
 import { WP_STATUS_CONFIG, type WpStatus } from '@/hooks/useWorkingPapers';
 import { useIndexTemplates } from '@/hooks/useIndexTemplates';
 import { useAvailableTemplatePapers, useAddTemplatePaper } from '@/hooks/useAudits';
@@ -594,11 +595,17 @@ function PaperTableRow({
   onRename,
   onMove,
   onDelete,
+  location,
+  onGoToFolder,
 }: {
   paper: WpStub;
   onRename: (p: WpStub) => void;
   onMove:   (p: WpStub) => void;
   onDelete: (p: WpStub) => void;
+  /** Solo en los resultados de búsqueda: dónde está el papel («Planificación › B — Estados Financieros»). */
+  location?: string;
+  /** Solo en los resultados de búsqueda: abre la carpeta del papel. */
+  onGoToFolder?: () => void;
 }) {
   const mimeInfo = getMimeInfo(paper.mimeType, paper.originalFilename);
   const kindCfg  = WP_KIND_CONFIG[paper.wpKind] ?? WP_KIND_CONFIG.STANDARD;
@@ -655,6 +662,24 @@ function PaperTableRow({
             <span className="block truncate text-[10px] text-slate-400">
               {paper.originalFilename}
             </span>
+          )}
+          {location && (
+            onGoToFolder ? (
+              <button
+                type="button"
+                onClick={onGoToFolder}
+                title="Abrir esta carpeta"
+                className="mt-0.5 flex max-w-full items-center gap-1 truncate text-[10px] text-amber-700 hover:underline"
+              >
+                <FolderOpen className="h-3 w-3 shrink-0" />
+                <span className="truncate">{location}</span>
+              </button>
+            ) : (
+              <span className="mt-0.5 flex max-w-full items-center gap-1 truncate text-[10px] text-amber-700">
+                <FolderOpen className="h-3 w-3 shrink-0" />
+                <span className="truncate">{location}</span>
+              </span>
+            )
           )}
           {/* Elaborado/Revisado por */}
           <div className="mt-1 flex items-center gap-2">
@@ -967,6 +992,9 @@ function UploadModal({
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
+/** Id de la carpeta virtual «Sin carpeta» (papeles que no están en ninguna carpeta). */
+const ORPHANS_FOLDER_ID = '__orphans__';
+
 interface ExpedienteTabProps {
   auditId: string;
   auditTitle: string;
@@ -991,6 +1019,13 @@ export function ExpedienteTab({ auditId, templateId, onCreatePaper }: Expediente
   // Panel split
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
 
+  // Buscador de papeles + papeles que no están en ninguna carpeta («Sin carpeta»)
+  const [query, setQuery] = useState('');
+  const { data: orphanData } = useOrphanPapers(auditId);
+  const orphans = useMemo(() => orphanData ?? [], [orphanData]);
+  const searching = searchTokens(query).length > 0;
+  const hits = useMemo(() => searchPapers(phases ?? [], orphans, query), [phases, orphans, query]);
+
   // Folder modal state
   const [folderModal, setFolderModal] = useState<{
     mode: 'create' | 'edit';
@@ -1013,6 +1048,11 @@ export function ExpedienteTab({ auditId, templateId, onCreatePaper }: Expediente
     templateId ? auditId : undefined,
   );
   const addPaper = useAddTemplatePaper(auditId);
+
+  // «Sin carpeta» desaparece cuando ya no quedan papeles sueltos (p. ej. se movió el último)
+  useEffect(() => {
+    if (selectedFolderId === ORPHANS_FOLDER_ID && orphanData && orphanData.length === 0) setSelectedFolderId(null);
+  }, [orphanData, selectedFolderId]);
 
   // Auto-seleccionar la primera carpeta disponible
   useEffect(() => {
@@ -1150,8 +1190,21 @@ export function ExpedienteTab({ auditId, templateId, onCreatePaper }: Expediente
 
   // ── Carpeta seleccionada ──────────────────────────────────────────────────
 
-  const selectedFolder = selectedFolderId ? findFolderById(phases, selectedFolderId) : null;
-  const selectedPhase  = selectedFolderId ? findPhaseForFolder(phases, selectedFolderId) : null;
+  // «Sin carpeta» es una carpeta VIRTUAL (no existe en la base): reúne los papeles que no están en ninguna.
+  const isOrphansView  = selectedFolderId === ORPHANS_FOLDER_ID;
+  const orphansFolder: AuditFolder = {
+    id: ORPHANS_FOLDER_ID, ref: '—', name: NO_FOLDER_LABEL, sortOrder: 0, children: [], papers: orphans,
+    description: 'Estos papeles no están en ninguna carpeta del expediente. Usa ⋮ → Mover para ubicarlos en una carpeta.',
+  };
+  const selectedFolder = isOrphansView
+    ? orphansFolder
+    : selectedFolderId ? findFolderById(phases, selectedFolderId) : null;
+  const selectedPhase  = selectedFolderId && !isOrphansView ? findPhaseForFolder(phases, selectedFolderId) : null;
+
+  const openFolder = (folderId: string | null) => {
+    setSelectedFolderId(folderId ?? ORPHANS_FOLDER_ID);
+    setQuery('');
+  };
 
   // ── Layout split-screen ───────────────────────────────────────────────────
 
@@ -1167,6 +1220,32 @@ export function ExpedienteTab({ auditId, templateId, onCreatePaper }: Expediente
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Árbol del expediente
           </span>
+        </div>
+
+        {/* Buscador de papeles: referencia, código (B-10, PT-ENTREV), título o nombre de archivo */}
+        <div className="border-b border-slate-200 bg-white px-2.5 py-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setQuery(''); }}
+              placeholder="Buscar papel o código…"
+              aria-label="Buscar un papel en el expediente por título, referencia o código"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-7 pr-7 text-xs text-slate-700 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Borrar la búsqueda"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Fases y carpetas */}
@@ -1247,6 +1326,25 @@ export function ExpedienteTab({ auditId, templateId, onCreatePaper }: Expediente
               </div>
             );
           })}
+
+          {/* Papeles que no están en ninguna carpeta: antes no se veían en ningún lado del árbol */}
+          {orphans.length > 0 && (
+            <button
+              type="button"
+              onClick={() => openFolder(null)}
+              className={cn(
+                'mx-1.5 mt-1 flex w-[calc(100%-0.75rem)] items-center gap-1.5 rounded-lg border border-dashed px-2 py-1.5 text-left text-[11px] transition-colors',
+                isOrphansView
+                  ? 'border-amber-300 bg-amber-50 font-semibold text-amber-800'
+                  : 'border-amber-200 text-amber-700 hover:bg-amber-50',
+              )}
+              title="Papeles que no están en ninguna carpeta"
+            >
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{NO_FOLDER_LABEL}</span>
+              <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-px text-[10px] font-bold text-amber-900">{orphans.length}</span>
+            </button>
+          )}
         </div>
 
         {/* ─── Papeles disponibles de la plantilla ──────────────────────── */}
@@ -1312,7 +1410,68 @@ export function ExpedienteTab({ auditId, templateId, onCreatePaper }: Expediente
 
       {/* ─── PANEL DERECHO: contenido de la carpeta seleccionada ────────── */}
       <div className="flex min-w-0 flex-1 flex-col bg-white">
-        {selectedFolder ? (
+        {searching ? (
+          /* ── Resultados de la búsqueda (en todo el expediente, incluidos los papeles sin carpeta) ── */
+          <>
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <Search className="h-4 w-4 shrink-0 text-blue-500" />
+                <span className="truncate text-sm font-semibold text-slate-800">
+                  {hits.length} {hits.length === 1 ? 'resultado' : 'resultados'} para «{query.trim()}»
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Volver al árbol
+              </button>
+            </div>
+            {hits.length > 0 ? (
+              <div className="flex-1 overflow-y-auto">
+                <table className="w-full border-collapse">
+                  <thead className="sticky top-0 z-10 bg-slate-50">
+                    <tr className="border-b border-slate-200">
+                      <th className="w-9 py-2 pl-4 pr-1" />
+                      <th className="w-20 px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Ref.</th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Documento · Carpeta</th>
+                      <th className="w-8 px-1 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-400" title="Estado">St.</th>
+                      <th className="w-24 px-1 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">Indicadores</th>
+                      <th className="w-10 py-2 pl-1 pr-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hits.map((hit) => (
+                      <PaperTableRow
+                        key={hit.paper.id}
+                        paper={hit.paper as WpStub}
+                        onRename={setRenameModal}
+                        onMove={setMoveModal}
+                        onDelete={setDeleteModal}
+                        location={hit.location}
+                        onGoToFolder={() => openFolder(hit.folderId)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+                  <Search className="h-7 w-7 text-slate-300" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-600">No encontré ningún papel con «{query.trim()}»</p>
+                  <p className="mt-0.5 max-w-sm text-xs text-slate-400">
+                    Prueba con parte del título, la referencia o el código (por ejemplo «entrev», «B-10» o «PT-ENTREV»).
+                    {(templateId ?? '') !== '' && ' Si el papel aún no está en el expediente, agrégalo desde «Papeles de la plantilla».'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        ) : selectedFolder ? (
           <>
             {/* Cabecera del panel derecho */}
             <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3">
@@ -1343,25 +1502,27 @@ export function ExpedienteTab({ auditId, templateId, onCreatePaper }: Expediente
                 )}
               </div>
 
-              {/* Botones de acción */}
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onCreatePaper?.(selectedFolder.id)}
-                  className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
-                >
-                  <FilePlus className="h-3.5 w-3.5" />
-                  Papel inteligente
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUploadFolderId(selectedFolder.id)}
-                  className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  Subir archivo
-                </button>
-              </div>
+              {/* Botones de acción (no aplican a «Sin carpeta», que es virtual: primero hay que ubicar los papeles) */}
+              {!isOrphansView && (
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onCreatePaper?.(selectedFolder.id)}
+                    className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                  >
+                    <FilePlus className="h-3.5 w-3.5" />
+                    Papel inteligente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadFolderId(selectedFolder.id)}
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Subir archivo
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Descripción de carpeta */}

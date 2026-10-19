@@ -1,7 +1,8 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException,
+  Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
+import { resolveFolderId } from './folder-match.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { PhaseStatus, PhaseType, WpKind, WorkingPaperType, WorkingPaperStatus } from '@prisma/client';
@@ -28,6 +29,7 @@ const PAPER_STUB_SELECT = {
 
 @Injectable()
 export class AuditFoldersService {
+  private readonly logger = new Logger(AuditFoldersService.name);
   private readonly supabaseAdmin: SupabaseClient;
 
   constructor(
@@ -333,7 +335,7 @@ export class AuditFoldersService {
 
     let linked = 0;
     for (const wp of orphans) {
-      const folderId = byRef.get(wp.indexSection);
+      const folderId = resolveFolderId(wp.indexSection, byRef);
       if (!folderId) continue;
       await this.prisma.workingPaper.update({
         where: { id: wp.id },
@@ -348,6 +350,12 @@ export class AuditFoldersService {
 
   async getExpediente(auditId: string, user: AuthUser) {
     await this.verifyAuditAccess(auditId, user);
+
+    // Autocuración: un papel sin carpeta cuya sección tiene carpeta se engancha solo (el árbol solo muestra papeles
+    // dentro de carpetas; «Agregar papel» antes los dejaba sueltos). Idempotente; un fallo aquí no debe romper la lectura.
+    await this.linkOrphanPapersToFolders(auditId).catch((e) =>
+      this.logger.warn(`No se pudieron enganchar papeles sueltos (${auditId}): ${(e as Error).message}`),
+    );
 
     const phases = await this.prisma.auditPhase.findMany({
       where: { auditId },
@@ -378,6 +386,16 @@ export class AuditFoldersService {
 
     // Si no hay fases, devolver vacío (sin auto-init)
     return phases;
+  }
+
+  /** Papeles del encargo que siguen SIN carpeta (su sección no tiene carpeta): la interfaz los muestra en «Sin carpeta». */
+  async getOrphanPapers(auditId: string, user: AuthUser) {
+    await this.verifyAuditAccess(auditId, user);
+    return this.prisma.workingPaper.findMany({
+      where: { auditId, folderId: null },
+      select: PAPER_STUB_SELECT,
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   // ─── Fases ────────────────────────────────────────────────────────────────

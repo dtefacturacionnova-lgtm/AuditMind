@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AuditType, WpKind, WorkingPaperType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAPER_TEMPLATES } from '../working-papers/paper-templates';
+import { resolveFolderId } from '../audit-folders/folder-match.util';
 
 // ─── Paper definition within an index ────────────────────────────────────────
 
@@ -1122,6 +1123,12 @@ export class AuditIndexService {
     });
     if (existing) throw new Error(`El papel "${code}" ya existe en esta auditoría`);
 
-    return this._createOnePaper(auditId, def, preparedById);
+    const wp = await this._createOnePaper(auditId, def, preparedById);
+
+    // Dejarlo DENTRO de su carpeta del expediente: el árbol solo muestra papeles con carpeta, y sin esto el papel
+    // quedaba «agregado pero invisible» (reportado por el usuario, 2026-10-19).
+    const folders = await this.prisma.auditFolder.findMany({ where: { auditId }, select: { id: true, ref: true } });
+    const folderId = resolveFolderId(def.indexSection, new Map(folders.map((f) => [f.ref, f.id])));
+    return folderId ? this.prisma.workingPaper.update({ where: { id: wp.id }, data: { folderId } }) : wp;
   }
 }

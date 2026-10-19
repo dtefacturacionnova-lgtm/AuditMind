@@ -6,7 +6,7 @@
 |---|---|
 | F1a · Infraestructura y bases | **Hecha y aplicada en producción (2026-10-18), 62 pruebas.** SQL aplicado, ClamAV en `127.0.0.1:3310` (EICAR detectado; no accesible desde internet), API desplegada con `trust proxy` y límite de intentos registrado. Verificado el código compilado contra el ClamAV real y el cifrado con la clave real del servidor |
 | F1b · Servicio y API | **Hecha y DESPLEGADA en producción (2026-10-19), 192 pruebas.** Servicio interno y público, adjuntos con antivirus, sellado, tareas programadas, controladores. Interruptor APAGADO por defecto (rutas públicas → 503, internas → 401). Verificado en producción a través de nginx: validación de cuerpos (400), límite por IP real (el VPS se bloquea tras 30 peticiones y otra IP en la misma ventana sigue pasando) |
-| F1c · Páginas públicas | **Construida y verificada en el navegador contra un API de prueba (2026-10-19), 63 pruebas web; PENDIENTE de despliegue.** `/firmar` y `/verificar`, cabeceras de seguridad, middleware sin Supabase para estas rutas |
+| F1c · Páginas públicas | **Hecha y DESPLEGADA en producción (2026-10-19, commits `5c34eb9`/`83fc4d3`), 63 pruebas web.** Verificada en el navegador contra un API de prueba y, en producción, con curl: cabeceras de seguridad en `/firmar` y `/verificar` (no en el resto del sitio) y API pública en 503 con el interruptor apagado. `/firmar` y `/verificar`, middleware sin Supabase para estas rutas |
 | F1d · F1e · F2 · F3 · F4 · F5 · F5b · F6 | Pendientes |
 
 Precisiones surgidas al construir F1c:
@@ -16,6 +16,7 @@ Precisiones surgidas al construir F1c:
 - Las pantallas se decidieron en una máquina de estados pura (`lib/signature/flow.ts`, con pruebas propias): qué hacer ante 401, 404, 409, 410, 423 y fallos de red no depende del navegador.
 - Si el SHA-256 del PDF bajado no coincide con el registrado, la página oculta el PDF y los formularios y bloquea la firma (el servidor lo vuelve a comprobar al firmar).
 - La respuesta de `GET /document` ahora incluye `declineNotice` (aviso de lo que pasa al no firmar), igual que ya incluía `consentText` y `privacyNotice`.
+- Los `*.spec.ts` quedan excluidos del `tsconfig.json` de la web: el build de producción no debe depender de `@types/jest` (jest usa su propia configuración en `jest.config.js`).
 - Un cierre por doble clic: `inFlight` en el cliente + 409 tardío ignorado por la máquina de estados cuando ya se muestra la constancia.
 
 Precisiones surgidas al construir F1b:

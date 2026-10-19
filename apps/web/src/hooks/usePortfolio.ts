@@ -152,6 +152,7 @@ export interface EngagementLetter {
   signedByClientRole?: string | null;
   signedAt?:           string | null;
   fileUrl?:            string | null;
+  declineReason?:      string | null;
   status:              EngagementLetterStatus;
   createdById:         string;
   createdAt:           string;
@@ -330,7 +331,7 @@ export interface PortfolioProfitabilitySummary {
 
 // ─── Query keys ───────────────────────────────────────────────────────────────
 const CLIENTS_KEY         = 'portfolio-clients';
-const CLIENT_KEY          = 'portfolio-client';
+export const CLIENT_KEY   = 'portfolio-client';
 const ENGAGEMENTS_KEY     = 'portfolio-engagements';
 const PROFITABILITY_KEY   = 'portfolio-profitability';
 const PROFITABILITY_LIST_KEY = 'portfolio-profitability-list';

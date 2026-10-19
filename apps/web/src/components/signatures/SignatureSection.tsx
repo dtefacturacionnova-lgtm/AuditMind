@@ -9,7 +9,11 @@ import { SignatureRequestsPanel, type SignatureRequestsPanelProps } from './Sign
 type SectionProps =
   Pick<SignatureRequestsPanelProps, 'documentType' | 'title' | 'sendLabel' | 'sendDisabledReason' | 'canManage' | 'isManager' | 'renderResponse' | 'responseLabels' | 'emptyHint'> &
   Pick<SendForSignatureModalProps, 'documentLabel' | 'documentTitle' | 'defaultSigner' | 'initialPayload' | 'renderPayloadFields' | 'validatePayload' | 'onSent'> &
-  { targetId: string };
+  {
+    targetId: string;
+    /** `false` oculta el botón de envío (p. ej. la carta ya se firmó). Por defecto se muestra. */
+    canSend?: boolean;
+  };
 
 /**
  * Panel de solicitudes + botón y ventana de envío, ya conectados. Cada documento (carta, confirmación, acta) monta
@@ -24,7 +28,7 @@ export function SignatureSection(props: SectionProps) {
     <>
       <SignatureRequestsPanel
         documentType={props.documentType} targetId={props.targetId} title={props.title}
-        onSend={() => setSending(true)} sendLabel={props.sendLabel} sendDisabledReason={props.sendDisabledReason}
+        onSend={props.canSend === false ? undefined : () => setSending(true)} sendLabel={props.sendLabel} sendDisabledReason={props.sendDisabledReason}
         canManage={props.canManage} isManager={props.isManager} renderResponse={props.renderResponse}
         responseLabels={props.responseLabels} emptyHint={props.emptyHint}
       />

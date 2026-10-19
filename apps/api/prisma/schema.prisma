@@ -1228,6 +1228,7 @@ model EngagementLetter {
   signedByClientRole String?
   signedAt           DateTime?
   fileUrl            String?
+  declineReason      String? // motivo que escribió el cliente al rechazar la firma electrónica (SQL: 2026-10-carta-rechazo.sql)
   status             EngagementLetterStatus @default(DRAFT)
   createdById        String
   createdAt          DateTime               @default(now())

@@ -60,10 +60,16 @@ export function sealLabel(status: SignatureStatus, seal: SealStatus, timestamped
   }
 }
 
-/** Mientras alguna solicitud se está sellando, la lista se refresca sola cada pocos segundos. */
+/**
+ * La lista se refresca sola: cada pocos segundos mientras algo se está sellando, y más despacio mientras se espera que el
+ * firmante abra o firme (así el equipo ve el cambio sin recargar la página).
+ */
 export const SEAL_POLL_MS = 8000;
+export const WAITING_POLL_MS = 30_000;
 export function pollInterval(list: Array<{ status: SignatureStatus; sealStatus: SealStatus }> | undefined): number | false {
-  return list?.some((r) => r.status === 'SIGNED' && r.sealStatus === 'PENDING') ? SEAL_POLL_MS : false;
+  if (list?.some((r) => r.status === 'SIGNED' && r.sealStatus === 'PENDING')) return SEAL_POLL_MS;
+  if (list?.some((r) => isActive(r.status))) return WAITING_POLL_MS;
+  return false;
 }
 
 // ─── Bitácora ────────────────────────────────────────────────────────────────

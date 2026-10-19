@@ -1,6 +1,6 @@
 import {
   canResend, canReseal, canRevoke, DEFAULT_EXPIRY_DAYS, eventDetail, expiryChoices, eventLabel, EVENT_LABELS, integrityLabel, isActive, MIN_ROLE_BY_TYPE, pollInterval,
-  responseEntries, sealLabel, SEAL_POLL_MS, STATUS_META, validateReason, validateSendForm, verifyPath, type SendFormValues, type SignatureStatus,
+  responseEntries, sealLabel, SEAL_POLL_MS, STATUS_META, WAITING_POLL_MS, validateReason, validateSendForm, verifyPath, type SendFormValues, type SignatureStatus,
 } from './internal';
 
 const ALL: SignatureStatus[] = ['PENDING', 'VIEWED', 'SIGNED', 'DECLINED', 'REVOKED', 'EXPIRED'];
@@ -44,11 +44,15 @@ describe('sellado', () => {
     expect(sealLabel('SIGNED', 'SEALED', false)).toMatchObject({ tone: 'amber' });
     expect(sealLabel('SIGNED', 'FAILED', false)).toMatchObject({ tone: 'red' });
   });
-  it('la lista se refresca sola solo mientras algo se está sellando', () => {
+  it('la lista se refresca sola: rápido mientras se sella, despacio mientras se espera la firma, nada en lo demás', () => {
     expect(pollInterval(undefined)).toBe(false);
     expect(pollInterval([])).toBe(false);
-    expect(pollInterval([{ status: 'SIGNED', sealStatus: 'SEALED' }, { status: 'PENDING', sealStatus: 'NOT_APPLICABLE' }])).toBe(false);
+    expect(pollInterval([{ status: 'SIGNED', sealStatus: 'SEALED' }, { status: 'REVOKED', sealStatus: 'NOT_APPLICABLE' }, { status: 'DECLINED', sealStatus: 'NOT_APPLICABLE' }])).toBe(false);
     expect(pollInterval([{ status: 'SIGNED', sealStatus: 'PENDING' }])).toBe(SEAL_POLL_MS);
+    expect(pollInterval([{ status: 'PENDING', sealStatus: 'NOT_APPLICABLE' }])).toBe(WAITING_POLL_MS);
+    expect(pollInterval([{ status: 'VIEWED', sealStatus: 'NOT_APPLICABLE' }])).toBe(WAITING_POLL_MS);
+    // si hay una vigente y otra sellándose, manda el sellado (más urgente)
+    expect(pollInterval([{ status: 'PENDING', sealStatus: 'NOT_APPLICABLE' }, { status: 'SIGNED', sealStatus: 'PENDING' }])).toBe(SEAL_POLL_MS);
   });
 });
 

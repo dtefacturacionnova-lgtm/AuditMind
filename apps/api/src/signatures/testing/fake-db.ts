@@ -30,6 +30,12 @@ const DEFAULTS: Record<string, () => Row> = {
   signatureAttachment: () => ({ safePath: null, safeSha256: null, scanSignature: null, submitted: false, createdAt: now() }),
   organization: () => ({}),
   user: () => ({}),
+  // Documentos de origen que usan los adaptadores reales (carta de compromiso, F2).
+  engagementLetter: () => ({
+    proposalId: null, signedByClientName: null, signedByClientRole: null, signedAt: null, fileUrl: null, declineReason: null,
+    status: 'DRAFT', year: 2026, createdAt: now(), updatedAt: now(),
+  }),
+  client: () => ({ status: 'PENDING_SIGNATURE' }),
 };
 
 const UNIQUE: Record<string, string[][]> = {
@@ -39,6 +45,8 @@ const UNIQUE: Record<string, string[][]> = {
   signatureAttachment: [['id']],
   organization: [['id']],
   user: [['id']],
+  engagementLetter: [['id']],
+  client: [['id']],
 };
 
 const isOp = (v: any) => v && typeof v === 'object' && !(v instanceof Date) && Object.keys(v).some((k) => ['in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'not', 'equals'].includes(k));
@@ -48,6 +56,7 @@ const eq = (a: any, b: any) => (a instanceof Date && b instanceof Date ? a.getTi
 export class FakeDb {
   tables: Record<string, Row[]> = {
     signatureRequest: [], signatureSession: [], signatureEvent: [], signatureAttachment: [], organization: [], user: [],
+    engagementLetter: [], client: [],
   };
   private chain: Promise<unknown> = Promise.resolve();
 
@@ -185,6 +194,8 @@ export class FakeDb {
     signatureAttachment: this.delegate('signatureAttachment'),
     organization: this.delegate('organization'),
     user: this.delegate('user'),
+    engagementLetter: this.delegate('engagementLetter'),
+    client: this.delegate('client'),
     $transaction: (fn: any) => this.transaction(fn),
     $queryRaw: async () => [],
   };
@@ -192,6 +203,14 @@ export class FakeDb {
   // ─── ayudas para las pruebas ───────────────────────────────────────────────
   seedOrg(id = 'org1', name = 'Pérez Cortez y Asociados') { this.tables.organization.push({ id, name }); }
   seedUser(id = 'u1', email = 'auditor@despacho.com', name = 'Ana Auditora') { this.tables.user.push({ id, email, name }); }
+  seedClient(id = 'cli1', legalName = 'Comercial Demo S.A. de C.V.', organizationId = 'org1') {
+    this.tables.client.push({ id, legalName, organizationId, status: 'PENDING_SIGNATURE' });
+  }
+  seedLetter(over: Record<string, unknown> = {}) {
+    const row = { ...DEFAULTS.engagementLetter(), id: 'letter1', organizationId: 'org1', clientId: 'cli1', content: 'CARTA DE COMPROMISO\nTexto con <b>HTML</b> & más.', ...over };
+    this.tables.engagementLetter.push(row);
+    return row;
+  }
   get requests() { return this.tables.signatureRequest; }
   get events() { return this.tables.signatureEvent; }
 }

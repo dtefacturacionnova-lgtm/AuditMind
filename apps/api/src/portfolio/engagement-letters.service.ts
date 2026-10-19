@@ -2,10 +2,11 @@ import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import {
-  Client, ClientStatus, EngagementLetter, EngagementLetterStatus, Prisma, Proposal, ProposalStatus,
+  Client, ClientStatus, EngagementLetter, EngagementLetterStatus, Prisma, Proposal, ProposalStatus, SignatureDocumentType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { SignatureRequestsService } from '../signatures/signature-requests.service';
 import {
   CreateEngagementLetterDto, UpdateEngagementLetterDto, SignEngagementLetterDto,
 } from './dto/engagement-letter.dto';
@@ -16,9 +17,15 @@ const LETTER_INCLUDE = {
   createdBy: { select: { id: true, name: true } },
 } satisfies Prisma.EngagementLetterInclude;
 
+/** Las transacciones que cierran solicitudes de firma escriben su bitácora: mismo margen que la firma (lección #32). */
+const TX_OPTIONS = { timeout: 30_000 } as const;
+
 @Injectable()
 export class EngagementLettersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly signatures: SignatureRequestsService,
+  ) {}
 
   private async getLetterOrThrow(id: string, user: AuthUser): Promise<EngagementLetter> {
     const letter = await this.prisma.engagementLetter.findUnique({ where: { id } });
@@ -71,20 +78,75 @@ export class EngagementLettersService {
   }
 
   // ── Editar contenido antes de firmar ──────────────────────────────────────
+  /**
+   * Si el texto cambia, nadie debe firmar algo distinto de lo que se envió (docs/firma-externa-por-enlace.md §11.1):
+   * se revoca la solicitud de firma activa ("el documento cambió"), la carta vuelve a BORRADOR y queda el evento
+   * TARGET_UPDATED en la bitácora. Una carta rechazada por el cliente también vuelve a borrador al editarla.
+   */
   async update(id: string, dto: UpdateEngagementLetterDto, user: AuthUser) {
     const letter = await this.getLetterOrThrow(id, user);
     if (letter.status === EngagementLetterStatus.SIGNED) {
       throw new BadRequestException('No se puede editar una carta ya firmada.');
     }
+    const changed = dto.content != null && dto.content !== letter.content;
+    if (!changed) {
+      return this.prisma.engagementLetter.findUniqueOrThrow({ where: { id }, include: LETTER_INCLUDE });
+    }
 
-    return this.prisma.engagementLetter.update({
-      where: { id },
-      data:  { ...(dto.content != null && { content: dto.content }) },
-      include: LETTER_INCLUDE,
-    });
+    return this.prisma.$transaction(async (tx) => {
+      await this.signatures.revokeActiveForTarget(tx, {
+        organizationId: user.organizationId, documentType: SignatureDocumentType.ENGAGEMENT_LETTER, targetId: id,
+        reason: 'El texto de la carta cambió después de enviarla', actorId: user.id,
+      });
+      return tx.engagementLetter.update({
+        where: { id },
+        data: {
+          content: dto.content,
+          ...(letter.status !== EngagementLetterStatus.DRAFT && { status: EngagementLetterStatus.DRAFT, declineReason: null }),
+        },
+        include: LETTER_INCLUDE,
+      });
+    }, TX_OPTIONS);
   }
 
   // ── Firmar ────────────────────────────────────────────────────────────────
+  /**
+   * Registra la carta como firmada y activa al cliente. Es la ÚNICA transición a SIGNED: la usan la firma manual
+   * (carta firmada en papel) y la firma electrónica por enlace (adaptador de la firma), cada una dentro de su transacción.
+   */
+  async markSigned(
+    tx: Prisma.TransactionClient,
+    letterId: string,
+    organizationId: string,
+    by: { name: string; role: string; at: Date; fileUrl?: string },
+  ) {
+    const letter = await tx.engagementLetter.findFirst({ where: { id: letterId, organizationId } });
+    if (!letter) throw new NotFoundException('Carta de compromiso no encontrada');
+    if (letter.status === EngagementLetterStatus.SIGNED) {
+      throw new BadRequestException('La carta de compromiso ya está firmada.');
+    }
+    if (letter.status === EngagementLetterStatus.DECLINED) {
+      throw new BadRequestException('La carta de compromiso fue rechazada por el cliente; no puede firmarse.');
+    }
+
+    const updated = await tx.engagementLetter.update({
+      where: { id: letterId },
+      data: {
+        status:             EngagementLetterStatus.SIGNED,
+        signedAt:           by.at,
+        signedByClientName: by.name,
+        signedByClientRole: by.role,
+        ...(by.fileUrl != null && { fileUrl: by.fileUrl }),
+      },
+      include: LETTER_INCLUDE,
+    });
+
+    // Carta firmada ⇒ el prospecto se convierte en cliente activo y ya puede registrar encargos.
+    await tx.client.update({ where: { id: letter.clientId }, data: { status: ClientStatus.ACTIVE } });
+    return updated;
+  }
+
+  /** Firma MANUAL (respaldo: la carta se firmó en papel). Cierra cualquier solicitud de firma electrónica vigente. */
   async sign(id: string, dto: SignEngagementLetterDto, user: AuthUser) {
     const letter = await this.getLetterOrThrow(id, user);
     if (letter.status === EngagementLetterStatus.SIGNED) {
@@ -94,26 +156,16 @@ export class EngagementLettersService {
       throw new BadRequestException('La carta de compromiso fue rechazada por el cliente; no puede firmarse.');
     }
 
-    const updated = await this.prisma.engagementLetter.update({
-      where: { id },
-      data: {
-        status:             EngagementLetterStatus.SIGNED,
-        signedAt:           new Date(),
-        signedByClientName: dto.signedByClientName,
-        signedByClientRole: dto.signedByClientRole,
-        ...(dto.fileUrl != null && { fileUrl: dto.fileUrl }),
-      },
-      include: LETTER_INCLUDE,
-    });
-
-    // Carta firmada ⇒ el prospecto se convierte en cliente activo y ya puede
-    // registrar encargos.
-    await this.prisma.client.update({
-      where: { id: letter.clientId },
-      data:  { status: ClientStatus.ACTIVE },
-    });
-
-    return updated;
+    return this.prisma.$transaction(async (tx) => {
+      // Si había una solicitud por enlace en curso, el cliente ya no debe poder firmar la misma carta otra vez.
+      await this.signatures.revokeActiveForTarget(tx, {
+        organizationId: user.organizationId, documentType: SignatureDocumentType.ENGAGEMENT_LETTER, targetId: id,
+        reason: 'La carta se registró como firmada de forma manual', actorId: user.id,
+      });
+      return this.markSigned(tx, id, user.organizationId, {
+        name: dto.signedByClientName, role: dto.signedByClientRole, at: new Date(), fileUrl: dto.fileUrl,
+      });
+    }, TX_OPTIONS);
   }
 
   // ── Texto base NIA 210 ────────────────────────────────────────────────────

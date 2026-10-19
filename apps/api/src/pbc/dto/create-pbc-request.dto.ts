@@ -1,6 +1,11 @@
 import {
-  IsString, IsOptional, IsDateString, IsEmail, IsBoolean, IsArray,
+  IsString,
+  IsOptional,
+  IsDateString,
+  IsEmail,
+  IsArray,
 } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreatePbcRequestDto {
@@ -32,7 +37,7 @@ export class CreatePbcRequestDto {
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isConfidential?: boolean;
 }
 

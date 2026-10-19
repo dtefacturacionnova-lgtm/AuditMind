@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsBoolean, IsEnum, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsArray } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AcceptanceRating } from '@prisma/client';
 
@@ -9,7 +10,7 @@ export class AssignEqrReviewerDto {
 
   @ApiPropertyOptional({ description: '¿El revisor fue el socio/gerente de este encargo en algún momento?' })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   wasEngagementPartner?: boolean;
 
   @ApiPropertyOptional({ description: 'Obligatorio si wasEngagementPartner=true — justificación del enfriamiento (NIGC 2)' })

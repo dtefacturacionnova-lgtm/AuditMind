@@ -1,6 +1,11 @@
 import {
-  IsString, IsOptional, IsEnum, IsBoolean, IsInt, IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
 } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MappingType, FieldType, RefType } from '@prisma/client';
 
@@ -43,7 +48,7 @@ export class CreatePaperLinkDto {
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isActive?: boolean;
 }
 

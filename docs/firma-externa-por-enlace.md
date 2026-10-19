@@ -9,7 +9,7 @@
 | F1c · F1d · F1e · F2 · F3 · F4 · F5 · F5b · F6 | Pendientes |
 
 Precisiones surgidas al construir F1b:
-- **El ValidationPipe global convierte `"false"` en `true`** (`enableImplicitConversion`) antes de que `@IsBoolean` valide. Para el consentimiento y `reminderEnabled` se lee el valor original con `@Transform(({ obj, key }) => obj[key])`; una prueba de controlador lo exige. El mismo riesgo existe en todos los DTO del repo con booleanos (pendiente aparte).
+- **El ValidationPipe global convierte `"false"` en `true`** (`enableImplicitConversion`) antes de que `@IsBoolean` valide. Para el consentimiento y `reminderEnabled` se lee el valor original con `@Transform(({ obj, key }) => obj[key])`; una prueba de controlador lo exige. El mismo riesgo existía en 19 archivos de DTO del repo: se corrigió en todos con `@StrictBoolean()` (`common/validators/strict-boolean.decorator.ts`; ver Fix 40 en la memoria).
 - La firma y el rechazo revisan el estado de la solicitud **dentro de la transacción, después de bloquearla**, antes de la sesión: si otra firma ya ganó, el mensaje es "ya fue firmada" (409) y no "verifica tu correo" (401). La condición del `updateMany` queda como segunda capa.
 - Los límites de adjuntos viven en un solo objeto (`ATTACHMENT_LIMITS`) para poder probarlos con tamaños pequeños.
 - Una prueba de mutaciones rompió a propósito 7 puntos críticos (intentos del código, firma tras vencimiento, verificación de la bitácora al sellar, fuga del hash del token, límite por IP, antivirus que falla abierto, aislamiento por organización): las pruebas detectaron los 7 (uno solo con las dos capas de la firma quitadas a la vez).

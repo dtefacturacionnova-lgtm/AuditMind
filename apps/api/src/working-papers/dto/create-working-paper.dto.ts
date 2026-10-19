@@ -1,6 +1,11 @@
 import {
-  IsString, IsOptional, IsEnum, IsArray, IsBoolean, IsObject,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsArray,
+  IsObject,
 } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { WorkingPaperType, TickMark, WpKind } from '@prisma/client';
 
@@ -53,7 +58,7 @@ export class CreateWorkingPaperDto {
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   aiAssisted?: boolean;
 
   // ─── Expediente: ubicación opcional en el árbol de carpetas ──────────────

@@ -5,14 +5,15 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { IsString, IsOptional, IsBoolean, IsArray, ValidateNested, IsNumber, Min } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested, IsNumber, Min } from 'class-validator';
+import { StrictBoolean } from '../common/validators/strict-boolean.decorator';
 import { Type } from 'class-transformer';
 
 class RollForwardDto {
   @IsString() title!: string;
   @IsOptional() @IsString() startDate?: string;
   @IsOptional() @IsString() endDate?: string;
-  @IsOptional() @IsBoolean() carryOpenFindings?: boolean;
+  @IsOptional() @StrictBoolean() carryOpenFindings?: boolean;
 }
 
 class TbAccountDto {

@@ -2,7 +2,8 @@ import {
   Controller, Get, Post, Patch, Body, Param, Query, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { IsString, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsOptional } from 'class-validator';
+import { StrictBoolean } from '../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FindingsService } from './findings.service';
 import {
@@ -22,7 +23,7 @@ class AddCommentDto {
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isInternal?: boolean;
 }
 

@@ -1,5 +1,6 @@
 import { PartialType, OmitType, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsOptional } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { CreateOrganizationDto } from './create-organization.dto';
 
 // adminEmail/adminName solo tienen sentido al CREAR la organización (invitan al
@@ -9,6 +10,6 @@ export class UpdateOrganizationDto extends PartialType(
 ) {
   @ApiPropertyOptional({ description: 'Activar/desactivar la organización (solo SUPER_ADMIN).' })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   active?: boolean;
 }

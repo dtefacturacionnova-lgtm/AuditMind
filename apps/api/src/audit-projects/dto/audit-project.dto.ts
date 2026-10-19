@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsInt, Min, Max } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAuditProjectDto {
@@ -31,7 +32,7 @@ export class CreateAuditProjectDto {
   @ApiPropertyOptional() @IsOptional() @IsString() lastAuditOpinion?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() finalRiskScore?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() finalRiskLevel?: string;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() includeInPlan?: boolean;
+  @ApiPropertyOptional() @IsOptional() @StrictBoolean() includeInPlan?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() targetPlanYear?: number;
 
   // Tab 3 — Planificación
@@ -72,7 +73,7 @@ export class UpdateAuditProjectDto {
   @ApiPropertyOptional() @IsOptional() @IsString() lastAuditOpinion?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() finalRiskScore?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() finalRiskLevel?: string;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() includeInPlan?: boolean;
+  @ApiPropertyOptional() @IsOptional() @StrictBoolean() includeInPlan?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() targetPlanYear?: number;
 
   // Planificación
@@ -82,5 +83,5 @@ export class UpdateAuditProjectDto {
   @ApiPropertyOptional() @IsOptional() teamJson?: any;
   @ApiPropertyOptional() @IsOptional() @IsNumber() totalBudget?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
+  @ApiPropertyOptional() @IsOptional() @StrictBoolean() active?: boolean;
 }

@@ -1,7 +1,12 @@
 import {
-  IsString, IsOptional, IsNumber,
-  Min, Max, IsArray, IsBoolean,
+  IsString,
+  IsOptional,
+  IsNumber,
+  Min,
+  Max,
+  IsArray,
 } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAuditableUnitDto {
@@ -59,7 +64,7 @@ export class CreateAuditableUnitDto {
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isActive?: boolean;
 
   @ApiPropertyOptional({ example: 'BUSINESS_UNIT' })

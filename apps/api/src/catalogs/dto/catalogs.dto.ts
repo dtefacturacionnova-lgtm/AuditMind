@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsInt, IsBoolean, Min } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateEntityTypeDto {
@@ -51,7 +52,7 @@ export class UpdateEntityTypeDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   active?: boolean;
 }
 
@@ -95,6 +96,6 @@ export class UpdateProcessCategoryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   active?: boolean;
 }

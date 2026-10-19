@@ -1,8 +1,16 @@
 import {
-  IsString, IsOptional, IsEnum, IsDateString, IsNumber,
-  IsBoolean, IsArray, Min, Max, ValidateNested,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsDateString,
+  IsNumber,
+  IsArray,
+  Min,
+  Max,
+  ValidateNested,
   IsIn,
 } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AuditOriginType, AuditType } from '@prisma/client';
@@ -96,7 +104,7 @@ export class CreateAuditDto {
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isInvestigationMode?: boolean;
 
   @ApiPropertyOptional({ example: ['user-cuid-1', 'user-cuid-2'] })

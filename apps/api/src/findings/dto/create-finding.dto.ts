@@ -1,7 +1,13 @@
 import {
-  IsString, IsOptional, IsEnum, IsBoolean,
-  IsNumber, Min, Max, IsDecimal,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  Min,
+  Max,
+  IsDecimal,
 } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FindingSeverity } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -58,7 +64,7 @@ export class CreateFindingDto {
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isMaterial?: boolean;
 
   @ApiPropertyOptional({ example: 'COSO 2013' })
@@ -73,7 +79,7 @@ export class CreateFindingDto {
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isRecurring?: boolean;
 }
 
@@ -131,7 +137,7 @@ export class UpdateFindingDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isMaterial?: boolean;
 
   @ApiPropertyOptional()
@@ -146,7 +152,7 @@ export class UpdateFindingDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isRecurring?: boolean;
 }
 

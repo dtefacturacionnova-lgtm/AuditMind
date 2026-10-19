@@ -5,7 +5,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
-import { IsString, IsArray, IsBoolean, IsNumber, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsOptional, IsEnum } from 'class-validator';
+import { StrictBoolean } from '../common/validators/strict-boolean.decorator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -35,7 +36,7 @@ class CreateProcedureDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   significantRisk?: boolean;
 
   @ApiPropertyOptional()
@@ -80,7 +81,7 @@ class UpdateProcedureDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   significantRisk?: boolean;
 
   @ApiPropertyOptional()

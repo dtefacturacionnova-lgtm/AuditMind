@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsNumber, Min, Max, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsInt, IsNumber, Min, Max, IsEnum } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 
 // ─── AuditProcess ─────────────────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ export class UpdateAuditProcessDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() category?: string;
   @IsOptional() @IsString() apqcCode?: string;
-  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @StrictBoolean() active?: boolean;
   @IsOptional() @IsInt() sortOrder?: number;
 }
 
@@ -28,7 +29,7 @@ export class CreateAuditableUnitDto {
   @IsString() auditProcessId: string;
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() auditType?: string;
-  @IsOptional() @IsBoolean() isMandatory?: boolean;
+  @IsOptional() @StrictBoolean() isMandatory?: boolean;
   @IsOptional() @IsString() mandatoryBasis?: string;
   @IsOptional() @IsString() strategicLineId?: string;
   @IsOptional() @IsString() riskType?: string;
@@ -38,11 +39,11 @@ export class CreateAuditableUnitDto {
 export class UpdateAuditableUnitDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() auditType?: string;
-  @IsOptional() @IsBoolean() isMandatory?: boolean;
+  @IsOptional() @StrictBoolean() isMandatory?: boolean;
   @IsOptional() @IsString() mandatoryBasis?: string;
   @IsOptional() @IsString() strategicLineId?: string;
   @IsOptional() @IsString() riskType?: string;
-  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @StrictBoolean() active?: boolean;
   @IsOptional() @IsString() notes?: string;
 }
 

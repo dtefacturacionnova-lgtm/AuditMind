@@ -1,6 +1,7 @@
 import { Controller, Post, Get, Body, Param, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { IsArray, IsOptional, IsString, ValidateNested, IsBoolean } from 'class-validator';
+import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { StrictBoolean } from '../common/validators/strict-boolean.decorator';
 import { Type } from 'class-transformer';
 import type { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -46,7 +47,7 @@ class ImportDgiiDto {
   @IsArray() @ValidateNested({ each: true }) @Type(() => DgiiContribuyenteDto)
   contribuyentes: DgiiContribuyenteDto[];
 
-  @IsOptional() @IsBoolean() replaceAll?: boolean;
+  @IsOptional() @StrictBoolean() replaceAll?: boolean;
 }
 
 class VerifyNrcDto {

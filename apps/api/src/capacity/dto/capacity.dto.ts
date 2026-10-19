@@ -1,6 +1,13 @@
 import {
-  IsString, IsInt, IsOptional, IsNumber, IsDateString, IsBoolean, Min, Max,
+  IsString,
+  IsInt,
+  IsOptional,
+  IsNumber,
+  IsDateString,
+  Min,
+  Max,
 } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // ─── HolidayConfig ─────────────────────────────────────────────────────────
@@ -16,7 +23,7 @@ export class CreateHolidayDto {
 
   @ApiPropertyOptional({ description: 'Si aplica automáticamente cada año en el mismo mes/día', default: false })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   recurring?: boolean;
 }
 
@@ -33,12 +40,12 @@ export class UpdateHolidayDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   recurring?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   active?: boolean;
 }
 

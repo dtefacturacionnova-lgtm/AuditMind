@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsBoolean, IsArray, MaxLength, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsArray, MaxLength, ValidateNested } from 'class-validator';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -62,7 +63,7 @@ export class CreateIndexTemplateDto {
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isDefault?: boolean;
 
   @ApiProperty({ type: () => [PhaseTemplateDto] })
@@ -86,7 +87,7 @@ export class UpdateIndexTemplateDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isDefault?: boolean;
 
   @ApiPropertyOptional({ type: () => [PhaseTemplateDto] })

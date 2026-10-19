@@ -5,7 +5,7 @@
 | Fase | Estado |
 |---|---|
 | F1a · Infraestructura y bases | **Hecha y aplicada en producción (2026-10-18), 62 pruebas.** SQL aplicado, ClamAV en `127.0.0.1:3310` (EICAR detectado; no accesible desde internet), API desplegada con `trust proxy` y límite de intentos registrado. Verificado el código compilado contra el ClamAV real y el cifrado con la clave real del servidor |
-| F1b · Servicio y API | **Hecha en código (2026-10-18), 170 pruebas.** Servicio interno y público, adjuntos con antivirus, sellado, tareas programadas, controladores. Interruptor apagado por defecto. Pendiente de desplegar |
+| F1b · Servicio y API | **Hecha y DESPLEGADA en producción (2026-10-19), 192 pruebas.** Servicio interno y público, adjuntos con antivirus, sellado, tareas programadas, controladores. Interruptor APAGADO por defecto (rutas públicas → 503, internas → 401). Verificado en producción a través de nginx: validación de cuerpos (400), límite por IP real (el VPS se bloquea tras 30 peticiones y otra IP en la misma ventana sigue pasando) |
 | F1c · F1d · F1e · F2 · F3 · F4 · F5 · F5b · F6 | Pendientes |
 
 Precisiones surgidas al construir F1b:

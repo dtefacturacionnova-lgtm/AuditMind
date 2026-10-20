@@ -47,6 +47,7 @@ import { useSignOff, usePbcLinks, useLinkPbc, useUnlinkPbc } from '@/hooks/useWo
 import type { SignOffLevel } from '@/hooks/useWorkingPaperSignOff';
 import { useCheckout, useCheckin } from '@/hooks/useCheckout';
 import { useSetPaperHelpContext } from '@/contexts/ContextualHelpContext';
+import { INTERVIEW_HELP_KEY } from '@/lib/contextualHelpContent';
 
 // ─── Scriptorium Draft Modal ──────────────────────────────────────────────────
 
@@ -944,7 +945,8 @@ function cosoToS7(m: string): string {
 export default function WpDetailPage() {
   const params = useParams<{ id: string }>();
   const { data: wp, isLoading } = useWorkingPaper(params.id);
-  useSetPaperHelpContext(wp?.paperCode ?? wp?.code);
+  // Los papeles de entrevista (PT-ENTREV, tipo entrevista, B-INT-*) comparten una sola ayuda: la del acta firmada
+  useSetPaperHelpContext(wp && isInterviewPaper(wp) ? INTERVIEW_HELP_KEY : (wp?.paperCode ?? wp?.code));
 
   const updateWp       = useUpdateWorkingPaper(params.id);
   const updateStatus   = useUpdateWpStatus();

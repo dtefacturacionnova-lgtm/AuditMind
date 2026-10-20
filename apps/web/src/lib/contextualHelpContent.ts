@@ -3,6 +3,29 @@ export interface HelpTopic {
   body:  string[];
 }
 
+/** Qué es la firma electrónica por enlace, para quien la usa por primera vez. Lo muestra el panel «Firma electrónica» (¿Cómo funciona?)
+ *  y es la base del resto de la ayuda de la firma. Describe lo que la pantalla hace hoy: ver docs/guia-firma-electronica.md. */
+export const SIGNATURE_HELP: HelpTopic = {
+  title: 'Firma electrónica por enlace',
+  body: [
+    'Envías el documento por correo y el firmante lo firma desde un enlace, sin cuenta en AuditMind. Antes de ver el documento confirma su identidad con un código de 6 dígitos que llega a ese mismo correo.',
+    'Al enviar, el documento se convierte en PDF y queda congelado: el firmante ve exactamente ese archivo. Si cambias el documento después, la solicitud se revoca y hay que enviarla otra vez.',
+    'El enlace completo se muestra una sola vez, en la ventana de envío. Si lo pierdes o el correo no llega, usa «Reenviar»: genera uno nuevo y el anterior deja de funcionar.',
+    'Al firmar queda guardado el nombre y el cargo que escribió, la fecha y la hora, la dirección IP, el navegador, el correo verificado, el texto del consentimiento y la huella (SHA-256) del documento, en una bitácora donde cualquier cambio se nota.',
+    'El PDF final lleva una hoja de evidencia, el sello de la organización y un sello de tiempo de un tercero. Cualquiera puede comprobarlo en /verificar con el código impreso en el PDF; el archivo no se sube a ningún servidor.',
+    'Es firma electrónica simple con evidencia. No es una firma certificada de un Prestador de Servicios de Certificación acreditado: si un caso exige firma certificada, esta función no la reemplaza.',
+  ],
+};
+
+/** Dos líneas para cerrar la ayuda de cada pantalla desde la que se envía algo a firma. */
+const SIGNATURE_BASICS = [
+  'El firmante recibe un enlace, confirma su identidad con un código que llega a su correo y firma sin cuenta. El documento queda congelado al enviarlo y el enlace completo se muestra una sola vez.',
+  'Es firma electrónica simple con evidencia (fecha, IP, correo verificado, huella del documento, bitácora y PDF sellado), verificable en /verificar. No es una firma certificada.',
+];
+
+/** Clave con la que se registra la ayuda de los papeles de entrevista (PT-ENTREV, tipo entrevista y B-INT-*). */
+export const INTERVIEW_HELP_KEY = 'PT-ENTREV';
+
 /** Ayuda específica por tipo de papel (paperCode) — tiene prioridad sobre la
  *  ayuda por ruta cuando el usuario está dentro de un papel de trabajo, ya que
  *  todos los papeles comparten la misma ruta `/dashboard/working-papers/[id]`
@@ -55,6 +78,16 @@ const PAPER_HELP: Record<string, HelpTopic> = {
       'Si no hay acuse de recibo por escrito, documenta en S6 cualquier evidencia indirecta (llamada, confirmación verbal) — no dejes la sección vacía.',
     ],
   },
+  [INTERVIEW_HELP_KEY]: {
+    title: 'Entrevista y acta firmada',
+    body: [
+      'El panel «Actas para firma» envía el acta a la persona entrevistada para que la firme desde un enlace. Redáctala completa en la ventana de envío: el acta no se edita después de enviada. Para corregirla, revoca la solicitud y envía otra.',
+      'La persona entrevistada es quien firma: indica si está conforme o escribe sus observaciones (obligatorias si no está conforme). Al sellarse, el PDF firmado se agrega a la sección S2 del papel.',
+      'Firma presencial: marca «Firma presencial: no enviar el correo con el enlace» y que la persona abra el enlace en su propio teléfono. El código de verificación sí llega a su correo.',
+      'En modo investigación, enviar el acta por correo puede alertar a la persona investigada. Solo el equipo del encargo ve estas solicitudes.',
+      ...SIGNATURE_BASICS,
+    ],
+  },
   'PT-FIN-ENCARGO': {
     title: 'Carta de Encargo (NIA 210)',
     body: [
@@ -62,6 +95,15 @@ const PAPER_HELP: Record<string, HelpTopic> = {
       'El botón "Word" genera el documento final listo para firma del representante legal.',
     ],
   },
+};
+
+const CARTERA_HELP: HelpTopic = {
+  title: 'Cartera (CRM de Auditoría Externa)',
+  body: [
+    'Pipeline: Prospecto → Radar de Aceptación (NIA 220/ISQM 1) → Propuesta → Carta de Compromiso firmada → Cliente Activo → Encargo → Auditoría real.',
+    'Un cliente necesita un Radar de Aceptación en verde o amarillo para poder crear una Propuesta — si el radar da rojo, el cliente se marca automáticamente como Declinado.',
+    '"Aprobar Encargo" es la acción que crea la auditoría real y el expediente — no se puede deshacer desde Cartera.',
+  ],
 };
 
 interface RouteHelpEntry {
@@ -221,13 +263,34 @@ const ROUTE_HELP: RouteHelpEntry[] = [
     },
   },
   {
-    test: p => p.startsWith('/dashboard/portfolio'),
+    // Ficha de un cliente: la pestaña de la carta de compromiso envía la carta a firma
+    test: p => p.startsWith('/dashboard/portfolio/clients/'),
     topic: {
-      title: 'Cartera (CRM de Auditoría Externa)',
+      title: 'Cartera: ficha del cliente y carta de compromiso',
       body: [
-        'Pipeline: Prospecto → Radar de Aceptación (NIA 220/ISQM 1) → Propuesta → Carta de Compromiso firmada → Cliente Activo → Encargo → Auditoría real.',
-        'Un cliente necesita un Radar de Aceptación en verde o amarillo para poder crear una Propuesta — si el radar da rojo, el cliente se marca automáticamente como Declinado.',
-        '"Aprobar Encargo" es la acción que crea la auditoría real y el expediente — no se puede deshacer desde Cartera.',
+        ...CARTERA_HELP.body,
+        'En la pestaña de la carta de compromiso, «Enviar para firma» la manda al contacto del cliente (puedes cambiar el nombre y el correo en la ventana). Requiere ser Gerente de Auditoría o superior.',
+        'Si el cliente firma, la carta pasa a Firmada y el cliente a Activo. Si la rechaza, ves su motivo. Si cambias el texto de la carta con una solicitud vigente, esa solicitud se revoca y la carta vuelve a borrador.',
+        '«Registrar firma manual» sigue disponible para una carta firmada en papel.',
+        ...SIGNATURE_BASICS,
+      ],
+    },
+  },
+  {
+    test: p => p.startsWith('/dashboard/portfolio'),
+    topic: CARTERA_HELP,
+  },
+  {
+    test: p => routeIs(p, '/dashboard/confirmations'),
+    topic: {
+      title: 'Confirmaciones externas (NIA 505) y firma electrónica',
+      body: [
+        'En el detalle de una confirmación, el panel «Firma electrónica» la envía por correo al confirmante registrado para que responda y firme desde un enlace. «Marcar como enviada» y el registro manual de la respuesta siguen disponibles para lo que llegue por otros medios.',
+        'Elige «Con saldo» (el confirmante ve el saldo y dice si está de acuerdo) o «Con saldo en blanco» (escribe el saldo según sus registros, sin ver el tuyo). Si el banco lo exige, anexa la carta de autorización del cliente.',
+        'El correo del firmante debe ser el del confirmante registrado: para cambiar al destinatario, edita la confirmación en borrador. Marca que verificaste el correo de forma independiente, como pide NIA 505.',
+        'Si el confirmante firma, la confirmación pasa a Recibida. Si decide no firmar, sigue enviada con su motivo y tú decides si queda sin respuesta o con procedimiento alternativo.',
+        'Los archivos que adjunta el confirmante pasan por un antivirus y se reconstruyen: abre la copia reconstruida. El original sin reconstruir solo lo abre un gerente.',
+        ...SIGNATURE_BASICS,
       ],
     },
   },

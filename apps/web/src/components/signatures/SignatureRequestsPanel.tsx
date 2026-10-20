@@ -5,6 +5,7 @@ import { Loader2, PenLine, Send } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useSignatureAvailability, useSignatureRequests, type SignatureRequestView } from '@/hooks/useSignatureRequests';
 import { MANAGER_ROLE, MIN_ROLE_BY_TYPE, type SignatureDocumentType } from '@/lib/signature/internal';
+import { SIGNATURE_HELP } from '@/lib/contextualHelpContent';
 import { SignatureRequestCard } from './SignatureRequestCard';
 import { Note, primaryBtn } from './ui';
 
@@ -82,6 +83,13 @@ export function SignatureRequestsPanel({
           ))}
         </div>
       )}
+
+      <details className="mt-4 rounded-xl border border-gray-100 bg-gray-50 px-4 py-2.5 text-xs text-gray-600">
+        <summary className="cursor-pointer font-medium text-gray-700">¿Cómo funciona la firma por enlace?</summary>
+        <ul className="mt-2 space-y-1.5 pb-1 leading-relaxed">
+          {SIGNATURE_HELP.body.map((line, i) => <li key={i}>{line}</li>)}
+        </ul>
+      </details>
     </section>
   );
 }

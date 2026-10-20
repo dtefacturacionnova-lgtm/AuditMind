@@ -1,0 +1,83 @@
+{
+  "emisor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "16",
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codEstable": "M001",
+    "codActividad": "74900",
+    "codPuntoVenta": "P001",
+    "descActividad": "Servicios profesionales y científicos ncp",
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "resumen": {
+    "totalIva": 0,
+    "totalLetras": "VEINTISEIS 26/100 DÓLARES",
+    "observaciones": "Retención de prueba para el MH (57)",
+    "totalIvaRetenido": 26.26,
+    "totalSujetoRetencion": 2626.27
+  },
+  "apendice": null,
+  "receptor": {
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "14",
+      "municipio": "23",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codActividad": "85301",
+    "numDocumento": "012345678",
+    "descActividad": "Enseñanza superior universitaria",
+    "tipoDocumento": "36",
+    "nombreComercial": null
+  },
+  "identificacion": {
+    "fecEmi": "2026-10-08",
+    "horEmi": "11:13:43",
+    "tipoDte": "07",
+    "version": 2,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "motivoContin": null,
+    "numeroControl": "DTE-07-M001P001-000000000000057",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "F61DE442-4284-451D-8C1F-E2799BFEF3E8",
+    "tipoContingencia": null
+  },
+  "cuerpoDocumento": [
+    {
+      "numItem": 1,
+      "tipoDte": "03",
+      "descripcion": "Retención del 1 % de IVA sobre el comprobante de crédito fiscal 857072",
+      "ivaRetenido": 20.24,
+      "fechaEmision": "2026-10-08",
+      "tipoGeneracion": 1,
+      "montoSujetoGrav": 2023.81,
+      "numeroDocumento": "857072",
+      "codigoRetencionMH": "22"
+    },
+    {
+      "numItem": 2,
+      "tipoDte": "03",
+      "descripcion": "Retención del 1 % de IVA sobre el comprobante de crédito fiscal 731315",
+      "ivaRetenido": 6.02,
+      "fechaEmision": "2026-10-08",
+      "tipoGeneracion": 1,
+      "montoSujetoGrav": 602.46,
+      "numeroDocumento": "731315",
+      "codigoRetencionMH": "22"
+    }
+  ]
+}

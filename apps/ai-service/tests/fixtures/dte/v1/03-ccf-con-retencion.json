@@ -1,0 +1,144 @@
+{
+  "emisor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codEstable": "M001",
+    "codActividad": "74900",
+    "codPuntoVenta": "P001",
+    "descActividad": "Servicios profesionales y científicos ncp",
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "resumen": {
+    "pagos": [
+      {
+        "plazo": null,
+        "codigo": "01",
+        "periodo": null,
+        "montoPago": 4405.82,
+        "referencia": null
+      }
+    ],
+    "subTotal": 3898.96,
+    "tributos": [
+      {
+        "valor": 506.86,
+        "codigo": "20",
+        "descripcion": "Impuesto al Valor Agregado 13%"
+      }
+    ],
+    "descuNoSuj": 0,
+    "saldoFavor": 0,
+    "totalDescu": 0,
+    "totalNoSuj": 0,
+    "totalPagar": 4405.82,
+    "descuExenta": 0,
+    "totalExenta": 0,
+    "totalLetras": "CUATRO MIL CUATROCIENTOS CINCO 82/100 DÓLARES",
+    "descuGravada": 0,
+    "totalGravada": 3898.96,
+    "observaciones": "Documento de prueba para el MH (153)",
+    "subTotalVentas": 3898.96,
+    "totalNoGravado": 0,
+    "condicionOperacion": 1,
+    "numPagoElectronico": null,
+    "montoTotalOperacion": 4405.82,
+    "porcentajeDescuento": 0,
+    "ivaPerci1": 0,
+    "ivaRete1": 5.5
+  },
+  "apendice": null,
+  "receptor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": null,
+    "direccion": {
+      "municipio": "23",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codActividad": "69200",
+    "descActividad": "Actividades de contabilidad, teneduría de libros y auditoría; asesoramiento en materia de impuestos",
+    "nombreComercial": null
+  },
+  "ventaTercero": {
+    "nit": "00000000000000",
+    "nombre": "NOMBRE DE PRUEBA",
+    "codDomiciliado": 1
+  },
+  "identificacion": {
+    "fecEmi": "2026-10-07",
+    "horEmi": "17:12:12",
+    "tipoDte": "03",
+    "version": 3,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "motivoContin": null,
+    "numeroControl": "DTE-03-M001P001-000000000000153",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "4E6FCCB1-1274-4737-A4F3-17FCC56B8999",
+    "tipoContingencia": null
+  },
+  "cuerpoDocumento": [
+    {
+      "psv": 0,
+      "codigo": "PRB-042",
+      "numItem": 1,
+      "cantidad": 1,
+      "tipoItem": 1,
+      "tributos": [
+        "20"
+      ],
+      "noGravado": 0,
+      "precioUni": 1230.61,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "ventaNoSuj": 0,
+      "descripcion": "Papelería y útiles",
+      "ventaExenta": 0,
+      "ventaGravada": 1230.61,
+      "numeroDocumento": null
+    },
+    {
+      "psv": 0,
+      "codigo": "PRB-092",
+      "numItem": 2,
+      "cantidad": 3,
+      "tipoItem": 1,
+      "tributos": [
+        "20"
+      ],
+      "noGravado": 0,
+      "precioUni": 889.45,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "ventaNoSuj": 0,
+      "descripcion": "Mobiliario de oficina",
+      "ventaExenta": 0,
+      "ventaGravada": 2668.35,
+      "numeroDocumento": null
+    }
+  ],
+  "otrosDocumentos": null,
+  "documentoRelacionado": null,
+  "responseMH": {
+    "estado": "PROCESADO",
+    "codigoGeneracion": "4E6FCCB1-1274-4737-A4F3-17FCC56B8999",
+    "selloRecibido": "03ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789AB",
+    "clasificaMsg": "10",
+    "codigoMsg": "001",
+    "descripcionMsg": "RECIBIDO"
+  }
+}

@@ -4,9 +4,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { applyBodyParsers } from './common/middleware/body-limits';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // bodyParser:false → los lectores de cuerpo se registran abajo con applyBodyParsers: 100 KB para toda la API y 25 MB solo
+  // para /ai/analytics (lotes de DTE del CAATs «Validación DTE»; con el tope por defecto de Express un lote real daba 413).
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
 
   // nginx (mismo VPS) agrega la IP real del cliente a X-Forwarded-For. Con 'loopback' Express confía
   // SOLO en ese salto: req.ip es la IP real y un valor falso metido por el cliente queda a la izquierda y
@@ -22,6 +25,8 @@ async function bootstrap() {
 
   // Security headers
   app.use(helmet());
+
+  applyBodyParsers(app);
 
   // CORS — permite el frontend web y el portal
   // En producción: APP_URL=https://auditmind.vercel.app,https://portal.auditmind.app

@@ -1,0 +1,109 @@
+{
+  "emisor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "16",
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codActividad": "74900",
+    "descActividad": "Servicios profesionales y científicos ncp",
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "resumen": {
+    "ivaRete": 0,
+    "ivaPerci": 0,
+    "totalIva": 0,
+    "tributos": [
+      {
+        "valor": 3.23,
+        "codigo": "20",
+        "descripcion": "Impuesto al Valor Agregado 13%"
+      }
+    ],
+    "totalDescu": 0,
+    "totalNoSuj": 0,
+    "totalPagar": 28.07,
+    "totalExenta": 0,
+    "totalLetras": "VEINTIOCHO 07/100 DÓLARES",
+    "totalGravada": 24.84,
+    "observaciones": "Documento de prueba para el MH (27)",
+    "subTotalVentas": 24.84,
+    "totalNoGravado": 0,
+    "codigoRetencionMH": null,
+    "condicionOperacion": 1,
+    "numPagoElectronico": null,
+    "montoTotalOperacion": 28.07
+  },
+  "apendice": null,
+  "receptor": {
+    "nrc": "0000000",
+    "correo": null,
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "01",
+      "municipio": "26",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "05"
+    },
+    "codActividad": "93299",
+    "numDocumento": "012345678",
+    "descActividad": "Actividades de esparcimiento ncp",
+    "tipoDocumento": "36",
+    "nombreComercial": null
+  },
+  "ventaTercero": null,
+  "identificacion": {
+    "fecEmi": "2026-10-07",
+    "fusion": null,
+    "horEmi": "13:52:55",
+    "tipoDte": "06",
+    "version": 4,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "motivoContin": null,
+    "numeroControl": "DTE-06-M001P001-000000000000027",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "E8933FB2-993A-48FE-A3A0-B7599A2F5A4B",
+    "tipoContingencia": null
+  },
+  "cuerpoDocumento": [
+    {
+      "codigo": null,
+      "ivaRete": 0,
+      "numItem": 1,
+      "cantidad": 1,
+      "ivaPerci": 0,
+      "tipoItem": 2,
+      "totalIva": 0,
+      "tributos": [
+        "20"
+      ],
+      "noGravado": 0,
+      "precioUni": 24.84,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "ventaNoSuj": 0,
+      "descripcion": "Cargo por intereses de mora",
+      "ventaExenta": 0,
+      "ventaGravada": 24.84,
+      "numeroDocumento": "879F3D9D-64DC-4DCE-8E8C-8A1597FC3177"
+    }
+  ],
+  "documentoRelacionado": [
+    {
+      "fechaEmision": "2026-10-07",
+      "tipoDocumento": "03",
+      "tipoGeneracion": 2,
+      "numeroDocumento": "879F3D9D-64DC-4DCE-8E8C-8A1597FC3177"
+    }
+  ]
+}

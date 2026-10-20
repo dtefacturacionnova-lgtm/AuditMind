@@ -16,7 +16,8 @@ Tareas 2.1–2.16:
   POST /analytics/structuring      → Pitufeo / Smurfing
   POST /analytics/missing_trader   → Missing Trader / Carrusel de IVA
   POST /analytics/tax_haven        → Concentración en Jurisdicciones de Baja Tributación
-  POST /analytics/dte_validation   → Suite de Validación DTE (esquema, sello, firma)
+  POST /analytics/dte_validation   → Suite de Validación DTE (esquema, sello, firma; con `mh_consultas`, también contra Hacienda)
+  POST /analytics/dte_mh           → Consulta pública de Hacienda para un lote (máx. 25) de DTE
   POST /analytics/sanctions_screening → Screening de Sanciones (OFAC SDN + Lista Consolidada ONU)
 """
 import dataclasses
@@ -43,6 +44,7 @@ from app.services.caats.structuring_analysis import analyze_structuring
 from app.services.caats.missing_trader_analysis import analyze_missing_trader
 from app.services.caats.tax_haven_analysis import analyze_tax_haven_concentration
 from app.services.caats.dte_validation_analysis import analyze_dte_validation
+from app.services.caats.dte_mh import MAX_LOTE_MH, consultar_lote
 from app.services.caats.sanctions_screening import analyze_sanctions_screening
 
 router = APIRouter()
@@ -82,6 +84,13 @@ class RecordsRequest(BaseModel):
     field_mapping: Optional[dict[str, str]] = Field(
         None,
         description="Mapeo opcional de nombres de campo: {'amount': 'monto', ...}",
+    )
+
+
+class DteValidationRequest(RecordsRequest):
+    mh_consultas: Optional[list[dict[str, Any]]] = Field(
+        None,
+        description="Respuestas de /analytics/dte_mh para estos documentos: si se mandan, el informe también confirma cada documento con Hacienda",
     )
 
 
@@ -479,7 +488,7 @@ async def tax_haven_analysis(
 # ─── Suite de Validación DTE ───────────────────────────────────────────────────
 @router.post("/dte_validation")
 async def dte_validation_analysis(
-    request: RecordsRequest,
+    request: DteValidationRequest,
     x_internal_key: str | None = Header(default=None),
 ):
     """Tarea 2.17 — Valida un lote de DTEs (JSON completo, no tabular) contra el
@@ -488,10 +497,26 @@ async def dte_validation_analysis(
     define Hacienda, no un mapeo de columnas del auditor."""
     verify_internal_key(x_internal_key)
     try:
-        result = analyze_dte_validation(dtes=request.records)
+        result = analyze_dte_validation(dtes=request.records, mh_consultas=request.mh_consultas)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return _serialize(result)
+
+
+@router.post("/dte_mh")
+async def dte_mh_consulta(
+    request: RecordsRequest,
+    x_internal_key: str | None = Header(default=None),
+):
+    """Consulta pública de Hacienda para un lote de DTE (de cada registro solo se lee el bloque `identificacion`). Máximo
+    `MAX_LOTE_MH` por llamada: se consulta uno a la vez con una pausa, así que el navegador reparte los lotes y luego manda las
+    respuestas a /dte_validation como `mh_consultas`."""
+    verify_internal_key(x_internal_key)
+    try:
+        consultas = await consultar_lote(request.records)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"consultas": consultas, "max_lote": MAX_LOTE_MH}
 
 
 # ─── Screening de Sanciones (OFAC + ONU) ───────────────────────────────────────

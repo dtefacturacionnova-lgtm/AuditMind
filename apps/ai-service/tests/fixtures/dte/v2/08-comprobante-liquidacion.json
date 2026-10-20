@@ -1,0 +1,90 @@
+{
+  "emisor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "16",
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codEstable": "M001",
+    "codActividad": "74900",
+    "codPuntoVenta": "P001",
+    "descActividad": "Servicios profesionales y científicos ncp",
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "resumen": {
+    "total": 4405.82,
+    "ivaPerci": 0,
+    "tributos": [
+      {
+        "valor": 506.86,
+        "codigo": "20",
+        "descripcion": "Impuesto al Valor Agregado 13%"
+      }
+    ],
+    "totalNoSuj": 0,
+    "exportacion": 0,
+    "totalExenta": 0,
+    "totalLetras": "CUATRO MIL CUATROCIENTOS CINCO 82/100 DÓLARES",
+    "totalGravada": 3898.96,
+    "observaciones": "Liquidación de prueba para el MH (80)",
+    "subTotalVentas": 3898.96,
+    "condicionOperacion": 1,
+    "montoTotalOperacion": 4405.82
+  },
+  "apendice": null,
+  "receptor": {
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "02",
+      "municipio": "21",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codActividad": "49233",
+    "numDocumento": "012345678",
+    "descActividad": "Transporte de carga internacional",
+    "tipoDocumento": "36",
+    "codDomiciliado": 1,
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "identificacion": {
+    "fecEmi": "2026-10-07",
+    "fusion": null,
+    "horEmi": "17:12:13",
+    "tipoDte": "08",
+    "version": 2,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "numeroControl": "DTE-08-M001P001-000000000000080",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "2A3F9FB6-51DC-405A-900C-5E26EA42D229"
+  },
+  "cuerpoDocumento": [
+    {
+      "ivaItem": 506.86,
+      "numItem": 1,
+      "tipoDte": "03",
+      "tributos": [
+        "20"
+      ],
+      "ventaNoSuj": 0,
+      "ventaExenta": 0,
+      "fechaEmision": "2026-10-07",
+      "ventaGravada": 3898.96,
+      "exportaciones": 0,
+      "observaciones": null,
+      "tipoGeneracion": 2,
+      "numeroDocumento": "4E6FCCB1-1274-4737-A4F3-17FCC56B8999"
+    }
+  ]
+}

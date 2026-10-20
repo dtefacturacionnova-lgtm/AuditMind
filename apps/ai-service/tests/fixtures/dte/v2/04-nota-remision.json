@@ -1,0 +1,147 @@
+{
+  "emisor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "16",
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codEstable": "M001",
+    "codActividad": "74900",
+    "codPuntoVenta": "P001",
+    "descActividad": "Servicios profesionales y científicos ncp",
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "resumen": {
+    "subTotal": 9885.11,
+    "tributos": [
+      {
+        "valor": 1181.78,
+        "codigo": "20",
+        "descripcion": "Impuesto al Valor Agregado 13%"
+      }
+    ],
+    "descuNoSuj": 0,
+    "totalDescu": 0,
+    "totalNoSuj": 0,
+    "descuExenta": 0,
+    "totalExenta": 794.51,
+    "totalLetras": "ONCE MIL SESENTA Y SEIS 89/100 DÓLARES",
+    "descuGravada": 0,
+    "totalGravada": 9090.6,
+    "observaciones": "Remisión de prueba para el MH (50)",
+    "subTotalVentas": 9885.11,
+    "montoTotalOperacion": 11066.89,
+    "porcentajeDescuento": 0
+  },
+  "apendice": null,
+  "receptor": {
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "14",
+      "municipio": "23",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "bienTitulo": "02",
+    "codActividad": "47739",
+    "numDocumento": "012345678",
+    "descActividad": "Venta al por menor de otros productos n.c.p.",
+    "tipoDocumento": "36",
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "ventaTercero": null,
+  "identificacion": {
+    "fecEmi": "2026-10-07",
+    "horEmi": "17:17:43",
+    "tipoDte": "04",
+    "version": 4,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "motivoContin": null,
+    "numeroControl": "DTE-04-M001P001-000000000000050",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "29C6C78A-8103-409A-8DFD-DAC54667C81A",
+    "tipoContingencia": null
+  },
+  "cuerpoDocumento": [
+    {
+      "codigo": null,
+      "numItem": 1,
+      "cantidad": 20,
+      "tipoItem": 1,
+      "tributos": [
+        "20"
+      ],
+      "precioUni": 347.5,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "ventaNoSuj": 0,
+      "descripcion": "Material de oficina",
+      "ventaExenta": 0,
+      "ventaGravada": 6950,
+      "numeroDocumento": null
+    },
+    {
+      "codigo": null,
+      "numItem": 2,
+      "cantidad": 3,
+      "tipoItem": 1,
+      "tributos": null,
+      "precioUni": 111.85,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "ventaNoSuj": 0,
+      "descripcion": "Suministros varios",
+      "ventaExenta": 335.55,
+      "ventaGravada": 0,
+      "numeroDocumento": null
+    },
+    {
+      "codigo": "NR-051",
+      "numItem": 3,
+      "cantidad": 20,
+      "tipoItem": 1,
+      "tributos": [
+        "20"
+      ],
+      "precioUni": 107.03,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "ventaNoSuj": 0,
+      "descripcion": "Equipo de cómputo",
+      "ventaExenta": 0,
+      "ventaGravada": 2140.6,
+      "numeroDocumento": null
+    },
+    {
+      "codigo": "NR-040",
+      "numItem": 4,
+      "cantidad": 2,
+      "tipoItem": 1,
+      "tributos": null,
+      "precioUni": 229.48,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "ventaNoSuj": 0,
+      "descripcion": "Cajas de archivo",
+      "ventaExenta": 458.96,
+      "ventaGravada": 0,
+      "numeroDocumento": null
+    }
+  ],
+  "documentoRelacionado": null
+}

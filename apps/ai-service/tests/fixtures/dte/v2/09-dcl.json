@@ -1,0 +1,74 @@
+{
+  "emisor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "16",
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codEstable": "M001",
+    "codActividad": "74900",
+    "codPuntoVenta": "P001",
+    "descActividad": "Servicios profesionales y científicos ncp",
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "apendice": null,
+  "receptor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "14",
+      "municipio": "23",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codActividad": "86203",
+    "descActividad": "Servicios médicos",
+    "nombreComercial": null,
+    "tipoEstablecimiento": "01"
+  },
+  "extension": {
+    "codEmpleado": "E001",
+    "docuEntrega": "00000000000000",
+    "nombEntrega": "NOMBRE DE PRUEBA"
+  },
+  "identificacion": {
+    "fecEmi": "2026-10-07",
+    "horEmi": "15:45:16",
+    "tipoDte": "09",
+    "version": 2,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "numeroControl": "DTE-09-M001P001-000000000000052",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "750D1B20-2A6A-48E5-BBEF-24E5C8507EEB"
+  },
+  "cuerpoDocumento": {
+    "iva": 2168,
+    "comision": 500.31,
+    "subTotal": 18844.93,
+    "cantidadDoc": 26,
+    "ivaComision": 65.04,
+    "totalLetras": "DIECISIETE MIL NOVECIENTOS CUARENTA Y SEIS 04/100 DÓLARES",
+    "ivaPercibido": 333.54,
+    "liquidoApagar": 17946.04,
+    "observaciones": "Liquidación de prueba para el MH (52)",
+    "codLiquidacion": "LIQ-202609-0052",
+    "porcentComision": 3,
+    "valorOperaciones": 18844.93,
+    "montoSinPercepcion": 0,
+    "descripSinPercepcion": null,
+    "montoSujetoPercepcion": 16676.93,
+    "periodoLiquidacionFechaFin": "2026-09-30",
+    "periodoLiquidacionFechaInicio": "2026-09-01"
+  }
+}

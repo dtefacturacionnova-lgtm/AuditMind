@@ -1,0 +1,144 @@
+{
+  "emisor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "regimen": null,
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "16",
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codEstable": "M001",
+    "tipoRegimen": null,
+    "codActividad": "74900",
+    "codPuntoVenta": "P001",
+    "descActividad": "Servicios profesionales y científicos ncp",
+    "recintoFiscal": null,
+    "tipoItemExpor": 2,
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "resumen": {
+    "flete": 0,
+    "pagos": [
+      {
+        "plazo": null,
+        "codigo": "01",
+        "periodo": null,
+        "montoPago": 23622.4,
+        "referencia": null
+      }
+    ],
+    "seguro": 0,
+    "tributos": [
+      {
+        "valor": 0,
+        "codigo": "C3",
+        "descripcion": "Impuesto al Valor Agregado (exportaciones) 0%"
+      }
+    ],
+    "saldoFavor": 0,
+    "totalDescu": 0,
+    "totalPagar": 23622.4,
+    "totalLetras": "VEINTITRES MIL SEISCIENTOS VEINTIDOS 40/100 DÓLARES",
+    "codIncoterms": null,
+    "descuGravada": 0,
+    "totalGravada": 23622.4,
+    "descIncoterms": null,
+    "observaciones": "Documento de prueba para el MH (103)",
+    "totalNoGravado": 0,
+    "totalNoOnerosas": 0,
+    "condicionOperacion": 1,
+    "numPagoElectronico": null,
+    "montoTotalOperacion": 23622.4,
+    "porcentajeDescuento": 0
+  },
+  "apendice": null,
+  "receptor": {
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "codPais": "US",
+    "telefono": null,
+    "nombrePais": "Estados Unidos",
+    "complemento": "DIRECCION DE PRUEBA",
+    "tipoPersona": 2,
+    "numDocumento": "012345678",
+    "descActividad": "Comercio en general",
+    "tipoDocumento": "37",
+    "nombreComercial": null
+  },
+  "ventaTercero": null,
+  "compraTercero": null,
+  "identificacion": {
+    "fecEmi": "2026-10-07",
+    "horEmi": "13:58:20",
+    "tipoDte": "11",
+    "version": 3,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "motivoContin": null,
+    "numeroControl": "DTE-11-M001P001-000000000000103",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "40149E4A-ED15-4F17-83AE-AEB5F44C0F12",
+    "tipoContingencia": null
+  },
+  "cuerpoDocumento": [
+    {
+      "codigo": "PRB-069",
+      "numItem": 1,
+      "cantidad": 1,
+      "tipoItem": 2,
+      "tributos": [
+        "C3"
+      ],
+      "noGravado": 0,
+      "precioUni": 1007.15,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "descripcion": "Servicio de asesoría empresarial",
+      "ventaGravada": 1007.15,
+      "numeroDocumento": null
+    },
+    {
+      "codigo": "PRB-068",
+      "numItem": 2,
+      "cantidad": 5,
+      "tipoItem": 2,
+      "tributos": [
+        "C3"
+      ],
+      "noGravado": 0,
+      "precioUni": 2624.93,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "descripcion": "Servicio de traducción técnica",
+      "ventaGravada": 13124.65,
+      "numeroDocumento": null
+    },
+    {
+      "codigo": null,
+      "numItem": 3,
+      "cantidad": 5,
+      "tipoItem": 2,
+      "tributos": [
+        "C3"
+      ],
+      "noGravado": 0,
+      "precioUni": 1898.12,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "descripcion": "Análisis financiero",
+      "ventaGravada": 9490.6,
+      "numeroDocumento": null
+    }
+  ],
+  "otrosDocumentos": null,
+  "documentoRelacionado": null
+}

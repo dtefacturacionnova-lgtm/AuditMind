@@ -1,0 +1,82 @@
+{
+  "emisor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "16",
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codEstable": "M001",
+    "codActividad": "74900",
+    "codPuntoVenta": "P001",
+    "descActividad": "Servicios profesionales y científicos ncp"
+  },
+  "resumen": {
+    "descu": 0,
+    "pagos": [
+      {
+        "plazo": null,
+        "codigo": "01",
+        "periodo": null,
+        "montoPago": 1912.26,
+        "referencia": null
+      }
+    ],
+    "subTotal": 1912.26,
+    "reteRenta": 0,
+    "totalDescu": 0,
+    "totalPagar": 1912.26,
+    "totalCompra": 1912.26,
+    "totalLetras": "MIL NOVECIENTOS DOCE 26/100 DÓLARES",
+    "observaciones": "Documento de prueba para el MH (25)",
+    "condicionOperacion": 1
+  },
+  "apendice": null,
+  "receptor": {
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "14",
+      "municipio": "23",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codActividad": null,
+    "numDocumento": "012345678",
+    "descActividad": null,
+    "tipoDocumento": "13"
+  },
+  "identificacion": {
+    "fecEmi": "2026-10-07",
+    "horEmi": "13:43:22",
+    "tipoDte": "14",
+    "version": 2,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "motivoContin": null,
+    "numeroControl": "DTE-14-M001P001-000000000000025",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "93F4DBDA-A485-4455-AE02-5022763D56E3",
+    "tipoContingencia": null
+  },
+  "cuerpoDocumento": [
+    {
+      "codigo": null,
+      "compra": 1912.26,
+      "numItem": 1,
+      "cantidad": 3,
+      "tipoItem": 2,
+      "precioUni": 637.42,
+      "uniMedida": 59,
+      "montoDescu": 0,
+      "descripcion": "Soporte técnico mensual"
+    }
+  ]
+}

@@ -12,6 +12,8 @@ import { apiClient } from '@/lib/api-client';
 import { AnalysisResultView } from '@/components/caats/CaatsResultView';
 import { SecondaryDatasetUpload, type SecondaryDatasetValue } from '@/components/caats/SecondaryDatasetUpload';
 import { DteJsonUpload } from '@/components/caats/DteJsonUpload';
+import { DteMhOption } from '@/components/caats/DteMhOption';
+import { ejecutarValidacionDte } from '@/lib/dte-mh';
 import {
   type AnalysisId, type ParsedFile, type CaatsAnalysisValue, FIELD_DEFS, SECONDARY_DATASET, JSON_UPLOAD_ENGINES,
   autoMatchColumn, autoDetectNumericColumns, buildCaatsRunPayload,
@@ -76,6 +78,8 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
   const [anomalyColumns, setAnomalyColumns] = useState<string[]>(value?.anomalyColumns ?? []);
   const [secondaryData, setSecondaryData] = useState<SecondaryDatasetValue | null>(null);
   const [dteRecords, setDteRecords] = useState<Record<string, unknown>[] | null>(null);
+  const [consultarMh, setConsultarMh] = useState(false);
+  const [mhProgreso, setMhProgreso] = useState<{ hecho: number; total: number } | null>(null);
 
   const isJsonEngine = !!engine && JSON_UPLOAD_ENGINES.has(engine);
   const fieldDefs = engine ? FIELD_DEFS[engine] : undefined;
@@ -207,7 +211,14 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
         }
       }
 
-      const data = await apiClient.post<Record<string, unknown>>(`/ai/analytics/${engine}`, payload);
+      // «Validación DTE» puede confirmar los documentos con la consulta pública de Hacienda (lib/dte-mh.ts reparte los lotes)
+      const data = engine === 'dte_validation' && dteRecords
+        ? await ejecutarValidacionDte(dteRecords, {
+            consultarMh,
+            post: (path, body) => apiClient.post<unknown>(path, body),
+            onProgreso: (hecho, total) => setMhProgreso({ hecho, total }),
+          })
+        : await apiClient.post<Record<string, unknown>>(`/ai/analytics/${engine}`, payload);
       setResult(data);
       onChange({
         engine,
@@ -220,6 +231,7 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setRunning(false);
+      setMhProgreso(null);
     }
   }
 
@@ -273,6 +285,9 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
       {engine && isJsonEngine && (
         <div className="space-y-3">
           <DteJsonUpload onChange={setDteRecords} />
+          {dteRecords && dteRecords.length > 0 && (
+            <DteMhOption records={dteRecords} checked={consultarMh} onChange={setConsultarMh} disabled={running} />
+          )}
           <div className="flex justify-end">
             <button
               onClick={runAnalysis}
@@ -280,7 +295,7 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
               title={!canRun ? 'Sube al menos un documento DTE (.json)' : undefined}
               className="flex items-center gap-2 px-4 py-2 bg-[#0F2D4A] text-white text-sm font-medium rounded-xl hover:bg-[#1a4a7a] disabled:opacity-60 transition-colors"
             >
-              {running ? <><Loader2 className="w-4 h-4 animate-spin" /> Analizando…</> : <><Play className="w-4 h-4" /> Ejecutar análisis</>}
+              {running ? <><Loader2 className="w-4 h-4 animate-spin" /> {mhProgreso ? `Consultando a Hacienda… ${mhProgreso.hecho}/${mhProgreso.total}` : 'Analizando…'}</> : <><Play className="w-4 h-4" /> Ejecutar análisis</>}
             </button>
           </div>
         </div>

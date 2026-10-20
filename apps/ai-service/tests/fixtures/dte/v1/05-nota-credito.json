@@ -1,0 +1,112 @@
+{
+  "emisor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codActividad": "74900",
+    "descActividad": "Servicios profesionales y científicos ncp",
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "resumen": {
+    "totalIva": 0,
+    "tributos": [
+      {
+        "valor": 7.05,
+        "codigo": "20",
+        "descripcion": "Impuesto al Valor Agregado 13%"
+      }
+    ],
+    "totalDescu": 0,
+    "totalNoSuj": 0,
+    "totalPagar": 61.31,
+    "totalExenta": 0,
+    "totalLetras": "SESENTA Y UNO 31/100 DÓLARES",
+    "totalGravada": 54.26,
+    "observaciones": "Documento de prueba para el MH (64)",
+    "subTotalVentas": 54.26,
+    "totalNoGravado": 0,
+    "codigoRetencionMH": null,
+    "condicionOperacion": 1,
+    "montoTotalOperacion": 61.31,
+    "ivaPerci1": 0,
+    "ivaRete1": 0
+  },
+  "apendice": null,
+  "receptor": {
+    "nit": "00000000000000",
+    "nrc": "0000000",
+    "nombre": "NOMBRE DE PRUEBA",
+    "codActividad": "47739",
+    "descActividad": "Venta al por menor de otros productos n.c.p.",
+    "direccion": {
+      "municipio": "23",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "telefono": "22220000",
+    "correo": "prueba@example.com"
+  },
+  "ventaTercero": null,
+  "identificacion": {
+    "fecEmi": "2026-10-07",
+    "fusion": null,
+    "horEmi": "13:55:23",
+    "tipoDte": "05",
+    "version": 3,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "motivoContin": null,
+    "numeroControl": "DTE-05-M001P001-000000000000064",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "9A8B836E-54EF-492E-95B3-CF1138B486B8",
+    "tipoContingencia": null
+  },
+  "cuerpoDocumento": [
+    {
+      "codigo": null,
+      "ivaRete": 0,
+      "numItem": 1,
+      "cantidad": 1,
+      "ivaPerci": 0,
+      "tipoItem": 2,
+      "totalIva": 0,
+      "tributos": [
+        "20"
+      ],
+      "noGravado": 0,
+      "precioUni": 54.26,
+      "uniMedida": 59,
+      "codTributo": null,
+      "montoDescu": 0,
+      "ventaNoSuj": 0,
+      "descripcion": "Devolución parcial: Mobiliario de oficina",
+      "ventaExenta": 0,
+      "ventaGravada": 54.26,
+      "numeroDocumento": "E3384860-A0D3-442F-89B6-6EB2C9B755C9"
+    }
+  ],
+  "documentoRelacionado": [
+    {
+      "fechaEmision": "2026-10-07",
+      "tipoDocumento": "03",
+      "tipoGeneracion": 2,
+      "numeroDocumento": "E3384860-A0D3-442F-89B6-6EB2C9B755C9"
+    }
+  ],
+  "responseMH": {
+    "estado": "PROCESADO",
+    "codigoGeneracion": "9A8B836E-54EF-492E-95B3-CF1138B486B8",
+    "selloRecibido": "05ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789AB",
+    "clasificaMsg": "10",
+    "codigoMsg": "001",
+    "descripcionMsg": "RECIBIDO"
+  }
+}

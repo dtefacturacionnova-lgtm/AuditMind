@@ -27,10 +27,35 @@ import base64
 import json
 import unicodedata
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from jsonschema import Draft7Validator
+from jsonschema import Draft7Validator, validators
+from jsonschema.exceptions import ValidationError
+
+from app.services.caats.dte_mh import clasificar_estado, dte_monto, monto_diferente
+from app.services.caats.dte_versions import (
+    ENVELOPE_KEYS, detect_dte_version, extract_firma, extract_respuesta, extract_sello, is_confirmed_v1, v1_structure_problems,
+)
+
+
+def _multiple_of_decimal(validator, multiple, instance, schema):
+    """`multipleOf` con aritmética DECIMAL. El de `jsonschema` divide números flotantes y da falsos errores con cualquier monto con
+    centavos: «1230.61 is not a multiple of 1e-08», «4405.82 is not a multiple of 0.01». Los esquemas oficiales del MH lo usan en casi
+    todos los montos, así que un DTE válido salía como «estructura inválida». Aquí cada número se toma como el texto con que se
+    escribió (Decimal(str(x))) y se comprueba el resto exacto."""
+    if not validator.is_type(instance, "number"):
+        return
+    try:
+        remainder = Decimal(str(instance)) % Decimal(str(multiple))
+    except (InvalidOperation, ZeroDivisionError):
+        return  # no se puede comprobar con exactitud (números enormes): no se inventa un error
+    if remainder != 0:
+        yield ValidationError(f"{instance} is not a multiple of {multiple}")
+
+
+_DteValidator = validators.extend(Draft7Validator, {"multipleOf": _multiple_of_decimal})
 
 
 @dataclass
@@ -50,6 +75,10 @@ class DteValidationReport:
     risk_score: float
     summary: dict
     tipo_breakdown: list[dict]
+    version_breakdown: list[dict] = field(default_factory=list)
+    # Solo con consulta al MH (si no se consultó quedan en None y la pantalla no los muestra):
+    mh_consultados: Optional[int] = None   # documentos sobre los que Hacienda dio una respuesta concluyente
+    mh_confirmados: Optional[int] = None   # de ellos, los que Hacienda tiene procesados y sin ninguna diferencia
 
 
 # ─── Esquemas oficiales MH por tipo de documento ──────────────────────────────
@@ -68,19 +97,19 @@ _TIPO_LABELS = {
     "11": "Factura de Exportación", "14": "Factura de Sujeto Excluido",
     "15": "Comprobante de Donación",
 }
-_ENVELOPE_KEYS = ("respuestaHacienda", "firmaElectronica", "selloRecibido")
+_ENVELOPE_KEYS = ENVELOPE_KEYS  # respuesta del MH, sello y firma, con todos los nombres con que se han visto (ver dte_versions.py)
 _ACCEPTED_ESTADOS = {"PROCESADO"}
 
-_validators_cache: dict[str, Draft7Validator] = {}
+_validators_cache: dict[str, Any] = {}
 
 
-def _get_validator(tipo_dte: str) -> Draft7Validator | None:
+def _get_validator(tipo_dte: str):
     filename = _SCHEMA_BY_TIPO.get(tipo_dte)
     if not filename:
         return None
     if tipo_dte not in _validators_cache:
         with open(_SCHEMA_DIR / filename, encoding="utf-8") as f:
-            _validators_cache[tipo_dte] = Draft7Validator(json.load(f))
+            _validators_cache[tipo_dte] = _DteValidator(json.load(f))
     return _validators_cache[tipo_dte]
 
 
@@ -111,16 +140,36 @@ def _doc_label(iden: dict) -> str:
     return f"{_TIPO_LABELS.get(tipo, f'Tipo {tipo}' if tipo else 'Tipo desconocido')} — {iden.get('numeroControl') or '(sin número de control)'}"
 
 
-def analyze_dte_validation(dtes: list[dict[str, Any]]) -> DteValidationReport:
+def analyze_dte_validation(dtes: list[dict[str, Any]], mh_consultas: Optional[list[dict]] = None) -> DteValidationReport:
     """Valida un lote de DTEs (JSON completo tal como se recibe) contra el
     esquema oficial de Hacienda, el sello de recepción, y la integridad de la
     firma electrónica. No requiere field_mapping — la estructura del DTE la
-    define Hacienda, no el auditor."""
+    define Hacienda, no el auditor.
+
+    `mh_consultas` (opcional) son las respuestas de la consulta pública de Hacienda para esos documentos (ver dte_mh.py): si se pasan,
+    además se confirma que cada documento exista en Hacienda y que su estado, sello y monto coincidan con los del archivo."""
     if not dtes:
         raise ValueError("No hay documentos DTE para analizar")
 
+    consultado_mh = mh_consultas is not None
+    mh_index: dict[str, dict] = {}
+    for c in mh_consultas or []:
+        code = str(c.get("codigo_generacion") or "").strip().upper() if isinstance(c, dict) else ""
+        if code:
+            mh_index[code] = c
+    mh_clases = {"confirmado": 0, "adverso": 0, "no_encontrado": 0, "sin_respuesta": 0}
+    mh_limpios = 0
+    mh_no_encontrado: list[dict] = []
+    mh_adverso: list[dict] = []
+    mh_monto: list[dict] = []
+    mh_sello: list[dict] = []
+    mh_inconsistente: list[dict] = []
+    mh_sin_consulta: list[dict] = []
+
     valid_structure = 0
     tipo_counts: dict[str, int] = {}
+    version_counts: dict[str, int] = {"v1": 0, "v2": 0}
+    v1_docs: list[dict] = []
 
     unsupported: list[dict] = []
     structural_errors: list[dict] = []
@@ -145,9 +194,22 @@ def analyze_dte_validation(dtes: list[dict[str, Any]]) -> DteValidationReport:
 
         tipo_counts[tipo_dte or "(sin tipo)"] = tipo_counts.get(tipo_dte or "(sin tipo)", 0) + 1
 
+        # ── Versión del esquema (V1 o V2.0) ────────────────────────────────
+        detection = detect_dte_version(dte)
+        confirmed_v1 = is_confirmed_v1(detection)
+        version_counts["v1" if confirmed_v1 else "v2"] += 1
+
         # ── Validación estructural contra el esquema oficial ──────────────
         validator = _get_validator(tipo_dte)
-        if validator is None:
+        if confirmed_v1:
+            # Un documento V1 (normativa anterior) NO se valida contra los esquemas de la V2.0: todos los campos nuevos y las
+            # versiones de esquema distintas lo marcarían como «inválido» siendo un documento legítimo. No hay esquemas V1 en este
+            # proyecto, así que solo se comprueba lo esencial y se avisa de que la validación es parcial.
+            v1_docs.append({"documento": label, "version_declarada": iden.get("version")})
+            problems = v1_structure_problems(dte, tipo_dte)
+            if problems:
+                structural_errors.append({"documento": label, "errores": "; ".join(problems), "total_errores": len(problems)})
+        elif validator is None:
             unsupported.append({"documento": label, "tipoDte": tipo_dte or "(vacío)"})
         else:
             inner = {k: v for k, v in dte.items() if k not in _ENVELOPE_KEYS}
@@ -163,16 +225,47 @@ def analyze_dte_validation(dtes: list[dict[str, Any]]) -> DteValidationReport:
                 valid_structure += 1
 
         # ── Sello de recepción ─────────────────────────────────────────────
-        respuesta = dte.get("respuestaHacienda") or {}
-        sello = dte.get("selloRecibido") or respuesta.get("selloRecibido")
+        # La respuesta y el sello pueden venir como `respuestaHacienda`/`selloRecibido` o, en la descarga del portal del MH, como
+        # `responseMH` (y en la V1, como `selloRecepcion`): se leen todos (dte_versions.py).
+        respuesta = extract_respuesta(dte)
+        sello = extract_sello(dte)
         estado = respuesta.get("estado")
         if not sello:
             missing_sello.append({"documento": label, "estado": estado or "(sin respuesta de Hacienda)"})
         if estado and estado not in _ACCEPTED_ESTADOS:
             rejected.append({"documento": label, "estado": estado, "observaciones": respuesta.get("observaciones") or ""})
 
+        # ── Confirmación con la consulta pública de Hacienda (solo si se consultó) ──
+        if consultado_mh:
+            consulta = mh_index.get(codigo_gen)
+            clase = clasificar_estado(consulta.get("estado") if consulta else None)
+            mh_clases[clase] += 1
+            estado_mh = (consulta or {}).get("estado") or "(sin código de generación para consultar)"
+            diferencias = False
+            if clase == "sin_respuesta":
+                mh_sin_consulta.append({"documento": label, "estado": estado_mh})
+            elif clase == "no_encontrado":
+                mh_no_encontrado.append({"documento": label, "codigoGeneracion": codigo_gen, "fecha_emision": iden.get("fecEmi") or ""})
+            else:
+                if clase == "adverso":
+                    mh_adverso.append({"documento": label, "estado_mh": estado_mh, "estado": estado or "(sin respuesta en el archivo)"})
+                monto_doc = dte_monto(tipo_dte, dte.get("resumen"), dte.get("cuerpoDocumento"))
+                monto_mh = consulta.get("monto_mh")
+                if monto_diferente(monto_doc, monto_mh):
+                    diferencias = True
+                    mh_monto.append({"documento": label, "monto_documento": monto_doc, "monto_mh": monto_mh})
+                sello_mh = str(consulta.get("sello_mh") or "").strip()
+                if sello and sello_mh and sello.strip().upper() != sello_mh.upper():
+                    diferencias = True
+                    mh_sello.append({"documento": label, "sello_documento": sello, "sello_mh": sello_mh})
+                if consulta.get("inconsistencia") is True:
+                    diferencias = True
+                    mh_inconsistente.append({"documento": label, "observaciones": consulta.get("observaciones") or ""})
+                if clase == "confirmado" and not diferencias:
+                    mh_limpios += 1
+
         # ── Firma electrónica (JWS) ────────────────────────────────────────
-        firma = dte.get("firmaElectronica")
+        firma = extract_firma(dte)
         if not firma:
             signature_issues.append({"documento": label, "problema": "no trae firma electrónica (firmaElectronica)"})
         else:
@@ -215,9 +308,22 @@ def analyze_dte_validation(dtes: list[dict[str, Any]]) -> DteValidationReport:
             risk_level="CRITICAL",
             record_count=len(structural_errors),
             description=f"{len(structural_errors)} documento(s) no cumplen la estructura del esquema técnico oficial "
-                        f"de Hacienda para su tipo de DTE — posible documento corrupto, editado manualmente, o "
-                        f"generado por un sistema no homologado.",
+                        f"de Hacienda para su tipo de DTE (en los de formato V1, los bloques esenciales del documento) — "
+                        f"posible documento corrupto, editado manualmente, o generado por un sistema no homologado.",
             sample_records=structural_errors[:10],
+        ))
+
+    if v1_docs:
+        findings.append(DteFinding(
+            test_name="DTE_V1_SIN_ESQUEMA",
+            risk_level="LOW",
+            record_count=len(v1_docs),
+            description=f"{len(v1_docs)} documento(s) en formato V1 (normativa anterior a la V2.0 de mayo de 2026; la V2.0 es "
+                        f"obligatoria desde el 1 de diciembre de 2026). Son documentos legítimos: no se validan contra los esquemas "
+                        f"V2.0 y, como no se tienen los esquemas oficiales V1, su estructura se verificó solo en lo esencial. El "
+                        f"sello, la firma, los duplicados y los correlativos sí se revisaron. No es evidencia de un problema, es "
+                        f"una limitación de cobertura del validador.",
+            sample_records=v1_docs[:10],
         ))
 
     if unsupported:
@@ -309,6 +415,66 @@ def analyze_dte_validation(dtes: list[dict[str, Any]]) -> DteValidationReport:
             sample_records=ambiente_pruebas[:10],
         ))
 
+    if mh_no_encontrado:
+        findings.append(DteFinding(
+            test_name="MH_NO_ENCONTRADO",
+            risk_level="CRITICAL",
+            record_count=len(mh_no_encontrado),
+            description=f"{len(mh_no_encontrado)} documento(s) que Hacienda NO tiene registrados con ese código de generación y fecha de "
+                        f"emisión — posible documento no emitido, falso o con datos alterados. Antes de concluir, confirmar que la "
+                        f"fecha de emisión y el ambiente del archivo sean los correctos.",
+            sample_records=mh_no_encontrado[:10],
+        ))
+
+    if mh_adverso:
+        findings.append(DteFinding(
+            test_name="MH_ESTADO_ADVERSO",
+            risk_level="HIGH",
+            record_count=len(mh_adverso),
+            description=f"{len(mh_adverso)} documento(s) que Hacienda tiene hoy como invalidados, anulados, rechazados u otro estado distinto "
+                        f"de procesado — aunque el archivo muestre otro estado. No deberían soportar un registro contable.",
+            sample_records=mh_adverso[:10],
+        ))
+
+    if mh_monto:
+        findings.append(DteFinding(
+            test_name="MH_MONTO_DIFERENTE",
+            risk_level="HIGH",
+            record_count=len(mh_monto),
+            description=f"{len(mh_monto)} documento(s) cuyo monto en el archivo difiere del que Hacienda tiene registrado — posible alteración "
+                        f"del documento después de su emisión.",
+            sample_records=mh_monto[:10],
+        ))
+
+    if mh_sello:
+        findings.append(DteFinding(
+            test_name="MH_SELLO_DISTINTO",
+            risk_level="HIGH",
+            record_count=len(mh_sello),
+            description=f"{len(mh_sello)} documento(s) cuyo sello de recepción en el archivo no es el que Hacienda registró — el sello no "
+                        f"corresponde a este documento.",
+            sample_records=mh_sello[:10],
+        ))
+
+    if mh_inconsistente:
+        findings.append(DteFinding(
+            test_name="MH_INCONSISTENCIA",
+            risk_level="MEDIUM",
+            record_count=len(mh_inconsistente),
+            description=f"{len(mh_inconsistente)} documento(s) en los que Hacienda reporta inconsistencias en los datos del documento.",
+            sample_records=mh_inconsistente[:10],
+        ))
+
+    if mh_sin_consulta:
+        findings.append(DteFinding(
+            test_name="MH_SIN_CONSULTA",
+            risk_level="LOW",
+            record_count=len(mh_sin_consulta),
+            description=f"{len(mh_sin_consulta)} documento(s) que no se pudieron confirmar con Hacienda (sin código de generación, error de "
+                        f"conexión o respuesta vacía). No es evidencia de un problema: el documento quedó sin confirmar y conviene repetir la consulta.",
+            sample_records=mh_sin_consulta[:10],
+        ))
+
     risk_weights = {"CRITICAL": 35, "HIGH": 20, "MEDIUM": 10, "LOW": 3}
     risk_score = min(100.0, sum(risk_weights.get(f.risk_level, 0) for f in findings))
 
@@ -317,13 +483,26 @@ def analyze_dte_validation(dtes: list[dict[str, Any]]) -> DteValidationReport:
         for t, c in sorted(tipo_counts.items(), key=lambda kv: -kv[1])
     ]
 
+    # Cuántos documentos son de cada formato (solo cuenta los registros que son objetos). «V2.0» incluye lo que no se pudo
+    # confirmar como V1: se valida como V2.0 y se reporta lo que falte.
+    version_breakdown = [
+        {"version": "V2.0", "cantidad": version_counts["v2"]},
+        {"version": "V1", "cantidad": version_counts["v1"]},
+    ]
+
     summary = {
         "total_dtes":           len(dtes),
         "valid_structure_count": valid_structure,
         "findings_count":       len(findings),
         "critical_count":       sum(1 for f in findings if f.risk_level == "CRITICAL"),
         "risk_score":           risk_score,
+        "v1_count":             version_counts["v1"],
+        "v2_count":             version_counts["v2"],
     }
+    mh_consultados = mh_clases["confirmado"] + mh_clases["adverso"] + mh_clases["no_encontrado"] if consultado_mh else None
+    if consultado_mh:
+        summary["mh_consultados"] = mh_consultados
+        summary["mh_confirmados"] = mh_limpios
 
     return DteValidationReport(
         total_dtes=len(dtes),
@@ -332,4 +511,7 @@ def analyze_dte_validation(dtes: list[dict[str, Any]]) -> DteValidationReport:
         risk_score=risk_score,
         summary=summary,
         tipo_breakdown=tipo_breakdown,
+        version_breakdown=version_breakdown,
+        mh_consultados=mh_consultados,
+        mh_confirmados=mh_limpios if consultado_mh else None,
     )

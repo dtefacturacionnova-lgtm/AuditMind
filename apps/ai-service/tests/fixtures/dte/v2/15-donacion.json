@@ -1,0 +1,105 @@
+{
+  "emisor": {
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "16",
+      "municipio": "24",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codEstable": "M001",
+    "codActividad": "74900",
+    "numDocumento": "012345678",
+    "codPuntoVenta": "P001",
+    "descActividad": "Servicios profesionales y científicos ncp",
+    "tipoDocumento": "36",
+    "nombreComercial": "COMERCIAL DE PRUEBA"
+  },
+  "resumen": {
+    "pagos": [
+      {
+        "codigo": "01",
+        "montoPago": 9587.76,
+        "referencia": null
+      }
+    ],
+    "valorTotal": 9587.76,
+    "totalLetras": "NUEVE MIL QUINIENTOS OCHENTA Y SIETE 76/100 DÓLARES"
+  },
+  "apendice": null,
+  "receptor": {
+    "nrc": "0000000",
+    "correo": "prueba@example.com",
+    "nombre": "NOMBRE DE PRUEBA",
+    "codPais": "SV",
+    "telefono": "22220000",
+    "direccion": {
+      "distrito": "02",
+      "municipio": "21",
+      "complemento": "DIRECCION DE PRUEBA",
+      "departamento": "06"
+    },
+    "codActividad": "62020",
+    "numDocumento": "012345678",
+    "descActividad": "Consultorías y gestión de servicios informáticos",
+    "tipoDocumento": "36",
+    "codDomiciliado": 1
+  },
+  "identificacion": {
+    "fecEmi": "2026-10-07",
+    "horEmi": "17:17:29",
+    "tipoDte": "15",
+    "version": 2,
+    "ambiente": "00",
+    "tipoModelo": 1,
+    "tipoMoneda": "USD",
+    "numeroControl": "DTE-15-M001P001-000000000000031",
+    "tipoOperacion": 1,
+    "codigoGeneracion": "B07B527A-30D9-47E3-919D-4ECC14F8F772"
+  },
+  "cuerpoDocumento": [
+    {
+      "valor": 2087.99,
+      "codigo": null,
+      "numItem": 1,
+      "cantidad": 1,
+      "valorUni": 2087.99,
+      "uniMedida": 99,
+      "descripcion": "Donación en efectivo",
+      "tipoDonacion": 1,
+      "tipoDepreciacion": 0
+    },
+    {
+      "valor": 3134.05,
+      "codigo": null,
+      "numItem": 2,
+      "cantidad": 1,
+      "valorUni": 3134.05,
+      "uniMedida": 99,
+      "descripcion": "Donación en efectivo",
+      "tipoDonacion": 1,
+      "tipoDepreciacion": 0
+    },
+    {
+      "valor": 4365.72,
+      "codigo": null,
+      "numItem": 3,
+      "cantidad": 1,
+      "valorUni": 4365.72,
+      "uniMedida": 99,
+      "descripcion": "Donación en efectivo",
+      "tipoDonacion": 1,
+      "tipoDepreciacion": 0
+    }
+  ],
+  "otrosDocumentos": [
+    {
+      "descDocumento": "Carta de ofrecimiento de donación",
+      "codDocAsociado": 2,
+      "detalleDocumento": "Carta firmada por el donante que respalda la donación de prueba PRUEBA-MH-0031"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "identificacion": {
+    "version": 1,
+    "ambiente": "00",
+    "tipoDte": "07",
+    "numeroControl": "DTE-07-M001P001-000000000000007",
+    "codigoGeneracion": "A1B2C3D4-0007-4000-8000-0000000000A7",
+    "tipoModelo": 1,
+    "tipoOperacion": 1,
+    "tipoContingencia": null,
+    "motivoContin": null,
+    "fecEmi": "2026-09-23",
+    "horEmi": "16:46:19",
+    "tipoMoneda": "USD"
+  },
+  "emisor": {
+    "nit": "06141234567890",
+    "nrc": "123456",
+    "nombre": "AGENTE DE RETENCION DE PRUEBA, S.A. DE C.V.",
+    "codActividad": "35130",
+    "descActividad": "Distribución de energía eléctrica",
+    "nombreComercial": null,
+    "tipoEstablecimiento": "01",
+    "direccion": { "departamento": "06", "municipio": "14", "complemento": "DIRECCION DE PRUEBA" },
+    "telefono": "22220000",
+    "correo": "prueba@example.com",
+    "codEstable": "M001",
+    "codPuntoVenta": "P001"
+  },
+  "receptor": {
+    "tipoDocumento": "36",
+    "numDocumento": "06149876543210",
+    "nrc": "654321",
+    "nombre": "PROVEEDOR RETENIDO DE PRUEBA, S.A. DE C.V.",
+    "codActividad": "35114",
+    "descActividad": "Generación de energía eléctrica",
+    "nombreComercial": null,
+    "direccion": { "departamento": "06", "municipio": "14", "complemento": "DIRECCION DE PRUEBA" },
+    "telefono": "22220001",
+    "correo": "retenido@example.com"
+  },
+  "cuerpoDocumento": [
+    {
+      "numItem": 1,
+      "tipoDte": "03",
+      "tipoDoc": 2,
+      "numDocumento": "2AB89A2E-F871-4E3F-9E15-FCA85748AB7C",
+      "fechaEmision": "2026-09-07",
+      "montoSujetoGrav": 75462.77,
+      "codigoRetencionMH": "22",
+      "ivaRetenido": 754.63,
+      "descripcion": "ENERGIA DE PRUEBA"
+    }
+  ],
+  "resumen": {
+    "totalSujetoRetencion": 75462.77,
+    "totalIVAretenido": 754.63,
+    "totalIVAretenidoLetras": "SETECIENTOS CINCUENTA Y CUATRO DÓLARES CON SESENTA Y TRES CENTAVOS"
+  },
+  "extension": null,
+  "apendice": null
+}

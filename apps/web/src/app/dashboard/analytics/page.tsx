@@ -21,6 +21,8 @@ import { AnalysisResultView, type FindingLike } from '@/components/caats/CaatsRe
 import { SaveAsWorkingPaperModal } from '@/components/caats/SaveAsWorkingPaperModal';
 import { SecondaryDatasetUpload, type SecondaryDatasetValue } from '@/components/caats/SecondaryDatasetUpload';
 import { DteJsonUpload } from '@/components/caats/DteJsonUpload';
+import { DteMhOption } from '@/components/caats/DteMhOption';
+import { ejecutarValidacionDte } from '@/lib/dte-mh';
 import {
   type AnalysisId, type ParsedFile, FIELD_DEFS, SECONDARY_DATASET, JSON_UPLOAD_ENGINES,
   normColName, autoMatchColumn, autoDetectNumericColumns,
@@ -857,6 +859,8 @@ export default function AnalyticsPage() {
   const [anomalyColumns, setAnomalyColumns] = useState<string[]>([]);
   const [secondaryData, setSecondaryData] = useState<SecondaryDatasetValue | null>(null);
   const [dteRecords, setDteRecords] = useState<Record<string, unknown>[] | null>(null);
+  const [consultarMh, setConsultarMh] = useState(false);
+  const [mhProgreso, setMhProgreso] = useState<{ hecho: number; total: number } | null>(null);
 
   const isJsonEngine = JSON_UPLOAD_ENGINES.has(selected.id);
 
@@ -985,15 +989,23 @@ export default function AnalyticsPage() {
           : { records: parsed.rows, field_mapping: mapping };
       }
 
-      const data = await apiClient.post<Record<string, unknown>>(
-        `/ai/analytics/${selected.id}`,
-        payload,
-      );
+      // «Validación DTE» puede confirmar los documentos con la consulta pública de Hacienda (lib/dte-mh.ts reparte los lotes)
+      const data = selected.id === 'dte_validation' && dataMode === 'upload' && dteRecords
+        ? await ejecutarValidacionDte(dteRecords, {
+            consultarMh,
+            post: (path, body) => apiClient.post<unknown>(path, body),
+            onProgreso: (hecho, total) => setMhProgreso({ hecho, total }),
+          })
+        : await apiClient.post<Record<string, unknown>>(
+          `/ai/analytics/${selected.id}`,
+          payload,
+        );
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setRunning(false);
+      setMhProgreso(null);
     }
   }
 
@@ -1193,7 +1205,7 @@ export default function AnalyticsPage() {
                 className="flex items-center gap-2 px-5 py-2.5 bg-[#0F2D4A] text-white text-sm font-medium rounded-xl hover:bg-[#1a4a7a] disabled:opacity-60 shrink-0 transition-colors"
               >
                 {running
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Analizando…</>
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {mhProgreso ? `Consultando a Hacienda… ${mhProgreso.hecho}/${mhProgreso.total}` : 'Analizando…'}</>
                   : <><Play className="w-4 h-4" /> Ejecutar análisis</>
                 }
               </button>
@@ -1241,8 +1253,11 @@ export default function AnalyticsPage() {
                   )}
                 </div>
               ) : isJsonEngine ? (
-                <div className="mt-3">
+                <div className="mt-3 space-y-3">
                   <DteJsonUpload onChange={setDteRecords} />
+                  {dteRecords && dteRecords.length > 0 && (
+                    <DteMhOption records={dteRecords} checked={consultarMh} onChange={setConsultarMh} disabled={running} />
+                  )}
                 </div>
               ) : (
                 <div className="mt-3 space-y-4">

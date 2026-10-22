@@ -177,7 +177,11 @@ def _embed_voyage(texts: list[str]) -> list[list[float]]:
 
 # ─── Jina AI ────────────────────────────────────────────────────────────────
 
-def _embed_jina_once(texts: list[str]) -> list[list[float]]:
+JINA_TASK_PASSAGE = "retrieval.passage"  # fragmentos que se guardan
+JINA_TASK_QUERY = "retrieval.query"  # pregunta del usuario al buscar
+
+
+def _embed_jina_once(texts: list[str], task: str = JINA_TASK_PASSAGE) -> list[list[float]]:
     """API REST plana, formato compatible OpenAI — sin SDK dedicado."""
     response = httpx.post(
         "https://api.jina.ai/v1/embeddings",
@@ -187,7 +191,7 @@ def _embed_jina_once(texts: list[str]) -> list[list[float]]:
         },
         json={
             "model": settings.JINA_EMBEDDING_MODEL,
-            "task": "retrieval.passage",
+            "task": task,
             "input": texts,
         },
         timeout=120.0,
@@ -268,6 +272,11 @@ def embed_batch_with_fallback(
 def embed_query_with_provider(query: str, provider: EmbeddingProvider) -> list[float]:
     """Genera el embedding de UNA consulta con un proveedor especifico —
     usado en busqueda, donde hay que igualar el proveedor de los chunks
-    contra los que se compara (ver search_knowledge en rag_pipeline.py)."""
+    contra los que se compara (ver search_knowledge en rag_pipeline.py).
+
+    Jina distingue la pregunta (retrieval.query) del fragmento (retrieval.passage). Medido el 2026-10-22 con las mismas preguntas: como
+    consulta los aciertos suben de 0.59-0.74 a 0.64-0.80 y lo que no tiene que ver con la base queda igual (máx 0.42)."""
+    if provider == EmbeddingProvider.JINA:
+        return _embed_jina_once([query], JINA_TASK_QUERY)[0]
     embeddings = _EMBEDDERS[provider]([query])
     return embeddings[0]

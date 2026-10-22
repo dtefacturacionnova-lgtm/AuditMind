@@ -39,6 +39,44 @@ class Cascada(unittest.TestCase):
         self.assertEqual((provider, llamados), (P.GEMINI, [P.JINA, P.VOYAGE, P.COHERE, P.GEMINI]))
 
 
+class JinaConsultaYPasaje(unittest.TestCase):
+    """Jina vectoriza distinto la pregunta (retrieval.query) y el fragmento (retrieval.passage)."""
+
+    def _respuesta(self, enviados):
+        def post(url, headers=None, json=None, timeout=None):
+            enviados.append(json)
+            r = MagicMock()
+            r.raise_for_status = MagicMock()
+            r.json = MagicMock(return_value={"data": [{"index": i, "embedding": [0.5]} for i, _ in enumerate(json["input"])]})
+            return r
+
+        return post
+
+    def test_la_pregunta_del_usuario_se_vectoriza_como_consulta(self):
+        enviados = []
+        with patch.object(er.httpx, "post", self._respuesta(enviados)):
+            vec = er.embed_query_with_provider("¿cuándo vence el plazo?", P.JINA)
+        self.assertEqual(vec, [0.5])
+        self.assertEqual([e["task"] for e in enviados], ["retrieval.query"])
+
+    def test_los_fragmentos_se_siguen_vectorizando_como_pasaje(self):
+        enviados = []
+        with patch.object(er.httpx, "post", self._respuesta(enviados)):
+            er._EMBEDDERS[P.JINA](["fragmento uno", "fragmento dos"])
+        self.assertEqual({e["task"] for e in enviados}, {"retrieval.passage"})
+
+    def test_los_otros_proveedores_no_cambian_al_buscar(self):
+        llamados = []
+
+        def fake(texts):
+            llamados.append(texts)
+            return [[0.1]]
+
+        with patch.object(er, "_EMBEDDERS", {**er._EMBEDDERS, P.VOYAGE: fake}):
+            er.embed_query_with_provider("hola", P.VOYAGE)
+        self.assertEqual(llamados, [["hola"]])
+
+
 class Umbral(unittest.TestCase):
     def test_jina_usa_el_suyo_y_no_el_de_gemini(self):
         self.assertEqual(er.effective_threshold(P.JINA, 0.65), 0.48)

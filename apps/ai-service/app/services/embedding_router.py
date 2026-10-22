@@ -1,7 +1,11 @@
 """
 Embedding Router — cascada de proveedores para generar embeddings de RAG.
 
-Orden fijo: Gemini (primario, gratis) → Voyage AI → Jina AI → Cohere.
+Orden fijo (cambiado el 2026-10-22): Jina AI → Voyage AI → Cohere → Gemini (último recurso).
+Antes Gemini iba primero por ser gratis, pero su cuota diaria (1000/día) se agota con cualquier carga grande y, al agotarse,
+los fragmentos que Gemini indexó dejan de aparecer en las búsquedas hasta el reinicio de la cuota. Con Jina como proveedor
+principal toda la base queda en una sola familia de vectores (sin depender de esa cuota y sin puntajes de dos modelos
+mezclados en un mismo ranking). Los fragmentos viejos de Gemini se migran con scripts/reembed_chunks.py.
 Cada proveedor de respaldo es opcional: si su API key no esta configurada
 (string vacio en settings), se salta silenciosamente al siguiente.
 
@@ -32,13 +36,27 @@ class EmbeddingProvider(str, Enum):
     COHERE = "cohere"
 
 
-# Orden de la cascada — Gemini siempre primero, nunca se quita.
+# Orden de la cascada — Jina primero; Gemini queda como último recurso (ver la nota de arriba).
 PROVIDER_CASCADE: list[EmbeddingProvider] = [
-    EmbeddingProvider.GEMINI,
-    EmbeddingProvider.VOYAGE,
     EmbeddingProvider.JINA,
+    EmbeddingProvider.VOYAGE,
     EmbeddingProvider.COHERE,
+    EmbeddingProvider.GEMINI,
 ]
+
+# Los puntajes de similitud de cada modelo no son comparables: con las mismas preguntas Gemini da 0.77-0.85 en los aciertos y Jina
+# 0.51-0.73, mientras que lo que no tiene que ver con la base queda en ≤ 0.43 en Jina (medido el 2026-10-22). Los llamadores piden
+# un umbral pensado para Gemini (0.65); para Jina ese umbral dejaba afuera casi la mitad de los aciertos, así que Jina usa el suyo.
+# Un llamador que pida un umbral MÁS BAJO (p. ej. 0.4 en las pruebas de /rag/search) lo conserva.
+MIN_SIMILARITY: dict[EmbeddingProvider, float] = {
+    EmbeddingProvider.JINA: 0.48,
+}
+
+
+def effective_threshold(provider: EmbeddingProvider, requested: float) -> float:
+    """Umbral de similitud que se aplica a los fragmentos de `provider` cuando el llamador pidió `requested`."""
+    floor = MIN_SIMILARITY.get(provider)
+    return requested if floor is None else min(requested, floor)
 
 # Dimension de cada proveedor — usado por rag_pipeline.py para saber en que
 # columna guardar (embedding = 3072 solo Gemini; embedding_fallback = el resto).

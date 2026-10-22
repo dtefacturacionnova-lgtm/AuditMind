@@ -36,6 +36,7 @@ procesan de forma síncrona como antes.
 import asyncio
 import hashlib
 import io
+import json
 import re
 import uuid
 from pathlib import Path
@@ -48,6 +49,7 @@ import pdfplumber
 from app.config import settings
 from app.services.embedding_router import (
     EmbeddingProvider,
+    effective_threshold,
     embed_batch_with_fallback,
     embed_query_with_provider,
 )
@@ -111,6 +113,33 @@ def _chunk_text(
         overlapped.append(chunk.strip())
 
     return overlapped
+
+
+# Versión del texto que se vectoriza. La 2 antepone el título del documento a cada fragmento (2026-10-22): un fragmento suelto de una
+# sentencia o de una guía casi nunca dice de qué trata el documento, así que las preguntas por tema perdían contra el texto de las leyes.
+# Se guarda en rag_chunks.metadata->>'emb_v' para que scripts/reembed_chunks.py sepa qué falta rehacer.
+EMBEDDING_TEXT_VERSION = 2
+_TITULO_MAX = 320
+# Avisos de vigencia que se agregan al final de los títulos («— guía histórica, verificar vigencia…»): son iguales en decenas de
+# documentos y no dicen de qué trata ninguno, así que no se vectorizan.
+_AVISO_FINAL = re.compile(
+    r"^(?:interpretaci[oó]n hist[oó]rica|jurisprudencia hist[oó]rica|gu[ií]a hist[oó]rica|la lista cambia|verificar|acto administrativo)",
+    re.IGNORECASE,
+)
+
+
+def titulo_para_embedding(titulo: Optional[str]) -> str:
+    """El título del documento sin los avisos de vigencia del final, acotado a _TITULO_MAX caracteres."""
+    partes = [p.strip() for p in re.split(r"\s+[—–]\s+", titulo or "") if p.strip()]
+    while len(partes) > 1 and _AVISO_FINAL.match(partes[-1]):
+        partes.pop()
+    return " — ".join(partes)[:_TITULO_MAX].rstrip()
+
+
+def texto_para_embedding(titulo: Optional[str], fragmento: str) -> str:
+    """Lo que se vectoriza de un fragmento: su título delante. En la base se guarda el fragmento tal cual, sin el título."""
+    t = titulo_para_embedding(titulo)
+    return f"{t}\n\n{fragmento}" if t else fragmento
 
 
 def _content_hash(text: str) -> str:
@@ -193,6 +222,7 @@ async def _insert_chunks(
     embeddings: list[list[float]],
     provider: EmbeddingProvider,
     section_titles: Optional[list[str]] = None,
+    emb_version: int = EMBEDDING_TEXT_VERSION,
 ) -> int:
     """Bulk insert chunks with embeddings, en la columna que corresponda al proveedor."""
     # Delete existing chunks for this doc (reintentos de la misma revisión)
@@ -216,13 +246,14 @@ async def _insert_chunks(
             emb_literal if is_gemini else None,
             emb_literal if not is_gemini else None,
             provider.value,
+            json.dumps({"emb_v": emb_version}),
         ))
 
     await conn.executemany("""
         INSERT INTO rag_chunks
             (id, doc_id, content, rag_base, section_title, organization_id, chunk_index,
-             embedding, embedding_fallback, embedding_provider)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9::vector, $10)
+             embedding, embedding_fallback, embedding_provider, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9::vector, $10, $11::jsonb)
     """, rows)
 
     return len(rows)
@@ -306,6 +337,7 @@ async def run_ingestion(
     org_id: Optional[str],
     chunk_size: int = 800,
     overlap: int = 100,
+    doc_title: Optional[str] = None,
 ) -> None:
     """Fragmenta, genera embeddings (cascada de proveedores) e inserta los
     chunks de un documento ya registrado. Actualiza `status`/`error_message`
@@ -323,12 +355,16 @@ async def run_ingestion(
             )
             return
 
+        if doc_title is None:
+            doc_title = await conn.fetchval("SELECT title FROM rag_documents WHERE id = $1", doc_id)
+        textos_embedding = [texto_para_embedding(doc_title, c) for c in chunks]
+
         print(f"  → Generando {len(chunks)} embeddings para doc {doc_id}...")
         try:
             # embed_batch_with_fallback hace llamadas HTTP sincronas — correrla
             # en el loop de asyncio directamente congelaria el servicio para
             # otras requests durante toda la ingesta. Se corre en thread aparte.
-            embeddings, provider = await asyncio.to_thread(embed_batch_with_fallback, chunks)
+            embeddings, provider = await asyncio.to_thread(embed_batch_with_fallback, textos_embedding)
         except Exception as e:
             await conn.execute(
                 "UPDATE rag_documents SET status = 'error', error_message = $2 WHERE id = $1",
@@ -590,12 +626,12 @@ async def search_knowledge(
     """
     Busca los chunks más relevantes para una consulta usando similitud coseno.
 
-    Busca primero en la columna de Gemini (`embedding`, el caso normal). Si
-    dentro del alcance de la búsqueda hay chunks ingeridos por un proveedor de
-    respaldo (`embedding_fallback` — solo ocurre si Gemini se agotó alguna vez),
-    también genera el embedding de la consulta con ESE MISMO proveedor y busca
-    ahí, combinando y reordenando ambos conjuntos de resultados. En el caso
-    común (todo ingerido con Gemini) esto es un no-op sin costo extra.
+    Busca solo con los proveedores que tienen fragmentos dentro del alcance de
+    la búsqueda (cada fragmento se compara con la consulta vectorizada por el
+    MISMO proveedor que lo indexó) y combina los resultados. Desde el 2026-10-22
+    la base está en Jina, así que normalmente es una sola búsqueda y no se le
+    pide nada a Gemini; solo se usa si todavía quedan fragmentos suyos. El
+    umbral se ajusta por proveedor (ver embedding_router.effective_threshold).
 
     Returns:
         Lista de dicts con: content, section_title, rag_base, similarity, doc_title
@@ -607,39 +643,34 @@ async def search_knowledge(
     try:
         all_results: list[dict] = []
 
-        try:
-            query_embedding = await asyncio.to_thread(
-                embed_query_with_provider, query, EmbeddingProvider.GEMINI
-            )
-            vec_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
-            all_results += await _similarity_search(
-                conn, vec_str, "embedding", threshold, top_k, rag_base, organization_id
-            )
-        except Exception as e:
-            print(f"[RAG] Error generando embedding Gemini de la consulta: {e}")
-
         rag_base_list = rag_base if isinstance(rag_base, list) else ([rag_base] if rag_base else None)
-        fallback_rows = await conn.fetch("""
+        # Un fragmento migrado a Jina conserva su vector de Gemini hasta que se anule (scripts/reembed_chunks.py --anular-gemini):
+        # el proveedor vigente de cada fragmento es `embedding_provider`, y solo ese cuenta.
+        proveedores = await conn.fetch("""
             SELECT DISTINCT kc.embedding_provider
             FROM rag_chunks kc
             JOIN rag_documents kd ON kd.id = kc.doc_id
-            WHERE kc.embedding_fallback IS NOT NULL AND kd.is_active = true
+            WHERE kd.is_active = true
+              AND ((kc.embedding_provider = 'gemini' AND kc.embedding IS NOT NULL)
+                   OR (kc.embedding_provider <> 'gemini' AND kc.embedding_fallback IS NOT NULL))
               AND ($1::text[] IS NULL OR kc.rag_base = ANY($1::text[]))
         """, rag_base_list)
 
-        for row in fallback_rows:
-            provider = EmbeddingProvider(row["embedding_provider"])
+        for row in proveedores:
             try:
-                query_embedding = await asyncio.to_thread(
-                    embed_query_with_provider, query, provider
-                )
+                provider = EmbeddingProvider(row["embedding_provider"])
+            except ValueError:
+                continue
+            column = "embedding" if provider == EmbeddingProvider.GEMINI else "embedding_fallback"
+            try:
+                query_embedding = await asyncio.to_thread(embed_query_with_provider, query, provider)
                 vec_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
                 all_results += await _similarity_search(
-                    conn, vec_str, "embedding_fallback", threshold, top_k,
+                    conn, vec_str, column, effective_threshold(provider, threshold), top_k,
                     rag_base, organization_id, extra_provider=provider.value,
                 )
             except Exception as e:
-                print(f"[RAG] Error en búsqueda de respaldo ({provider.value}): {e}")
+                print(f"[RAG] Error en la búsqueda con {provider.value}: {e}")
 
         all_results.sort(key=lambda r: r["similarity"], reverse=True)
         return all_results[:top_k]

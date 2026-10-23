@@ -2,6 +2,7 @@ import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
+import { ROLE_HIERARCHY } from '../common/guards/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
@@ -992,8 +993,14 @@ export class AuditsService {
    * Mismo criterio que el resto del sistema: si NADIE del equipo tiene
    * presupuesto asignado, el total no se muestra como "0" sino como
    * `null` — nunca se inventa un presupuesto que nadie definió.
+   *
+   * COSTOS: `costoReal`, `horasSinCostear` y `costoTotal` salen del UserCostProfile (el costo por hora de cada persona sale de su
+   * salario), así que SOLO los recibe la dirección (CAE o superior), el mismo criterio de la pantalla de rentabilidad y de las
+   * tarifas del equipo. Para el resto del equipo la respuesta ni los trae: con costoReal ÷ horasReales se despejaba el costo por
+   * hora de cada compañero.
    */
   async getBudgetReport(auditId: string, user: AuthUser) {
+    const canSeeCost = (ROLE_HIERARCHY[user.role] ?? 0) >= ROLE_HIERARCHY.CAE;
     const audit = await this.prisma.audit.findFirst({
       where: { id: auditId, organizationId: user.organizationId },
       select: { id: true },
@@ -1041,7 +1048,7 @@ export class AuditsService {
     // nunca se asume $0.
     const allUserIds = [...new Set(entries.map((e) => e.userId))];
     const years = [...new Set(entries.map((e) => e.workDate.getUTCFullYear()))];
-    const costProfiles = allUserIds.length > 0 && years.length > 0
+    const costProfiles = canSeeCost && allUserIds.length > 0 && years.length > 0
       ? await this.prisma.userCostProfile.findMany({
           where: { organizationId: user.organizationId, userId: { in: allUserIds }, year: { in: years } },
           select: { userId: true, year: true, costRatePerHour: true },
@@ -1073,8 +1080,7 @@ export class AuditsService {
           role: m.role,
           horasPresupuestadas: m.budgetedHours ?? null,
           horasReales: round2(actualByUser.get(m.userId) ?? 0),
-          costoReal,
-          horasSinCostear,
+          ...(canSeeCost ? { costoReal, horasSinCostear } : {}),
           enEquipo: true,
         };
       }),
@@ -1087,8 +1093,7 @@ export class AuditsService {
           role: null,
           horasPresupuestadas: null,
           horasReales: round2(actualByUser.get(id) ?? 0),
-          costoReal,
-          horasSinCostear,
+          ...(canSeeCost ? { costoReal, horasSinCostear } : {}),
           enEquipo: false,
         };
       }),
@@ -1101,7 +1106,7 @@ export class AuditsService {
     const totalReal = round2(porPersona.reduce((sum, p) => sum + p.horasReales, 0));
     const sinPresupuesto = team.filter((m) => m.budgetedHours == null).length + orphanUserIds.length;
 
-    const conCosto = porPersona.filter((p) => p.costoReal !== null);
+    const conCosto = porPersona.filter((p) => p.costoReal != null);
     const costoTotal = conCosto.length > 0 ? round2(conCosto.reduce((sum, p) => sum + (p.costoReal ?? 0), 0)) : null;
 
     const variacionHoras = totalPresupuestado !== null ? round2(totalReal - totalPresupuestado) : null;
@@ -1115,7 +1120,7 @@ export class AuditsService {
       variacionHoras,
       variacionPct,
       sinPresupuesto,
-      costoTotal,
+      ...(canSeeCost ? { costoTotal } : {}),
       porPersona,
     };
   }

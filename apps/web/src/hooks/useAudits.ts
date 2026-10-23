@@ -311,9 +311,9 @@ export interface BudgetReportPerson {
   role:                string | null;
   horasPresupuestadas: number | null;
   horasReales:         number;
-  /** null = sin UserCostProfile para ningún año trabajado — nunca se asume $0. */
-  costoReal:           number | null;
-  horasSinCostear:     number;
+  /** null = sin UserCostProfile para ningún año trabajado — nunca se asume $0. Solo viene para CAE o superior (undefined para el resto). */
+  costoReal?:          number | null;
+  horasSinCostear?:    number;
   enEquipo:            boolean;
 }
 
@@ -323,8 +323,8 @@ export interface AuditBudgetReport {
   variacionHoras:     number | null;
   variacionPct:       number | null;
   sinPresupuesto:     number;
-  /** Costo real en $ — base del criterio "costo vs. presupuesto" para Auditoría Interna. */
-  costoTotal:          number | null;
+  /** Costo real en $ — base del criterio "costo vs. presupuesto" para Auditoría Interna. Solo viene para CAE o superior. */
+  costoTotal?:         number | null;
   porPersona:         BudgetReportPerson[];
 }
 

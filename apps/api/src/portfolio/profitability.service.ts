@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { TimeEntryCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { resolveBillRate, resolveCostRate } from '../timesheet/frozen-rates';
 
 // Mismas categorías que TimesheetService considera "ligadas a un encargo" —
 // las únicas que representan horas del equipo trabajadas para el cliente
@@ -16,6 +17,7 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 export interface HourYearBreakdown {
   year: number;
   hours: number;
+  /** Costo por hora efectivo de las horas costeadas de ese año (promedio si el año mezcla meses cerrados y abiertos). null = ninguna se pudo costear. */
   costRatePerHour: number | null;
   cost: number | null;
 }
@@ -27,6 +29,8 @@ export interface PersonBreakdown {
   totalHours: number;
   totalCost: number;
   uncostedHours: number;
+  /** Horas de meses todavía no cerrados: se costean con el perfil vigente y pueden cambiar. */
+  provisionalHours: number;
   // Tarifa pactada con el cliente (AuditTeam.billingRateType/agreedRatePerHour,
   // congelada al momento de la asignación — ver AuditsService.updateTeamMemberRate).
   // null = esta persona no tiene una tarifa asignada en el equipo del encargo.
@@ -40,6 +44,8 @@ export interface AuditCostSummary {
   totalHours: number;
   totalCost: number;
   uncostedHours: number;
+  /** Horas de meses sin cerrar (cifra provisional). Con el cierre de horas apagado son todas. */
+  provisionalHours: number;
   // Suma de horas × tarifa pactada, y horas de personas SIN tarifa asignada
   // (nunca se asumen a $0 — mismo criterio que uncostedHours).
   totalRevenueByRate: number;
@@ -54,6 +60,16 @@ export interface Revenue {
 export interface Margin {
   marginAmount: number | null;
   marginPercent: number | null;
+}
+
+const emptySummary = (): AuditCostSummary => ({
+  byPerson: [], totalHours: 0, totalCost: 0, uncostedHours: 0, provisionalHours: 0, totalRevenueByRate: 0, unratedHours: 0,
+});
+
+/** Acumulador de una persona en un año calendario. */
+interface YearAcc {
+  hours: number; cost: number; costedHours: number; uncosted: number; provisional: number;
+  revenue: number; ratedHours: number; unrated: number;
 }
 
 @Injectable()
@@ -77,7 +93,9 @@ export class ProfitabilityService {
       throw new NotFoundException('Encargo no encontrado');
     }
 
-    const revenue = await this.resolveRevenue(engagement.engagementLetter?.proposalId ?? null);
+    const revenue = (await this.resolveRevenues([engagement.engagementLetter?.proposalId ?? null])).get(
+      engagement.engagementLetter?.proposalId ?? '',
+    ) ?? NO_REVENUE;
     const ingreso = revenue.feeAmount !== null
       ? { feeAmount: revenue.feeAmount, feeCurrency: revenue.feeCurrency as string }
       : null;
@@ -96,13 +114,14 @@ export class ProfitabilityService {
         ...base,
         porPersona: [],
         totales: {
-          horasTotales: 0, costoTotal: 0, horasSinCostear: 0, margenAbsoluto: null, margenPct: null,
+          horasTotales: 0, costoTotal: 0, horasSinCostear: 0, horasProvisionales: 0, margenAbsoluto: null, margenPct: null,
           ingresoPorTarifa: 0, horasSinTarifa: 0, margenPorTarifaAbsoluto: null, margenPorTarifaPct: null,
         },
       };
     }
 
-    const summary = await this.computeAuditCostSummary(engagement.auditId, user.organizationId);
+    const summary = (await this.computeAuditCostSummaries([engagement.auditId], user.organizationId)).get(engagement.auditId)
+      ?? emptySummary();
     const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
     const marginByRate = this.computeMarginByRate(summary);
 
@@ -118,23 +137,14 @@ export class ProfitabilityService {
         // quedan visibles aparte, nunca mezcladas como si fueran $0.
         costoCalculado: p.totalHours > 0 && p.uncostedHours === p.totalHours ? null : p.totalCost,
         horasSinCostear: p.uncostedHours,
+        horasProvisionales: p.provisionalHours,
         // Tarifa pactada con el cliente (Equipo del Encargo) — null si esta
         // persona no tiene una tarifa asignada todavía.
         tarifaTipo: p.billingRateType,
         tarifaPorHora: p.agreedRatePerHour,
         ingresoPorTarifa: p.revenueByRate,
       })),
-      totales: {
-        horasTotales: summary.totalHours,
-        costoTotal: summary.totalCost,
-        horasSinCostear: summary.uncostedHours,
-        margenAbsoluto: margin.marginAmount,
-        margenPct: margin.marginPercent,
-        ingresoPorTarifa: summary.totalRevenueByRate,
-        horasSinTarifa: summary.unratedHours,
-        margenPorTarifaAbsoluto: marginByRate.marginAmount,
-        margenPorTarifaPct: marginByRate.marginPercent,
-      },
+      totales: this.totalsOf(summary, margin, marginByRate),
     };
   }
 
@@ -159,39 +169,31 @@ export class ProfitabilityService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const rows = await Promise.all(
-      engagements.map(async (e) => {
-        const [revenue, summary] = await Promise.all([
-          this.resolveRevenue(e.engagementLetter?.proposalId ?? null),
-          // auditId no puede ser null acá — filtrado arriba con { not: null }
-          this.computeAuditCostSummary(e.auditId as string, user.organizationId),
-        ]);
-        const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
-        const marginByRate = this.computeMarginByRate(summary);
+    // Una consulta por tipo de dato para TODOS los encargos (antes eran ~5 consultas por encargo).
+    const [revenues, summaries] = await Promise.all([
+      this.resolveRevenues(engagements.map((e) => e.engagementLetter?.proposalId ?? null)),
+      // auditId no puede ser null acá — filtrado arriba con { not: null }
+      this.computeAuditCostSummaries(engagements.map((e) => e.auditId as string), user.organizationId),
+    ]);
 
-        return {
-          engagementId: e.id,
-          clientId: e.clientId,
-          clientName: e.client.legalName,
-          fiscalYear: e.fiscalYear,
-          ingreso: revenue.feeAmount !== null
-            ? { feeAmount: revenue.feeAmount, feeCurrency: revenue.feeCurrency as string }
-            : null,
-          auditId: e.auditId,
-          totales: {
-            horasTotales: summary.totalHours,
-            costoTotal: summary.totalCost,
-            horasSinCostear: summary.uncostedHours,
-            margenAbsoluto: margin.marginAmount,
-            margenPct: margin.marginPercent,
-            ingresoPorTarifa: summary.totalRevenueByRate,
-            horasSinTarifa: summary.unratedHours,
-            margenPorTarifaAbsoluto: marginByRate.marginAmount,
-            margenPorTarifaPct: marginByRate.marginPercent,
-          },
-        };
-      }),
-    );
+    const rows = engagements.map((e) => {
+      const revenue = revenues.get(e.engagementLetter?.proposalId ?? '') ?? NO_REVENUE;
+      const summary = summaries.get(e.auditId as string) ?? emptySummary();
+      const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
+      const marginByRate = this.computeMarginByRate(summary);
+
+      return {
+        engagementId: e.id,
+        clientId: e.clientId,
+        clientName: e.client.legalName,
+        fiscalYear: e.fiscalYear,
+        ingreso: revenue.feeAmount !== null
+          ? { feeAmount: revenue.feeAmount, feeCurrency: revenue.feeCurrency as string }
+          : null,
+        auditId: e.auditId,
+        totales: this.totalsOf(summary, margin, marginByRate),
+      };
+    });
 
     // Orden por margen % descendente. Los casos sin base confiable para
     // comparar (sin ingreso conocido, o con horas sin costear que dejarían el
@@ -215,54 +217,50 @@ export class ProfitabilityService {
   // permite cortar las horas a una fecha (ej. el cierre del período del
   // Comité) — sin él, se comportan igual que los métodos existentes (todo el
   // historial de TimeEntry del encargo).
-  async getAuditFinancialSummary(auditId: string, organizationId: string, asOf?: Date): Promise<{
-    hoursTotal: number; cost: number; uncostedHours: number;
-    revenue: number | null; feeCurrency: string | null;
-    margin: number | null; marginPct: number | null;
-  }> {
+  async getAuditFinancialSummary(auditId: string, organizationId: string, asOf?: Date): Promise<AuditFinancialSummary> {
     const engagement = await this.prisma.engagement.findFirst({
       where: { auditId, organizationId },
       select: { engagementLetter: { select: { proposalId: true } } },
     });
-    const [revenue, summary] = await Promise.all([
-      this.resolveRevenue(engagement?.engagementLetter?.proposalId ?? null),
-      this.computeAuditCostSummary(auditId, organizationId, asOf),
+    const proposalId = engagement?.engagementLetter?.proposalId ?? null;
+    const [revenues, summaries] = await Promise.all([
+      this.resolveRevenues([proposalId]),
+      this.computeAuditCostSummaries([auditId], organizationId, asOf),
     ]);
-    const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
-    return {
-      hoursTotal: summary.totalHours,
-      cost: summary.totalCost,
-      uncostedHours: summary.uncostedHours,
-      revenue: revenue.feeAmount,
-      feeCurrency: revenue.feeCurrency,
-      margin: margin.marginAmount,
-      marginPct: margin.marginPercent,
-    };
+    return this.financialSummaryOf(revenues.get(proposalId ?? '') ?? NO_REVENUE, summaries.get(auditId) ?? emptySummary());
   }
 
   // ── Rentabilidad agregada de TODA la organización, para el dashboard de
   // Comité (extensión del roadmap pendiente desde PT-B4/Comité, 2026-08-23).
-  // Reutiliza getAuditFinancialSummary() encargo por encargo — NO reimplementa
-  // el cálculo de costo en SQL crudo — para preservar la regla de negocio de
-  // que las horas sin costear NUNCA se asumen $0 (ver computeAuditCostSummary).
+  // Usa el MISMO cálculo de costo que cada encargo (computeAuditCostSummaries) —
+  // NO reimplementa el costo en SQL crudo — para preservar la regla de negocio de
+  // que las horas sin costear NUNCA se asumen $0. Desde la Fase 2 del cierre de
+  // horas lo hace con consultas agrupadas (6 en total, no ~6 por encargo).
   async getOrgWideProfitability(organizationId: string, asOf?: Date) {
     const engagements = await this.prisma.engagement.findMany({
       where: { organizationId, auditId: { not: null } },
-      select: { auditId: true },
+      select: { auditId: true, engagementLetter: { select: { proposalId: true } } },
     });
 
-    const summaries = await Promise.all(
-      engagements.map((e) => this.getAuditFinancialSummary(e.auditId as string, organizationId, asOf)),
-    );
+    const [revenues, costs] = await Promise.all([
+      this.resolveRevenues(engagements.map((e) => e.engagementLetter?.proposalId ?? null)),
+      this.computeAuditCostSummaries(engagements.map((e) => e.auditId as string), organizationId, asOf),
+    ]);
+    const summaries = engagements.map((e) => this.financialSummaryOf(
+      revenues.get(e.engagementLetter?.proposalId ?? '') ?? NO_REVENUE,
+      costs.get(e.auditId as string) ?? emptySummary(),
+    ));
 
     let totalIncome = 0;
     let totalCost = 0;
     let totalMargin = 0;
+    let provisionalHours = 0;
     let engagementsWithRevenue = 0;
     let engagementsWithMargin = 0;
 
     for (const s of summaries) {
       totalCost += s.cost;
+      provisionalHours += s.provisionalHours;
       if (s.revenue !== null) {
         totalIncome += s.revenue;
         engagementsWithRevenue++;
@@ -281,20 +279,58 @@ export class ProfitabilityService {
       totalCost: round2(totalCost),
       totalMargin: round2(totalMargin),
       totalMarginPct: totalIncome !== 0 ? round2((totalMargin / totalIncome) * 100) : null,
+      provisionalHours: round2(provisionalHours),
     };
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  /** Ingreso conocido del encargo, resuelto vía EngagementLetter → Proposal. null si no hay honorario definido. */
-  private async resolveRevenue(proposalId: string | null): Promise<Revenue> {
-    if (!proposalId) return { feeAmount: null, feeCurrency: null };
-    const proposal = await this.prisma.proposal.findUnique({
-      where: { id: proposalId },
-      select: { feeAmount: true, feeCurrency: true },
+  private totalsOf(summary: AuditCostSummary, margin: Margin, marginByRate: Margin) {
+    return {
+      horasTotales: summary.totalHours,
+      costoTotal: summary.totalCost,
+      horasSinCostear: summary.uncostedHours,
+      horasProvisionales: summary.provisionalHours,
+      margenAbsoluto: margin.marginAmount,
+      margenPct: margin.marginPercent,
+      ingresoPorTarifa: summary.totalRevenueByRate,
+      horasSinTarifa: summary.unratedHours,
+      margenPorTarifaAbsoluto: marginByRate.marginAmount,
+      margenPorTarifaPct: marginByRate.marginPercent,
+    };
+  }
+
+  private financialSummaryOf(revenue: Revenue, summary: AuditCostSummary): AuditFinancialSummary {
+    const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
+    return {
+      hoursTotal: summary.totalHours,
+      cost: summary.totalCost,
+      uncostedHours: summary.uncostedHours,
+      provisionalHours: summary.provisionalHours,
+      revenue: revenue.feeAmount,
+      feeCurrency: revenue.feeCurrency,
+      margin: margin.marginAmount,
+      marginPct: margin.marginPercent,
+    };
+  }
+
+  /**
+   * Ingreso conocido de cada propuesta (EngagementLetter → Proposal), en UNA consulta. El mapa va por id de propuesta;
+   * una propuesta ausente o sin honorario no aparece con ingreso (null, nunca $0).
+   */
+  private async resolveRevenues(proposalIds: (string | null)[]): Promise<Map<string, Revenue>> {
+    const ids = [...new Set(proposalIds.filter((v): v is string => !!v))];
+    const out = new Map<string, Revenue>();
+    if (ids.length === 0) return out;
+    const proposals = await this.prisma.proposal.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, feeAmount: true, feeCurrency: true },
     });
-    if (!proposal || proposal.feeAmount === null) return { feeAmount: null, feeCurrency: null };
-    return { feeAmount: round2(Number(proposal.feeAmount)), feeCurrency: proposal.feeCurrency };
+    for (const p of proposals) {
+      if (p.feeAmount === null) continue;
+      out.set(p.id, { feeAmount: round2(Number(p.feeAmount)), feeCurrency: p.feeCurrency });
+    }
+    return out;
   }
 
   private computeMargin(feeAmount: number | null, cost: number): Margin {
@@ -319,36 +355,34 @@ export class ProfitabilityService {
   }
 
   /**
-   * Costo real del encargo a partir de las TimeEntry facturables/no facturables
-   * de cliente ligadas a su Audit, agrupadas por persona y por año calendario
-   * de `workDate` (un encargo puede cruzar el fin de año, y el costo por hora
-   * de una persona depende del UserCostProfile del año en que trabajó, no de
-   * un valor fijo). Horas de una persona+año sin UserCostProfile cargado
-   * quedan explícitamente en `uncostedHours` — NUNCA se asumen a costo $0.
+   * Costo real de VARIOS encargos a la vez a partir de las TimeEntry facturables/no facturables de cliente, con una sola
+   * consulta por tipo de dato (horas, personas, perfiles de costeo, tarifas del equipo).
+   *
+   * Cada hora se costea una por una (ver `frozen-rates.ts`): si su mes está CERRADO vale el costo y la tarifa congelados al
+   * cerrar; si no, el perfil de costeo del año de `workDate` y la tarifa pactada vigentes, y cuenta como provisional.
+   * Horas sin costo (persona+año sin UserCostProfile, o mes cerrado sin costo congelado) quedan en `uncostedHours` — NUNCA
+   * se asumen a $0. Lo mismo con la tarifa: horas sin tarifa quedan en `unratedHours`.
    */
-  private async computeAuditCostSummary(auditId: string, organizationId: string, asOf?: Date): Promise<AuditCostSummary> {
+  private async computeAuditCostSummaries(
+    auditIds: string[], organizationId: string, asOf?: Date,
+  ): Promise<Map<string, AuditCostSummary>> {
+    const ids = [...new Set(auditIds)];
+    const result = new Map<string, AuditCostSummary>(ids.map((id) => [id, emptySummary()]));
+    if (ids.length === 0) return result;
+
     const entries = await this.prisma.timeEntry.findMany({
       where: {
-        organizationId, auditId, category: { in: BILLABLE_CATEGORIES },
+        organizationId, auditId: { in: ids }, category: { in: BILLABLE_CATEGORIES },
         ...(asOf ? { workDate: { lte: asOf } } : {}),
       },
-      select: { userId: true, workDate: true, hours: true },
+      select: {
+        auditId: true, userId: true, workDate: true, hours: true,
+        closedAt: true, costRateSnapshot: true, billRateSnapshot: true,
+      },
     });
+    if (entries.length === 0) return result;
 
-    if (entries.length === 0) {
-      return { byPerson: [], totalHours: 0, totalCost: 0, uncostedHours: 0, totalRevenueByRate: 0, unratedHours: 0 };
-    }
-
-    // userId -> año -> horas acumuladas
-    const byUser = new Map<string, Map<number, number>>();
-    for (const e of entries) {
-      const year = e.workDate.getUTCFullYear();
-      if (!byUser.has(e.userId)) byUser.set(e.userId, new Map());
-      const yearMap = byUser.get(e.userId)!;
-      yearMap.set(year, (yearMap.get(year) ?? 0) + e.hours);
-    }
-
-    const userIds = [...byUser.keys()];
+    const userIds = [...new Set(entries.map((e) => e.userId))];
     const years = [...new Set(entries.map((e) => e.workDate.getUTCFullYear()))];
 
     const [users, costProfiles, teamRates] = await Promise.all([
@@ -358,67 +392,102 @@ export class ProfitabilityService {
         select: { userId: true, year: true, costRatePerHour: true },
       }),
       this.prisma.auditTeam.findMany({
-        where: { auditId, userId: { in: userIds } },
-        select: { userId: true, billingRateType: true, agreedRatePerHour: true },
+        where: { auditId: { in: ids }, userId: { in: userIds } },
+        select: { auditId: true, userId: true, billingRateType: true, agreedRatePerHour: true },
       }),
     ]);
 
     const userNameMap = new Map(users.map((u) => [u.id, u.name]));
     const costMap = new Map(costProfiles.map((cp) => [`${cp.userId}:${cp.year}`, Number(cp.costRatePerHour)]));
-    const rateMap = new Map(teamRates.map((t) => [t.userId, t]));
+    const rateMap = new Map(teamRates.map((t) => [`${t.auditId}:${t.userId}`, t]));
 
-    let totalHours = 0;
-    let totalCost = 0;
-    let uncostedHours = 0;
-    let totalRevenueByRate = 0;
-    let unratedHours = 0;
+    // auditId -> userId -> año -> acumulado
+    const acc = new Map<string, Map<string, Map<number, YearAcc>>>();
+    for (const e of entries) {
+      const auditId = e.auditId as string;
+      const year = e.workDate.getUTCFullYear();
+      const byUser = acc.get(auditId) ?? acc.set(auditId, new Map()).get(auditId)!;
+      const byYear = byUser.get(e.userId) ?? byUser.set(e.userId, new Map()).get(e.userId)!;
+      const a = byYear.get(year) ?? byYear.set(year, {
+        hours: 0, cost: 0, costedHours: 0, uncosted: 0, provisional: 0, revenue: 0, ratedHours: 0, unrated: 0,
+      }).get(year)!;
 
-    const byPerson: PersonBreakdown[] = [...byUser.entries()].map(([userId, yearMap]) => {
-      let personHours = 0;
-      let personCost = 0;
-      let personUncosted = 0;
+      const team = rateMap.get(`${auditId}:${e.userId}`);
+      const liveBill = team?.agreedRatePerHour != null ? Number(team.agreedRatePerHour) : null;
+      const cost = resolveCostRate(e, costMap.get(`${e.userId}:${year}`));
+      const bill = resolveBillRate(e, liveBill);
 
-      const hoursByYear: HourYearBreakdown[] = [...yearMap.entries()]
-        .sort(([yearA], [yearB]) => yearA - yearB)
-        .map(([year, hours]) => {
-          const rate = costMap.get(`${userId}:${year}`);
-          const cost = rate !== undefined ? round2(hours * rate) : null;
-          personHours += hours;
-          if (cost !== null) personCost += cost;
-          else personUncosted += hours;
-          return { year, hours: round2(hours), costRatePerHour: rate ?? null, cost };
-        });
+      a.hours += e.hours;
+      if (cost.rate !== null) { a.cost += e.hours * cost.rate; a.costedHours += e.hours; } else { a.uncosted += e.hours; }
+      if (bill.rate !== null) { a.revenue += e.hours * bill.rate; a.ratedHours += e.hours; } else { a.unrated += e.hours; }
+      if (!cost.frozen) a.provisional += e.hours;
+    }
 
-      totalHours += personHours;
-      totalCost += personCost;
-      uncostedHours += personUncosted;
+    for (const [auditId, byUser] of acc) {
+      let totalHours = 0, totalCost = 0, uncostedHours = 0, provisionalHours = 0, totalRevenueByRate = 0, unratedHours = 0;
 
-      const agreedRate = rateMap.get(userId);
-      const agreedRatePerHour = agreedRate?.agreedRatePerHour != null ? Number(agreedRate.agreedRatePerHour) : null;
-      const revenueByRate = agreedRatePerHour !== null ? round2(personHours * agreedRatePerHour) : null;
-      if (revenueByRate !== null) totalRevenueByRate += revenueByRate;
-      else unratedHours += personHours;
+      const byPerson: PersonBreakdown[] = [...byUser.entries()].map(([userId, byYear]) => {
+        let personHours = 0, personCost = 0, personUncosted = 0, personProvisional = 0, personRevenue = 0, personRated = 0, personUnrated = 0;
 
-      return {
-        userId,
-        userName: userNameMap.get(userId) ?? userId,
-        hoursByYear,
-        totalHours: round2(personHours),
-        totalCost: round2(personCost),
-        uncostedHours: round2(personUncosted),
-        billingRateType: agreedRate?.billingRateType ?? null,
-        agreedRatePerHour,
-        revenueByRate,
-      };
-    });
+        const hoursByYear: HourYearBreakdown[] = [...byYear.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([year, a]) => {
+            const cost = a.costedHours > 0 ? round2(a.cost) : null;
+            personHours += a.hours;
+            if (cost !== null) personCost += cost;
+            personUncosted += a.uncosted;
+            personProvisional += a.provisional;
+            personRevenue += a.revenue;
+            personRated += a.ratedHours;
+            personUnrated += a.unrated;
+            return {
+              year, hours: round2(a.hours),
+              costRatePerHour: a.costedHours > 0 ? round2(a.cost / a.costedHours) : null,
+              cost,
+            };
+          });
 
-    return {
-      byPerson,
-      totalHours: round2(totalHours),
-      totalCost: round2(totalCost),
-      uncostedHours: round2(uncostedHours),
-      totalRevenueByRate: round2(totalRevenueByRate),
-      unratedHours: round2(unratedHours),
-    };
+        const team = rateMap.get(`${auditId}:${userId}`);
+        const revenueByRate = personRated > 0 ? round2(personRevenue) : null;
+        totalHours += personHours;
+        totalCost += personCost;
+        uncostedHours += personUncosted;
+        provisionalHours += personProvisional;
+        if (revenueByRate !== null) totalRevenueByRate += revenueByRate;
+        unratedHours += personUnrated;
+
+        return {
+          userId,
+          userName: userNameMap.get(userId) ?? userId,
+          hoursByYear,
+          totalHours: round2(personHours),
+          totalCost: round2(personCost),
+          uncostedHours: round2(personUncosted),
+          provisionalHours: round2(personProvisional),
+          billingRateType: team?.billingRateType ?? null,
+          agreedRatePerHour: team?.agreedRatePerHour != null ? Number(team.agreedRatePerHour) : null,
+          revenueByRate,
+        };
+      });
+
+      result.set(auditId, {
+        byPerson,
+        totalHours: round2(totalHours),
+        totalCost: round2(totalCost),
+        uncostedHours: round2(uncostedHours),
+        provisionalHours: round2(provisionalHours),
+        totalRevenueByRate: round2(totalRevenueByRate),
+        unratedHours: round2(unratedHours),
+      });
+    }
+    return result;
   }
 }
+
+export interface AuditFinancialSummary {
+  hoursTotal: number; cost: number; uncostedHours: number; provisionalHours: number;
+  revenue: number | null; feeCurrency: string | null;
+  margin: number | null; marginPct: number | null;
+}
+
+const NO_REVENUE: Revenue = { feeAmount: null, feeCurrency: null };

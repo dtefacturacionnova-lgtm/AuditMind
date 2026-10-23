@@ -234,4 +234,11 @@ Construida en el árbol de trabajo, **sin commit, sin despliegue y con el SQL si
 
 **Orden de despliegue:** primero el SQL, luego `prisma generate`, luego API y web. El interruptor queda **apagado** hasta que la dirección lo active en «Cierre de Horas › Parámetros».
 
-**Lo que todavía no está:** el bloque de ingreso y facturación (Fase 3), los cuadros de gestión (Fase 4) y la congelación de costo/tarifa dentro de los reportes de rentabilidad (Fase 2: los snapshots ya se guardan al cerrar, pero la rentabilidad todavía lee el perfil vigente).
+**Fase 2 (integridad), construida el 2026-10-22:**
+
+- **Costo y tarifa congelados en los reportes.** La rentabilidad por encargo y de la organización, el presupuesto vs. real y el WIP del dashboard de la firma usan, para las horas de un mes cerrado, el costo y la tarifa que se congelaron al cerrar; para las de un mes abierto, el perfil y la tarifa vigentes. Un mes cerrado sin costo congelado queda «sin costear» y no se rescata con el perfil de hoy (se reabre y se vuelve a cerrar). Con el cierre apagado todo se calcula como antes.
+- **Cifras provisionales.** La rentabilidad devuelve cuántas horas son de meses sin cerrar (`horasProvisionales`) y las pantallas lo avisan cuando el cierre está activo.
+- **Consultas agrupadas.** La lista de rentabilidad y la de toda la organización pasaron de unas 5 consultas por encargo a 6 en total, sin importar cuántos encargos haya.
+- **Pruebas de las reglas financieras** (antes no había ninguna): costo, ingreso por tarifa, margen, orden de la lista, corte por fecha, aislamiento por organización y equivalencia con el cálculo anterior sobre datos aleatorios. Verificado además contra los datos reales: el cálculo nuevo da exactamente lo mismo que el anterior.
+
+**Lo que todavía no está:** el bloque de ingreso y facturación (Fase 3), los cuadros de gestión (Fase 4) y el costo no absorbido (nómina menos lo cargado a encargos).

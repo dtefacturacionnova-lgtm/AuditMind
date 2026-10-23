@@ -3,6 +3,7 @@
 import { Loader2, AlertCircle, ShieldAlert, Users2 } from 'lucide-react';
 import { useUser } from '@/hooks/useUser';
 import { useEngagementProfitability, marginTone } from '@/hooks/usePortfolio';
+import { useHoursCloseSettings } from '@/hooks/useHoursClose';
 import { formatMoney } from '@/lib/utils';
 
 /** Mismo umbral de rol que el resto de pantallas financieras sensibles de Cartera
@@ -35,6 +36,8 @@ export function ProfitabilityPanel({ engagementId }: { engagementId: string }) {
   const canView = hasRole(PROFITABILITY_ROLES);
 
   const { data, isLoading, isError, error } = useEngagementProfitability(engagementId, canView);
+  const { data: closeSettings } = useHoursCloseSettings();
+  const closeEnabled = !!closeSettings?.enabled;
 
   if (!canView) {
     return (
@@ -82,8 +85,16 @@ export function ProfitabilityPanel({ engagementId }: { engagementId: string }) {
       <div className={`flex items-center gap-2 rounded-xl border px-4 py-2 ${tone.bg} ${tone.border}`}>
         <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
         <span className={`text-xs font-semibold ${tone.text}`}>{tone.label}</span>
+        {closeEnabled && (totales.horasProvisionales ?? 0) > 0 && (
+          <span
+            className="ml-auto text-[11px] text-blue-600 font-medium"
+            title="Son horas de meses que todavía no se cierran: se costean con el perfil de costeo y la tarifa vigentes, así que estas cifras pueden cambiar. Las horas de meses cerrados usan el costo y la tarifa congelados al cerrar."
+          >
+            {(totales.horasProvisionales ?? 0).toFixed(1)}h de meses sin cerrar (provisional)
+          </span>
+        )}
         {totales.horasSinCostear > 0 && (
-          <span className="ml-auto text-[11px] text-amber-600 font-medium">
+          <span className={`${closeEnabled && (totales.horasProvisionales ?? 0) > 0 ? '' : 'ml-auto '}text-[11px] text-amber-600 font-medium`}>
             {totales.horasSinCostear.toFixed(1)}h sin costear
           </span>
         )}

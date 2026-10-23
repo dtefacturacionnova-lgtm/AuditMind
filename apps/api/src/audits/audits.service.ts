@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
 import { ROLE_HIERARCHY } from '../common/guards/roles.guard';
+import { resolveCostRate } from '../timesheet/frozen-rates';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
@@ -1018,19 +1019,16 @@ export class AuditsService {
       }),
       this.prisma.timeEntry.findMany({
         where: { auditId },
-        select: { userId: true, workDate: true, hours: true },
+        select: { userId: true, workDate: true, hours: true, closedAt: true, costRateSnapshot: true },
       }),
     ]);
 
-    // Horas reales por persona, Y por persona+año (el costo por hora depende del
-    // UserCostProfile del año en que se trabajó — mismo criterio que ProfitabilityService).
+    // Horas reales por persona. El costo se calcula hora por hora más abajo (el costo por hora depende del
+    // UserCostProfile del año en que se trabajó, o del costo congelado si el mes ya se cerró — mismo criterio que
+    // ProfitabilityService).
     const actualByUser = new Map<string, number>();
-    const actualByUserYear = new Map<string, number>(); // key `${userId}:${year}`
     for (const e of entries) {
-      const year = e.workDate.getUTCFullYear();
       actualByUser.set(e.userId, (actualByUser.get(e.userId) ?? 0) + e.hours);
-      const key = `${e.userId}:${year}`;
-      actualByUserYear.set(key, (actualByUserYear.get(key) ?? 0) + e.hours);
     }
 
     // Horas cargadas por alguien que ya no está (o nunca estuvo) en AuditTeam —
@@ -1056,18 +1054,20 @@ export class AuditsService {
       : [];
     const costRateMap = new Map(costProfiles.map((cp) => [`${cp.userId}:${cp.year}`, Number(cp.costRatePerHour)]));
 
-    const costoPorPersona = (userId: string): { costoReal: number | null; horasSinCostear: number } => {
-      let costo = 0;
-      let sinCostear = 0;
-      let algunoCosteado = false;
-      for (const [key, hours] of actualByUserYear.entries()) {
-        if (!key.startsWith(`${userId}:`)) continue;
-        const year = Number(key.split(':')[1]);
-        const rate = costRateMap.get(`${userId}:${year}`);
-        if (rate !== undefined) { costo += hours * rate; algunoCosteado = true; }
-        else sinCostear += hours;
+    // Solo la dirección ve costos: para el resto no se calcula nada. Cada hora vale el costo congelado al cerrar su mes
+    // (si ya se cerró) o el perfil vigente; sin costo, queda sin costear (nunca $0).
+    const costByUser = new Map<string, { costo: number; sinCostear: number; algunoCosteado: boolean }>();
+    if (canSeeCost) {
+      for (const e of entries) {
+        const acc = costByUser.get(e.userId) ?? { costo: 0, sinCostear: 0, algunoCosteado: false };
+        const { rate } = resolveCostRate(e, costRateMap.get(`${e.userId}:${e.workDate.getUTCFullYear()}`));
+        if (rate !== null) { acc.costo += e.hours * rate; acc.algunoCosteado = true; } else { acc.sinCostear += e.hours; }
+        costByUser.set(e.userId, acc);
       }
-      return { costoReal: algunoCosteado ? round2(costo) : null, horasSinCostear: round2(sinCostear) };
+    }
+    const costoPorPersona = (userId: string): { costoReal: number | null; horasSinCostear: number } => {
+      const acc = costByUser.get(userId);
+      return { costoReal: acc?.algunoCosteado ? round2(acc.costo) : null, horasSinCostear: round2(acc?.sinCostear ?? 0) };
     };
 
     const porPersona = [

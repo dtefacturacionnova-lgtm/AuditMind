@@ -3,6 +3,7 @@ import { Prisma, TimeEntryCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInOrg } from '../common/utils/tenant.util';
+import { resolveBillRate } from '../timesheet/frozen-rates';
 import {
   CreateHolidayDto, UpdateHolidayDto,
   CreateAvailabilityProfileDto, UpdateAvailabilityProfileDto,
@@ -566,7 +567,7 @@ export class CapacityService {
           workDate: { gte: yearStart, lt: yearEnd },
           category: { in: [TimeEntryCategory.CLIENT_BILLABLE, TimeEntryCategory.CLIENT_NON_BILLABLE] },
         },
-        select: { userId: true, hours: true, auditId: true },
+        select: { userId: true, hours: true, auditId: true, closedAt: true, billRateSnapshot: true },
       }),
       this.prisma.auditTeam.findMany({
         where: { agreedRatePerHour: { not: null }, audit: { organizationId: user.organizationId } },
@@ -607,8 +608,9 @@ export class CapacityService {
     let horasConTarifa = 0;
     for (const e of entries) {
       if (!e.auditId) continue;
-      const rate = rateMap.get(`${e.auditId}:${e.userId}`);
-      if (rate !== undefined) { wipAproximado += e.hours * rate; horasConTarifa += e.hours; }
+      // Hora de un mes cerrado: la tarifa congelada al cerrar; si no, la tarifa pactada vigente (provisional).
+      const { rate } = resolveBillRate(e, rateMap.get(`${e.auditId}:${e.userId}`));
+      if (rate !== null) { wipAproximado += e.hours * rate; horasConTarifa += e.hours; }
     }
 
     // ── Ranking de encargos abiertos por variación de presupuesto ──

@@ -282,6 +282,8 @@ export interface ProfitabilityPersonRow {
   /** null = no se pudo calcular (esa persona no tiene perfil de costeo) — mostrar "Sin costear", nunca $0. */
   costoCalculado:  number | null;
   horasSinCostear: number;
+  /** Horas de meses todavía sin cerrar: se costean con el perfil vigente y pueden cambiar. */
+  horasProvisionales?: number;
   /** Tarifa pactada con el cliente (Equipo del Encargo). null = sin tarifa asignada todavía. */
   tarifaTipo:        string | null;
   tarifaPorHora:      number | null;
@@ -292,6 +294,8 @@ export interface ProfitabilityTotals {
   horasTotales:    number;
   costoTotal:      number;
   horasSinCostear: number;
+  /** Horas de meses todavía sin cerrar (cifra provisional). Con el cierre de horas apagado son todas, así que solo se avisa si el cierre está activo. */
+  horasProvisionales?: number;
   /** null = no se pudo calcular (sin honorario vinculado, o falta perfil de costeo de alguien). */
   margenAbsoluto:  number | null;
   margenPct:       number | null;

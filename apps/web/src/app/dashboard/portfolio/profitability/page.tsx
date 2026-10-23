@@ -11,6 +11,7 @@ import { formatMoney } from '@/lib/utils';
 import {
   usePortfolioProfitability, marginTone, PortfolioProfitabilitySummary,
 } from '@/hooks/usePortfolio';
+import { useHoursCloseSettings } from '@/hooks/useHoursClose';
 
 const PROFITABILITY_ROLES = ['CAE', 'ADMIN', 'SUPER_ADMIN'];
 
@@ -32,15 +33,26 @@ function YearSelect({ year, onChange }: { year: number; onChange: (y: number) =>
   );
 }
 
-function EngagementRow({ item }: { item: PortfolioProfitabilitySummary }) {
+function EngagementRow({ item, closeEnabled }: { item: PortfolioProfitabilitySummary; closeEnabled: boolean }) {
   const tone = marginTone(item.totales.margenPct);
+  const provisional = closeEnabled && (item.totales.horasProvisionales ?? 0) > 0;
   const unavailableReason = item.ingreso ? 'Sin costear' : 'Honorario no definido';
 
   const content = (
     <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-4 hover:border-blue-200 hover:shadow-sm transition-all">
       <div className="min-w-0">
         <p className="text-sm font-semibold text-gray-800 truncate">{item.clientName}</p>
-        <p className="text-xs text-gray-400">Ejercicio fiscal {item.fiscalYear}</p>
+        <p className="text-xs text-gray-400">
+          Ejercicio fiscal {item.fiscalYear}
+          {provisional && (
+            <span
+              className="ml-2 rounded-full bg-blue-50 text-blue-600 px-2 py-0.5 text-[10px] font-medium"
+              title={`${(item.totales.horasProvisionales ?? 0).toFixed(1)}h son de meses sin cerrar: el margen puede cambiar.`}
+            >
+              provisional
+            </span>
+          )}
+        </p>
       </div>
       <div className="flex items-center gap-6 flex-shrink-0">
         <div className="text-right hidden sm:block">
@@ -79,6 +91,8 @@ export default function PortfolioProfitabilityPage() {
   const [year, setYear] = useState(CURRENT_YEAR);
 
   const { data: items = [], isLoading } = usePortfolioProfitability(year, canView);
+  const { data: closeSettings } = useHoursCloseSettings();
+  const closeEnabled = !!closeSettings?.enabled;
 
   if (!canView) {
     return (
@@ -126,7 +140,7 @@ export default function PortfolioProfitabilityPage() {
         ) : (
           <div className="space-y-3">
             {items.map((item, i) => (
-              <EngagementRow key={item.engagementId ?? `${item.clientName}-${item.fiscalYear}-${i}`} item={item} />
+              <EngagementRow key={item.engagementId ?? `${item.clientName}-${item.fiscalYear}-${i}`} item={item} closeEnabled={closeEnabled} />
             ))}
           </div>
         )}
@@ -137,6 +151,12 @@ export default function PortfolioProfitabilityPage() {
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Margen ajustado (10–30%)</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Margen negativo (&lt;10%)</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-300" /> No calculable</span>
+          {closeEnabled && (
+            <span className="flex items-center gap-1.5">
+              <span className="rounded-full bg-blue-50 text-blue-600 px-2 py-0.5 text-[10px] font-medium">provisional</span>
+              tiene horas de meses sin cerrar; las de meses cerrados usan el costo y la tarifa congelados al cerrar
+            </span>
+          )}
         </div>
       </div>
     </div>

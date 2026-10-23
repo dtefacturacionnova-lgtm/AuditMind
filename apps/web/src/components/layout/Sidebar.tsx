@@ -9,7 +9,7 @@ import {
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
   Clock, CalendarClock, DollarSign, Handshake, CheckSquare, Wallet, Gauge, CalendarCheck,
-  Stamp, ShieldBan, Landmark,
+  Stamp, ShieldBan, Landmark, ClipboardCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
@@ -29,9 +29,15 @@ interface NavItem {
   module?: 'INTERNAL' | 'EXTERNAL';
   /** Solo visible para el rol SUPER_ADMIN (administración de la plataforma, no de una organización). */
   superAdminOnly?: boolean;
+  /** Visible desde este rol hacia arriba (misma jerarquía que el RolesGuard del API). */
+  minRole?: 'AUDIT_MANAGER' | 'CAE';
   /** Explicación de una línea — se muestra como tooltip al pasar el mouse. */
   hint?: string;
 }
+
+const ROLE_RANK: Record<string, number> = {
+  SUPER_ADMIN: 100, ADMIN: 90, CAE: 80, AUDIT_MANAGER: 70, SENIOR_AUDITOR: 60, AUDITOR: 50, AUDITEE: 20, READ_ONLY: 10,
+};
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -95,7 +101,8 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Horas y Rentabilidad',
     icon: Wallet,
     children: [
-      { label: 'Captura Diaria',         href: '/dashboard/timesheet',              icon: Clock },
+      { label: 'Captura de Horas',       href: '/dashboard/timesheet',              icon: Clock },
+      { label: 'Cierre de Horas',        href: '/dashboard/timesheet/close',        icon: ClipboardCheck, minRole: 'AUDIT_MANAGER', hint: 'El gerente revisa y cierra el mes de cada persona' },
       { label: 'Reporte Consolidado',    href: '/dashboard/timesheet/report',       icon: BarChart3 },
       { label: 'Asistencia',             href: '/dashboard/timesheet/attendance',   icon: CalendarCheck },
       { label: 'Mi Utilización',         href: '/dashboard/my-utilization',         icon: Gauge },
@@ -172,6 +179,7 @@ function getVisibleNavItems(
     list
       .filter((item) => !(excluded && item.module === excluded))
       .filter((item) => !item.superAdminOnly || role === 'SUPER_ADMIN')
+      .filter((item) => !item.minRole || (ROLE_RANK[role ?? ''] ?? 0) >= ROLE_RANK[item.minRole])
       .map((item) => (item.children ? { ...item, children: filter(item.children) } : item));
 
   return filter(items);

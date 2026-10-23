@@ -51,13 +51,18 @@ function dayRange(dateKey: string): { gte: Date; lt: Date } {
  * aislado.
  */
 export async function assertDailyHoursCap(
-  prisma: PrismaService,
+  prisma: Pick<PrismaService, 'timeEntry'>,
   userId: string,
   hoursByDate: Map<string, number>,
+  /** Registros que se están reemplazando (edición): no cuentan contra el tope. */
+  excludeEntryIds: string[] = [],
 ): Promise<void> {
   for (const [dateKey, additional] of hoursByDate) {
     const existing = await prisma.timeEntry.aggregate({
-      where: { userId, workDate: dayRange(dateKey) },
+      where: {
+        userId, workDate: dayRange(dateKey),
+        ...(excludeEntryIds.length > 0 ? { id: { notIn: excludeEntryIds } } : {}),
+      },
       _sum: { hours: true },
     });
     const total = (existing._sum.hours ?? 0) + additional;

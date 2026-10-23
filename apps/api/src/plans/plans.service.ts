@@ -1,10 +1,14 @@
 import {
   Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException,
 } from '@nestjs/common';
+import { TimeEntryCategory, TimeEntryLogAction } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
 import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg } from '../timesheet/daily-hours-cap.util';
+import {
+  assertPeriodsOpen, validateEntryRules, entrySnapshot, logEntryChange, TX_OPTIONS, ENTRY_PUBLIC_SELECT,
+} from '../timesheet/hours-close.util';
 import {
   CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
   CreateTimeEntryDto, LinkAuditDto,
@@ -367,17 +371,28 @@ export class PlansService {
     await assertTimeAnchorsInOrg(this.prisma, user.organizationId, [dto]);
     await assertDailyHoursCap(this.prisma, user.id, new Map([[dto.workDate, dto.hours]]));
 
-    const entry = await this.prisma.timeEntry.create({
-      data: {
-        organizationId: user.organizationId,
-        userId:         user.id,
-        auditId:        dto.auditId,
-        planItemId:     dto.planItemId,
-        workDate:       new Date(dto.workDate),
-        hours:          dto.hours,
-        description:    dto.description,
-      },
-    });
+    // Misma comprobación de mes cerrado y misma bitácora que la captura general (TimesheetService): son las dos rutas que escriben horas.
+    const entry = await this.prisma.$transaction(async (tx) => {
+      const settings = await assertPeriodsOpen(tx, user.organizationId, user.id, [dto.workDate]);
+      const ruleError = validateEntryRules({ category: TimeEntryCategory.CLIENT_BILLABLE, description: dto.description }, settings.enabled);
+      if (ruleError) throw new BadRequestException(ruleError);
+      const created = await tx.timeEntry.create({
+        data: {
+          organizationId: user.organizationId,
+          userId:         user.id,
+          auditId:        dto.auditId,
+          planItemId:     dto.planItemId,
+          workDate:       new Date(dto.workDate),
+          hours:          dto.hours,
+          description:    dto.description,
+        },
+      });
+      await logEntryChange(tx, {
+        organizationId: user.organizationId, userId: user.id, actorId: user.id,
+        action: TimeEntryLogAction.CREATE, timeEntryId: created.id, after: entrySnapshot(created),
+      });
+      return created;
+    }, TX_OPTIONS);
     await recalculateAuditActualHours(this.prisma, dto.auditId);
     return entry;
   }
@@ -387,6 +402,7 @@ export class PlansService {
     return this.prisma.timeEntry.findMany({
       where:   { auditId, organizationId: user.organizationId },
       orderBy: { workDate: 'asc' },
+      select:  ENTRY_PUBLIC_SELECT, // sin costo/tarifa congelados: el costo por hora sale del salario de cada persona
     });
   }
 
@@ -395,6 +411,7 @@ export class PlansService {
     return this.prisma.timeEntry.findMany({
       where:   { planItemId, organizationId: user.organizationId },
       orderBy: { workDate: 'asc' },
+      select:  ENTRY_PUBLIC_SELECT,
     });
   }
 
@@ -403,7 +420,14 @@ export class PlansService {
     const entry = await this.prisma.timeEntry.findUnique({ where: { id } });
     if (!entry || entry.organizationId !== user.organizationId) throw new NotFoundException();
     if (entry.userId !== user.id) throw new ForbiddenException('Solo puedes eliminar tus propias entradas');
-    await this.prisma.timeEntry.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await assertPeriodsOpen(tx, user.organizationId, user.id, [entry.workDate]);
+      await tx.timeEntry.delete({ where: { id } });
+      await logEntryChange(tx, {
+        organizationId: user.organizationId, userId: user.id, actorId: user.id,
+        action: TimeEntryLogAction.DELETE, timeEntryId: id, before: entrySnapshot(entry),
+      });
+    }, TX_OPTIONS);
     await recalculateAuditActualHours(this.prisma, entry.auditId);
     return { deleted: true };
   }

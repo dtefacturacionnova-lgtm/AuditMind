@@ -7,7 +7,7 @@ import {
   AlertTriangle, Upload, BadgeCheck, Edit2, ChevronRight, ChevronDown,
   TrendingUp, Target, Shield, Sparkles, Wand2, Loader2, X,
   ClipboardCopy, Check, ListChecks, Plus, Trash2, BarChart3,
-  CheckCircle2, Circle, RotateCcw, Printer, Download, ShieldAlert, DollarSign,
+  CheckCircle2, Circle, RotateCcw, Printer, Download, ShieldAlert, DollarSign, AlertCircle,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import {
@@ -20,6 +20,7 @@ import { useOrgUsersList } from '@/hooks/useCapacity';
 import { useCompetenciesRoster, CompetencyRosterEntry } from '@/hooks/useQaip';
 import { useUser } from '@/hooks/useUser';
 import { useAuditTimeEntries, useCreateTimeEntry, useDeleteTimeEntry } from '@/hooks/usePlans';
+import { useHoursCloseSettings } from '@/hooks/useHoursClose';
 import { useFindingsByAudit, SEVERITY_CONFIG, STATUS_CONFIG } from '@/hooks/useFindings';
 import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
@@ -1659,7 +1660,7 @@ function BudgetVsActualPanel({ auditId }: { auditId: string }) {
             <p className="text-xs text-gray-500 pt-1 border-t border-gray-50">
               Costo real acumulado:{' '}
               <span className="font-semibold text-gray-800">
-                {costoTotal !== null ? formatMoneyRate(costoTotal) : '— sin costeo configurado —'}
+                {costoTotal != null ? formatMoneyRate(costoTotal) : '— sin costeo configurado —'}
               </span>
             </p>
           )}
@@ -1694,7 +1695,7 @@ function BudgetVsActualPanel({ auditId }: { auditId: string }) {
                   <td className="px-3 py-2 text-right font-medium text-gray-800">{p.horasReales.toFixed(1)}h</td>
                   {canSeeCost && (
                     <td className="px-3 py-2 text-right text-gray-600">
-                      {p.costoReal !== null ? formatMoneyRate(p.costoReal) : <span className="text-gray-300" title="Sin perfil de costeo para el año en que se registraron las horas">—</span>}
+                      {p.costoReal != null ? formatMoneyRate(p.costoReal) : <span className="text-gray-300" title="Sin perfil de costeo para el año en que se registraron las horas">—</span>}
                     </td>
                   )}
                 </tr>
@@ -1711,16 +1712,33 @@ function TimesheetTab({ auditId }: { auditId: string }) {
   const { data: entries = [], isLoading } = useAuditTimeEntries(auditId);
   const createEntry = useCreateTimeEntry();
   const deleteEntry = useDeleteTimeEntry();
+  const { data: closeSettings } = useHoursCloseSettings();
+  const requireDesc = !!closeSettings?.enabled; // con el cierre de horas activo, las horas de cliente piden descripción
   const [date, setDate]   = useState(new Date().toISOString().slice(0, 10));
   const [hours, setHours] = useState('');
   const [desc, setDesc]   = useState('');
+  const [error, setError] = useState<string | null>(null);
   const totalHours = entries.reduce((s, e) => s + e.hours, 0);
 
   const handleAdd = async () => {
     if (!hours || +hours <= 0) return;
-    await createEntry.mutateAsync({ auditId, workDate: date, hours: +hours, description: desc || undefined });
-    setHours('');
-    setDesc('');
+    if (requireDesc && desc.trim().length < 5) {
+      setError('Escribe una descripción de al menos 5 caracteres: el cierre de horas la exige como respaldo.');
+      return;
+    }
+    setError(null);
+    try {
+      await createEntry.mutateAsync({ auditId, workDate: date, hours: +hours, description: desc.trim() || undefined });
+      setHours('');
+      setDesc('');
+    } catch (e) {
+      setError((e as Error).message); // p. ej. «El mes 2026-09 de estas horas está cerrado…»
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setError(null);
+    try { await deleteEntry.mutateAsync(id); } catch (e) { setError((e as Error).message); }
   };
 
   return (
@@ -1734,7 +1752,7 @@ function TimesheetTab({ auditId }: { auditId: string }) {
           <input type="number" min="0.5" max="24" step="0.5" placeholder="Horas (ej. 8)"
             value={hours} onChange={e => setHours(e.target.value)}
             className="w-32 rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <input type="text" placeholder="Descripción del trabajo…"
+          <input type="text" placeholder={requireDesc ? 'Descripción del trabajo (obligatoria)…' : 'Descripción del trabajo…'}
             value={desc} onChange={e => setDesc(e.target.value)}
             className="flex-1 min-w-[180px] rounded-lg border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
             onKeyDown={e => e.key === 'Enter' && handleAdd()} />
@@ -1744,6 +1762,11 @@ function TimesheetTab({ auditId }: { auditId: string }) {
             {createEntry.isPending ? 'Guardando…' : 'Registrar'}
           </button>
         </div>
+        {error && (
+          <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-red-600">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" /> {error}
+          </p>
+        )}
       </div>
 
       {/* Presupuesto vs. Real — reemplaza el card anterior que leía Audit.estimatedHours */}
@@ -1780,7 +1803,7 @@ function TimesheetTab({ auditId }: { auditId: string }) {
                   <td className="px-4 py-2.5 text-right font-bold text-gray-800">{e.hours}h</td>
                   <td className="px-4 py-2.5 text-gray-600">{e.description ?? <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2.5 text-right">
-                    <button onClick={() => deleteEntry.mutateAsync(e.id)}
+                    <button onClick={() => handleDelete(e.id)}
                       disabled={deleteEntry.isPending}
                       className="text-gray-300 hover:text-red-500 transition-colors">
                       <Trash2 className="w-3.5 h-3.5" />

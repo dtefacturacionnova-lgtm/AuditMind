@@ -18,6 +18,9 @@ export type TimesheetCategory =
 
 export type TimesheetReportGroupBy = 'user' | 'audit' | 'plan' | 'date';
 
+// Debe reflejar el enum `NonBillableReason` de apps/api/prisma/schema.prisma.
+export type NonBillableReason = 'OVER_BUDGET' | 'REWORK' | 'COURTESY' | 'OTHER';
+
 export interface TimesheetEntry {
   id:             string;
   organizationId: string;
@@ -28,6 +31,10 @@ export interface TimesheetEntry {
   hours:          number;
   description?:   string | null;
   category:       TimesheetCategory;
+  nonBillableReason?: NonBillableReason | null;
+  /** Entró por un ajuste aprobado después del cierre del mes. */
+  afterClose?:    boolean;
+  closedAt?:      string | null;
   createdAt:      string;
   updatedAt:      string;
 }
@@ -39,6 +46,18 @@ export interface CreateTimesheetEntryData {
   category:     TimesheetCategory;
   auditId?:     string;
   planItemId?:  string;
+  nonBillableReason?: NonBillableReason;
+}
+
+/** Edición parcial: `null` en auditId/planItemId/description/nonBillableReason los quita. */
+export interface UpdateTimesheetEntryData {
+  workDate?:    string;
+  hours?:       number;
+  description?: string | null;
+  category?:    TimesheetCategory;
+  auditId?:     string | null;
+  planItemId?:  string | null;
+  nonBillableReason?: NonBillableReason | null;
 }
 
 export interface MyAssignment {
@@ -273,6 +292,18 @@ export function useCreateTimesheetEntriesBulk() {
   return useMutation({
     mutationFn: (entries: CreateTimesheetEntryData[]) =>
       apiClient.post<{ created: number }>('/timesheet/entries/bulk', { entries }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['timesheet-entries'] });
+      qc.invalidateQueries({ queryKey: ['timesheet-report'] });
+    },
+  });
+}
+
+export function useUpdateTimesheetEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: UpdateTimesheetEntryData & { id: string }) =>
+      apiClient.patch<TimesheetEntry>(`/timesheet/entries/${id}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['timesheet-entries'] });
       qc.invalidateQueries({ queryKey: ['timesheet-report'] });

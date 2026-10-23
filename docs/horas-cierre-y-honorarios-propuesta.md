@@ -202,3 +202,36 @@ Cada gerente ve la rentabilidad de sus encargos sin ver el costo por hora ni el 
 3. **¿Un gerente puede cerrar horas de otro gerente?** La propuesta dice que sí, y que nadie cierra las propias; la dirección cierra las de los gerentes. Confirmar quién es «la dirección» en el despacho.
 4. **¿Quién crea el evento de cobro?** El gerente del encargo, o solo la dirección.
 5. **Facturación:** empezar con el registro manual de facturas (recomendado) o integrar con Nexus Finance desde el principio.
+
+---
+
+## 7. Estado de la implementación de la Fase 1 (2026-10-22)
+
+Construida en el árbol de trabajo, **sin commit, sin despliegue y con el SQL sin aplicar** (la base de desarrollo es la de producción: aplicar el SQL requiere aprobación explícita).
+
+**Qué hay:**
+
+| Pieza | Dónde |
+|---|---|
+| SQL aditivo y su reversa (RLS activo, sin acceso para `anon`/`authenticated`) | `infrastructure/db-migrations/2026-10-horas-cierre.sql` y `.REVERSA.sql` |
+| Reglas, candado por persona y mes, bitácora | `apps/api/src/timesheet/hours-close.util.ts` |
+| Cierre, reapertura, ajustes, resumen, recordatorios | `hours-close.service.ts`, `hours-close.controller.ts`, `hours-close.scheduler.ts` |
+| Edición de horas (`PATCH /timesheet/entries/:id`) y rutas de escritura con comprobación de mes cerrado | `timesheet.service.ts` y `plans.service.ts` (las dos rutas que escriben horas) |
+| Captura semanal, edición, pedido de ajuste | `/dashboard/timesheet` |
+| Pantalla del gerente | `/dashboard/timesheet/close` (menú «Cierre de Horas», desde gerente) |
+
+**Decisiones que se tomaron por defecto (las abiertas de la sección 6) y se pueden cambiar:**
+
+1. Cierre por **persona y mes**.
+2. Plazos de 5.º y 10.º día hábil, configurables por organización.
+3. «La dirección» = CAE, administrador y superadministrador.
+4. Un gerente no cierra a otro gerente ni a sí mismo: las horas de un gerente las cierra la dirección.
+5. Solo se cierran meses terminados.
+6. La descripción de las horas de cliente se exige solo cuando el cierre está activo (así la captura vieja no se rompe durante el despliegue).
+7. Los recordatorios por correo salen dos veces: el primer día hábil del mes (a quienes tienen días sin horas del mes anterior) y el día del plazo del auditor.
+
+**Revisión independiente:** un segundo modelo revisó el backend sin ver mis conclusiones y encontró 11 puntos; los reales se corrigieron, cada uno con su prueba. Los más importantes: el costo por hora congelado no sale en ninguna consulta de horas; un ajuste solo se decide una vez aunque se apruebe a la vez desde dos sesiones; los ajustes usan el costo del mes cerrado y no el del perfil de hoy; y restaurar una copia o borrar un encargo no esquiva el cierre (se rechaza antes de tocar nada). Limitación conocida: con el interruptor apagado el candado se suelta, y lo que se escriba en meses cerrados en ese tiempo no queda congelado (hay que reabrir y cerrar esos meses de nuevo).
+
+**Orden de despliegue:** primero el SQL, luego `prisma generate`, luego API y web. El interruptor queda **apagado** hasta que la dirección lo active en «Cierre de Horas › Parámetros».
+
+**Lo que todavía no está:** el bloque de ingreso y facturación (Fase 3), los cuadros de gestión (Fase 4) y la congelación de costo/tarifa dentro de los reportes de rentabilidad (Fase 2: los snapshots ya se guardan al cerrar, pero la rentabilidad todavía lee el perfil vigente).

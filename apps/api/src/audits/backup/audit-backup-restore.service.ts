@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenEx
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertNoClosedHours } from '../../timesheet/hours-close.util';
 import { AuthUser } from '../../auth/jwt.strategy';
 import { AuditBackupPackageService } from './audit-backup-package.service';
 import { AuditBackupFilesService } from './audit-backup-files.service';
@@ -57,6 +58,7 @@ export class AuditBackupRestoreService {
     }
     const auditOriginal = data.audit?.[0];
     if (!auditOriginal) throw new BadRequestException('El backup no contiene el registro del encargo');
+    await this.asegurarHorasDeLaCopiaAbiertas(data, user);
 
     const advertencias: AuditBackupAdvertencia[] = [];
     const idMap = new Map<string, string>();
@@ -108,6 +110,18 @@ export class AuditBackupRestoreService {
     this.logger.log(`Restauración de backup como nuevo encargo '${nuevoAudit.id}': ${totalFilasCreadas} filas, ${totalArchivosSubidos}/${archivos.size} archivos, ${advertencias.length} advertencia(s)`);
 
     return { audit: nuevoAudit, totalFilasCreadas, totalArchivosSubidos, advertencias };
+  }
+
+  /**
+   * Las horas de la copia caerían en los meses que sean: si alguno ya está cerrado para esa persona, se rechaza ANTES de tocar
+   * nada (en la restauración destructiva, antes de borrar el encargo existente: si no, fallaría ya borrado).
+   */
+  private async asegurarHorasDeLaCopiaAbiertas(data: Record<string, Record<string, unknown>[]>, user: AuthUser): Promise<void> {
+    await assertNoClosedHours(
+      this.prisma, user.organizationId,
+      (data.timeEntry ?? []).map(h => ({ userId: h.userId as string | null, workDate: h.workDate as string | null })),
+      'Restaurar esta copia',
+    );
   }
 
   /**
@@ -173,6 +187,10 @@ export class AuditBackupRestoreService {
   ): Record<string, unknown> | null {
     const resultado: Record<string, unknown> = { ...fila };
     delete resultado.id;
+    if (modelo === 'timeEntry') {
+      // Una hora restaurada entra como provisional: el costo y la tarifa que traía la copia son de otro cierre.
+      delete resultado.costRateSnapshot; delete resultado.billRateSnapshot; delete resultado.closedAt; delete resultado.afterClose;
+    }
 
     for (const fk of obtenerFksDeModelo(modelo)) {
       if (!(fk.campo in resultado)) continue;
@@ -395,6 +413,7 @@ export class AuditBackupRestoreService {
     };
 
     // ── 1. Borrar TODO lo existente del encargo (el Audit mismo se conserva, solo se actualiza) ──
+    await this.asegurarHorasDeLaCopiaAbiertas(data, user); // antes de borrar: si falla aquí, el encargo queda intacto
     await this.eliminarDatosExistentes(auditId, advertencias);
 
     // ── 2. Actualizar los campos propios del Audit desde el backup ──
@@ -483,6 +502,11 @@ export class AuditBackupRestoreService {
    * llega al paso 2 de recrear filas nuevas desde un backup.
    */
   async eliminarDatosExistentes(auditId: string, advertencias: AuditBackupAdvertencia[]): Promise<void> {
+    // Las horas del encargo pueden estar en meses ya cerrados: borrarlas cambiaría un mes cerrado sin pasar por un ajuste.
+    const horas = await this.prisma.timeEntry.findMany({ where: { auditId }, select: { organizationId: true, userId: true, workDate: true } });
+    for (const orgId of new Set(horas.map(h => h.organizationId))) {
+      await assertNoClosedHours(this.prisma, orgId, horas.filter(h => h.organizationId === orgId), 'Borrar o reemplazar este encargo');
+    }
     const idsPorModelo = await this.recolectarIdsExistentes(auditId);
     for (const modelo of [...AUDIT_SCOPED_MODELS].reverse()) {
       const ids = idsPorModelo[modelo.model] ?? [];

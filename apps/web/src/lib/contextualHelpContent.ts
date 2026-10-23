@@ -316,12 +316,27 @@ const ROUTE_HELP: RouteHelpEntry[] = [
     },
   },
   {
+    test: p => routeIs(p, '/dashboard/timesheet/close'),
+    topic: {
+      title: 'Cierre de Horas',
+      body: [
+        'El auditor registra sus horas durante el mes y hasta el plazo; después el gerente revisa a cada persona y cierra su mes. Se cierra por persona y por mes: quien entregó a tiempo no espera a los demás.',
+        'Los avisos (días sin horas, pocas o muchas horas, días largos, horas sin descripción, sin perfil de costeo) no impiden cerrar: son para que decidas con la información a la vista. «Ver» muestra las horas de la persona sin costos ni salarios.',
+        'Al cerrar, las horas, el costo por hora y la tarifa por encargo quedan fijos: un cambio de salario posterior ya no mueve el margen de ese mes. Nadie cierra sus propias horas, y las de un gerente las cierra la dirección.',
+        'Pasado el cierre, la persona pide un ajuste con su motivo y tú lo apruebas o lo rechazas; también puedes reabrir el mes con un motivo. Todo queda en la bitácora de horas.',
+        'La dirección activa o apaga el cierre en «Parámetros». Apagado, nada se bloquea.',
+      ],
+    },
+  },
+  {
     test: p => p.startsWith('/dashboard/timesheet'),
     topic: {
       title: 'Registro de Horas',
       body: [
         'Distingue horas facturables/no facturables de cliente (requieren encargo o auditoría) de las administrativas, capacitación, vacaciones, incapacidades y permisos (sin encargo).',
         'Estas horas son la base de Rentabilidad por Encargo y del reporte consolidado — regístralas con la categoría correcta desde el inicio, corregirlas después es más trabajo.',
+        'Captura la semana completa: una celda por encargo y día, en pasos de cuarto de hora. Cada encargo lleva su descripción del trabajo y, si una hora no se factura, su motivo (sobrepresupuesto, retrabajo, cortesía u otro). «Copiar semana anterior» te ahorra repetir lo habitual.',
+        'Puedes registrar días atrasados sin pedir permiso mientras el mes siga abierto. Cuando tu gerente cierra el mes, ese mes se bloquea (candado): si falta algo o hay un error, pides un ajuste y el gerente lo revisa.',
       ],
     },
   },

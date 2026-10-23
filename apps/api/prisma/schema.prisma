@@ -472,6 +472,10 @@ model Organization {
   engagements            Engagement[]
   adminTasks             AdminTask[]
   signatureRequests      SignatureRequest[]
+  hoursCloseSettings     HoursCloseSettings?
+  hoursPeriodCloses      HoursPeriodClose[]
+  timeEntryLogs          TimeEntryLog[]
+  timeAdjustmentRequests TimeAdjustmentRequest[]
 
   // Sello de evidencia de la firma por enlace (docs/firma-externa-por-enlace.md §10)
   sealCertPem      String?
@@ -545,6 +549,8 @@ model User {
   createdEngagements         Engagement[]              @relation("EngagementCreator")
   assignedAdminTasks         AdminTask[]               @relation("AdminTaskAssignee")
   createdAdminTasks          AdminTask[]               @relation("AdminTaskCreator")
+  hoursPeriodCloses          HoursPeriodClose[]        @relation("HoursCloseUser")
+  timeAdjustmentRequests     TimeAdjustmentRequest[]   @relation("AdjustmentRequester")
 
   @@index([organizationId])
   @@index([email])
@@ -984,19 +990,59 @@ enum TimeEntryCategory {
   OTHER_NON_BILLABLE
 }
 
+// Por qué una hora de cliente no se factura (Fase 1 del cierre de horas, docs/horas-cierre-y-honorarios-propuesta.md)
+enum NonBillableReason {
+  OVER_BUDGET // sobrepresupuesto
+  REWORK // retrabajo
+  COURTESY // cortesía
+  OTHER
+}
+
+enum HoursCloseStatus {
+  OPEN // reabierto: vuelve a ser provisional
+  CLOSED
+}
+
+enum TimeAdjustmentAction {
+  ADD
+  EDIT
+  DELETE
+}
+
+enum TimeAdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TimeEntryLogAction {
+  CREATE
+  UPDATE
+  DELETE
+  ADJUSTMENT_APPROVED
+  PERIOD_CLOSED
+  PERIOD_REOPENED
+}
+
 // L2.8 — Registro de horas (timesheet) por auditor/auditoría
 model TimeEntry {
-  id             String            @id @default(cuid())
-  organizationId String
-  auditId        String?
-  planItemId     String?
-  userId         String
-  workDate       DateTime
-  hours          Float
-  description    String?
-  category       TimeEntryCategory @default(CLIENT_BILLABLE)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id               String             @id @default(cuid())
+  organizationId   String
+  auditId          String?
+  planItemId       String?
+  userId           String
+  workDate         DateTime
+  hours            Float
+  description      String?
+  category         TimeEntryCategory  @default(CLIENT_BILLABLE)
+  // ─── Cierre de horas (Fase 1) ───
+  nonBillableReason NonBillableReason? // obligatorio solo cuando category = CLIENT_NON_BILLABLE
+  costRateSnapshot Decimal?           @db.Decimal(10, 2) // costo/hora congelado al cerrar el mes de la persona
+  billRateSnapshot Decimal?           @db.Decimal(10, 2) // tarifa pactada por encargo congelada al cerrar
+  closedAt         DateTime? // cuándo se congeló; null = provisional
+  afterClose       Boolean            @default(false) // entró por un ajuste aprobado después del cierre
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   audit        Audit?         @relation(fields: [auditId], references: [id])
@@ -1008,7 +1054,98 @@ model TimeEntry {
   @@index([planItemId])
   @@index([userId])
   @@index([category])
+  @@index([userId, workDate])
   @@map("time_entries")
+}
+
+// Parámetros del cierre de horas por organización. Sin fila o con enabled=false NADA se bloquea (despliegue sin riesgo).
+model HoursCloseSettings {
+  organizationId     String   @id
+  enabled            Boolean  @default(false)
+  entryDeadlineDay   Int      @default(5) // día hábil del mes siguiente hasta el que el auditor registra
+  closeDeadlineDay   Int      @default(10) // día hábil del mes siguiente hasta el que el gerente cierra
+  lastReminderPeriod String? // 'AAAA-MM' del último mes recordado por correo (evita duplicados)
+  updatedById        String?
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("hours_close_settings")
+}
+
+// Cierre por PERSONA y MES. Una fila CLOSED bloquea crear/editar/borrar horas de esa persona fechadas en ese mes.
+model HoursPeriodClose {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  year           Int
+  month          Int // 1-12
+  status         HoursCloseStatus @default(CLOSED)
+  closedById     String?
+  closedAt       DateTime?
+  closeNote      String?
+  entryCount     Int              @default(0) // registros congelados al cerrar
+  totalHours     Float            @default(0)
+  costRateSnapshot Decimal?       @db.Decimal(10, 2) // costo/hora del mes, congelado al cerrar: lo usan los ajustes aprobados después
+  reopenedById   String?
+  reopenedAt     DateTime?
+  reopenReason   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("HoursCloseUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, year, month])
+  @@index([organizationId, year, month])
+  @@map("hours_period_closes")
+}
+
+// Bitácora de horas: solo se agrega, nunca se edita ni se borra desde la aplicación.
+model TimeEntryLog {
+  id             String             @id @default(cuid())
+  organizationId String
+  timeEntryId    String? // sin FK: el registro puede haberse borrado
+  userId         String // dueño de las horas
+  actorId        String // quien hizo el cambio
+  action         TimeEntryLogAction
+  before         Json?
+  after          Json?
+  note           String?
+  createdAt      DateTime           @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId, createdAt])
+  @@index([timeEntryId])
+  @@map("time_entry_logs")
+}
+
+// Pedido de la persona para cambiar horas de un mes ya cerrado; lo aprueba o rechaza un gerente.
+model TimeAdjustmentRequest {
+  id             String               @id @default(cuid())
+  organizationId String
+  userId         String // dueño de las horas (quien pide)
+  year           Int
+  month          Int
+  action         TimeAdjustmentAction
+  timeEntryId    String? // EDIT y DELETE
+  payload        Json? // ADD: el registro completo; EDIT: los campos a cambiar
+  reason         String
+  status         TimeAdjustmentStatus @default(PENDING)
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("AdjustmentRequester", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([userId, year, month])
+  @@map("time_adjustment_requests")
 }
 
 // ─── CALENDARIO Y CAPACIDAD DE LA FIRMA ──────────────────────────────────────

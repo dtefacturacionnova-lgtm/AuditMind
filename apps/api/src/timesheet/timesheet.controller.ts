@@ -1,11 +1,11 @@
 import {
-  Controller, Get, Post, Delete, Body, Param, Query,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { TimesheetService } from './timesheet.service';
 import {
-  CreateTimesheetEntryDto, BulkCreateTimesheetEntryDto,
+  CreateTimesheetEntryDto, BulkCreateTimesheetEntryDto, UpdateTimesheetEntryDto,
   QueryTimesheetEntriesDto, QueryTimesheetReportDto,
 } from './dto/timesheet.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -37,6 +37,13 @@ export class TimesheetController {
   @ApiOperation({ summary: 'Listar mis propias entradas de horas (con filtros)' })
   getMyEntries(@Query() query: QueryTimesheetEntriesDto, @CurrentUser() user: AuthUser) {
     return this.service.getMyEntries(query, user);
+  }
+
+  @Patch('entries/:id')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Editar una entrada de horas propia (solo mientras su mes esté abierto)' })
+  updateEntry(@Param('id') id: string, @Body() dto: UpdateTimesheetEntryDto, @CurrentUser() user: AuthUser) {
+    return this.service.updateEntry(id, dto, user);
   }
 
   @Delete('entries/:id')

@@ -1,15 +1,19 @@
 import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
-import { TimeEntryCategory } from '@prisma/client';
+import { TimeEntryCategory, TimeEntryLogAction } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import {
-  CreateTimesheetEntryDto, BulkCreateTimesheetEntryDto,
+  CreateTimesheetEntryDto, BulkCreateTimesheetEntryDto, UpdateTimesheetEntryDto,
   QueryTimesheetEntriesDto, QueryTimesheetReportDto, TimesheetReportGroupBy,
 } from './dto/timesheet.dto';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
 import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg } from './daily-hours-cap.util';
+import {
+  assertPeriodsOpen, validateEntryRules, validateCategoryLinkage, mergeEntryChanges, entrySnapshot, logEntryChange, logEntryChanges, TX_OPTIONS,
+  ENTRY_PUBLIC_SELECT,
+} from './hours-close.util';
 
 // Mismo criterio de jerarquía que RolesGuard (apps/api/src/common/guards/roles.guard.ts).
 // Se replica aquí (en vez de importarlo) porque el guard no lo exporta — solo lo usa internamente.
@@ -59,15 +63,7 @@ export class TimesheetService {
   private validateCategoryLinkage(dto: {
     category: TimeEntryCategory; auditId?: string; planItemId?: string;
   }): string | null {
-    const hasAnchor = !!dto.auditId || !!dto.planItemId;
-    if (AUDIT_LINKED_CATEGORIES.has(dto.category)) {
-      if (!hasAnchor) {
-        return `La categoría ${dto.category} requiere auditId o planItemId`;
-      }
-    } else if (hasAnchor) {
-      return `La categoría ${dto.category} no admite auditId ni planItemId (horas no ligadas a un encargo)`;
-    }
-    return null;
+    return validateCategoryLinkage(dto);
   }
 
   // ── POST /timesheet/entries ───────────────────────────────────────────────
@@ -79,18 +75,30 @@ export class TimesheetService {
 
     await assertDailyHoursCap(this.prisma, user.id, new Map([[dto.workDate, dto.hours]]));
 
-    const entry = await this.prisma.timeEntry.create({
-      data: {
-        organizationId: user.organizationId,
-        userId:         user.id,
-        auditId:        dto.auditId,
-        planItemId:     dto.planItemId,
-        workDate:       new Date(dto.workDate),
-        hours:          dto.hours,
-        description:    dto.description,
-        category:       dto.category,
-      },
-    });
+    // El candado del mes, la comprobación de "mes abierto", la escritura y la bitácora van en UNA transacción.
+    const entry = await this.prisma.$transaction(async (tx) => {
+      const settings = await assertPeriodsOpen(tx, user.organizationId, user.id, [dto.workDate]);
+      const ruleError = validateEntryRules(dto, settings.enabled);
+      if (ruleError) throw new BadRequestException(ruleError);
+      const created = await tx.timeEntry.create({
+        data: {
+          organizationId: user.organizationId,
+          userId:         user.id,
+          auditId:        dto.auditId,
+          planItemId:     dto.planItemId,
+          workDate:       new Date(dto.workDate),
+          hours:          dto.hours,
+          description:    dto.description,
+          category:       dto.category,
+          nonBillableReason: dto.nonBillableReason ?? null,
+        },
+      });
+      await logEntryChange(tx, {
+        organizationId: user.organizationId, userId: user.id, actorId: user.id,
+        action: TimeEntryLogAction.CREATE, timeEntryId: created.id, after: entrySnapshot(created),
+      });
+      return created;
+    }, TX_OPTIONS);
     await recalculateAuditActualHours(this.prisma, dto.auditId);
     return entry;
   }
@@ -119,23 +127,40 @@ export class TimesheetService {
     }
     await assertDailyHoursCap(this.prisma, user.id, hoursByDate);
 
-    const result = await this.prisma.timeEntry.createMany({
-      data: dto.entries.map((entry) => ({
-        organizationId: user.organizationId,
-        userId:         user.id,
-        auditId:        entry.auditId,
-        planItemId:     entry.planItemId,
-        workDate:       new Date(entry.workDate),
-        hours:          entry.hours,
-        description:    entry.description,
-        category:       entry.category,
-      })),
-    });
+    const created = await this.prisma.$transaction(async (tx) => {
+      const settings = await assertPeriodsOpen(tx, user.organizationId, user.id, dto.entries.map((e) => e.workDate));
+      const ruleErrors: { index: number; error: string }[] = [];
+      dto.entries.forEach((entry, index) => {
+        const error = validateEntryRules(entry, settings.enabled);
+        if (error) ruleErrors.push({ index, error });
+      });
+      if (ruleErrors.length > 0) {
+        throw new BadRequestException({ message: 'Una o más entradas del lote son inválidas', errors: ruleErrors });
+      }
+      const rows = await tx.timeEntry.createManyAndReturn({
+        data: dto.entries.map((entry) => ({
+          organizationId: user.organizationId,
+          userId:         user.id,
+          auditId:        entry.auditId,
+          planItemId:     entry.planItemId,
+          workDate:       new Date(entry.workDate),
+          hours:          entry.hours,
+          description:    entry.description,
+          category:       entry.category,
+          nonBillableReason: entry.nonBillableReason ?? null,
+        })),
+      });
+      await logEntryChanges(tx, rows.map((row) => ({
+        organizationId: user.organizationId, userId: user.id, actorId: user.id,
+        action: TimeEntryLogAction.CREATE, timeEntryId: row.id, after: entrySnapshot(row),
+      })));
+      return rows;
+    }, TX_OPTIONS);
 
     const affectedAuditIds = [...new Set(dto.entries.map((e) => e.auditId).filter((v): v is string => !!v))];
     await Promise.all(affectedAuditIds.map((id) => recalculateAuditActualHours(this.prisma, id)));
 
-    return { created: result.count };
+    return { created: created.length };
   }
 
   // ── GET /timesheet/entries ────────────────────────────────────────────────
@@ -152,7 +177,50 @@ export class TimesheetService {
     if (query.category) where.category = query.category;
     if (query.auditId)  where.auditId = query.auditId;
 
-    return this.prisma.timeEntry.findMany({ where, orderBy: { workDate: 'desc' } });
+    return this.prisma.timeEntry.findMany({ where, orderBy: { workDate: 'desc' }, select: ENTRY_PUBLIC_SELECT });
+  }
+
+  // ── PATCH /timesheet/entries/:id ──────────────────────────────────────────
+  /** Edita una hora PROPIA mientras su mes esté abierto. Pasado el cierre se pide un ajuste (HoursCloseService). */
+  async updateEntry(id: string, dto: UpdateTimesheetEntryDto, user: AuthUser) {
+    const entry = await this.prisma.timeEntry.findUnique({ where: { id } });
+    if (!entry || entry.organizationId !== user.organizationId) throw new NotFoundException();
+    if (entry.userId !== user.id) throw new ForbiddenException('Solo puedes editar tus propias entradas');
+
+    const merged = mergeEntryChanges(entry, dto);
+    const linkError = this.validateCategoryLinkage({
+      category: merged.category, auditId: merged.auditId ?? undefined, planItemId: merged.planItemId ?? undefined,
+    });
+    if (linkError) throw new BadRequestException(linkError);
+    assertValidHours(merged.hours);
+    await assertTimeAnchorsInOrg(this.prisma, user.organizationId, [merged]);
+    await assertDailyHoursCap(this.prisma, user.id, new Map([[merged.workDate, merged.hours]]), [id]);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const settings = await assertPeriodsOpen(tx, user.organizationId, user.id, [entry.workDate, merged.workDate]);
+      // Una hora no facturable de antes de este cambio no tiene motivo: editarle solo las horas o la fecha no debe exigirle uno.
+      const legacyNoReason = entry.category === TimeEntryCategory.CLIENT_NON_BILLABLE && !entry.nonBillableReason
+        && dto.category === undefined && dto.nonBillableReason === undefined;
+      const ruleError = validateEntryRules(merged, settings.enabled, { allowMissingReason: legacyNoReason });
+      if (ruleError) throw new BadRequestException(ruleError);
+      const row = await tx.timeEntry.update({
+        where: { id },
+        data: {
+          workDate: new Date(merged.workDate), hours: merged.hours, category: merged.category,
+          description: merged.description, auditId: merged.auditId, planItemId: merged.planItemId,
+          nonBillableReason: merged.nonBillableReason,
+        },
+      });
+      await logEntryChange(tx, {
+        organizationId: user.organizationId, userId: user.id, actorId: user.id,
+        action: TimeEntryLogAction.UPDATE, timeEntryId: id, before: entrySnapshot(entry), after: entrySnapshot(row),
+      });
+      return row;
+    }, TX_OPTIONS);
+
+    const auditIds = new Set([entry.auditId, updated.auditId].filter((v): v is string => !!v));
+    await Promise.all([...auditIds].map((auditId) => recalculateAuditActualHours(this.prisma, auditId)));
+    return updated;
   }
 
   // ── DELETE /timesheet/entries/:id ─────────────────────────────────────────
@@ -160,7 +228,14 @@ export class TimesheetService {
     const entry = await this.prisma.timeEntry.findUnique({ where: { id } });
     if (!entry || entry.organizationId !== user.organizationId) throw new NotFoundException();
     if (entry.userId !== user.id) throw new ForbiddenException('Solo puedes eliminar tus propias entradas');
-    await this.prisma.timeEntry.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await assertPeriodsOpen(tx, user.organizationId, user.id, [entry.workDate]);
+      await tx.timeEntry.delete({ where: { id } });
+      await logEntryChange(tx, {
+        organizationId: user.organizationId, userId: user.id, actorId: user.id,
+        action: TimeEntryLogAction.DELETE, timeEntryId: id, before: entrySnapshot(entry),
+      });
+    }, TX_OPTIONS);
     await recalculateAuditActualHours(this.prisma, entry.auditId);
     return { deleted: true };
   }

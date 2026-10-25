@@ -63,15 +63,33 @@ const UNIQUE: Record<string, string[][]> = {
   paperSection: [['id'], ['paperId', 'sectionKey']],
 };
 
-const isOp = (v: any) => v && typeof v === 'object' && !(v instanceof Date) && Object.keys(v).some((k) => ['in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'not', 'equals'].includes(k));
+const isOp = (v: any) => v && typeof v === 'object' && !(v instanceof Date) && Object.keys(v).some((k) => ['in', 'notIn', 'gt', 'gte', 'lt', 'lte', 'not', 'equals', 'contains'].includes(k));
 const cmp = (a: any, b: any) => (a instanceof Date ? a.getTime() : a) - (b instanceof Date ? b.getTime() : b);
 const eq = (a: any, b: any) => (a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : (a ?? null) === (b ?? null));
 
+/** Tablas que expone `client`. Las que no tienen DEFAULTS empiezan vacías (solo lo que siembra cada prueba). */
+const TABLES = [
+  'signatureRequest', 'signatureSession', 'signatureEvent', 'signatureAttachment', 'organization', 'user',
+  'engagementLetter', 'client', 'externalConfirmation', 'audit', 'workingPaper', 'paperSection',
+  // Revisión del modo investigación en el resto de módulos (2026-10-19).
+  'auditTeam', 'trialBalance', 'finding', 'findingComment', 'findingAction', 'timeEntry', 'auditFolder', 'auditPhase',
+  'workingPaperVersion', 'workingPaperComment', 'tickMarkEntry', 'fieldEvidence', 'graphEntity', 'graphRelation',
+  'auditRequestDocument', 'pbcRequest', 'dataAnalysisJob', 'auditReport',
+];
+
+/**
+ * Relaciones a-uno que los filtros, `select` e `include` resuelven por su clave foránea en la fila
+ * (p. ej. `{ audit: { organizationId } }` en cualquier tabla con `auditId`).
+ */
+const RELATIONS: Record<string, [table: string, fk: string]> = {
+  audit: ['audit', 'auditId'],
+  paper: ['workingPaper', 'paperId'],
+  workingPaper: ['workingPaper', 'workingPaperId'],
+  finding: ['finding', 'findingId'],
+};
+
 export class FakeDb {
-  tables: Record<string, Row[]> = {
-    signatureRequest: [], signatureSession: [], signatureEvent: [], signatureAttachment: [], organization: [], user: [],
-    engagementLetter: [], client: [], externalConfirmation: [], audit: [], workingPaper: [], paperSection: [],
-  };
+  tables: Record<string, Row[]> = Object.fromEntries(TABLES.map((t) => [t, []]));
   private chain: Promise<unknown> = Promise.resolve();
 
   // ─── filtros ───────────────────────────────────────────────────────────────
@@ -79,6 +97,7 @@ export class FakeDb {
     return Object.entries(where).every(([key, cond]) => {
       if (cond === undefined) return true;
       if (key === 'OR') return (cond as Row[]).some((sub) => this.match(table, row, sub));
+      if (key === 'AND') return ([] as Row[]).concat(cond).every((sub) => this.match(table, row, sub));
       // Relación a-muchos guardada como arreglo en la fila (p. ej. `audit.team: [{ userId }]`): `{ some: { … } }`.
       if (cond && typeof cond === 'object' && 'some' in cond) {
         const items = Array.isArray(row[key]) ? row[key] : [];
@@ -88,9 +107,10 @@ export class FakeDb {
         const req = this.tables.signatureRequest.find((r) => r.id === row.requestId);
         return !!req && this.match('signatureRequest', req, cond);
       }
-      if (key === 'audit' && (table === 'externalConfirmation' || table === 'workingPaper')) {
-        const a = this.tables.audit.find((x) => x.id === row.auditId);
-        return !!a && this.match('audit', a, cond);
+      const rel = RELATIONS[key];
+      if (rel && rel[1] in row) {
+        const target = this.tables[rel[0]].find((x) => x.id === row[rel[1]]);
+        return !!target && this.match(rel[0], target, cond);
       }
       const v = row[key];
       if (isOp(cond)) {
@@ -102,6 +122,11 @@ export class FakeDb {
         if ('lte' in cond && !(v != null && cmp(v, cond.lte) <= 0)) return false;
         if ('not' in cond && eq(v, cond.not)) return false;
         if ('equals' in cond && !eq(v, cond.equals)) return false;
+        if ('contains' in cond) {
+          const ci = cond.mode === 'insensitive';
+          const hay = String(v ?? ''); const needle = String(cond.contains);
+          if (!(ci ? hay.toLowerCase().includes(needle.toLowerCase()) : hay.includes(needle))) return false;
+        }
         return true;
       }
       return eq(v, cond);
@@ -130,20 +155,27 @@ export class FakeDb {
   private pick(row: Row, select?: Row): Row {
     if (!select) return { ...row };
     return Object.fromEntries(Object.keys(select).filter((k) => select[k]).map((k) => {
-      // `select: { audit: { select: … } }` en filas que cuelgan de una auditoría: se resuelve la relación.
-      if (k === 'audit' && typeof select[k] === 'object' && 'auditId' in row) {
-        const a = this.tables.audit.find((x) => x.id === row.auditId);
-        return [k, a ? this.pick(a, select[k].select) : null];
+      // `select: { audit: { select: … } }` en filas que cuelgan de una auditoría (o de un papel): se resuelve la relación.
+      const rel = RELATIONS[k];
+      if (rel && typeof select[k] === 'object' && rel[1] in row) {
+        const target = this.tables[rel[0]].find((x) => x.id === row[rel[1]]);
+        return [k, target ? this.withInclude(rel[0], this.pick(target, select[k].select), select[k].include) : null];
       }
       return [k, row[k]];
     }));
   }
 
-  /** Solo `include: { audit: … }` en confirmaciones: lo único que los adaptadores reales necesitan. */
+  /** `include` de las relaciones a-uno de RELATIONS (con su `select`/`include` anidado); lo demás se ignora. */
   private withInclude(table: string, row: Row, include?: Row): Row {
-    if (!include?.audit || (table !== 'externalConfirmation' && table !== 'workingPaper')) return row;
-    const a = this.tables.audit.find((x) => x.id === row.auditId);
-    return { ...row, audit: a ? this.pick(a, include.audit.select) : null };
+    if (!include) return row;
+    const out = { ...row };
+    for (const [k, spec] of Object.entries(include)) {
+      const rel = RELATIONS[k];
+      if (!spec || !rel || !(rel[1] in row)) continue;
+      const target = this.tables[rel[0]].find((x) => x.id === row[rel[1]]);
+      out[k] = target ? this.withInclude(rel[0], this.pick(target, spec === true ? undefined : spec.select), spec === true ? undefined : spec.include) : null;
+    }
+    return out;
   }
 
   private order(rows: Row[], orderBy?: Row): Row[] {
@@ -157,7 +189,7 @@ export class FakeDb {
     const t = () => this.tables[table];
     return {
       create: async ({ data }: any) => {
-        const row = { ...DEFAULTS[table](), id: randomUUID() } as Row;
+        const row = { ...(DEFAULTS[table]?.() ?? {}), id: randomUUID() } as Row;
         this.apply(row, data);
         if (data.id) row.id = data.id;
         this.assertUnique(table, row);
@@ -177,10 +209,11 @@ export class FakeDb {
         if (!row) throw new Error(`No ${table} found`);
         return this.pick(row, select);
       },
-      findMany: async ({ where, orderBy, take, select }: any = {}) => {
+      findMany: async ({ where, orderBy, skip, take, select, include }: any = {}) => {
         let rows = this.order(t().filter((r) => this.match(table, r, where)), orderBy);
+        if (skip) rows = rows.slice(skip);
         if (take) rows = rows.slice(0, take);
-        return rows.map((r) => this.pick(r, select));
+        return rows.map((r) => this.withInclude(table, this.pick(r, select), include));
       },
       count: async ({ where }: any = {}) => t().filter((r) => this.match(table, r, where)).length,
       update: async ({ where, data }: any) => {
@@ -227,18 +260,7 @@ export class FakeDb {
   };
 
   readonly client: any = {
-    signatureRequest: this.delegate('signatureRequest'),
-    signatureSession: this.delegate('signatureSession'),
-    signatureEvent: this.delegate('signatureEvent'),
-    signatureAttachment: this.delegate('signatureAttachment'),
-    organization: this.delegate('organization'),
-    user: this.delegate('user'),
-    engagementLetter: this.delegate('engagementLetter'),
-    client: this.delegate('client'),
-    externalConfirmation: this.delegate('externalConfirmation'),
-    audit: this.delegate('audit'),
-    workingPaper: this.delegate('workingPaper'),
-    paperSection: this.delegate('paperSection'),
+    ...Object.fromEntries(TABLES.map((t) => [t, this.delegate(t)])),
     $transaction: (fn: any) => this.transaction(fn),
     $queryRaw: async () => [],
   };

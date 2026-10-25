@@ -4,6 +4,9 @@ import {
 import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
 import { ROLE_HIERARCHY } from '../common/guards/roles.guard';
 import { resolveCostRate } from '../timesheet/frozen-rates';
+import {
+  assertAuditVisible, assertInvestigationAccess, INVESTIGATION_SELECT, visibleAuditWhere,
+} from '../common/utils/investigation-scope.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
@@ -152,13 +155,12 @@ export class AuditsService {
     subtype?: string,
   ) {
     const skip = (page - 1) * limit;
-    const where = {
-      organizationId: user.organizationId,
-      ...(search && {
-        OR: [
-          { title: { contains: search, mode: 'insensitive' as const } },
-        ],
-      }),
+    const where: Prisma.AuditWhereInput = {
+      // `AND`: el filtro de visibilidad trae su propio `OR` y la búsqueda no debe pisarlo.
+      AND: [
+        visibleAuditWhere(user), // sin las auditorías en modo investigación ajenas a su equipo
+        ...(search ? [{ OR: [{ title: { contains: search, mode: 'insensitive' as const } }] }] : []),
+      ],
       ...(status  && { status:  status  as AuditStatus }),
       ...(type    && { type:    type    as any }),
       ...(subtype && { subtype }),
@@ -459,6 +461,7 @@ export class AuditsService {
     });
     if (!tb) throw new NotFoundException('Balance no encontrado');
     if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+    await assertAuditVisible(this.prisma, tb.auditId, user); // modo investigación
     return tb;
   }
 
@@ -472,6 +475,7 @@ export class AuditsService {
     const tb = await this.prisma.trialBalance.findUnique({ where: { id: tbId } });
     if (!tb) throw new NotFoundException('Balance no encontrado');
     if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+    await assertAuditVisible(this.prisma, tb.auditId, user); // modo investigación
     await assertInOrg(this.prisma.workingPaper, paperId, { auditId: tb.auditId }, 'El papel de trabajo');
 
     return this.prisma.trialBalancePaperLink.upsert({
@@ -485,6 +489,7 @@ export class AuditsService {
     const tb = await this.prisma.trialBalance.findUnique({ where: { id: tbId } });
     if (!tb) throw new NotFoundException();
     if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+    await assertAuditVisible(this.prisma, tb.auditId, user); // modo investigación
     await this.prisma.trialBalance.delete({ where: { id: tbId } });
     return { deleted: true };
   }
@@ -501,6 +506,7 @@ export class AuditsService {
     const tb = await this.prisma.trialBalance.findUnique({ where: { id: tbId } });
     if (!tb) throw new NotFoundException('Balance no encontrado');
     if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+    await assertAuditVisible(this.prisma, tb.auditId, user); // modo investigación
 
     // Extract monetary amounts from accounts
     interface TBAccount { code: string; name: string; balance?: number | string; debit?: number | string; credit?: number | string }
@@ -771,10 +777,11 @@ export class AuditsService {
   async getBenfordResult(tbId: string, user: AuthUser) {
     const tb = await this.prisma.trialBalance.findUnique({
       where: { id: tbId },
-      select: { orgId: true, benfordResult: true, benfordRunAt: true, benfordFindingId: true },
+      select: { orgId: true, auditId: true, benfordResult: true, benfordRunAt: true, benfordFindingId: true },
     });
     if (!tb) throw new NotFoundException('Balance no encontrado');
     if (tb.orgId !== user.organizationId) throw new ForbiddenException();
+    await assertAuditVisible(this.prisma, tb.auditId, user);
     return {
       result:    tb.benfordResult,
       runAt:     tb.benfordRunAt?.toISOString() ?? null,
@@ -844,6 +851,7 @@ export class AuditsService {
   // ─── Papeles disponibles desde plantilla ─────────────────────────────────────
 
   async getAvailableTemplatePapers(auditId: string, user: AuthUser) {
+    await assertAuditVisible(this.prisma, auditId, user);
     return this.auditIndex.getAvailableTemplatePapers(auditId, user.organizationId);
   }
 
@@ -1004,9 +1012,10 @@ export class AuditsService {
     const canSeeCost = (ROLE_HIERARCHY[user.role] ?? 0) >= ROLE_HIERARCHY.CAE;
     const audit = await this.prisma.audit.findFirst({
       where: { id: auditId, organizationId: user.organizationId },
-      select: { id: true },
+      select: { id: true, ...INVESTIGATION_SELECT },
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    assertInvestigationAccess(audit, user);
 
     const [team, entries] = await Promise.all([
       this.prisma.auditTeam.findMany({

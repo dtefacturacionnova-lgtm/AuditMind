@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../../auth/jwt.strategy';
 
@@ -35,3 +35,21 @@ export function assertInvestigationAccess(
 
 /** Para incluir en las consultas que luego pasan por `assertInvestigationAccess`. */
 export const INVESTIGATION_SELECT = { isInvestigationMode: true, team: { select: { userId: true } } } as const;
+
+/**
+ * Por id de auditoría: 404 si no es de la organización del usuario, 403 si es una investigación ajena a su equipo.
+ * Función suelta (recibe el cliente de Prisma) para los servicios que no pueden inyectar
+ * `AuditInvestigationAccessService` sin crear un ciclo de módulos.
+ */
+export async function assertAuditVisible(
+  prisma: Pick<Prisma.TransactionClient, 'audit'>,
+  auditId: string,
+  user: Pick<AuthUser, 'id' | 'role' | 'organizationId'>,
+): Promise<void> {
+  const audit = await prisma.audit.findFirst({
+    where: { id: auditId, organizationId: user.organizationId },
+    select: INVESTIGATION_SELECT,
+  });
+  if (!audit) throw new NotFoundException('Auditoría no encontrada');
+  assertInvestigationAccess(audit, user);
+}

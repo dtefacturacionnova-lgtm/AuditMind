@@ -471,6 +471,42 @@ export class EmailService {
     });
   }
 
+  /**
+   * Código de 6 dígitos para entrar al portal PBC del auditado (docs/portal-pbc-codigo-por-correo.md). El asunto NO
+   * lleva el código: se ve en la bandeja y en las notificaciones del teléfono sin abrir el correo.
+   */
+  sendPbcPortalOtp(to: string, p: { orgName: string; code: string }) {
+    return this.send({
+      to,
+      subject: 'Tu código para entrar al portal de solicitudes de AuditMind',
+      body: {
+        heading: 'Tu código de verificación',
+        paragraphs: [
+          `Usa este código para abrir las solicitudes de documentos de <strong>${escHtml(p.orgName)}</strong>:`,
+          `<span style="display:inline-block;font-size:30px;font-weight:700;letter-spacing:8px;color:#0F2D4A;">${escHtml(p.code)}</span>`,
+          'El código vence en 10 minutos. Si no lo pediste, ignora este correo: sin el código nadie puede ver ni responder la solicitud.',
+        ],
+      },
+    });
+  }
+
+  /** Aviso al equipo cuando el portal PBC de una solicitud queda inservible por demasiados códigos incorrectos. */
+  sendPbcPortalLockedAlert(to: string, p: { title: string; requestedToEmail: string; panelPath: string }) {
+    return this.send({
+      to,
+      subject: `Portal de solicitud bloqueado: «${p.title}»`,
+      body: {
+        heading: 'El portal de la solicitud se bloqueó',
+        paragraphs: [
+          `El enlace que enviaste a ${escHtml(p.requestedToEmail)} para responder «${escHtml(p.title)}» recibió demasiados códigos de verificación incorrectos y quedó inservible.`,
+          'Puede ser un error de la persona o un intento de adivinar el código. Confirma con ella antes de usar «Regenerar enlace», que crea un enlace nuevo.',
+        ],
+        ctaLabel: 'Abrir en AuditMind',
+        ctaUrl: this.panelUrl(p.panelPath),
+      },
+    });
+  }
+
   /** Email de prueba — útil para verificar configuración */
   async sendTestEmail(to: string) {
     return this.send({

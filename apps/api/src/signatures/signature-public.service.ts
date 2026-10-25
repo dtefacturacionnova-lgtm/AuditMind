@@ -22,26 +22,19 @@ import { CONSENT_VERSION, renderConsentText, renderDeclineNotice, renderPrivacyN
 import { publicDocumentView, publicRequestView, publicVerifyView } from './signature-views';
 
 // ─── Parámetros de seguridad (docs/firma-externa-por-enlace.md §6) ───────────
-export const OTP_TTL_MS = 10 * 60_000;
-export const OTP_MIN_GAP_MS = 60_000;
-export const OTP_MAX_SENDS_PER_HOUR = 5;
-export const OTP_MAX_FAILS_PER_CODE = 5;
-export const OTP_MAX_FAILS_PER_HOUR = 10;
-export const OTP_LOCK_MS = 3_600_000;
-export const SESSION_TTL_MS = 30 * 60_000;
+// Los del código por correo y la sesión viven en otp-limits.ts, compartidos con el portal PBC; se reexportan aquí para
+// no romper a quien los importe desde este archivo.
+import {
+  DAY_MS, HOUR_MS, OTP_LOCK_MS, OTP_MAX_FAILS_PER_CODE, OTP_MAX_FAILS_PER_HOUR, OTP_MAX_LOCKS, OTP_MAX_SENDS_PER_DAY,
+  OTP_MAX_SENDS_PER_HOUR, OTP_MIN_GAP_MS, OTP_TTL_MS, SESSION_TTL_MS,
+} from './otp-limits';
+export {
+  OTP_LOCK_MS, OTP_MAX_FAILS_PER_CODE, OTP_MAX_FAILS_PER_HOUR, OTP_MAX_LOCKS, OTP_MAX_SENDS_PER_DAY, OTP_MAX_SENDS_PER_HOUR,
+  OTP_MIN_GAP_MS, OTP_TTL_MS, SESSION_TTL_MS,
+};
 export const SIGNED_DOWNLOAD_DAYS = 30;
-/**
- * Topes extra de la revisión de seguridad F5b (2026-10-19):
- *  - códigos por solicitud y día (además de 5/hora): con pocos enlaces nadie agota el presupuesto de la organización;
- *  - ya firmada, el código solo sirve para descargar la copia: muy pocos por día;
- *  - bloqueos acumulados: al tercer bloqueo de 1 h el enlace queda inservible hasta que el equipo lo reenvíe (sin esto se
- *    podían probar ~240 códigos por día durante toda la vigencia).
- */
-export const OTP_MAX_SENDS_PER_DAY = 10;
+/** Ya firmada, el código solo sirve para descargar la copia: muy pocos por día (revisión de seguridad F5b, 2026-10-19). */
 export const OTP_MAX_SENDS_PER_DAY_SIGNED = 3;
-export const OTP_MAX_LOCKS = 3;
-const HOUR_MS = 3_600_000;
-const DAY_MS = 24 * HOUR_MS;
 const ACTIVE = ['PENDING', 'VIEWED'] as const;
 
 const INVALID_LINK = 'Enlace no válido o reemplazado por uno más reciente. Revisa el último correo que recibiste.';

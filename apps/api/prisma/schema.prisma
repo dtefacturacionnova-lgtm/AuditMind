@@ -2287,6 +2287,17 @@ model PbcRequest {
   portalTokenHash      String?          @unique
   portalTokenEncrypted String?
   portalTokenExpiresAt DateTime? // vence el enlace del portal público; se renueva al regenerarlo
+  // Código por correo antes de ver la solicitud (docs/portal-pbc-codigo-por-correo.md; SQL: 2026-10-pbc-portal-otp.sql).
+  // Mismo esquema que SignatureRequest. Nunca salen en las respuestas (withoutPortalSecrets).
+  portalOtpHash         String? // HMAC-SHA256 del código vigente, nunca el código
+  portalOtpExpiresAt    DateTime?
+  portalOtpAttempts     Int       @default(0)
+  portalOtpFailuresHour Int       @default(0)
+  portalOtpWindowStart  DateTime?
+  portalOtpSentCount    Int       @default(0)
+  portalOtpLastSentAt   DateTime?
+  portalLockedUntil     DateTime?
+  portalLockCount       Int       @default(0) // bloqueos desde la última vez que se generó el enlace
   fileUrls         Json             @default("[]")
   rejectionReason  String?
   submittedAt      DateTime?
@@ -2300,11 +2311,54 @@ model PbcRequest {
   organization Organization   @relation(fields: [organizationId], references: [id])
   messages     PbcMessage[]
   paperLinks   PbcPaperLink[]
+  portalSessions PbcPortalSession[]
+  portalEvents   PbcPortalEvent[]
 
   @@index([auditId])
   @@index([organizationId])
   @@index([status, dueDate])
   @@map("pbc_requests")
+}
+
+// Sesión corta del auditado tras verificar el código (30 min, sin extensión). Solo la huella del token de sesión.
+model PbcPortalSession {
+  id        String    @id @default(cuid())
+  requestId String
+  tokenHash String    @unique
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  request PbcRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("pbc_portal_sessions")
+}
+
+enum PbcPortalEventType {
+  OTP_SENT
+  OTP_FAILED
+  OTP_LOCKED
+  SESSION_STARTED
+}
+
+// Bitácora simple del portal (sin cadena de hash): topes diarios y rastro de accesos. Nunca guarda códigos ni sesiones.
+model PbcPortalEvent {
+  id        String             @id @default(cuid())
+  requestId String
+  type      PbcPortalEventType
+  at        DateTime           @default(now())
+  ip        String?
+  userAgent String?
+  detail    Json?
+
+  request PbcRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, type, at])
+  @@index([type, at])
+  @@map("pbc_portal_events")
 }
 
 // ─── F6.3 PBC ↔ Workpaper links ───────────────────────────────────────────────

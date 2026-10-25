@@ -1,13 +1,16 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useReducer, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Send, Paperclip, X, CheckCircle2, Clock, AlertTriangle,
   FileText, Upload, ShieldCheck, Link as LinkIcon,
 } from 'lucide-react';
 import { usePortalRequest, useAddPortalMessage, useSubmitPortal, PBC_STATUS_CONFIG } from '@/hooks/usePbc';
 import { captureFragmentToken, type FragmentToken } from '@/lib/fragment-token';
-import { PortalApiError } from '@/lib/portal-api';
+import { PortalApiError, portalApi } from '@/lib/portal-api';
+import { classifyApiError, reducer as stageReducer, type PortalStage } from '@/lib/portal/flow';
+import { PortalCodeStep } from '@/components/portal/PortalCodeStep';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
@@ -132,28 +135,166 @@ export default function PortalPage() {
       </LinkProblem>
     );
   }
-  return <PortalContent token={captured.token} />;
+  return <PortalGate token={captured.token} />;
 }
 
-function PortalContent({ token }: { token: string }) {
-  const { data: request, isLoading, error, refetch } = usePortalRequest(token);
-  const addMessage = useAddPortalMessage(token);
-  const submit     = useSubmitPortal(token);
-  const [sendError, setSendError] = useState<string | null>(null);
+// ─── Borradores: viven POR ENCIMA de la parte protegida, para no perderse si la sesión vence ───────────────────────
+interface PortalDrafts { msgText: string; files: string[]; fileInput: string; showSubmit: boolean; submitNotes: string }
+const EMPTY_DRAFTS: PortalDrafts = { msgText: '', files: [], fileInput: '', showSubmit: false, submitNotes: '' };
 
-  const [msgText, setMsgText]         = useState('');
-  const [files, setFiles]             = useState<string[]>([]);
-  const [fileInput, setFileInput]     = useState('');
-  const [showSubmit, setShowSubmit]   = useState(false);
-  const [submitNotes, setSubmitNotes] = useState('');
+// ─── Puerta: el enlace solo abre la portada; el contenido exige el código que llega al correo registrado ─────────────
+/**
+ * Tener el enlace NO basta (el historial del navegador de un equipo compartido guarda la URL con el token): hace falta el
+ * código de 6 dígitos del correo y la sesión de 30 minutos que abre (docs/portal-pbc-codigo-por-correo.md). La sesión vive
+ * solo en memoria; al vencer se vuelve a pedir el código y lo escrito se conserva.
+ */
+function PortalGate({ token }: { token: string }) {
+  const [stage, dispatch] = useReducer(stageReducer, { kind: 'loading' } as PortalStage);
+  const [busy, setBusy] = useState(false);
+  const [resendAt, setResendAt] = useState<number | null>(null);
+  const [drafts, setDrafts] = useState<PortalDrafts>(EMPTY_DRAFTS);
+  const qc = useQueryClient();
+
+  const loadCover = useCallback(async () => {
+    try {
+      dispatch({ type: 'COVER_LOADED', cover: await portalApi.cover(token) });
+    } catch (e) {
+      const a = classifyApiError(e, 'load');
+      dispatch({ type: 'TERMINAL', stage: a.action === 'terminal' ? a.stage : { kind: 'unavailable', message: (e as Error).message } });
+    }
+  }, [token]);
+
+  useEffect(() => { void loadCover(); }, [loadCover]);
+
+  const expireSession = useCallback(() => {
+    qc.removeQueries({ queryKey: ['portal'] }); // la solicitud no se queda en la caché de la página
+    setResendAt(null);
+    dispatch({ type: 'SESSION_EXPIRED' });
+  }, [qc]);
+
+  // La sesión vence a los 30 min SIN extenderse: un temporizador devuelve la página al paso del código.
+  const sessionExpiresAt = stage.kind === 'portal' ? stage.sessionExpiresAt : null;
+  useEffect(() => {
+    if (!sessionExpiresAt) return;
+    const id = setTimeout(expireSession, Math.max(0, new Date(sessionExpiresAt).getTime() - Date.now()));
+    return () => clearTimeout(id);
+  }, [sessionExpiresAt, expireSession]);
+
+  const handleCodeError = (e: unknown) => {
+    const a = classifyApiError(e, 'code');
+    if (a.action === 'terminal') dispatch({ type: 'TERMINAL', stage: a.stage });
+    else if (a.action === 'locked') dispatch({ type: 'CODE_ERROR', message: a.message, locked: true, permanent: a.permanent });
+    else if (a.action === 'wait') { setResendAt(Date.now() + a.seconds * 1000); dispatch({ type: 'CODE_ERROR', message: a.message }); }
+    else if (a.action === 'inline') dispatch({ type: 'CODE_ERROR', message: a.message });
+  };
+
+  const sendCode = async () => {
+    setBusy(true);
+    try {
+      const r = await portalApi.sendOtp(token);
+      dispatch({ type: 'OTP_SENT', maskedEmail: r.maskedEmail });
+      setResendAt(Date.now() + r.resendInSeconds * 1000);
+    } catch (e) { handleCodeError(e); } finally { setBusy(false); }
+  };
+
+  const verifyCode = async (code: string) => {
+    setBusy(true);
+    try {
+      const v = await portalApi.verifyOtp(token, code);
+      dispatch({ type: 'VERIFIED', sessionToken: v.sessionToken, sessionExpiresAt: v.sessionExpiresAt });
+    } catch (e) { handleCodeError(e); } finally { setBusy(false); }
+  };
+
+  switch (stage.kind) {
+    case 'loading':
+      return (
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-gray-500 text-sm">Abriendo el enlace…</p>
+        </div>
+      );
+    case 'invalid':
+      return (
+        <LinkProblem icon={<AlertTriangle className="w-12 h-12 text-red-300" />} title="Enlace inválido o reemplazado">
+          Este enlace no es válido o fue reemplazado por uno más reciente. Revisa el último mensaje que recibiste o contacta al equipo auditor.
+        </LinkProblem>
+      );
+    case 'expired':
+      return (
+        <LinkProblem icon={<AlertTriangle className="w-12 h-12 text-red-300" />} title="Este enlace venció">
+          El plazo de este enlace terminó. Contacta al equipo auditor para obtener uno nuevo.
+        </LinkProblem>
+      );
+    case 'unavailable':
+      return (
+        <LinkProblem icon={<AlertTriangle className="w-12 h-12 text-amber-300" />} title="No pudimos abrir la solicitud"
+          onRetry={() => { dispatch({ type: 'RESTART' }); void loadCover(); }}>
+          {stage.message || 'Inténtalo de nuevo en un momento.'}
+        </LinkProblem>
+      );
+    case 'code':
+      return (
+        <PortalCodeStep
+          orgName={stage.cover.orgName} maskedEmail={stage.cover.maskedEmail} sent={stage.sent} error={stage.error} notice={stage.notice}
+          locked={stage.locked} permanent={stage.permanent} busy={busy} resendAt={resendAt} onSend={() => void sendCode()} onVerify={(c) => void verifyCode(c)}
+        />
+      );
+    case 'portal':
+      return (
+        <PortalContent
+          token={token} session={stage.sessionToken} onSessionExpired={expireSession}
+          drafts={drafts} setDrafts={(patch) => setDrafts((d) => ({ ...d, ...patch }))}
+        />
+      );
+  }
+}
+
+function PortalContent({ token, session, onSessionExpired, drafts, setDrafts }: {
+  token: string; session: string; onSessionExpired: () => void; drafts: PortalDrafts; setDrafts: (patch: Partial<PortalDrafts>) => void;
+}) {
+  const { data: request, isLoading, error, refetch } = usePortalRequest(token, session);
+  const addMessage = useAddPortalMessage(token, session);
+  const submit     = useSubmitPortal(token, session);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [terminal, setTerminal] = useState<'invalid' | 'expired' | null>(null);
+
+  // Lo escrito vive en la puerta (por encima de esta parte): si la sesión vence no se pierde.
+  const { msgText, files, fileInput, showSubmit, submitNotes } = drafts;
+  const setMsgText    = (v: string) => setDrafts({ msgText: v });
+  const setFiles      = (v: string[] | ((p: string[]) => string[])) => setDrafts({ files: typeof v === 'function' ? v(drafts.files) : v });
+  const setFileInput  = (v: string) => setDrafts({ fileInput: v });
+  const setShowSubmit = (v: boolean) => setDrafts({ showSubmit: v });
+  const setSubmitNotes = (v: string) => setDrafts({ submitNotes: v });
   const fileRef = useRef<HTMLInputElement>(null);
+
+  /** Una respuesta de error de la API: 401 → volver a pedir el código; 404/410 → pantalla terminal; lo demás, mensaje en línea. */
+  const handleApiError = (e: unknown, fallback: string): string | null => {
+    const a = classifyApiError(e, 'session');
+    if (a.action === 'session-expired') { onSessionExpired(); return null; }
+    if (a.action === 'terminal') { setTerminal(a.stage.kind === 'expired' ? 'expired' : 'invalid'); return null; }
+    return a.action === 'inline' || a.action === 'locked' || a.action === 'wait' ? (a.message || fallback) : fallback;
+  };
+
+  // Sesión vencida o revocada mientras se leía la solicitud: se vuelve al paso del código (sin pantalla de error).
+  const sessionGone = error instanceof PortalApiError && error.status === 401;
+  useEffect(() => { if (sessionGone) onSessionExpired(); }, [sessionGone, onSessionExpired]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [request?.messages?.length]);
 
-  if (isLoading) {
+  if (terminal) {
+    return (
+      <LinkProblem icon={<AlertTriangle className="w-12 h-12 text-red-300" />} title={terminal === 'expired' ? 'Este enlace venció' : 'Enlace inválido o reemplazado'}>
+        {terminal === 'expired'
+          ? 'El plazo de este enlace terminó. Contacta al equipo auditor para obtener uno nuevo.'
+          : 'Este enlace ya no es válido: el equipo auditor pudo haber generado uno nuevo. Revisa el último mensaje que recibiste.'}
+      </LinkProblem>
+    );
+  }
+
+  if (isLoading || sessionGone) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
         <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -193,7 +334,7 @@ function PortalContent({ token }: { token: string }) {
       setMsgText('');
       setFiles([]);
     } catch (e) {
-      setSendError((e as Error).message || 'No se pudo enviar el mensaje.');
+      setSendError(handleApiError(e, 'No se pudo enviar el mensaje.'));
     }
   };
 
@@ -219,7 +360,7 @@ function PortalContent({ token }: { token: string }) {
       setSubmitNotes('');
       setFiles([]);
     } catch (e) {
-      setSendError((e as Error).message || 'No se pudo enviar la respuesta.');
+      setSendError(handleApiError(e, 'No se pudo enviar la respuesta.'));
     }
   };
 

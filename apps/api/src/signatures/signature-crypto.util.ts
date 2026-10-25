@@ -36,6 +36,15 @@ export function deriveOtpKey(encryptionKey: string): Buffer {
   return Buffer.from(hkdfSync('sha256', encryptionKey, 'auditmind-signature', 'otp-v1', 32));
 }
 
+/**
+ * Clave del HMAC de los códigos del portal PBC: misma ENCRYPTION_KEY pero SAL propia (`auditmind-pbc-portal`), así un
+ * código de la firma nunca sirve en el portal ni al revés aunque coincidieran los ids (docs/portal-pbc-codigo-por-correo.md §2).
+ */
+export function derivePortalOtpKey(encryptionKey: string): Buffer {
+  if (!encryptionKey) throw new Error('ENCRYPTION_KEY no configurada');
+  return Buffer.from(hkdfSync('sha256', encryptionKey, 'auditmind-pbc-portal', 'otp-v1', 32));
+}
+
 /** 6 dígitos, con ceros a la izquierda. */
 export const generateOtp = (): string => String(randomInt(0, 1_000_000)).padStart(6, '0');
 

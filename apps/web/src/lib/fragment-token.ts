@@ -6,8 +6,8 @@
  *
  * Límite conocido (revisión de seguridad F5b, 2026-10-19): el historial GLOBAL del navegador (y su sincronización)
  * guarda la URL tal como se abrió, con el fragmento. En un equipo compartido, otra persona podría reabrir el enlace desde
- * el autocompletado. En /firmar eso no basta: hace falta además el código que llega al correo. El portal PBC no tiene
- * ese segundo paso: ahí el resguardo es el vencimiento del enlace y «Regenerar enlace».
+ * el autocompletado. En /firmar y en /portal eso no basta: hace falta además el código que llega al correo registrado
+ * (portal PBC: docs/portal-pbc-codigo-por-correo.md). El resguardo adicional es el vencimiento del enlace y «Regenerar enlace».
  *
  * Se borra DOS veces: el efecto de un componente hijo corre antes que el del router de Next 15, que apenas entonces
  * envuelve `history.replaceState` para sincronizar su propia copia de la URL. Con una sola llamada el router conserva la

@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException, GoneException,
+  Injectable, NotFoundException, ForbiddenException,
   ConflictException, ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -10,7 +10,8 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { PbcRequestStatus } from '@prisma/client';
 import { decryptSecret, encryptSecret } from '../common/utils/signing-key.util';
 import { assertInvestigationAccess, INVESTIGATION_SELECT, visibleAuditWhere } from '../common/utils/investigation-scope.util';
-import { generateToken, hashToken, isWellFormedToken } from '../signatures/signature-crypto.util';
+import { generateToken, hashToken } from '../signatures/signature-crypto.util';
+import { OTP_MAX_LOCKS } from '../signatures/otp-limits';
 
 /**
  * Vencimiento del enlace del portal público (decisión 2026-10-18): 30 días
@@ -24,32 +25,31 @@ function portalExpiry(dueDate: Date): Date {
 }
 
 /**
- * Lo único que ve el auditado en el portal público (sin login). Antes se
- * devolvía el registro completo: token, organizationId, createdById, etc.
- * (auditoría de seguridad 2026-10-18).
- */
-const PORTAL_SELECT = {
-  id: true, title: true, description: true, status: true, dueDate: true,
-  submittedAt: true, acceptedAt: true, rejectionReason: true,
-  requestedToName: true, fileUrls: true, portalTokenExpiresAt: true,
-  audit:    { select: { title: true } },
-  messages: {
-    orderBy: { createdAt: 'asc' as const },
-    select:  { id: true, isAuditor: true, senderName: true, content: true, attachmentUrls: true, createdAt: true },
-  },
-};
-
-/**
  * Campos que NUNCA salen de la API: el token del portal no se guarda en claro (sha256 para buscarlo + copia cifrada
- * para que el equipo pueda volver a copiar el enlace), y ninguna de las dos formas debe viajar en una respuesta.
+ * para que el equipo pueda volver a copiar el enlace), ni el estado del código por correo (huella del código vigente,
+ * intentos, ventanas y bloqueos). El detalle de la solicitud solo expone el resumen `portalLock`.
  */
-export function withoutPortalSecrets<T extends object>(row: T): Omit<T, 'portalTokenHash' | 'portalTokenEncrypted'> {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-  const { portalTokenHash, portalTokenEncrypted, ...rest } = row as any;
-  return rest;
+const PORTAL_SECRET_FIELDS = [
+  'portalTokenHash', 'portalTokenEncrypted',
+  'portalOtpHash', 'portalOtpExpiresAt', 'portalOtpAttempts', 'portalOtpFailuresHour', 'portalOtpWindowStart',
+  'portalOtpSentCount', 'portalOtpLastSentAt', 'portalLockedUntil', 'portalLockCount',
+] as const;
+type PortalSecretField = (typeof PORTAL_SECRET_FIELDS)[number];
+
+export function withoutPortalSecrets<T extends object>(row: T): Omit<T, PortalSecretField> {
+  const rest: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+  for (const f of PORTAL_SECRET_FIELDS) delete rest[f];
+  return rest as Omit<T, PortalSecretField>;
 }
 
-const TOKEN_ERROR = 'Solicitud no encontrada o token inválido';
+/** Resumen del bloqueo del portal para el equipo: `null` si no hay; `permanent` cuando el enlace quedó inservible. */
+export function portalLockOf(
+  r: { portalLockCount: number; portalLockedUntil: Date | null }, now = new Date(),
+): { permanent: boolean; until: string | null } | null {
+  if (r.portalLockCount >= OTP_MAX_LOCKS) return { permanent: true, until: null };
+  if (r.portalLockedUntil && r.portalLockedUntil.getTime() > now.getTime()) return { permanent: false, until: r.portalLockedUntil.toISOString() };
+  return null;
+}
 
 @Injectable()
 export class PbcService {
@@ -179,7 +179,7 @@ export class PbcService {
     if (!request) throw new NotFoundException('Solicitud PBC no encontrada');
     if (request.organizationId !== user.organizationId) throw new ForbiddenException();
     await this.assertAuditVisible(request.auditId, user);
-    return withoutPortalSecrets(request);
+    return { ...withoutPortalSecrets(request), portalLock: portalLockOf(request) };
   }
 
   async addAuditorMessage(
@@ -281,10 +281,19 @@ export class PbcService {
     if (!request) throw new NotFoundException('Solicitud no encontrada');
 
     const { token, stored } = this.issueToken();
-    const updated = await this.prisma.pbcRequest.update({
-      where: { id },
-      data:   { ...stored, portalTokenExpiresAt: portalExpiry(request.dueDate) },
-      select: { id: true, portalTokenExpiresAt: true },
+    // Un enlace nuevo parte de cero: sin código vigente, sin contadores ni bloqueos, y las sesiones abiertas dejan de servir.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.pbcRequest.update({
+        where: { id },
+        data: {
+          ...stored, portalTokenExpiresAt: portalExpiry(request.dueDate),
+          portalOtpHash: null, portalOtpExpiresAt: null, portalOtpAttempts: 0, portalOtpFailuresHour: 0, portalOtpWindowStart: null,
+          portalOtpSentCount: 0, portalOtpLastSentAt: null, portalLockedUntil: null, portalLockCount: 0,
+        },
+        select: { id: true, portalTokenExpiresAt: true },
+      });
+      await tx.pbcPortalSession.updateMany({ where: { requestId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+      return u;
     });
     return { id: updated.id, portalUrl: this.email.portalUrl(token), portalTokenExpiresAt: updated.portalTokenExpiresAt };
   }
@@ -324,85 +333,5 @@ export class PbcService {
       data: { status: PbcRequestStatus.OVERDUE },
     });
     return { updated: result.count };
-  }
-
-  // ─── Métodos públicos del portal (validados por token) ────────────────────────
-
-  private assertLinkActive(request: { portalTokenExpiresAt: Date | null }) {
-    if (request.portalTokenExpiresAt && request.portalTokenExpiresAt.getTime() < Date.now()) {
-      throw new GoneException('Este enlace venció. Pide uno nuevo al equipo auditor.');
-    }
-  }
-
-  /** Busca por la HUELLA del token (nunca se compara el token en claro) y descarta basura antes de tocar la BD. */
-  private async loadByToken(token: unknown) {
-    if (!isWellFormedToken(token)) throw new NotFoundException(TOKEN_ERROR);
-    const request = await this.prisma.pbcRequest.findUnique({ where: { portalTokenHash: hashToken(token) } });
-    if (!request) throw new NotFoundException(TOKEN_ERROR);
-    this.assertLinkActive(request);
-    return request;
-  }
-
-  async findByToken(token: unknown) {
-    if (!isWellFormedToken(token)) throw new NotFoundException(TOKEN_ERROR);
-    const request = await this.prisma.pbcRequest.findUnique({
-      where: { portalTokenHash: hashToken(token) },
-      select: PORTAL_SELECT,
-    });
-    if (!request) throw new NotFoundException(TOKEN_ERROR);
-    this.assertLinkActive(request);
-    return request;
-  }
-
-  async addMessageByToken(token: unknown, content: string, attachmentUrls?: string[]) {
-    const request = await this.loadByToken(token);
-    if (request.status === PbcRequestStatus.ACCEPTED) {
-      throw new BadRequestException('Esta solicitud ya fue aceptada y no acepta más mensajes');
-    }
-
-    return this.prisma.pbcMessage.create({
-      data: {
-        requestId:      request.id,
-        senderEmail:    request.requestedToEmail,
-        senderName:     request.requestedToName ?? 'Auditado',
-        isAuditor:      false,
-        content,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        attachmentUrls: (attachmentUrls ?? []) as any,
-      },
-    });
-  }
-
-  async submitByToken(token: unknown, fileUrls?: string[], auditeeNotes?: string) {
-    const request = await this.loadByToken(token);
-    if (request.status === PbcRequestStatus.ACCEPTED) {
-      throw new BadRequestException('Esta solicitud ya fue aceptada');
-    }
-    if (request.status === PbcRequestStatus.SUBMITTED) {
-      throw new BadRequestException('La solicitud ya fue enviada anteriormente');
-    }
-
-    if (auditeeNotes) {
-      await this.prisma.pbcMessage.create({
-        data: {
-          requestId:   request.id,
-          senderEmail: request.requestedToEmail,
-          senderName:  request.requestedToName ?? 'Auditado',
-          isAuditor:   false,
-          content:     `📎 Respuesta enviada: ${auditeeNotes}`,
-        },
-      });
-    }
-
-    return this.prisma.pbcRequest.update({
-      where: { id: request.id },
-      data: {
-        status:      PbcRequestStatus.SUBMITTED,
-        submittedAt: new Date(),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...(fileUrls?.length && { fileUrls: fileUrls as any }),
-      },
-      select: PORTAL_SELECT,
-    });
   }
 }

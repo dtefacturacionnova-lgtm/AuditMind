@@ -102,14 +102,15 @@ export function usePbcStats(auditId: string) {
 }
 
 /**
- * Portal público — sin sesión. El token del enlace (que llega en el #fragmento) viaja en la cabecera X-Portal-Token.
- * La clave de la caché NO lleva el token: solo hay un enlace por página y no debe quedar en herramientas de depuración.
+ * Portal público — sin cuenta. El token del enlace (que llega en el #fragmento) viaja en la cabecera X-Portal-Token y, tras
+ * verificar el código del correo, la sesión corta en X-Portal-Session. La clave de la caché NO lleva ninguno de los dos:
+ * solo hay un enlace por página y no deben quedar en herramientas de depuración.
  */
-export function usePortalRequest(token: string | null) {
+export function usePortalRequest(token: string | null, session: string | null) {
   return useQuery<PbcRequest>({
     queryKey: ['portal'],
-    queryFn:  () => portalApi.get<PbcRequest>(token as string),
-    enabled:  !!token,
+    queryFn:  () => portalApi.request<PbcRequest>(token as string, session as string),
+    enabled:  !!token && !!session,
     staleTime: 15_000,
     retry: false,
   });
@@ -183,22 +184,22 @@ export function usePortalLink() {
 }
 
 // ─── Mutations públicas del portal ────────────────────────────────────────────
-export function useAddPortalMessage(token: string | null) {
+export function useAddPortalMessage(token: string | null, session: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ content, attachmentUrls }: { content: string; attachmentUrls?: string[] }) =>
-      portalApi.post(token as string, '/message', { content, attachmentUrls }),
+      portalApi.post(token as string, session as string, '/message', { content, attachmentUrls }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portal'] });
     },
   });
 }
 
-export function useSubmitPortal(token: string | null) {
+export function useSubmitPortal(token: string | null, session: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ auditeeNotes, fileUrls }: { auditeeNotes?: string; fileUrls?: string[] }) =>
-      portalApi.post<PbcRequest>(token as string, '/submit', { auditeeNotes, fileUrls }),
+      portalApi.post<PbcRequest>(token as string, session as string, '/submit', { auditeeNotes, fileUrls }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portal'] });
     },

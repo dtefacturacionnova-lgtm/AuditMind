@@ -2,6 +2,9 @@ import {
   Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
+import {
+  assertAuditVisible, assertInvestigationAccess, AUDIT_ACCESS_SELECT, visibleAuditWhere,
+} from '../common/utils/investigation-scope.util';
 import { resolveFolderId } from './folder-match.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -44,16 +47,13 @@ export class AuditFoldersService {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
+  /**
+   * La auditoría es de la organización y, si está en modo investigación, el usuario es del equipo (o CAE/ADMIN).
+   * Revisión del modo investigación (2026-10-25): antes solo se comparaba la organización y cualquier AUDITOR veía el
+   * expediente completo (ids de papeles, carpetas y las URLs de sus archivos) de una investigación ajena.
+   */
   private async verifyAuditAccess(auditId: string, user: AuthUser) {
-    const audit = await this.prisma.audit.findUnique({
-      where: { id: auditId },
-      select: { organizationId: true },
-    });
-    if (!audit) throw new NotFoundException('Auditoría no encontrada');
-    if (audit.organizationId !== user.organizationId) {
-      throw new ForbiddenException('Sin acceso a esta auditoría');
-    }
-    return audit;
+    await assertAuditVisible(this.prisma, auditId, user);
   }
 
   // ─── Inicializar expediente (plantilla estándar) ──────────────────────────
@@ -424,12 +424,13 @@ export class AuditFoldersService {
   async updatePhase(phaseId: string, dto: UpdatePhaseDto, user: AuthUser) {
     const phase = await this.prisma.auditPhase.findUnique({
       where: { id: phaseId },
-      include: { audit: { select: { organizationId: true } } },
+      include: { audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!phase) throw new NotFoundException('Fase no encontrada');
     if (phase.audit.organizationId !== user.organizationId) {
       throw new ForbiddenException();
     }
+    assertInvestigationAccess(phase.audit, user);
 
     return this.prisma.auditPhase.update({
       where: { id: phaseId },
@@ -445,12 +446,13 @@ export class AuditFoldersService {
     const phase = await this.prisma.auditPhase.findUnique({
       where: { id: phaseId },
       include: {
-        audit: { select: { organizationId: true } },
+        audit: { select: AUDIT_ACCESS_SELECT },
         folders: { include: { papers: { select: { status: true } } } },
       },
     });
     if (!phase) throw new NotFoundException('Fase no encontrada');
     if (phase.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(phase.audit, user);
 
     return this.prisma.auditPhase.update({
       where: { id: phaseId },
@@ -503,10 +505,11 @@ export class AuditFoldersService {
   async updateFolder(folderId: string, dto: UpdateFolderDto, user: AuthUser) {
     const folder = await this.prisma.auditFolder.findUnique({
       where: { id: folderId },
-      include: { audit: { select: { organizationId: true } } },
+      include: { audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!folder) throw new NotFoundException('Carpeta no encontrada');
     if (folder.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(folder.audit, user);
     await assertInOrg(this.prisma.auditPhase, dto.phaseId, { auditId: folder.auditId }, 'La fase');
     await assertInOrg(this.prisma.auditFolder, dto.parentId, { auditId: folder.auditId }, 'La carpeta padre');
     if (dto.parentId && dto.parentId === folderId) {
@@ -530,13 +533,14 @@ export class AuditFoldersService {
     const folder = await this.prisma.auditFolder.findUnique({
       where: { id: folderId },
       include: {
-        audit: { select: { organizationId: true } },
+        audit: { select: AUDIT_ACCESS_SELECT },
         children: true,
         _count: { select: { papers: true } },
       },
     });
     if (!folder) throw new NotFoundException('Carpeta no encontrada');
     if (folder.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(folder.audit, user);
     if (folder.children.length > 0) {
       throw new BadRequestException('No se puede eliminar una carpeta con sub-carpetas');
     }
@@ -552,7 +556,7 @@ export class AuditFoldersService {
     // Antes reordenaba carpetas de cualquier organización por id.
     await assertAllInOrg(
       this.prisma.auditFolder, dto.items.map((i) => i.id),
-      { audit: { organizationId: user.organizationId } }, 'Carpetas',
+      { audit: visibleAuditWhere(user) }, 'Carpetas', // sin las de investigaciones ajenas al equipo
     );
     const updates = dto.items.map(({ id, sortOrder }) =>
       this.prisma.auditFolder.update({
@@ -676,10 +680,11 @@ export class AuditFoldersService {
   async assignPaperToFolder(paperId: string, folderId: string | null, user: AuthUser) {
     const paper = await this.prisma.workingPaper.findUnique({
       where: { id: paperId },
-      include: { audit: { select: { organizationId: true } } },
+      include: { audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!paper) throw new NotFoundException('Papel no encontrado');
     if (paper.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(paper.audit, user);
 
     if (folderId) {
       const folder = await this.prisma.auditFolder.findUnique({ where: { id: folderId } });
@@ -689,9 +694,11 @@ export class AuditFoldersService {
       }
     }
 
+    // Respuesta acotada: la fila completa trae contenido, narrativa, conclusión y notas al revisor, y esta ruta solo mueve de carpeta.
     return this.prisma.workingPaper.update({
       where: { id: paperId },
       data: { folderId },
+      select: { id: true, auditId: true, folderId: true, code: true, title: true, status: true },
     });
   }
 }

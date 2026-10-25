@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../../auth/jwt.strategy';
 
@@ -52,4 +52,62 @@ export async function assertAuditVisible(
   });
   if (!audit) throw new NotFoundException('Auditoría no encontrada');
   assertInvestigationAccess(audit, user);
+}
+
+/** `select` de una auditoría para comprobar organización y modo investigación en una sola consulta. */
+export const AUDIT_ACCESS_SELECT = { organizationId: true, ...INVESTIGATION_SELECT } as const;
+
+type UserScope = Pick<AuthUser, 'id' | 'role' | 'organizationId'>;
+
+/**
+ * Por id de papel de trabajo: 404 si no es de la organización del usuario, 403 si su auditoría es una investigación ajena
+ * a su equipo. Devuelve el id de la auditoría para que quien llama no tenga que volver a cargarla.
+ */
+export async function assertPaperVisible(
+  prisma: Pick<Prisma.TransactionClient, 'workingPaper'>,
+  paperId: string,
+  user: UserScope,
+): Promise<{ id: string; auditId: string }> {
+  const paper = await prisma.workingPaper.findUnique({
+    where: { id: paperId }, select: { id: true, auditId: true, audit: { select: AUDIT_ACCESS_SELECT } },
+  });
+  if (!paper || paper.audit.organizationId !== user.organizationId) throw new NotFoundException('Papel de trabajo no encontrado');
+  assertInvestigationAccess(paper.audit, user);
+  return { id: paper.id, auditId: paper.auditId };
+}
+
+/** Texto que ocupa el lugar del título de un encargo que el usuario no puede ver (investigación ajena a su equipo). */
+export const RESTRICTED_AUDIT_TITLE = 'Encargo restringido';
+
+/** ¿Puede este usuario ver la auditoría (traída con `isInvestigationMode` y `team`)? Versión sin excepción de `assertInvestigationAccess`. */
+export function canSeeAudit(audit: { isInvestigationMode: boolean; team: Array<{ userId: string }> }, user: Pick<AuthUser, 'id' | 'role'>): boolean {
+  return !audit.isInvestigationMode || seesAllInvestigations(user) || audit.team.some((m) => m.userId === user.id);
+}
+
+/**
+ * Para los `include`/`select` a-uno de una auditoría que Prisma no deja filtrar (un ítem de plan, un encargo, una hora):
+ * si la investigación es ajena, se devuelve solo el id y un título genérico, nunca estado, horas ni equipo.
+ */
+export function maskAuditIfHidden<T extends { id: string; isInvestigationMode: boolean; team: Array<{ userId: string }> }>(
+  audit: T | null | undefined, user: Pick<AuthUser, 'id' | 'role'>,
+): T | { id: string; title: string; restricted: true } | null {
+  if (!audit) return null;
+  if (canSeeAudit(audit, user)) return audit;
+  return { id: audit.id, title: RESTRICTED_AUDIT_TITLE, restricted: true };
+}
+
+/**
+ * En una investigación solo puede ser RESPONSABLE de un hallazgo o de una acción alguien que ya la puede ver (equipo, CAE,
+ * ADMIN o SUPER_ADMIN): si no, esa persona vería después el título del hallazgo en «Mis pendientes» (H36).
+ */
+export async function assertAssigneeCanSee(
+  prisma: Pick<Prisma.TransactionClient, 'user'>,
+  assigneeId: string | null | undefined,
+  audit: { isInvestigationMode: boolean; team: Array<{ userId: string }> },
+): Promise<void> {
+  if (!assigneeId || !audit.isInvestigationMode) return;
+  if (audit.team.some((m) => m.userId === assigneeId)) return;
+  const u = await prisma.user.findUnique({ where: { id: assigneeId }, select: { role: true } });
+  if (u && INVESTIGATION_PRIVILEGED_ROLES.includes(u.role)) return;
+  throw new BadRequestException('En una investigación solo puede ser responsable alguien del equipo de la auditoría.');
 }

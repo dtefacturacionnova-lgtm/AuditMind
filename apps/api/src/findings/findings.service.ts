@@ -6,6 +6,9 @@ import { CreateFindingDto, UpdateFindingDto, AssignResponsibleDto, RejectFinding
 import { AuthUser } from '../auth/jwt.strategy';
 import { FindingStatus, UserRole, EscalationLevel, Finding } from '@prisma/client';
 import { assertInOrg } from '../common/utils/tenant.util';
+import {
+  assertAssigneeCanSee, assertAuditVisible, assertInvestigationAccess, INVESTIGATION_SELECT, visibleAuditWhere,
+} from '../common/utils/investigation-scope.util';
 
 // ─── Quality Score Engine ────────────────────────────────────────────────────
 function computeQualityScore(data: {
@@ -66,21 +69,23 @@ export class FindingsService {
   constructor(private prisma: PrismaService) {}
 
   // ─── Guards ────────────────────────────────────────────────────────────────
+  /**
+   * La auditoría es de la organización y, si está en modo investigación, el usuario es del equipo (o CAE/ADMIN).
+   * Revisión del modo investigación (2026-10-25): antes solo se comparaba la organización y cualquier AUDITOR podía leer,
+   * crear, editar, aprobar o cerrar hallazgos de una investigación ajena.
+   */
   private async assertAuditAccess(auditId: string, user: AuthUser) {
-    const audit = await this.prisma.audit.findFirst({
-      where: { id: auditId, organizationId: user.organizationId },
-    });
-    if (!audit) throw new NotFoundException('Auditoría no encontrada');
-    return audit;
+    await assertAuditVisible(this.prisma, auditId, user);
   }
 
   private async assertFindingAccess(id: string, user: AuthUser) {
     const finding = await this.prisma.finding.findUnique({
       where: { id },
-      include: { audit: { select: { id: true, organizationId: true, materiality: true } } },
+      include: { audit: { select: { id: true, organizationId: true, materiality: true, ...INVESTIGATION_SELECT } } },
     });
     if (!finding) throw new NotFoundException('Hallazgo no encontrado');
     if (finding.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(finding.audit, user);
     return finding;
   }
 
@@ -124,7 +129,7 @@ export class FindingsService {
 
     // Auto-check recurrence
     if (dto.title) {
-      await this.checkRecurrence(finding.id, dto.auditId, dto.title, user.organizationId);
+      await this.checkRecurrence(finding.id, dto.auditId, dto.title, user);
     }
 
     return finding;
@@ -197,6 +202,7 @@ export class FindingsService {
 
     const where = {
       organizationId: user.organizationId,
+      audit: visibleAuditWhere(user), // sin las investigaciones ajenas a su equipo
       ...(filters?.severity && { severity: filters.severity as any }),
       ...(filters?.status && { status: filters.status as any }),
     };
@@ -323,6 +329,7 @@ export class FindingsService {
       throw new ForbiddenException('Solo se puede asignar responsable a hallazgos aprobados');
     }
     await assertInOrg(this.prisma.user, dto.responsibleId, { organizationId: user.organizationId }, 'El responsable');
+    await assertAssigneeCanSee(this.prisma, dto.responsibleId, finding.audit);
 
     const dueDate = new Date(dto.dueDate);
 
@@ -354,8 +361,9 @@ export class FindingsService {
 
   // ─── FindingAction CRUD ────────────────────────────────────────────────────
   async createAction(findingId: string, dto: CreateActionDto, user: AuthUser) {
-    await this.assertFindingAccess(findingId, user);
+    const finding = await this.assertFindingAccess(findingId, user);
     await assertInOrg(this.prisma.user, dto.responsibleId, { organizationId: user.organizationId }, 'El responsable');
+    await assertAssigneeCanSee(this.prisma, dto.responsibleId, finding.audit);
     return this.prisma.findingAction.create({
       data: {
         findingId,
@@ -373,13 +381,14 @@ export class FindingsService {
   async updateAction(actionId: string, dto: UpdateActionDto, user: AuthUser) {
     const action = await this.prisma.findingAction.findUnique({
       where: { id: actionId },
-      include: { finding: { select: { audit: { select: { organizationId: true } } } } },
+      include: { finding: { select: { audit: { select: { organizationId: true, ...INVESTIGATION_SELECT } } } } },
     });
     if (!action) throw new NotFoundException('Acción no encontrada');
     // Se valida contra la organización del ENCARGO (fuente de verdad), no solo
     // contra la copia `organizationId` de la acción.
     if (action.organizationId !== user.organizationId
       || action.finding?.audit?.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(action.finding.audit, user);
 
     const data: Record<string, unknown> = {};
     if (dto.status      !== undefined) data.status      = dto.status;
@@ -448,6 +457,7 @@ export class FindingsService {
     return this.prisma.finding.findMany({
       where: {
         organizationId: user.organizationId,
+        audit: visibleAuditWhere(user),
         status: { in: [FindingStatus.OVERDUE, FindingStatus.IN_PROGRESS] },
         dueDate: { lt: new Date() },
       },
@@ -461,7 +471,7 @@ export class FindingsService {
 
   async getRecurringFindings(user: AuthUser) {
     return this.prisma.finding.findMany({
-      where: { organizationId: user.organizationId, isRecurring: true },
+      where: { organizationId: user.organizationId, isRecurring: true, audit: visibleAuditWhere(user) },
       include: {
         audit: { select: { id: true, title: true } },
       },
@@ -494,15 +504,17 @@ export class FindingsService {
     findingId: string,
     auditId: string,
     title: string,
-    organizationId: string,
+    user: AuthUser,
   ) {
-    // Look for similar findings in the same org (case-insensitive partial match)
+    // Look for similar findings in the same org (case-insensitive partial match). Solo entre auditorías que el usuario
+    // puede ver: buscar entre investigaciones ajenas revelaba por palabra del título que existían.
     const keywords = title.toLowerCase().split(/\s+/).filter(w => w.length > 4);
     if (keywords.length === 0) return;
 
     const similar = await this.prisma.finding.findFirst({
       where: {
-        organizationId,
+        organizationId: user.organizationId,
+        audit: visibleAuditWhere(user),
         id: { not: findingId },
         title: { contains: keywords[0], mode: 'insensitive' },
       },

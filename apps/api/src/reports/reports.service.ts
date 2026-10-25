@@ -4,6 +4,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { AuditStatus } from '@prisma/client';
 import { PdfService } from '../pdf/pdf.service';
 import { renderAuditReportBody, renderFindingBody } from '../pdf/pdf-templates';
+import { assertInvestigationAccess, INVESTIGATION_SELECT, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
 @Injectable()
 export class ReportsService {
@@ -38,9 +39,11 @@ export class ReportsService {
   async generateFindingPdf(findingId: string, user: AuthUser): Promise<Buffer> {
     const finding = await this.prisma.finding.findFirst({
       where:   { id: findingId, organizationId: user.organizationId },
-      include: { audit: { select: { id: true, title: true } } },
+      include: { audit: { select: { id: true, title: true, ...INVESTIGATION_SELECT } } },
     });
     if (!finding) throw new NotFoundException('Hallazgo no encontrado');
+    // Modo investigación (2026-10-25): el PDF de un hallazgo de una investigación ajena es el hallazgo completo.
+    assertInvestigationAccess((finding as unknown as { audit: { isInvestigationMode: boolean; team: Array<{ userId: string }> } }).audit, user);
 
     const auditMeta = {
       title: (finding as unknown as { audit: { title: string } }).audit.title,
@@ -138,6 +141,9 @@ export class ReportsService {
     });
 
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    // Modo investigación (2026-10-25): el informe trae hallazgos, conclusiones de papeles, PBC, confirmaciones y el equipo
+    // con sus correos; el `include` ya trae `isInvestigationMode` y `team`.
+    assertInvestigationAccess(audit, user);
 
     // ─── KPIs ────────────────────────────────────────────────────────────────
     const findings       = audit.findings as any[];
@@ -239,8 +245,8 @@ export class ReportsService {
   async listAvailableReports(user: AuthUser) {
     const audits = await this.prisma.audit.findMany({
       where: {
-        organizationId: user.organizationId,
-        status: { in: [AuditStatus.IN_PROGRESS, AuditStatus.REVIEW, AuditStatus.CLOSED] },
+        // `AND`: el filtro de visibilidad trae su propio `OR`. Sin las investigaciones ajenas al equipo.
+        AND: [visibleAuditWhere(user), { status: { in: [AuditStatus.IN_PROGRESS, AuditStatus.REVIEW, AuditStatus.CLOSED] } }],
       },
       orderBy: { updatedAt: 'desc' },
       select: {

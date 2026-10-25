@@ -11,6 +11,7 @@ import { AuditOriginType, AuditStatus, AuditType, WorkingPaperType, WpKind } fro
 import { CreateAuditTemplateDto, UpdateAuditTemplateDto } from './dto/audit-template.dto';
 import { PAPER_TEMPLATES } from '../working-papers/paper-templates';
 import { AuditFoldersService } from '../audit-folders/audit-folders.service';
+import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
 // ─── PaperDef mirrors audit-index.service interface ──────────────────────────
 
@@ -86,7 +87,7 @@ export class AuditTemplatesService {
       orderBy: [{ isSystem: 'desc' }, { isDefault: 'desc' }, { name: 'asc' }],
       include: {
         createdBy: { select: { id: true, name: true } },
-        _count: { select: { audits: true } },
+        _count: { select: { audits: { where: visibleAuditWhere(user) } } }, // sin contar investigaciones ajenas (modo investigación)
       },
     });
 
@@ -104,7 +105,7 @@ export class AuditTemplatesService {
       where: { id, organizationId: user.organizationId },
       include: {
         createdBy: { select: { id: true, name: true } },
-        _count: { select: { audits: true } },
+        _count: { select: { audits: { where: visibleAuditWhere(user) } } },
       },
     });
     if (!template) throw new NotFoundException('Plantilla de auditoría no encontrada');

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { CreateAuditProjectDto, UpdateAuditProjectDto } from './dto/audit-project.dto';
 import { AuditStatus } from '@prisma/client';
+import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
 const INCLUDE = {
   strategicObjective: { select: { id: true, code: true, name: true, color: true, icon: true } },
@@ -28,7 +29,7 @@ export class AuditProjectsService {
       include: INCLUDE,
       orderBy: [{ planYear: 'desc' }, { correlative: 'asc' }],
     });
-    return this.enrichWithCoverage(projects, user.organizationId);
+    return this.enrichWithCoverage(projects, user);
   }
 
   async findOne(id: string, user: AuthUser) {
@@ -36,7 +37,7 @@ export class AuditProjectsService {
       where: { id, organizationId: user.organizationId }, include: INCLUDE,
     });
     if (!project) return null;
-    const [enriched] = await this.enrichWithCoverage([project], project.organizationId);
+    const [enriched] = await this.enrichWithCoverage([project], user);
     return enriched;
   }
 
@@ -171,7 +172,7 @@ export class AuditProjectsService {
 
   // ─── Private helpers ───────────────────────────────────────────────────────
 
-  private async enrichWithCoverage(projects: any[], organizationId: string) {
+  private async enrichWithCoverage(projects: any[], user: AuthUser) {
     const entityIds = [
       ...new Set(projects.map(p => p.responsibleEntityId).filter(Boolean) as string[]),
     ];
@@ -183,9 +184,11 @@ export class AuditProjectsService {
     }
 
     // Single query: most recent CLOSED audit per entity (ordered desc → first seen = latest)
+    // Modo investigación (2026-10-25): la última auditoría cerrada que se muestra no incluye investigaciones ajenas al equipo
+    // (la fecha de cierre revelaría que existió una). El puntaje de cobertura de `syncCoverage` sí las considera: es de toda la organización.
     const closedAudits = await this.prisma.audit.findMany({
       where: {
-        organizationId,
+        ...visibleAuditWhere(user),
         auditEntityId: { in: entityIds },
         status: AuditStatus.CLOSED,
       },

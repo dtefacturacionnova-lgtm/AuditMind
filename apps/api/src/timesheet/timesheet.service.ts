@@ -10,6 +10,7 @@ import {
 } from './dto/timesheet.dto';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
 import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg } from './daily-hours-cap.util';
+import { hiddenAuditIds, RESTRICTED_AUDIT_TITLE } from '../common/utils/investigation-scope.util';
 import {
   assertPeriodsOpen, validateEntryRules, validateCategoryLinkage, mergeEntryChanges, entrySnapshot, logEntryChange, logEntryChanges, TX_OPTIONS,
   ENTRY_PUBLIC_SELECT,
@@ -71,7 +72,7 @@ export class TimesheetService {
     const error = this.validateCategoryLinkage(dto);
     if (error) throw new BadRequestException(error);
     assertValidHours(dto.hours);
-    await assertTimeAnchorsInOrg(this.prisma, user.organizationId, [dto]);
+    await assertTimeAnchorsInOrg(this.prisma, user, [dto]);
 
     await assertDailyHoursCap(this.prisma, user.id, new Map([[dto.workDate, dto.hours]]));
 
@@ -119,7 +120,7 @@ export class TimesheetService {
     }
 
     dto.entries.forEach((entry) => assertValidHours(entry.hours));
-    await assertTimeAnchorsInOrg(this.prisma, user.organizationId, dto.entries);
+    await assertTimeAnchorsInOrg(this.prisma, user, dto.entries);
 
     const hoursByDate = new Map<string, number>();
     for (const entry of dto.entries) {
@@ -193,7 +194,7 @@ export class TimesheetService {
     });
     if (linkError) throw new BadRequestException(linkError);
     assertValidHours(merged.hours);
-    await assertTimeAnchorsInOrg(this.prisma, user.organizationId, [merged]);
+    await assertTimeAnchorsInOrg(this.prisma, user, [merged]);
     await assertDailyHoursCap(this.prisma, user.id, new Map([[merged.workDate, merged.hours]]), [id]);
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -267,6 +268,10 @@ export class TimesheetService {
     }
     if (query.category) where.category = query.category;
     if (query.auditId)  where.auditId = query.auditId;
+    // Modo investigación (2026-10-25): filtrar por una investigación ajena entregaba quién trabajó en ella y cuántas horas.
+    if (query.auditId && (await hiddenAuditIds(this.prisma, [query.auditId], user)).size > 0) {
+      throw new ForbiddenException('Acceso restringido — modo investigación');
+    }
 
     if (query.groupBy === TimesheetReportGroupBy.PLAN) {
       if (!query.planId) throw new BadRequestException('planId es requerido para groupBy=plan');
@@ -331,9 +336,12 @@ export class TimesheetService {
           where:  { id: { in: auditIds }, organizationId: user.organizationId },
           select: { id: true, title: true },
         });
+        const hidden = await hiddenAuditIds(this.prisma, auditIds, user);
         breakdown = rows.map((r) => ({
           auditId:    r.auditId,
-          auditTitle: r.auditId ? (audits.find((a) => a.id === r.auditId)?.title ?? r.auditId) : 'Sin encargo',
+          auditTitle: r.auditId
+            ? (hidden.has(r.auditId) ? RESTRICTED_AUDIT_TITLE : (audits.find((a) => a.id === r.auditId)?.title ?? r.auditId))
+            : 'Sin encargo',
           category:   r.category,
           hours:      r._sum.hours ?? 0,
         }));

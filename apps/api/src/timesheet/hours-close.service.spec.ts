@@ -522,6 +522,8 @@ describe('El costo por hora nunca sale en una consulta de horas', () => {
 
   it('las listas de horas del encargo y del ítem de plan (las ve cualquier auditor)', async () => {
     const { db, plans, u } = await conCierre();
+    // el ítem del plan existe y es de la organización (la lista ahora lo comprueba por el modo investigación)
+    db.tables.auditPlanItem.rows.push({ id: 'item1', plan: { organizationId: 'org1' } });
     // una hora ligada a un ítem de plan, ya con su costo congelado
     db.tables.timeEntry.rows.push({
       ...db.entries()[0], id: 'del-item', planItemId: 'item1', auditId: null, costRateSnapshot: 12.5, billRateSnapshot: 40,

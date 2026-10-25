@@ -20,6 +20,12 @@ import { WorkingPapersService } from '../../working-papers/working-papers.servic
 import { FieldEvidenceService } from '../../working-papers/field-evidence/field-evidence.service';
 import { ExcelTemplateEngineService } from '../../working-papers/excel-templates/excel-template-engine.service';
 import { CrossAuditLearningService } from '../../working-papers/cross-audit-learning.service';
+import { AuditProceduresService } from '../../audit-procedures/audit-procedures.service';
+import { TimesheetService } from '../../timesheet/timesheet.service';
+import { HoursCloseService } from '../../timesheet/hours-close.service';
+import { PlansService } from '../../plans/plans.service';
+import { AuditUniverseService } from '../../audit-universe/audit-universe.service';
+import { AuditProjectsService } from '../../audit-projects/audit-projects.service';
 
 /**
  * Modo investigación · barrido de módulos contra un Postgres REAL (docs/seguridad: revisión del 2026-10-25).
@@ -462,6 +468,260 @@ suite('modo investigación · barrido por módulo (Postgres real)', () => {
         expect(r.basedOnAudits).toBe(1);
         expect(r.totalFindings).toBeGreaterThan(0);
       }
+    });
+  });
+
+  // ═══ Lote 7 · Procedimientos de auditoría (sección → procedimiento → actividad) ═══════════════════════════
+  describe('lote 7 · procedimientos de auditoría', () => {
+    let svc: AuditProceduresService;
+    const seeded: Record<string, any> = {};
+    beforeAll(async () => {
+      svc = new AuditProceduresService(prisma as any, { get: (_k: string, d?: unknown) => d ?? '' } as any);
+      for (const [k, a] of [['inv', w.inv], ['nor', w.nor]] as const) {
+        const paper = await prisma.workingPaper.create({ data: { auditId: a.id, code: `L7-${k}`, indexSection: 'A', title: 'Papel', type: 'PLANNING_UNDERSTANDING' as any } });
+        const section = await prisma.paperSection.create({ data: { paperId: paper.id, sectionKey: 'S1', label: 'Procedimientos' } });
+        const procedure = await prisma.auditProcedure.create({ data: { sectionId: section.id, refNumber: 'P-1', description: 'Procedimiento reservado' } });
+        const step = await prisma.auditStep.create({ data: { procedureId: procedure.id, refNumber: 'P-1-A', description: 'Actividad reservada' } });
+        seeded[k] = { section, procedure, step };
+      }
+    });
+    const freshProc = (sectionId: string) => prisma.auditProcedure.create({ data: { sectionId, refNumber: `P-${randomUUID().slice(0, 4)}`, description: 'para borrar' } });
+    const freshStep = (procedureId: string) => prisma.auditStep.create({ data: { procedureId, refNumber: `A-${randomUUID().slice(0, 4)}`, description: 'para borrar' } });
+
+    it('por sección: leer, crear, listar papeles y riesgos, y sugerir', async () => {
+      const s = seeded.inv; const n = seeded.nor;
+      await check('getProcedures', (u) => svc.getProcedures(s.section.id, u), (u) => svc.getProcedures(n.section.id, u));
+      await check('createProcedure', (u) => svc.createProcedure(s.section.id, { refNumber: 'N-1', description: 'nuevo' }, u), (u) => svc.createProcedure(n.section.id, { refNumber: 'N-1', description: 'nuevo' }, u));
+      await check('getAuditPapersForSection', (u) => svc.getAuditPapersForSection(s.section.id, u), (u) => svc.getAuditPapersForSection(n.section.id, u));
+      await check('getAuditRisksForSection', (u) => svc.getAuditRisksForSection(s.section.id, u), (u) => svc.getAuditRisksForSection(n.section.id, u));
+      await check('suggestAndCreateProcedures', (u) => svc.suggestAndCreateProcedures(s.section.id, u), (u) => svc.suggestAndCreateProcedures(n.section.id, u));
+    });
+
+    it('por procedimiento: editar, borrar y crear actividades', async () => {
+      const s = seeded.inv; const n = seeded.nor;
+      await check('updateProcedure', (u) => svc.updateProcedure(s.procedure.id, { description: 'otro' }, u), (u) => svc.updateProcedure(n.procedure.id, { description: 'otro' }, u));
+      await check('createStep', (u) => svc.createStep(s.procedure.id, { refNumber: 'N-A', description: 'nueva' }, u), (u) => svc.createStep(n.procedure.id, { refNumber: 'N-A', description: 'nueva' }, u));
+      await check('deleteProcedure', async (u) => svc.deleteProcedure((await freshProc(s.section.id)).id, u), async (u) => svc.deleteProcedure((await freshProc(n.section.id)).id, u));
+    });
+
+    it('por actividad: editar, borrar y evidencia', async () => {
+      const s = seeded.inv; const n = seeded.nor;
+      await check('updateStep', (u) => svc.updateStep(s.step.id, { description: 'otra' }, u), (u) => svc.updateStep(n.step.id, { description: 'otra' }, u));
+      await check('deleteStep', async (u) => svc.deleteStep((await freshStep(s.procedure.id)).id, u), async (u) => svc.deleteStep((await freshStep(n.procedure.id)).id, u));
+      const freshEvidence = (stepId: string) => prisma.stepEvidence.create({ data: { stepId, fileName: 'x.pdf', storageKey: `procedures/steps/${stepId}/x.pdf`, mimeType: 'application/pdf', size: 1, uploadedByName: 'lead', uploadedById: w.users.lead.id } });
+      await expectBlocked('deleteEvidence', async (u) => svc.deleteEvidence((await freshEvidence(s.step.id)).id, s.step.id, u));
+    });
+  });
+
+  // ═══ Lote 8 · Horas (captura, reporte, cierre y ajustes) ═══════════════════════════════════════════════
+  describe('lote 8 · horas', () => {
+    let ts: TimesheetService; let hc: HoursCloseService;
+    const seeded: Record<string, any> = {};
+    let day = 0;
+    const nextDay = () => `2030-03-${String(1 + (day++ % 27)).padStart(2, '0')}`;
+    const entryDto = (auditId: string) => ({ workDate: nextDay(), hours: 1, description: 'revisión de saldos', category: 'CLIENT_BILLABLE' as any, auditId });
+    const mkOwn = (userId: string, auditId: string, extra: any = {}) => prisma.timeEntry.create({
+      data: { organizationId: w.org.id, userId, auditId, workDate: new Date('2028-05-10'), hours: 2, category: 'CLIENT_BILLABLE' as any, description: 'entrevista con el gerente de compras', ...extra },
+    });
+
+    beforeAll(async () => {
+      ts = new TimesheetService(prisma as any);
+      hc = new HoursCloseService(prisma as any, {} as any);
+      for (const [k, a] of [['inv', w.inv], ['nor', w.nor]] as const) seeded[k] = { entry: await mkOwn(w.users.lead.id, a.id) };
+    });
+
+    it('registrar horas en un encargo: solo quien lo ve (antes bastaba con que fuera de la organización)', async () => {
+      await check('createEntry', (u) => ts.createEntry(entryDto(w.inv.id), u), (u) => ts.createEntry(entryDto(w.nor.id), u));
+      await check('createEntriesBulk', (u) => ts.createEntriesBulk({ entries: [entryDto(w.inv.id)] } as any, u), (u) => ts.createEntriesBulk({ entries: [entryDto(w.nor.id)] } as any, u));
+      // mover una hora propia a la investigación
+      await check('updateEntry', async (u) => ts.updateEntry((await mkOwn(u.id, w.nor.id)).id, { auditId: w.inv.id } as any, u), async (u) => ts.updateEntry((await mkOwn(u.id, w.nor.id)).id, { description: 'otra descripción' } as any, u));
+    });
+
+    it('reporte de horas: el gerente ve la investigación ajena sin título, y no puede filtrar por ella', async () => {
+      const titleOf = (r: any, auditId: string) => r.breakdown.find((b: any) => b.auditId === auditId)?.auditTitle;
+      const asManager: any = await ts.getReport({ groupBy: 'audit' } as any, w.users.manager);
+      expect(titleOf(asManager, w.inv.id)).toBe('Encargo restringido');
+      expect(titleOf(asManager, w.nor.id)).toBe('Auditoría normal');
+      const asCae: any = await ts.getReport({ groupBy: 'audit' } as any, w.users.cae);
+      expect(titleOf(asCae, w.inv.id)).toBe('Investigación reservada');
+      // el líder (del equipo) ve sus propias horas con el título
+      const asLead: any = await ts.getReport({ groupBy: 'audit' } as any, w.users.lead);
+      expect(titleOf(asLead, w.inv.id)).toBe('Investigación reservada');
+      // filtrar por la investigación: el gerente ajeno no (entregaba quién trabajó y cuánto); el CAE sí
+      await expect(ts.getReport({ groupBy: 'user', auditId: w.inv.id } as any, w.users.manager)).rejects.toThrow(/modo investigación/);
+      await expect(ts.getReport({ groupBy: 'user', auditId: w.inv.id } as any, w.users.cae)).resolves.toBeDefined();
+      await expect(ts.getReport({ groupBy: 'user', auditId: w.nor.id } as any, w.users.manager)).resolves.toBeDefined();
+    });
+
+    it('horas de una persona en el mes (gerente): sin título ni descripción si la investigación es ajena', async () => {
+      const find = (r: any, id: string) => r.entries.find((e: any) => e.id === id);
+      const asManager: any = await hc.personEntries(w.users.lead.id, 2028, 5, w.users.manager);
+      expect(find(asManager, seeded.inv.entry.id)).toMatchObject({ description: null, auditTitle: 'Encargo restringido' });
+      expect(find(asManager, seeded.nor.entry.id)).toMatchObject({ description: 'entrevista con el gerente de compras', auditTitle: 'Auditoría normal' });
+      const asCae: any = await hc.personEntries(w.users.lead.id, 2028, 5, w.users.cae);
+      expect(find(asCae, seeded.inv.entry.id)).toMatchObject({ description: 'entrevista con el gerente de compras', auditTitle: 'Investigación reservada' });
+    });
+
+    it('pedidos de ajuste: el gerente que no ve la investigación no lee la descripción; el pedido propio sí se ve completo', async () => {
+      const mkReq = (userId: string, entryId: string, payload: any) => prisma.timeAdjustmentRequest.create({
+        data: { organizationId: w.org.id, userId, year: 2028, month: 5, action: 'EDIT' as any, timeEntryId: entryId, payload, reason: 'corrección' },
+      });
+      const reqInv = await mkReq(w.users.lead.id, seeded.inv.entry.id, { description: 'texto reservado nuevo' });
+      const reqNor = await mkReq(w.users.lead.id, seeded.nor.entry.id, { description: 'texto normal nuevo' });
+      const pick = (rows: any[], id: string) => rows.find((r) => r.id === id);
+      const asManager: any[] = await hc.listAdjustments({} as any, w.users.manager);
+      expect(pick(asManager, reqInv.id).entry.description).toBeNull();
+      expect(pick(asManager, reqInv.id).payload.description).toBeNull();
+      expect(pick(asManager, reqNor.id).entry.description).toBe('entrevista con el gerente de compras');
+      expect(pick(asManager, reqNor.id).payload.description).toBe('texto normal nuevo');
+      const asCae: any[] = await hc.listAdjustments({} as any, w.users.cae);
+      expect(pick(asCae, reqInv.id).payload.description).toBe('texto reservado nuevo');
+      const asLead: any[] = await hc.listAdjustments({ mine: 'true' } as any, w.users.lead);
+      expect(pick(asLead, reqInv.id).entry.description).toBe('entrevista con el gerente de compras');
+    });
+
+    it('al aprobar un ajuste se revalida que QUIEN LO PIDIÓ todavía vea el encargo', async () => {
+      await prisma.hoursCloseSettings.upsert({ where: { organizationId: w.org.id }, create: { organizationId: w.org.id, enabled: true }, update: { enabled: true } });
+      const mkClosed = (userId: string) => prisma.hoursPeriodClose.create({
+        data: { organizationId: w.org.id, userId, year: 2029, month: 3, status: 'CLOSED' as any, closedById: w.users.manager.id, closedAt: new Date(), entryCount: 0, totalHours: 0 },
+      });
+      const mkAdd = async (userId: string, auditId: string) => {
+        await mkClosed(userId).catch(() => undefined); // un solo cierre por persona y mes
+        return prisma.timeAdjustmentRequest.create({
+          data: {
+            organizationId: w.org.id, userId, year: 2029, month: 3, action: 'ADD' as any, reason: 'olvidé registrarlas',
+            payload: { workDate: '2029-03-10', hours: 2, category: 'CLIENT_BILLABLE', description: 'trabajo en el encargo', auditId },
+          },
+        });
+      };
+      const decide = (id: string) => hc.decideAdjustment(id, { approve: true } as any, w.users.cae);
+      // quien pidió las horas NO es del equipo de la investigación: no se aprueban, el pedido sigue pendiente y no hay hora creada
+      const bad = await mkAdd(w.users.outsider.id, w.inv.id);
+      await expect(decide(bad.id)).rejects.toThrow(/no existe/);
+      expect((await prisma.timeAdjustmentRequest.findUniqueOrThrow({ where: { id: bad.id } })).status).toBe('PENDING');
+      expect(await prisma.timeEntry.count({ where: { userId: w.users.outsider.id, auditId: w.inv.id, workDate: new Date('2029-03-10') } })).toBe(0);
+      // integrante del equipo sobre la investigación, y cualquiera sobre una auditoría normal: se aprueba
+      const countOf = (userId: string, auditId: string) => prisma.timeEntry.count({ where: { userId, auditId, workDate: new Date('2029-03-10') } });
+      const okTeam = await mkAdd(w.users.member.id, w.inv.id);
+      await expect(decide(okTeam.id)).resolves.toBeDefined();
+      expect(await countOf(w.users.member.id, w.inv.id)).toBe(1);
+      const okNormal = await mkAdd(w.users.outsider.id, w.nor.id);
+      await expect(decide(okNormal.id)).resolves.toBeDefined();
+      expect(await countOf(w.users.outsider.id, w.nor.id)).toBe(1);
+    });
+  });
+
+  // ═══ Lote 9 · Planes, universo auditable y banco de proyectos ═══════════════════════════════════════════
+  describe('lote 9 · planes, universo y proyectos', () => {
+    let plans: PlansService; let universe: AuditUniverseService; let projects: AuditProjectsService;
+    const seeded: Record<string, any> = {};
+    let day = 0;
+    const nextDay = () => `2031-04-${String(1 + (day++ % 27)).padStart(2, '0')}`;
+
+    beforeAll(async () => {
+      plans = new PlansService(prisma as any);
+      universe = new AuditUniverseService(prisma as any);
+      projects = new AuditProjectsService(prisma as any);
+
+      const plan = await prisma.auditPlan.create({ data: { organizationId: w.org.id, year: 2031, name: 'Plan 2031', totalHours: 1000 } });
+      const project = await prisma.auditProject.create({ data: { organizationId: w.org.id, correlative: 'BAP-T01', name: 'Proyecto', planYear: 2031 } });
+      const item = (extra: any) => prisma.auditPlanItem.create({ data: { planId: plan.id, estimatedHours: 40, ...extra } });
+      const itemInv = await item({ auditId: w.inv.id, auditProjectId: project.id });
+      const itemNor = await item({ auditId: w.nor.id, auditProjectId: project.id });
+      // auditorías sin ítem de plan (para vincular) y sus ítems libres
+      const mkAudit = async (title: string, inv: boolean) => {
+        const a = await prisma.audit.create({ data: { organizationId: w.org.id, title, type: 'EXTERNAL', isInvestigationMode: inv, leadAuditorId: w.users.lead.id } });
+        await prisma.auditTeam.create({ data: { auditId: a.id, userId: w.users.lead.id, role: 'LEAD' } });
+        await prisma.auditTeam.create({ data: { auditId: a.id, userId: w.users.member.id, role: 'MEMBER' } });
+        return a;
+      };
+      const freeInv = await mkAudit('Investigación sin plan', true);
+      const freeNor = await mkAudit('Auditoría normal sin plan', false);
+      Object.assign(seeded, { plan, project, itemInv, itemNor, freeInv, freeNor, itemFreeInv: await item({}), itemFreeNor: await item({}) });
+    });
+
+    it('el plan muestra el ítem de una investigación ajena como «Encargo restringido» (sin estado ni horas) y nunca el equipo', async () => {
+      const itemOf = (plan: any, id: string) => plan.items.find((i: any) => i.id === id);
+      for (const who of ['outsider', 'manager'] as const) {
+        const one: any = await plans.findOne(seeded.plan.id, w.users[who]);
+        expect(itemOf(one, seeded.itemInv.id).audit).toEqual({ id: w.inv.id, title: 'Encargo restringido', restricted: true });
+        expect(itemOf(one, seeded.itemNor.id).audit).toMatchObject({ id: w.nor.id, title: 'Auditoría normal' });
+        const all: any[] = await plans.findAll(w.users[who]);
+        expect(itemOf(all.find((p) => p.id === seeded.plan.id), seeded.itemInv.id).audit.restricted).toBe(true);
+      }
+      for (const who of ['member', 'lead', 'cae'] as const) {
+        const one: any = await plans.findOne(seeded.plan.id, w.users[who]);
+        expect(itemOf(one, seeded.itemInv.id).audit).toMatchObject({ id: w.inv.id, title: 'Investigación reservada' });
+        expect(itemOf(one, seeded.itemInv.id).audit).not.toHaveProperty('team');
+      }
+      // el total de horas reales del plan no cambia con quien lo mira
+      const a: any = await plans.findOne(seeded.plan.id, w.users.outsider); const b: any = await plans.findOne(seeded.plan.id, w.users.cae);
+      expect(a.realHours).toBe(b.realHours);
+    });
+
+    it('encargos que se pueden vincular: la investigación ajena no aparece', async () => {
+      await checkListing('getLinkableAudits', (u) => plans.getLinkableAudits(seeded.plan.id, u), (r) => r.map((a: any) => a.id), seeded.freeInv.id, seeded.freeNor.id);
+    });
+
+    it('vincular y desvincular un encargo del ítem del plan', async () => {
+      await check('linkAudit', (u) => plans.linkAudit(seeded.plan.id, seeded.itemFreeInv.id, { auditId: seeded.freeInv.id }, u), (u) => plans.linkAudit(seeded.plan.id, seeded.itemFreeNor.id, { auditId: seeded.freeNor.id }, u));
+      // desvincular una investigación ajena (el ítem de la investigación sembrada)
+      await expectBlocked('unlinkAudit', (u) => plans.unlinkAudit(seeded.plan.id, seeded.itemInv.id, u));
+      await expect(plans.unlinkAudit(seeded.plan.id, seeded.itemFreeInv.id, w.users.member)).resolves.toBeDefined();
+    });
+
+    it('horas de un encargo y de un ítem del plan, y registrar horas desde el plan', async () => {
+      await check('getTimeEntries', (u) => plans.getTimeEntries(w.inv.id, u), (u) => plans.getTimeEntries(w.nor.id, u));
+      await check('getPlanItemTimeEntries', (u) => plans.getPlanItemTimeEntries(seeded.itemInv.id, u), (u) => plans.getPlanItemTimeEntries(seeded.itemNor.id, u));
+      await check('createTimeEntry', (u) => plans.createTimeEntry({ auditId: w.inv.id, workDate: nextDay(), hours: 1, description: 'trabajo de campo' } as any, u), (u) => plans.createTimeEntry({ auditId: w.nor.id, workDate: nextDay(), hours: 1, description: 'trabajo de campo' } as any, u));
+      // un ítem de plan ya vinculado a una investigación ajena tampoco admite horas
+      await expectBlocked('createTimeEntry(planItem)', (u) => plans.createTimeEntry({ planItemId: seeded.itemInv.id, workDate: nextDay(), hours: 1, description: 'trabajo de campo' } as any, u));
+    });
+
+    it('hallazgos de un proyecto del banco: no se listan los de una investigación ajena', async () => {
+      const mkFinding = (auditId: string) => prisma.finding.create({ data: { auditId, organizationId: w.org.id, title: 'Hallazgo del proyecto', condition: 'c', criteria: 'k', cause: 'z', effect: 'e', risk: 'r', recommendation: 'rec', severity: 'HIGH' } });
+      const invFinding = await mkFinding(w.inv.id);
+      const norFinding = await mkFinding(w.nor.id);
+      await checkListing('getProjectFindings', (u) => plans.getProjectFindings(seeded.project.id, u), (r) => r.map((f: any) => f.id), invFinding.id, norFinding.id);
+    });
+
+    describe('universo auditable y banco de proyectos', () => {
+      const e: Record<string, any> = {};
+      beforeAll(async () => {
+        e.entity = await prisma.auditEntity.create({ data: { organizationId: w.org.id, name: 'Gerencia de Compras' } });
+        const mk = async (title: string, inv: boolean, endDate: Date) => {
+          const a = await prisma.audit.create({ data: { organizationId: w.org.id, title, type: 'EXTERNAL', status: 'CLOSED' as any, isInvestigationMode: inv, auditEntityId: e.entity.id, endDate, leadAuditorId: w.users.lead.id } });
+          await prisma.auditTeam.create({ data: { auditId: a.id, userId: w.users.lead.id, role: 'LEAD' } });
+          await prisma.auditTeam.create({ data: { auditId: a.id, userId: w.users.member.id, role: 'MEMBER' } });
+          return a;
+        };
+        e.inv = await mk('Investigación en compras', true, new Date('2025-12-31'));
+        e.nor = await mk('Auditoría de compras', false, new Date('2024-06-30'));
+        e.project = await prisma.auditProject.create({ data: { organizationId: w.org.id, correlative: 'BAP-T02', name: 'Compras', planYear: 2031, responsibleEntityId: e.entity.id } });
+      });
+
+      it('la ficha, el listado y el árbol de la entidad no cuentan ni muestran la investigación ajena', async () => {
+        for (const who of ['outsider', 'manager'] as const) {
+          const one: any = await universe.findOne(e.entity.id, w.users[who]);
+          expect(one.audits.map((a: any) => a.id)).toEqual([e.nor.id]);
+          const list: any = await universe.findAll(w.users[who], 1, 100);
+          expect(list.data.find((x: any) => x.id === e.entity.id)._count.audits).toBe(1);
+          const tree: any[] = await universe.getEntityTree(w.users[who]);
+          expect(tree.find((x) => x.id === e.entity.id)._count.audits).toBe(1);
+        }
+        for (const who of ['member', 'lead', 'cae'] as const) {
+          const one: any = await universe.findOne(e.entity.id, w.users[who]);
+          expect(one.audits.map((a: any) => a.id).sort()).toEqual([e.inv.id, e.nor.id].sort());
+          const list: any = await universe.findAll(w.users[who], 1, 100);
+          expect(list.data.find((x: any) => x.id === e.entity.id)._count.audits).toBe(2);
+        }
+      });
+
+      it('la cobertura del banco de proyectos no revela la fecha de una investigación ajena', async () => {
+        const last = async (u: any) => ((await projects.findAll(u)) as any[]).find((p) => p.id === e.project.id).lastAuditDate;
+        for (const who of ['outsider', 'manager'] as const) expect(new Date(await last(w.users[who])).toISOString().slice(0, 10)).toBe('2024-06-30');
+        for (const who of ['member', 'lead', 'cae'] as const) expect(new Date(await last(w.users[who])).toISOString().slice(0, 10)).toBe('2025-12-31');
+      });
     });
   });
 });

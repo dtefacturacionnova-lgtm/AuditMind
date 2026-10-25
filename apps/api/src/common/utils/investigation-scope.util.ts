@@ -111,3 +111,21 @@ export async function assertAssigneeCanSee(
   if (u && INVESTIGATION_PRIVILEGED_ROLES.includes(u.role)) return;
   throw new BadRequestException('En una investigación solo puede ser responsable alguien del equipo de la auditoría.');
 }
+
+/**
+ * De estos ids de auditoría, los que el usuario NO puede ver (investigaciones ajenas a su equipo). Para ocultar títulos,
+ * descripciones y horas en las listas que mezclan encargos (horas, informes, panel): una sola consulta, sin cargar el equipo.
+ */
+export async function hiddenAuditIds(
+  prisma: Pick<Prisma.TransactionClient, 'audit'>,
+  auditIds: Array<string | null | undefined>,
+  user: UserScope,
+): Promise<Set<string>> {
+  const ids = [...new Set(auditIds.filter((v): v is string => !!v))];
+  if (ids.length === 0 || seesAllInvestigations(user)) return new Set();
+  const rows = await prisma.audit.findMany({
+    where: { id: { in: ids }, organizationId: user.organizationId, isInvestigationMode: true, team: { none: { userId: user.id } } },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}

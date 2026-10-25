@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService, escHtml } from '../email/email.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { hiddenAuditIds, RESTRICTED_AUDIT_TITLE } from '../common/utils/investigation-scope.util';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
 import { assertDailyHoursCap, assertTimeAnchorsInOrg, assertValidHours } from './daily-hours-cap.util';
 import {
@@ -265,10 +266,14 @@ export class HoursCloseService {
       ? await this.prisma.audit.findMany({ where: { id: { in: auditIds }, organizationId: user.organizationId }, select: { id: true, title: true } })
       : [];
     const titles = new Map(audits.map((a) => [a.id, a.title]));
+    // Modo investigación (2026-10-25): las horas de una investigación ajena se ven sin título ni descripción.
+    const hidden = await hiddenAuditIds(this.prisma, auditIds, user);
     return {
       user: { id: target.id, name: target.name },
       year, month,
-      entries: entries.map((e) => ({ ...e, auditTitle: e.auditId ? titles.get(e.auditId) ?? null : null })),
+      entries: entries.map((e) => (e.auditId && hidden.has(e.auditId)
+        ? { ...e, description: null, auditTitle: RESTRICTED_AUDIT_TITLE }
+        : { ...e, auditTitle: e.auditId ? titles.get(e.auditId) ?? null : null })),
     };
   }
 
@@ -407,7 +412,7 @@ export class HoursCloseService {
     if (dto.action === TimeAdjustmentAction.ADD) {
       if (!dto.entry) throw new BadRequestException('Para agregar horas indica la hora completa en "entry".');
       this.assertEntryFields(dto.entry);
-      await assertTimeAnchorsInOrg(this.prisma, user.organizationId, [dto.entry]);
+      await assertTimeAnchorsInOrg(this.prisma, user, [dto.entry]);
       period = periodKeyOf(dto.entry.workDate);
       payload = { ...dto.entry } as Prisma.InputJsonObject;
     } else {
@@ -424,7 +429,7 @@ export class HoursCloseService {
         }
         const merged = mergeEntryChanges(entry, dto.changes);
         this.assertEntryFields(merged);
-        await assertTimeAnchorsInOrg(this.prisma, user.organizationId, [merged]);
+        await assertTimeAnchorsInOrg(this.prisma, user, [merged]);
         payload = { ...dto.changes } as Prisma.InputJsonObject;
       }
     }
@@ -441,6 +446,26 @@ export class HoursCloseService {
       },
     });
     return row;
+  }
+
+  /**
+   * Modo investigación (2026-10-25): al aprobar un ajuste se vuelve a comprobar que QUIEN LO PIDIÓ todavía puede ver el
+   * encargo al que apunta (pudo salir del equipo, o el encargo pasar a investigación, entre el pedido y la decisión).
+   * Se valida con la visibilidad del solicitante, no la del gerente que decide.
+   */
+  private async assertRequesterCanStillSee(req: {
+    organizationId: string; userId: string; action: TimeAdjustmentAction; timeEntryId: string | null; payload: unknown; user: { id: string; role: string };
+  }) {
+    if (req.action === TimeAdjustmentAction.DELETE) return;
+    const requester = { id: req.userId, role: req.user.role, organizationId: req.organizationId };
+    const payload = (req.payload ?? {}) as { auditId?: string | null; planItemId?: string | null };
+    if (req.action === TimeAdjustmentAction.ADD) {
+      await assertTimeAnchorsInOrg(this.prisma, requester, [payload]);
+      return;
+    }
+    const entry = req.timeEntryId ? await this.prisma.timeEntry.findUnique({ where: { id: req.timeEntryId } }) : null;
+    if (!entry) return; // «la hora ya no existe» lo resuelve la transacción
+    await assertTimeAnchorsInOrg(this.prisma, requester, [mergeEntryChanges(entry, payload as Record<string, never>)]);
   }
 
   /** Reglas del registro que valen igual para una hora nueva que para una editada. */
@@ -471,7 +496,21 @@ export class HoursCloseService {
       ? await this.prisma.timeEntry.findMany({ where: { id: { in: entryIds }, organizationId: user.organizationId }, select: ENTRY_PUBLIC_SELECT })
       : [];
     const byId = new Map(entries.map((e) => [e.id, e]));
-    return rows.map((r) => ({ ...r, entry: r.timeEntryId ? byId.get(r.timeEntryId) ?? null : null }));
+    // Modo investigación (2026-10-25): el gerente que no ve la investigación no lee la descripción de las horas de otros en ella
+    // (ni la del cambio pedido). El pedido propio se muestra completo.
+    const anchored = [...entries.map((e) => e.auditId), ...rows.map((r) => (r.payload as { auditId?: string } | null)?.auditId)];
+    const hidden = await hiddenAuditIds(this.prisma, anchored, user);
+    return rows.map((r) => {
+      const entry = r.timeEntryId ? byId.get(r.timeEntryId) ?? null : null;
+      const payloadAudit = (r.payload as { auditId?: string } | null)?.auditId;
+      const redact = r.userId !== user.id
+        && ((!!entry?.auditId && hidden.has(entry.auditId)) || (!!payloadAudit && hidden.has(payloadAudit)));
+      return {
+        ...r,
+        payload: redact && r.payload && typeof r.payload === 'object' ? { ...(r.payload as object), description: null } : r.payload,
+        entry: redact && entry ? { ...entry, description: null } : entry,
+      };
+    });
   }
 
   async decideAdjustment(id: string, dto: DecideAdjustmentDto, user: AuthUser) {
@@ -482,6 +521,7 @@ export class HoursCloseService {
     if (!settings.enabled) throw new BadRequestException('El cierre de horas no está activado en tu organización.');
     if (req.status !== 'PENDING') throw new ConflictException('Ese pedido ya fue resuelto.');
     assertCanCloseFor(user, req.user);
+    await this.assertRequesterCanStillSee(req);
     const period = { year: req.year, month: req.month };
     const now = new Date();
 

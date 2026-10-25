@@ -4,6 +4,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInvestigationAccess, AUDIT_ACCESS_SELECT } from '../common/utils/investigation-scope.util';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   ProcStatus, StepStatus, StepConclusion, TestType, AuditNature, AuditTiming,
@@ -85,11 +86,12 @@ export class AuditProceduresService {
   private async assertSectionAccess(sectionId: string, user: AuthUser) {
     const section = await this.prisma.paperSection.findUnique({
       where:   { id: sectionId },
-      include: { paper: { include: { audit: { select: { organizationId: true } } } } },
+      include: { paper: { include: { audit: { select: AUDIT_ACCESS_SELECT } } } },
     });
     if (!section) throw new NotFoundException('Sección no encontrada');
     if (section.paper.audit.organizationId !== user.organizationId)
       throw new ForbiddenException();
+    assertInvestigationAccess(section.paper.audit, user); // modo investigación (2026-10-25)
     return section;
   }
 
@@ -98,13 +100,14 @@ export class AuditProceduresService {
       where:   { id: procedureId },
       include: {
         section: {
-          include: { paper: { include: { audit: { select: { organizationId: true } } } } },
+          include: { paper: { include: { audit: { select: AUDIT_ACCESS_SELECT } } } },
         },
       },
     });
     if (!proc) throw new NotFoundException('Procedimiento no encontrado');
     if (proc.section.paper.audit.organizationId !== user.organizationId)
       throw new ForbiddenException();
+    assertInvestigationAccess(proc.section.paper.audit, user);
     return proc;
   }
 
@@ -136,7 +139,7 @@ export class AuditProceduresService {
         procedure: {
           include: {
             section: {
-              include: { paper: { include: { audit: { select: { organizationId: true } } } } },
+              include: { paper: { include: { audit: { select: AUDIT_ACCESS_SELECT } } } },
             },
           },
         },
@@ -145,6 +148,7 @@ export class AuditProceduresService {
     if (!step) throw new NotFoundException('Actividad no encontrada');
     if (step.procedure.section.paper.audit.organizationId !== user.organizationId)
       throw new ForbiddenException();
+    assertInvestigationAccess(step.procedure.section.paper.audit, user);
     return step;
   }
 

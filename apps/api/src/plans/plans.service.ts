@@ -5,6 +5,9 @@ import { TimeEntryCategory, TimeEntryLogAction } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
+import {
+  assertAuditVisible, assertInvestigationAccess, AUDIT_ACCESS_SELECT, canSeeAudit, RESTRICTED_AUDIT_TITLE, visibleAuditWhere,
+} from '../common/utils/investigation-scope.util';
 import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg } from '../timesheet/daily-hours-cap.util';
 import {
   assertPeriodsOpen, validateEntryRules, entrySnapshot, logEntryChange, TX_OPTIONS, ENTRY_PUBLIC_SELECT,
@@ -30,7 +33,8 @@ const ITEM_INCLUDE = {
   // vía linkAudit(). `actualHours` ya se mantiene sincronizado con TimeEntry desde
   // Fase 1 de "Horas y Rentabilidad" (apps/api/src/audits/audit-hours.util.ts).
   audit: {
-    select: { id: true, title: true, status: true, actualHours: true },
+    // isInvestigationMode + team: solo para decidir si se enmascara (ver `present`); no salen en la respuesta.
+    select: { id: true, title: true, status: true, actualHours: true, isInvestigationMode: true, team: { select: { userId: true } } },
   },
 } as const;
 
@@ -56,6 +60,23 @@ export class PlansService {
     const startedItems = items.filter((i) => i.audit).length;
     const realHours = items.reduce((s, i) => s + (i.audit?.actualHours ?? 0), 0);
     return { allocatedHours, remainingHours, utilizationPct, startedItems, realHours };
+  }
+
+  /**
+   * Modo investigación (2026-10-25): el ítem del plan vinculado a una investigación ajena al equipo del usuario muestra
+   * solo «Encargo restringido» (sin estado ni horas reales); el equipo, CAE, ADMIN y SUPER_ADMIN ven el encargo completo.
+   * Siempre se quita la lista del equipo de la respuesta.
+   */
+  private present<P extends { totalHours: number; items: Array<{ estimatedHours: number; audit?: any }> }>(plan: P, user: AuthUser) {
+    const capacity = this.calcCapacity(plan.totalHours, plan.items);
+    const items = plan.items.map((i) => {
+      const a = i.audit;
+      if (!a) return i;
+      if (!canSeeAudit(a, user)) return { ...i, audit: { id: a.id, title: RESTRICTED_AUDIT_TITLE, restricted: true } };
+      const { team: _team, ...visible } = a;
+      return { ...i, audit: visible };
+    });
+    return { ...plan, items, ...capacity };
   }
 
   private async getPlanOrThrow(id: string, user: AuthUser) {
@@ -87,7 +108,7 @@ export class PlansService {
       include: PLAN_INCLUDE,
     });
 
-    return { ...plan, ...this.calcCapacity(plan.totalHours, plan.items) };
+    return this.present(plan, user);
   }
 
   // ── List plans ─────────────────────────────────────────────────────────────
@@ -97,13 +118,13 @@ export class PlansService {
       include: PLAN_INCLUDE,
       orderBy: { year: 'desc' },
     });
-    return plans.map(p => ({ ...p, ...this.calcCapacity(p.totalHours, p.items) }));
+    return plans.map(p => this.present(p, user));
   }
 
   // ── Get one ────────────────────────────────────────────────────────────────
   async findOne(id: string, user: AuthUser) {
     const plan = await this.getPlanOrThrow(id, user);
-    return { ...plan, ...this.calcCapacity(plan.totalHours, plan.items) };
+    return this.present(plan, user);
   }
 
   // ── Update plan ────────────────────────────────────────────────────────────
@@ -121,7 +142,7 @@ export class PlansService {
       },
       include: PLAN_INCLUDE,
     });
-    return { ...updated, ...this.calcCapacity(updated.totalHours, updated.items) };
+    return this.present(updated, user);
   }
 
   // ── Approve plan ───────────────────────────────────────────────────────────
@@ -134,7 +155,7 @@ export class PlansService {
       data:  { status: 'APPROVED', approvedById: user.id, approvedAt: new Date() },
       include: PLAN_INCLUDE,
     });
-    return { ...updated, ...this.calcCapacity(updated.totalHours, updated.items) };
+    return this.present(updated, user);
   }
 
   // ── Activate plan ──────────────────────────────────────────────────────────
@@ -147,7 +168,7 @@ export class PlansService {
       data:  { status: 'ACTIVE' },
       include: PLAN_INCLUDE,
     });
-    return { ...updated, ...this.calcCapacity(updated.totalHours, updated.items) };
+    return this.present(updated, user);
   }
 
   // ── Close plan ─────────────────────────────────────────────────────────────
@@ -160,7 +181,7 @@ export class PlansService {
       data:  { status: 'CLOSED' },
       include: PLAN_INCLUDE,
     });
-    return { ...updated, ...this.calcCapacity(updated.totalHours, updated.items) };
+    return this.present(updated, user);
   }
 
   // ── Add item ───────────────────────────────────────────────────────────────
@@ -240,7 +261,7 @@ export class PlansService {
     if (!item) throw new NotFoundException('Item no encontrado en el plan');
 
     const audit = await this.prisma.audit.findFirst({
-      where: { id: dto.auditId, organizationId: user.organizationId },
+      where: { id: dto.auditId, ...visibleAuditWhere(user) }, // una investigación ajena se trata como si no existiera
       select: { id: true },
     });
     if (!audit) throw new NotFoundException('Encargo no encontrado en esta organización');
@@ -266,6 +287,8 @@ export class PlansService {
 
     const item = plan.items.find((i) => i.id === itemId);
     if (!item) throw new NotFoundException('Item no encontrado en el plan');
+    // Desvincular una investigación ajena la sacaría del plan sin que quien lo hace pueda ni verla.
+    if (item.audit) assertInvestigationAccess(item.audit, user);
 
     await this.prisma.auditPlanItem.update({
       where: { id: itemId },
@@ -280,7 +303,7 @@ export class PlansService {
   async getLinkableAudits(planId: string, user: AuthUser) {
     await this.getPlanOrThrow(planId, user);
     return this.prisma.audit.findMany({
-      where: { organizationId: user.organizationId, planItem: null },
+      where: { ...visibleAuditWhere(user), planItem: null },
       select: { id: true, title: true, status: true, actualHours: true },
       orderBy: { title: 'asc' },
     });
@@ -368,7 +391,7 @@ export class PlansService {
   // ── L2.8: Timesheet — create time entry ──────────────────────────────────────
   async createTimeEntry(dto: CreateTimeEntryDto, user: AuthUser) {
     assertValidHours(dto.hours);
-    await assertTimeAnchorsInOrg(this.prisma, user.organizationId, [dto]);
+    await assertTimeAnchorsInOrg(this.prisma, user, [dto]);
     await assertDailyHoursCap(this.prisma, user.id, new Map([[dto.workDate, dto.hours]]));
 
     // Misma comprobación de mes cerrado y misma bitácora que la captura general (TimesheetService): son las dos rutas que escriben horas.
@@ -399,6 +422,7 @@ export class PlansService {
 
   // ── L2.8: Timesheet — list entries for an audit ──────────────────────────────
   async getTimeEntries(auditId: string, user: AuthUser) {
+    await assertAuditVisible(this.prisma, auditId, user); // modo investigación (2026-10-25): quién trabajó y qué hizo
     return this.prisma.timeEntry.findMany({
       where:   { auditId, organizationId: user.organizationId },
       orderBy: { workDate: 'asc' },
@@ -408,6 +432,11 @@ export class PlansService {
 
   // ── L2.8: Timesheet — list entries for a plan item ───────────────────────────
   async getPlanItemTimeEntries(planItemId: string, user: AuthUser) {
+    const item = await this.prisma.auditPlanItem.findUnique({
+      where: { id: planItemId }, select: { plan: { select: { organizationId: true } }, audit: { select: AUDIT_ACCESS_SELECT } },
+    });
+    if (!item || item.plan.organizationId !== user.organizationId) throw new NotFoundException('Item no encontrado');
+    if (item.audit) assertInvestigationAccess(item.audit, user);
     return this.prisma.timeEntry.findMany({
       where:   { planItemId, organizationId: user.organizationId },
       orderBy: { workDate: 'asc' },
@@ -444,7 +473,8 @@ export class PlansService {
     if (auditIds.length === 0) return [];
 
     return this.prisma.finding.findMany({
-      where:   { auditId: { in: auditIds }, organizationId: user.organizationId },
+      // Modo investigación (2026-10-25): los hallazgos de una investigación ajena no se listan por el proyecto.
+      where:   { auditId: { in: auditIds }, organizationId: user.organizationId, audit: visibleAuditWhere(user) },
       orderBy: { createdAt: 'desc' },
       select:  {
         id: true, title: true, condition: true, severity: true,

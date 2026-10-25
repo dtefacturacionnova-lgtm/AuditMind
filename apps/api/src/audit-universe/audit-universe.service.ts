@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInOrg } from '../common/utils/tenant.util';
+import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
 import { CreateAuditableUnitDto as LegacyCreateDto } from './dto/create-auditable-unit.dto';
 import { UpdateAuditableUnitDto as LegacyUpdateDto } from './dto/update-auditable-unit.dto';
 import {
@@ -116,7 +117,8 @@ export class AuditUniverseService {
         orderBy: [{ inherentRiskScore: 'desc' }, { name: 'asc' }],
         include: {
           owner: { select: { id: true, name: true } },
-          _count: { select: { audits: true, auditableUnits: true } },
+          // Modo investigación (2026-10-25): el conteo de auditorías no incluye investigaciones ajenas al equipo.
+          _count: { select: { audits: { where: visibleAuditWhere(user) }, auditableUnits: true } },
           children: { select: { id: true, name: true } },
         },
       }),
@@ -143,6 +145,7 @@ export class AuditUniverseService {
           },
         },
         audits: {
+          where: visibleAuditWhere(user),
           orderBy: { createdAt: 'desc' }, take: 5,
           select: { id: true, title: true, status: true, startDate: true, endDate: true, auditOpinion: true },
         },
@@ -208,7 +211,7 @@ export class AuditUniverseService {
       orderBy: { name: 'asc' },
       include: {
         owner: { select: { id: true, name: true } },
-        _count: { select: { auditableUnits: true, audits: true } },
+        _count: { select: { auditableUnits: true, audits: { where: visibleAuditWhere(user) } } },
       },
     });
 

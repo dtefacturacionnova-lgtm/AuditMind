@@ -13,7 +13,7 @@ import { encryptSecret } from '../common/utils/signing-key.util';
 import { roleLevel } from '../common/utils/tenant.util';
 import { ClientInfo } from './request-info.util';
 import { CreateSignatureRequestDto, ResendSignatureRequestDto } from './dto/signature.dto';
-import { generateToken, hashToken, sha256Hex } from './signature-crypto.util';
+import { deriveSealMacKey, generateToken, hashToken, sha256Hex, verifySealedHashMac } from './signature-crypto.util';
 import { verifyChain } from './signature-event-chain.util';
 import { SignatureAdapterRegistry, SignatureDocumentAdapter } from './signature-documents';
 import { SignatureEventsService, TX_OPTIONS } from './signature-events.service';
@@ -379,6 +379,9 @@ export class SignatureRequestsService {
         const signed = await this.storage.download(r.signedPdfPath);
         checks.push({ name: 'pdf_sellado', ok: sha256Hex(signed) === r.signedPdfSha256 });
       } catch { checks.push({ name: 'pdf_sellado', ok: false, detail: 'No se pudo leer el archivo' }); }
+      // La huella registrada la escribió el sellado (tiene su MAC) y no alguien con escritura en la BD.
+      const macOk = verifySealedHashMac(deriveSealMacKey(this.policy.encryptionKey()), r.id, r.signedPdfSha256, r.signedPdfMacs);
+      checks.push({ name: 'huella_sellada_autenticada', ok: macOk, ...(macOk ? {} : { detail: 'La huella registrada no tiene un MAC válido' }) });
     }
     if (r.eventsHeadHash) checks.push({ name: 'cabeza_de_cadena_impresa_en_el_pdf', ok: chain.some((e) => e.hash === r.eventsHeadHash) });
     const ok = checks.every((c) => c.ok);

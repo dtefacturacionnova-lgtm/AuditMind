@@ -8,7 +8,7 @@ import { Prisma } from '@prisma/client';
  *  - transacciones que se DESHACEN si algo lanza, y que se serializan (como el FOR UPDATE sobre la solicitud),
  *  - restricciones únicas (tokenHash, verificationCode, requestId+seq),
  *  - updateMany condicional (la base de "gana una sola firma"),
- *  - { increment }, orden, take, select y el filtro por la relación `request`.
+ *  - { increment }, { push } en listas, orden, take, select y el filtro por la relación `request`.
  */
 type Row = Record<string, any>;
 
@@ -21,7 +21,7 @@ const DEFAULTS: Record<string, () => Row> = {
     otpLastSentAt: null, otpVerifiedAt: null, documentPages: null, consentVersion: null, consentText: null,
     signedName: null, signedRole: null, response: null, declineReason: null, signedAt: null, viewedAt: null,
     signerIp: null, signerUserAgent: null, verificationCode: null, sealStatus: 'NOT_APPLICABLE', sealAttempts: 0,
-    sealedAt: null, tsaUrlUsed: null, signedPdfPath: null, signedPdfSha256: null, eventsHeadHash: null, sentAt: null,
+    sealedAt: null, tsaUrlUsed: null, signedPdfPath: null, signedPdfSha256: null, signedPdfMacs: [], eventsHeadHash: null, sentAt: null,
     sendCount: 0, reminderEnabled: true, reminderSentAt: null, revokedAt: null, revokedById: null, revokedReason: null,
     createdAt: now(), updatedAt: now(),
   }),
@@ -121,7 +121,8 @@ export class FakeDb {
       if (v === undefined) continue;
       if (v === Prisma.DbNull || v === Prisma.JsonNull) row[k] = null;
       else if (v && typeof v === 'object' && !(v instanceof Date) && 'increment' in v) row[k] = (row[k] ?? 0) + v.increment;
-      else row[k] = v instanceof Date ? new Date(v.getTime()) : v;
+      else if (v && typeof v === 'object' && !Array.isArray(v) && 'push' in v) row[k] = [...(row[k] ?? []), ...[v.push].flat()];
+      else row[k] = v instanceof Date ? new Date(v.getTime()) : Array.isArray(v) ? [...v] : v;
     }
     if ('updatedAt' in row) row.updatedAt = now();
   }

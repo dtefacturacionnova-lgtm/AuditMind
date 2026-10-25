@@ -8,8 +8,8 @@ import { EmailService } from '../email/email.service';
 import { ClientInfo } from './request-info.util';
 import { DeclineDto, SignDto } from './dto/signature.dto';
 import {
-  deriveOtpKey, generateOtp, generateToken, generateVerificationCode, hashToken, hmacOtp, isWellFormedToken,
-  maskEmail, normalizeVerificationCode, sha256Hex, verifyOtp,
+  deriveOtpKey, deriveSealMacKey, generateOtp, generateToken, generateVerificationCode, hashToken, hmacOtp, isWellFormedToken,
+  maskEmail, normalizeVerificationCode, sha256Hex, verifyOtp, verifySealedHashMac,
 } from './signature-crypto.util';
 import { SignatureAdapterRegistry, SignatureDocumentAdapter } from './signature-documents';
 import { SignatureEventsService, TX_OPTIONS } from './signature-events.service';
@@ -470,18 +470,26 @@ export class SignaturePublicService {
     const r = await this.prisma.signatureRequest.findUnique({ where: { verificationCode: code } });
     if (!r) throw new NotFoundException('No encontramos un documento con ese código.');
 
+    // Candidatas: la huella actual y las de los eventos SEALED (la previa al sello de tiempo). Solo se publican las que
+    // tienen MAC válido: la columna y los eventos se pueden editar con escritura en la BD, la clave no está en ella.
+    const macKey = deriveSealMacKey(this.policy.encryptionKey());
     const sealed = await this.prisma.signatureEvent.findMany({ where: { requestId: r.id, type: 'SEALED' }, orderBy: { seq: 'asc' } });
-    const hashes = new Set<string>();
-    if (r.signedPdfSha256) hashes.add(r.signedPdfSha256);
+    const candidates = new Set<string>();
+    if (r.signedPdfSha256) candidates.add(r.signedPdfSha256);
     for (const e of sealed) {
       const sha = (e.detail as { sha256?: unknown } | null)?.sha256;
-      if (typeof sha === 'string') hashes.add(sha);
+      if (typeof sha === 'string') candidates.add(sha);
+    }
+    const accepted = [...candidates].filter((sha) => verifySealedHashMac(macKey, r.id, sha, r.signedPdfMacs));
+    if (accepted.length < candidates.size) {
+      // Sin evento en la bitácora: esta ruta es pública y cualquiera con el código la podría llenar de entradas.
+      this.logger.error(`INTEGRIDAD: /verificar descartó ${candidates.size - accepted.length} huella(s) sin MAC válido (solicitud ${r.id})`);
     }
     return publicVerifyView(r, {
       orgName: await this.orgName(r.organizationId),
       documentLabel: this.registry.find(r.documentType)?.label ?? 'Documento',
       sealFingerprint: await this.orgSeal.getFingerprintIfExists(r.organizationId),
-      acceptedHashes: [...hashes],
+      acceptedHashes: accepted,
     });
   }
 

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { buildHarness, INFO, makePdf, useClock, user } from './testing/harness';
-import { hashToken, sha256Hex } from './signature-crypto.util';
+import { deriveSealMacKey, hashToken, macSealedHash, sha256Hex } from './signature-crypto.util';
 import { verifyChain } from './signature-event-chain.util';
 import { CONSENT_VERSION, renderConsentText } from './legal-texts';
 
@@ -290,5 +290,58 @@ describe('Firma pública · verificación por código', () => {
     const { verificationCode } = await h.public.sign(token, session, SIGN, INFO);
     const view = await h.public.verify(verificationCode);
     expect(view).toMatchObject({ valid: true, sealing: true, acceptedHashes: [] });
+  });
+});
+
+/** Escritura directa en la BD (actor A8, o la contraseña de la BD filtrada): huellas y eventos se pueden editar; la clave no. */
+describe('Firma pública · verificación con la base de datos manipulada', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  async function sealedRequest(h = buildHarness(), targetId = 'conf1') {
+    const c = await h.create({ targetId });
+    const session = await h.openSession(c.token);
+    const seal = jest.spyOn(h.sealing, 'sealRequest').mockResolvedValue('SKIPPED');
+    const { verificationCode } = await h.public.sign(c.token, session, SIGN, INFO);
+    seal.mockRestore();
+    expect(await h.sealing.sealRequest(c.id)).toBe('SEALED');
+    const row = () => h.fake.requests.find((r) => r.id === c.id)!;
+    return { h, id: c.id, verificationCode, row, realSha: row().signedPdfSha256 as string };
+  }
+
+  it('una huella cambiada en la columna NO se publica (la auténtica, que sigue en el evento SEALED, sí)', async () => {
+    const { h, verificationCode, row, realSha } = await sealedRequest();
+    const forged = sha256Hex(await makePdf(9));
+    row().signedPdfSha256 = forged;
+    expect((await h.public.verify(verificationCode)).acceptedHashes).toEqual([realSha]);
+  });
+
+  it('un evento SEALED agregado con una huella inventada NO se publica, aunque la cadena siga íntegra', async () => {
+    const { h, id, verificationCode, realSha } = await sealedRequest();
+    const forged = sha256Hex(await makePdf(9));
+    // la bitácora no lleva clave: quien escribe en la BD puede agregar un evento bien encadenado
+    await h.events.appendStandalone(id, { type: 'SEALED', detail: { phase: 'timestamp', sha256: forged, tsa: 'http://timestamp.digicert.com' } });
+    expect(verifyChain(id, await h.events.listChain(id)).ok).toBe(true);
+    expect((await h.public.verify(verificationCode)).acceptedHashes).toEqual([realSha]);
+  });
+
+  it('copiar huella y MAC de OTRA solicitud no sirve: el MAC va ligado a la solicitud', async () => {
+    const a = await sealedRequest();
+    const b = await sealedRequest(a.h, 'conf2');
+    Object.assign(b.row(), { signedPdfSha256: a.realSha, signedPdfMacs: [...a.row().signedPdfMacs] });
+    const view = await a.h.public.verify(b.verificationCode);
+    expect(view.acceptedHashes).not.toContain(a.realSha);
+    expect(view.acceptedHashes).toEqual([]); // y b perdió su propio MAC: nada que publicar
+  });
+
+  it('sellada sin MAC (anterior a este cambio, o MAC borrado): no publica ninguna huella y no dice «sellando»', async () => {
+    const { h, verificationCode, row } = await sealedRequest();
+    row().signedPdfMacs = [];
+    expect(await h.public.verify(verificationCode)).toMatchObject({ valid: true, sealing: false, acceptedHashes: [] });
+  });
+
+  it('un MAC calculado con otra clave (p. ej. sin la ENCRYPTION_KEY real) no se acepta', async () => {
+    const { h, id, verificationCode, row, realSha } = await sealedRequest();
+    row().signedPdfMacs = [macSealedHash(deriveSealMacKey('otra-clave-que-no-es-la-del-servidor!!'), id, realSha)];
+    expect((await h.public.verify(verificationCode)).acceptedHashes).toEqual([]);
   });
 });

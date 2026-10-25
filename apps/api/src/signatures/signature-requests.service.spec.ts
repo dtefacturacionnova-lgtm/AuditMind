@@ -267,6 +267,27 @@ describe('Firma interna · archivos e integridad', () => {
     expect((await h.requests.integrity(mgr, id)).checks.find((c) => c.name === 'documento_original')).toMatchObject({ ok: false });
   });
 
+  it('integridad de una solicitud sellada: la huella registrada debe tener su MAC (si alguien la cambió en la BD, falla)', async () => {
+    const h = buildHarness();
+    const { id } = await h.openSignedRequest();
+    expect(await h.sealing.sealRequest(id)).toBe('SEALED');
+    const mgr = user('AUDIT_MANAGER');
+    const fine = await h.requests.integrity(mgr, id);
+    expect(fine.ok).toBe(true);
+    expect(fine.checks.find((c) => c.name === 'huella_sellada_autenticada')).toMatchObject({ ok: true });
+
+    // alguien reemplaza el PDF sellado Y actualiza la huella en la base: el archivo «coincide», pero sin MAC válido
+    const row = h.fake.requests.find((r) => r.id === id)!;
+    const forged = await makePdf(6);
+    h.storage.files.set(row.signedPdfPath, forged);
+    row.signedPdfSha256 = sha256Hex(forged);
+    const bad = await h.requests.integrity(mgr, id);
+    expect(bad.ok).toBe(false);
+    expect(bad.checks.find((c) => c.name === 'pdf_sellado')).toMatchObject({ ok: true });
+    expect(bad.checks.find((c) => c.name === 'huella_sellada_autenticada')).toMatchObject({ ok: false });
+    expect(h.fake.events.at(-1)).toMatchObject({ type: 'INTEGRITY_FAILED', detail: { failed: ['huella_sellada_autenticada'] } });
+  });
+
   it('reseal: solo una solicitud firmada con sellado pendiente o fallido; dispara el sellado', async () => {
     const h = buildHarness();
     const { id } = await h.create();

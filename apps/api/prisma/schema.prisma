@@ -3468,6 +3468,9 @@ model SignatureRequest {
   tsaUrlUsed       String?
   signedPdfPath    String?
   signedPdfSha256  String?
+  // HMAC-SHA256 (clave HKDF de ENCRYPTION_KEY) de "<id>|<sha256>", uno por huella aceptada: /verificar solo publica
+  // huellas cuyo MAC verifica (quien escriba en la BD sin la clave no puede fabricarlas). SQL: 2026-10-firma-mac-huellas.sql
+  signedPdfMacs    String[]              @default([])
   eventsHeadHash   String?
   // envío
   sentAt          DateTime?

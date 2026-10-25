@@ -1,4 +1,4 @@
-import type { FormField } from './types';
+import type { FormField, VerifyResult } from './types';
 
 /** Límites de adjuntos (los mismos que impone la API: docs/firma-externa-por-enlace.md §12). */
 export const MAX_FILES = 5;
@@ -127,6 +127,15 @@ export async function sha256Hex(data: ArrayBuffer): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 export const sameHash = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * ¿Se puede comparar la copia en /verificar? La API solo publica huellas autenticadas por el servidor (MAC): un
+ * documento ya sellado sin ninguna es señal de que la huella guardada no es confiable, no de que «aún se sella».
+ */
+export function verifyHashState(r: Pick<VerifyResult, 'sealing' | 'acceptedHashes'>): 'sealing' | 'ready' | 'unverifiable' {
+  if (r.acceptedHashes.length > 0) return 'ready';
+  return r.sealing ? 'sealing' : 'unverifiable';
+}
 
 // ─── Fechas (hora de El Salvador) ────────────────────────────────────────────
 const SV = 'America/El_Salvador';

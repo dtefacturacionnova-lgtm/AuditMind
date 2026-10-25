@@ -48,6 +48,29 @@ export function verifyOtp(code: string, key: Buffer, requestId: string, storedHa
   return safeEqualHex(hmacOtp(code, key, requestId), storedHash);
 }
 
+// ─── MAC de las huellas del PDF sellado (§8, §10) ───────────────────────────
+/**
+ * Clave PROPIA del MAC de las huellas: misma ENCRYPTION_KEY, otra `info` (no comparte clave con los códigos).
+ * Sin ella, quien pueda escribir en la BD no puede fabricar una huella que /verificar publique.
+ */
+export function deriveSealMacKey(encryptionKey: string): Buffer {
+  if (!encryptionKey) throw new Error('ENCRYPTION_KEY no configurada');
+  return Buffer.from(hkdfSync('sha256', encryptionKey, 'auditmind-signature', 'sealed-pdf-mac-v1', 32));
+}
+
+/** HMAC de la huella, ligado a la solicitud: el MAC de una no sirve para otra. */
+export const macSealedHash = (key: Buffer, requestId: string, sha256: string): string =>
+  createHmac('sha256', key).update(`${requestId}|${sha256}`).digest('hex');
+
+/** ¿Alguno de los MAC guardados corresponde a esta huella de esta solicitud? Cada comparación, en tiempo constante. */
+export function verifySealedHashMac(key: Buffer, requestId: string, sha256: string, macs: readonly string[] | null | undefined): boolean {
+  if (typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256) || !Array.isArray(macs)) return false;
+  const expected = macSealedHash(key, requestId, sha256);
+  let ok = false;
+  for (const m of macs) ok = safeEqualHex(expected, m) || ok; // sin cortar al primero que coincide
+  return ok;
+}
+
 // ─── Código público de verificación del PDF (§5, §10) ───────────────────────
 // Base32 de Crockford (sin I, L, O, U): 10 bytes = 80 bits = 16 caracteres.
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';

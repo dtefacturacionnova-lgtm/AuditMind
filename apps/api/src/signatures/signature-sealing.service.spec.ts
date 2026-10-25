@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { PDFDocument } from 'pdf-lib';
-import { buildHarness, INFO, makePdf, user } from './testing/harness';
-import { sha256Hex } from './signature-crypto.util';
+import { buildHarness, INFO, makePdf, OTP_KEY, user } from './testing/harness';
+import { deriveSealMacKey, macSealedHash, sha256Hex } from './signature-crypto.util';
 import { verifyChain } from './signature-event-chain.util';
 import { MAX_SEAL_ATTEMPTS } from './signature-sealing.service';
 
@@ -207,6 +207,55 @@ describe('Sellado', () => {
     await h.public.decline(token, session, { reason: 'No corresponde' }, INFO);
     expect(await h.sealing.sealRequest(id)).toBe('SKIPPED');
     expect(h.pdfTools.signCalls).toHaveLength(0);
+  });
+
+  it('guarda el MAC de cada huella aceptada: la del sellado y, tras el sello de tiempo posterior, también la final', async () => {
+    const { h, id, row } = await signed();
+    const key = deriveSealMacKey(OTP_KEY);
+    h.pdfTools.failTsa.add('http://timestamp.digicert.com').add('http://timestamp.sectigo.com');
+    expect(await h.sealing.sealRequest(id)).toBe('SEALED');
+    const firstSha = row().signedPdfSha256;
+    expect(row().signedPdfMacs).toEqual([macSealedHash(key, id, firstSha)]);
+    // el MAC NO va en la bitácora (encadenada: no se puede editar después) ni en ninguna vista
+    expect(JSON.stringify(h.fake.events)).not.toContain(row().signedPdfMacs[0]);
+
+    h.pdfTools.failTsa.clear();
+    expect(await h.sealing.retryTimestamp(id)).toBe(true);
+    expect(row().signedPdfMacs).toEqual([macSealedHash(key, id, firstSha), macSealedHash(key, id, row().signedPdfSha256)]);
+    expect(verifyChain(id, await h.events.listChain(id)).ok).toBe(true);
+  });
+
+  it('sin ENCRYPTION_KEY no sella (se reintenta) y no gasta Chromium ni Stirling: una huella sin MAC nunca se publicaría', async () => {
+    const { h, id, row } = await signed();
+    const get = h.config.get;
+    jest.spyOn(h.config, 'get').mockImplementation((k: any, d?: any) => (k === 'ENCRYPTION_KEY' ? '' : get(k, d)));
+    const rendersBefore = h.pdf.calls; // el documento congelado ya se generó al crear la solicitud
+    expect(await h.sealing.sealRequest(id)).toBe('RETRY');
+    expect(row()).toMatchObject({ sealStatus: 'PENDING', signedPdfSha256: null, signedPdfMacs: [] });
+    expect(h.pdf.calls).toBe(rendersBefore);
+    expect(h.pdfTools.signCalls).toHaveLength(0);
+  });
+
+  it('el sello de tiempo pendiente NO legitima un archivo al que alguien apuntó ruta y huella en la BD (sin MAC)', async () => {
+    const { h, id, row } = await signed();
+    h.pdfTools.failTsa.add('http://timestamp.digicert.com').add('http://timestamp.sectigo.com');
+    expect(await h.sealing.sealRequest(id)).toBe('SEALED');
+    const macsBefore = [...row().signedPdfMacs];
+    h.pdfTools.failTsa.clear();
+    h.pdfTools.tsaCalls.length = 0;
+
+    // con escritura en la BD: ruta y huella apuntan a otro archivo del bucket (la huella coincide con ese archivo)
+    const forged = await makePdf(3);
+    h.storage.files.set('signature-requests/aud1/otra/forjado.pdf', forged);
+    Object.assign(row(), { signedPdfPath: 'signature-requests/aud1/otra/forjado.pdf', signedPdfSha256: sha256Hex(forged) });
+
+    expect(await h.sealing.retryTimestamp(id)).toBe(false);
+    expect(h.pdfTools.tsaCalls).toHaveLength(0); // ni siquiera se pidió el sello de tiempo
+    expect(row().tsaUrlUsed).toBeNull();
+    expect(row().signedPdfMacs).toEqual(macsBefore);
+    expect(h.fake.events.at(-1)).toMatchObject({ type: 'INTEGRITY_FAILED', detail: { phase: 'timestamp', reason: 'la huella del PDF sellado no está autenticada' } });
+    expect(h.email.sendSignatureIntegrityAlert).toHaveBeenCalled();
+    expect((await h.public.verify(row().verificationCode)).acceptedHashes).not.toContain(sha256Hex(forged));
   });
 
   it('si falla el gancho posterior (afterSealed) la firma y el sello NO se pierden', async () => {

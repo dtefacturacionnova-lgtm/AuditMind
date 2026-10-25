@@ -1,6 +1,6 @@
 import {
   buildResponse, isFieldRequired, fileProblem, formatBytes, shouldUseCanvasViewer, formatDateTimeSv, formatVerificationInput, isCompleteVerificationCode,
-  MAX_FILE_BYTES, MAX_FILES, parseAmount, sameHash, sha256Hex, validateSigner,
+  MAX_FILE_BYTES, MAX_FILES, parseAmount, sameHash, sha256Hex, validateSigner, verifyHashState,
 } from './helpers';
 import type { FormField } from './types';
 
@@ -116,6 +116,11 @@ describe('huella SHA-256', () => {
   it('compara sin importar mayúsculas ni espacios', () => {
     expect(sameHash(' ABC123 ', 'abc123')).toBe(true);
     expect(sameHash('abc123', 'abc124')).toBe(false);
+  });
+  it('sin huellas: «sellando» solo si aún se sella; ya sellado sin huella autenticada no se puede comprobar', () => {
+    expect(verifyHashState({ sealing: true, acceptedHashes: [] })).toBe('sealing');
+    expect(verifyHashState({ sealing: false, acceptedHashes: [] })).toBe('unverifiable');
+    expect(verifyHashState({ sealing: false, acceptedHashes: ['a'.repeat(64)] })).toBe('ready');
   });
 });
 

@@ -11,7 +11,7 @@ import { SignatureAdapterRegistry } from './signature-documents';
 import { SignatureEventsService, TX_OPTIONS } from './signature-events.service';
 import { requestFolder, SignatureStorageService } from './signature-storage.service';
 import { renderEvidenceBody } from './evidence-sheet';
-import { sha256Hex } from './signature-crypto.util';
+import { deriveSealMacKey, macSealedHash, sha256Hex, verifySealedHashMac } from './signature-crypto.util';
 import { verifyChain } from './signature-event-chain.util';
 import { CONSENT_VERSION } from './legal-texts';
 
@@ -47,6 +47,11 @@ export class SignatureSealingService {
     private readonly registry: SignatureAdapterRegistry,
     private readonly config: ConfigService,
   ) {}
+
+  /** Clave del MAC de las huellas. Sin ENCRYPTION_KEY no se sella: una huella sin MAC nunca se publicaría. */
+  private macKey(): Buffer {
+    return deriveSealMacKey(this.config.get<string>('ENCRYPTION_KEY', ''));
+  }
 
   private tsaUrls(): string[] {
     return (this.config.get<string>('SIGNATURE_TSA_URLS') || DEFAULT_TSA_URLS).split(',').map((s) => s.trim()).filter(Boolean);
@@ -95,6 +100,7 @@ export class SignatureSealingService {
   }
 
   private async doSeal(req: SignatureRequest): Promise<SealOutcome> {
+    const macKey = this.macKey(); // antes del trabajo pesado: sin clave, falla (y se reintenta) sin gastar Chromium ni Stirling
     // 1. Integridad ANTES de sellar: bitácora íntegra y PDF original intacto.
     const chain = await this.events.listChain(req.id);
     const verification = verifyChain(req.id, chain);
@@ -163,10 +169,15 @@ export class SignatureSealingService {
     const signedPath = `${requestFolder(req.id, req.organizationId, req.auditId)}/signed.pdf`;
     await this.storage.upload(signedPath, finalPdf, 'application/pdf', true);
 
+    // El MAC va en la misma escritura que la huella. Se REEMPLAZA la lista: un sellado nuevo sobrescribe signed.pdf, así
+    // que las huellas de un intento anterior ya no corresponden a ningún archivo.
     await this.prisma.$transaction(async (tx) => {
       await tx.signatureRequest.update({
         where: { id: req.id },
-        data: { sealStatus: 'SEALED', sealedAt: new Date(), tsaUrlUsed: tsa, signedPdfPath: signedPath, signedPdfSha256: finalSha, eventsHeadHash: headHash },
+        data: {
+          sealStatus: 'SEALED', sealedAt: new Date(), tsaUrlUsed: tsa, signedPdfPath: signedPath, signedPdfSha256: finalSha,
+          signedPdfMacs: [macSealedHash(macKey, req.id, finalSha)], eventsHeadHash: headHash,
+        },
       });
       await this.events.append(tx, req.id, { type: 'SEALED', detail: { sha256: finalSha, tsa, headHash } });
     }, TX_OPTIONS);
@@ -233,13 +244,19 @@ export class SignatureSealingService {
         where: { id, status: 'SIGNED', sealStatus: 'SEALED', tsaUrlUsed: null, sealAttempts: { lt: MAX_TIMESTAMP_ATTEMPTS } },
       });
       if (!req?.signedPdfPath) return false;
+      const macKey = this.macKey();
       await this.prisma.signatureRequest.update({ where: { id }, data: { sealAttempts: { increment: 1 } } });
       const current = await this.storage.download(req.signedPdfPath);
       // Se sella el tiempo SOLO sobre el PDF que se selló: si el archivo guardado ya no es ese, no se "legitima" otro
-      // con una huella nueva (revisión de seguridad F5b, 2026-10-19).
-      if (!req.signedPdfSha256 || sha256Hex(current) !== req.signedPdfSha256) {
-        this.logger.error(`INTEGRIDAD: el PDF sellado de ${id} cambió; no se aplica el sello de tiempo`);
-        await this.events.appendStandalone(id, { type: 'INTEGRITY_FAILED', detail: { phase: 'timestamp', reason: 'la huella del PDF sellado no coincide' } });
+      // con una huella nueva (revisión de seguridad F5b, 2026-10-19). Y la huella registrada debe tener su MAC: si no,
+      // alguien con escritura en la BD podría apuntar ruta y huella a otro archivo y obtener un MAC válido de su versión
+      // con sello de tiempo.
+      const reason = !req.signedPdfSha256 || sha256Hex(current) !== req.signedPdfSha256 ? 'la huella del PDF sellado no coincide'
+        : !verifySealedHashMac(macKey, id, req.signedPdfSha256, req.signedPdfMacs) ? 'la huella del PDF sellado no está autenticada'
+        : null;
+      if (reason) {
+        this.logger.error(`INTEGRIDAD: ${reason} (solicitud ${id}); no se aplica el sello de tiempo`);
+        await this.events.appendStandalone(id, { type: 'INTEGRITY_FAILED', detail: { phase: 'timestamp', reason } });
         await this.prisma.signatureRequest.update({ where: { id }, data: { sealAttempts: MAX_TIMESTAMP_ATTEMPTS } }); // no reintentar
         await this.notifyCreator(req, 'integrity');
         return false;
@@ -249,7 +266,8 @@ export class SignatureSealingService {
       const sha = sha256Hex(pdf);
       await this.storage.upload(req.signedPdfPath, pdf, 'application/pdf', true);
       await this.prisma.$transaction(async (tx) => {
-        await tx.signatureRequest.update({ where: { id }, data: { tsaUrlUsed: tsa, signedPdfSha256: sha } });
+        // `push`: la huella anterior (sin sello de tiempo) sigue siendo válida para quien ya descargó esa copia.
+        await tx.signatureRequest.update({ where: { id }, data: { tsaUrlUsed: tsa, signedPdfSha256: sha, signedPdfMacs: { push: macSealedHash(macKey, id, sha) } } });
         await this.events.append(tx, id, { type: 'SEALED', detail: { phase: 'timestamp', sha256: sha, tsa } });
       }, TX_OPTIONS);
       this.logger.log(`Sello de tiempo aplicado a la solicitud ${id} (${tsa})`);

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { BadgeCheck, FileSearch, ShieldAlert, Upload } from 'lucide-react';
 import { SignatureApiError, signatureApi } from '@/lib/signature/api';
-import { formatBytes, formatDateTimeSv, formatVerificationInput, isCompleteVerificationCode, sameHash, sha256Hex } from '@/lib/signature/helpers';
+import { formatBytes, formatDateTimeSv, formatVerificationInput, isCompleteVerificationCode, sameHash, sha256Hex, verifyHashState } from '@/lib/signature/helpers';
 import type { VerifyResult } from '@/lib/signature/types';
 import { Alert, Card, Heading, Spinner, inputClass, primaryButton } from './ui';
 
@@ -144,8 +144,13 @@ export function VerifyDocument() {
               <p className="mb-4 text-sm text-gray-600">
                 Selecciona el PDF firmado que tienes. Calculamos su huella <strong>en tu navegador</strong> y la comparamos con la registrada: el archivo no se sube a ningún servidor.
               </p>
-              {result.acceptedHashes.length === 0 ? (
+              {verifyHashState(result) === 'sealing' ? (
                 <Alert tone="amber">El documento todavía se está sellando, así que aún no hay una huella contra la cual comparar. Vuelve a intentarlo en unos minutos.</Alert>
+              ) : verifyHashState(result) === 'unverifiable' ? (
+                <Alert tone="red">
+                  <p className="flex items-center gap-2 font-semibold"><ShieldAlert className="h-4 w-4" aria-hidden="true" /> No podemos confirmar la huella registrada de este documento.</p>
+                  <p className="mt-1">Por eso no es posible comprobar tu copia aquí. No la consideres auténtica sin consultar a quien la emitió.</p>
+                </Alert>
               ) : (
                 <FileDrop onFile={(f) => void compareFile(f)} />
               )}

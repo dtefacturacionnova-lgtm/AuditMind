@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   CalendarDays, Plus, Trash2, Clock, CheckCircle2, Zap, Lock,
   TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Edit2, Save, X,
@@ -14,7 +14,7 @@ import { apiClient } from '@/lib/api-client';
 import { Header } from '@/components/layout/Header';
 import {
   usePlan, useApprovePlan, useActivatePlan, useClosePlan,
-  useUpdatePlanItem, useRemovePlanItem, useUpdatePlan,
+  useUpdatePlanItem, useRemovePlanItem, useUpdatePlan, useAddPlanAmendment, useDeletePlan,
   useImportFromProjects, usePlanProjectCandidates,
   useLinkableAudits, useLinkAudit, useUnlinkAudit,
   PLAN_STATUS_CONFIG, PRIORITY_CONFIG, RISK_LEVEL_CONFIG,
@@ -26,6 +26,13 @@ import { cn } from '@/lib/utils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatDate(d?: string | null) {
+  if (!d) return '—';
+  // Las fechas tentativas se guardan como medianoche UTC: en la zona horaria local (UTC−6) se mostraban un día antes.
+  return new Date(d).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+/** Momento exacto (aprobación): en la zona horaria del navegador. */
+function formatDateTime(d?: string | null) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
 }
@@ -83,8 +90,10 @@ function ImportFromBancoPanel({ planId, planYear, onClose }: { planId: string; p
 
   const handleImport = async () => {
     if (selected.size === 0) return;
-    await importMut.mutateAsync([...selected]);
-    onClose();
+    try {
+      await importMut.mutateAsync([...selected]);
+      onClose();
+    } catch { /* el motivo se muestra abajo (importMut.error) */ }
   };
 
   const rlCfg = (level?: string) => RISK_LEVEL_CONFIG[level ?? ''] ?? { label: level ?? '—', color: 'text-gray-500', bg: 'bg-gray-100' };
@@ -235,6 +244,11 @@ function ImportFromBancoPanel({ planId, planYear, onClose }: { planId: string; p
           )}
         </div>
 
+        {importMut.isError && (
+          <p role="alert" className="mx-4 mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
+            {(importMut.error as Error)?.message ?? 'No se pudo importar'}
+          </p>
+        )}
         {/* footer */}
         <div className="border-t border-gray-200 p-4 flex gap-3">
           <button
@@ -293,11 +307,13 @@ function QuickAddProjectForm({ planId, existingProjectIds, onAdded }: {
 
   const handleAdd = async () => {
     if (!selectedId) return;
-    await importMut.mutateAsync([selectedId]);
-    setSelectedId('');
-    setSearch('');
-    setOpen(false);
-    onAdded();
+    try {
+      await importMut.mutateAsync([selectedId]);
+      setSelectedId('');
+      setSearch('');
+      setOpen(false);
+      onAdded();
+    } catch { /* el motivo se muestra abajo (importMut.error) */ }
   };
 
   const RISK_COLORS: Record<string, string> = {
@@ -349,6 +365,7 @@ function QuickAddProjectForm({ planId, existingProjectIds, onAdded }: {
         </div>
       )}
       <div className="flex gap-2 pt-1">
+        {importMut.isError && <p role="alert" className="self-center text-xs text-red-600">{(importMut.error as Error)?.message ?? 'No se pudo agregar'}</p>}
         <button onClick={handleAdd} disabled={!selectedId || importMut.isPending}
           className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
           {importMut.isPending ? 'Agregando…' : 'Agregar al plan'}
@@ -381,7 +398,7 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
   const removeItem = useRemovePlanItem(planId);
   const linkAudit   = useLinkAudit(planId);
   const unlinkAudit = useUnlinkAudit(planId);
-  const { data: linkableAudits = [] } = useLinkableAudits(planId);
+  const { data: linkableAudits = [] } = useLinkableAudits(planId, canEdit);
   const pr = PRIORITY_CONFIG[item.priority] ?? PRIORITY_CONFIG[2];
 
   const restricted = !!item.audit?.restricted; // investigación ajena al equipo: sin horas, sin enlace
@@ -393,10 +410,13 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
 
   const handleLink = async () => {
     if (!pickedAuditId) return;
-    await linkAudit.mutateAsync({ itemId: item.id, auditId: pickedAuditId });
-    setLinking(false);
-    setPickedAuditId('');
+    try {
+      await linkAudit.mutateAsync({ itemId: item.id, auditId: pickedAuditId });
+      setLinking(false);
+      setPickedAuditId('');
+    } catch { /* el motivo se muestra en el ítem */ }
   };
+  const itemError = (linkAudit.error ?? unlinkAudit.error ?? removeItem.error ?? updateItem.error) as Error | null;
 
   const isFromProject = !!item.auditProjectId;
   const displayName  = isFromProject ? (item.auditProject?.name ?? '—') : (item.auditEntity?.name ?? '—');
@@ -494,6 +514,7 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
           )}
         </div>
 
+        {itemError && <p role="alert" className="mt-1 text-xs text-red-600">{itemError.message}</p>}
         {linking && (
           <div className="flex items-center gap-1.5 mt-1.5">
             <select
@@ -573,7 +594,7 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
                 <button
                   onClick={async () => {
                     if (confirm('¿Desvincular este encargo del ítem del plan? Las horas reales dejarán de mostrarse aquí.')) {
-                      await unlinkAudit.mutateAsync(item.id);
+                      await unlinkAudit.mutateAsync(item.id).catch(() => undefined);
                     }
                   }}
                   disabled={unlinkAudit.isPending}
@@ -593,7 +614,7 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
               <button
                 onClick={async () => {
                   if (confirm(`¿Quitar "${displayName}" del plan?`)) {
-                    await removeItem.mutateAsync(item.id);
+                    await removeItem.mutateAsync(item.id).catch(() => undefined);
                   }
                 }}
                 disabled={removeItem.isPending}
@@ -676,13 +697,13 @@ const GANTT_RISK_COLORS: Record<string, string> = {
 };
 
 function getQuarter(date: Date): 'Q1' | 'Q2' | 'Q3' | 'Q4' {
-  const m = date.getMonth(); // 0–11
+  const m = date.getUTCMonth(); // 0–11 (las fechas del plan son medianoche UTC: con la hora local un 1 de enero caía en el trimestre anterior)
   return m < 3 ? 'Q1' : m < 6 ? 'Q2' : m < 9 ? 'Q3' : 'Q4';
 }
 
 function QuarterlyTimeline({ items, year }: { items: PlanItem[]; year: number }) {
-  const yearStart = new Date(year, 0, 1).getTime();
-  const yearEnd   = new Date(year, 11, 31, 23, 59).getTime();
+  const yearStart = Date.UTC(year, 0, 1);
+  const yearEnd   = Date.UTC(year, 11, 31, 23, 59);
   const yearMs    = yearEnd - yearStart;
 
   // Only items with both dates
@@ -1025,22 +1046,26 @@ function CapacityHeatmap({ items, year }: { items: PlanItem[]; year: number }) {
       const name = item.responsibleName;
       if (!map[name]) map[name] = {};
 
-      const start = new Date(item.tentativeStartDate);
-      const end = new Date(item.tentativeEndDate);
-      const totalDays = Math.max((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24), 1);
+      // Días calendario en UTC (las fechas son medianoche UTC); inicio y fin inclusivos. Solo cuentan los meses del año del plan: antes
+      // las horas de un diciembre anterior se sumaban a «Dic» y el reparto sumaba un día de más.
+      const DAY = 86_400_000;
+      const s0 = new Date(item.tentativeStartDate);
+      const e0 = new Date(item.tentativeEndDate);
+      const startMs = Date.UTC(s0.getUTCFullYear(), s0.getUTCMonth(), s0.getUTCDate());
+      const endMs = Date.UTC(e0.getUTCFullYear(), e0.getUTCMonth(), e0.getUTCDate());
+      if (endMs < startMs) return;
+      const totalDays = (endMs - startMs) / DAY + 1;
 
       // Distribute hours proportionally across months
-      let cur = new Date(start);
-      while (cur <= end) {
-        const mo = cur.getMonth();
-        const monthEnd = new Date(cur.getFullYear(), mo + 1, 0);
-        const daysInSlice = Math.min(
-          (monthEnd.getTime() - cur.getTime()) / (1000 * 60 * 60 * 24) + 1,
-          (end.getTime() - cur.getTime()) / (1000 * 60 * 60 * 24) + 1,
-        );
-        const hoursForMonth = (daysInSlice / totalDays) * item.estimatedHours;
-        map[name][mo] = (map[name][mo] ?? 0) + hoursForMonth;
-        cur = new Date(cur.getFullYear(), mo + 1, 1);
+      let curMs = startMs;
+      while (curMs <= endMs) {
+        const cur = new Date(curMs);
+        const y = cur.getUTCFullYear();
+        const mo = cur.getUTCMonth();
+        const sliceEnd = Math.min(Date.UTC(y, mo + 1, 0), endMs);
+        const daysInSlice = (sliceEnd - curMs) / DAY + 1;
+        if (y === year) map[name][mo] = (map[name][mo] ?? 0) + (daysInSlice / totalDays) * item.estimatedHours;
+        curMs = Date.UTC(y, mo + 1, 1);
       }
     });
 
@@ -1591,22 +1616,18 @@ function AnalysisTab({ plan }: { plan: AuditPlan }) {
 // ─── AddAmendmentForm ─────────────────────────────────────────────────────────
 function AddAmendmentForm({ planId }: { planId: string }) {
   const [desc, setDesc] = useState('');
-  const updatePlan = useUpdatePlan(planId);
-  const { data: plan } = usePlan(planId);
-  const { user } = useUser();
+  const addAmendment = useAddPlanAmendment(planId);
   const [open, setOpen] = useState(false);
 
+  // El servidor agrega el renglón con su fecha y la persona real (antes el navegador mandaba el historial completo y dos personas
+  // registrando a la vez se pisaban; cualquiera podía reescribirlo).
   const handleAdd = async () => {
-    if (!desc.trim()) return;
-    const existing = (plan?.amendments as any[]) ?? [];
-    const newEntry = {
-      date: new Date().toISOString(),
-      description: desc.trim(),
-      approvedBy: user?.name ?? 'Sistema',
-    };
-    await updatePlan.mutateAsync({ amendments: [...existing, newEntry] as any });
-    setDesc('');
-    setOpen(false);
+    if (desc.trim().length < 5) return;
+    try {
+      await addAmendment.mutateAsync(desc.trim());
+      setDesc('');
+      setOpen(false);
+    } catch { /* el motivo se muestra abajo */ }
   };
 
   if (!open) return (
@@ -1626,7 +1647,8 @@ function AddAmendmentForm({ planId }: { planId: string }) {
         className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
         onKeyDown={e => e.key === 'Enter' && handleAdd()}
       />
-      <button onClick={handleAdd} disabled={!desc.trim() || updatePlan.isPending}
+      {addAmendment.isError && <span role="alert" className="text-xs text-red-600">{(addAmendment.error as Error)?.message}</span>}
+      <button onClick={handleAdd} disabled={desc.trim().length < 5 || addAmendment.isPending}
         className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg disabled:opacity-50">
         Guardar
       </button>
@@ -1638,13 +1660,71 @@ function AddAmendmentForm({ planId }: { planId: string }) {
   );
 }
 
+// ─── Nombre y capacidad del plan + borrar el borrador ─────────────────────────
+function PlanBasics({ plan, canEdit, canDelete }: { plan: AuditPlan; canEdit: boolean; canDelete: boolean }) {
+  const router = useRouter();
+  const updatePlan = useUpdatePlan(plan.id);
+  const deletePlan = useDeletePlan();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(plan.name);
+  const [hours, setHours] = useState(String(plan.totalHours ?? 0));
+
+  if (!canEdit && !canDelete) return null;
+  const hoursNum = Number(hours);
+  const valid = name.trim().length >= 3 && Number.isFinite(hoursNum) && hoursNum >= 0;
+
+  const save = async () => {
+    try {
+      await updatePlan.mutateAsync({ name: name.trim(), totalHours: hoursNum });
+      setOpen(false);
+    } catch { /* el motivo se muestra abajo */ }
+  };
+  const remove = async () => {
+    if (!confirm(`¿Eliminar el plan ${plan.year}? Es un borrador y no se puede recuperar.`)) return;
+    try {
+      await deletePlan.mutateAsync(plan.id);
+      router.push('/dashboard/plans');
+    } catch { /* el motivo se muestra abajo */ }
+  };
+  const err = (updatePlan.error ?? deletePlan.error) as Error | null;
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2" data-no-print>
+      {canEdit && !open && (
+        <button onClick={() => { setName(plan.name); setHours(String(plan.totalHours ?? 0)); setOpen(true); }}
+          className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+          <Edit2 className="w-3 h-3" /> Editar nombre y horas totales
+        </button>
+      )}
+      {open && (
+        <>
+          <input value={name} onChange={e => setName(e.target.value)} aria-label="Nombre del plan"
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs w-64 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="number" min={0} value={hours} onChange={e => setHours(e.target.value)} aria-label="Horas totales del plan"
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs w-28 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <button onClick={save} disabled={!valid || updatePlan.isPending}
+            className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg disabled:opacity-50">Guardar</button>
+          <button onClick={() => setOpen(false)} className="px-3 py-1.5 border border-gray-200 text-xs text-gray-600 rounded-lg">Cancelar</button>
+          {plan.status !== 'DRAFT' && <span className="text-[11px] text-gray-400">El cambio de horas queda en el historial del plan.</span>}
+        </>
+      )}
+      {canDelete && !open && (
+        <button onClick={remove} disabled={deletePlan.isPending} className="text-xs text-red-500 hover:underline ml-auto">Eliminar borrador</button>
+      )}
+      {err && <p role="alert" className="w-full text-xs text-red-600">{err.message}</p>}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function PlanDetailPage() {
   const params = useParams<{ id: string }>();
-  const { data: plan, isLoading } = usePlan(params.id);
-  const { user } = useUser();
+  const { data: plan, isLoading, isError, error: loadError } = usePlan(params.id);
+  const { user, hasRole } = useUser();
+  // Las acciones del plan (aprobar, activar, cerrar, importar, editar, vincular, quitar) son de gerente o superior en el API.
+  const isManager = hasRole(['AUDIT_MANAGER']);
   const [editingObjectives, setEditObj] = useState(false);
   const [objText, setObjText] = useState('');
   const [showAllItems, setShowAll] = useState(false);
@@ -1660,6 +1740,18 @@ export default function PlanDetailPage() {
   const close    = useClosePlan();
   const updatePlan = useUpdatePlan(params.id);
 
+  if (isError) {
+    return (
+      <div className="flex flex-col h-full">
+        <Header breadcrumbs={[{ label: 'Planificación', href: '/dashboard/plans' }, { label: 'Plan no disponible' }]} />
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <p role="alert" className="text-sm text-red-600">No se pudo abrir el plan: {(loadError as Error)?.message ?? 'error desconocido'}.</p>
+          <NextLink href="/dashboard/plans" className="text-sm text-blue-600 hover:underline">Volver a los planes</NextLink>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading || !plan) {
     return (
       <div className="flex flex-col h-full">
@@ -1672,7 +1764,8 @@ export default function PlanDetailPage() {
   }
 
   const st       = PLAN_STATUS_CONFIG[plan.status];
-  const canEdit  = plan.status !== 'CLOSED';
+  const canEdit  = plan.status !== 'CLOSED' && isManager;
+  const actionError = (approve.error ?? activate.error ?? close.error) as Error | null;
   const sortedItems = [...plan.items].sort((a, b) => a.priority - b.priority);
   const displayItems = showAllItems ? sortedItems : sortedItems.slice(0, 10);
 
@@ -1814,7 +1907,7 @@ Genera en español un resumen ejecutivo de 3-4 párrafos (máximo 350 palabras) 
                 </div>
                 <p className="text-sm text-gray-600">{plan.name}</p>
                 {plan.approvedAt && (
-                  <p className="text-xs text-gray-400 mt-0.5">Aprobado el {formatDate(plan.approvedAt)}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Aprobado el {formatDateTime(plan.approvedAt)}</p>
                 )}
               </div>
 
@@ -1843,24 +1936,24 @@ Genera en español un resumen ejecutivo de 3-4 párrafos (máximo 350 palabras) 
                     Importar del Banco
                   </button>
                 )}
-                {plan.status === 'DRAFT' && (
-                  <button onClick={() => approve.mutateAsync(plan.id)} disabled={approve.isPending}
+                {plan.status === 'DRAFT' && isManager && (
+                  <button onClick={() => approve.mutateAsync(plan.id).catch(() => undefined)} disabled={approve.isPending}
                     className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     {approve.isPending ? '...' : 'Aprobar plan'}
                   </button>
                 )}
-                {plan.status === 'APPROVED' && (
-                  <button onClick={() => activate.mutateAsync(plan.id)} disabled={activate.isPending}
+                {plan.status === 'APPROVED' && isManager && (
+                  <button onClick={() => activate.mutateAsync(plan.id).catch(() => undefined)} disabled={activate.isPending}
                     className="px-4 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1.5">
                     <Zap className="w-3.5 h-3.5" />
                     {activate.isPending ? '...' : 'Activar plan'}
                   </button>
                 )}
-                {plan.status === 'ACTIVE' && (
+                {plan.status === 'ACTIVE' && isManager && (
                   <button onClick={() => {
                     if (confirm('¿Cerrar este plan? Esta acción no se puede deshacer.')) {
-                      close.mutateAsync(plan.id);
+                      close.mutateAsync(plan.id).catch(() => undefined);
                     }
                   }} disabled={close.isPending}
                     className="px-4 py-2 border border-gray-300 text-gray-600 text-xs font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-60 flex items-center gap-1.5">
@@ -1870,6 +1963,9 @@ Genera en español un resumen ejecutivo de 3-4 párrafos (máximo 350 palabras) 
                 )}
               </div>
             </div>
+
+            {actionError && <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{actionError.message}</p>}
+            <PlanBasics plan={plan} canEdit={canEdit} canDelete={isManager && plan.status === 'DRAFT'} />
 
             {/* Capacity bar */}
             {plan.totalHours > 0 && (

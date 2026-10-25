@@ -140,6 +140,29 @@ function ScoreSlider({ label, hint, value, onChange, labelMap = SCORE_LABELS }: 
   );
 }
 
+// ─── Campos que acepta el API ─────────────────────────────────────────────────
+// El API rechaza (400) cualquier propiedad que no esté en su DTO: antes «Guardar» mandaba el proyecto completo tal como llegó
+// (id, relaciones, fechas, cobertura calculada…) y editar siempre fallaba. Se manda solo lo que el DTO conoce.
+const PROJECT_API_FIELDS = [
+  'name', 'planYear', 'strategicObjectiveId', 'strategicLineId', 'responsibleEntityId', 'supportEntityId', 'riskCategory', 'notes',
+  'impactScore', 'likelihoodScore', 'controlMaturityScore', 'materialityScore', 'strategicAlignScore', 'operationalAlignScore',
+  'fraudHistoryScore', 'managementReqScore', 'staffTurnoverScore', 'coverageHistoryScore',
+  'legalRequirement', 'lastAuditOpinion', 'includeInPlan', 'targetPlanYear',
+  'legalBasis', 'frequencyPerYear', 'plannedHours', 'teamJson', 'status',
+] as const;
+
+function projectPayload(form: Partial<AuditProject>, extra: Record<string, unknown>, includeCorrelative: boolean): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const src = form as Record<string, unknown>;
+  for (const k of PROJECT_API_FIELDS) {
+    const v = src[k];
+    if (v !== undefined && v !== null) out[k] = v;
+  }
+  if (includeCorrelative && form.correlative) out.correlative = form.correlative;
+  for (const [k, v] of Object.entries(extra)) if (v !== undefined && v !== null) out[k] = v;
+  return out;
+}
+
 // ─── Blank form ───────────────────────────────────────────────────────────────
 
 function blankForm(): Partial<AuditProject> {
@@ -352,6 +375,7 @@ function ProjectsPageContent() {
   const [form, setForm]                 = useState<Partial<AuditProject>>(blankForm());
   const [activeTab, setActiveTab]       = useState<0 | 1 | 2 | 3>(0);
   const [saving, setSaving]             = useState(false);
+  const [saveError, setSaveError]       = useState<string | null>(null);
   const [syncResult, setSyncResult]     = useState<{ updated: number } | null>(null);
   const [pendingLineId, setPendingLineId] = useState<string | null>(null);
 
@@ -478,6 +502,7 @@ function ProjectsPageContent() {
     setEditing(null);
     setForm(blankForm());
     setActiveTab(0);
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -490,6 +515,7 @@ function ProjectsPageContent() {
         : DEFAULT_TEAM.map(r => ({ ...r })),
     });
     setActiveTab(0);
+    setSaveError(null);
     setShowModal(true);
   }
 
@@ -506,19 +532,18 @@ function ProjectsPageContent() {
   async function handleSave() {
     if (!form.name || !form.correlative) return;
     setSaving(true);
+    setSaveError(null);
     try {
-      const payload = {
-        ...form,
-        finalRiskScore: liveRisk?.score,
-        finalRiskLevel: liveRisk?.level,
-        totalBudget,
-      };
+      // El puntaje y el nivel final los recalcula el servidor con los 10 factores; se mandan solo por compatibilidad.
+      const extra = { finalRiskScore: liveRisk?.score, finalRiskLevel: liveRisk?.level, totalBudget };
       if (editing) {
-        await updateProject.mutateAsync({ id: editing.id, data: payload });
+        await updateProject.mutateAsync({ id: editing.id, data: projectPayload(form, extra, false) as Partial<AuditProject> });
       } else {
-        await createProject.mutateAsync(payload);
+        await createProject.mutateAsync(projectPayload(form, extra, true) as Partial<AuditProject>);
       }
       setShowModal(false);
+    } catch (e) {
+      setSaveError((e as Error)?.message ?? 'No se pudo guardar el proyecto');
     } finally {
       setSaving(false);
     }
@@ -1240,7 +1265,8 @@ function ProjectsPageContent() {
                     className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100">Siguiente</button>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                {saveError && <p role="alert" className="max-w-xs text-xs text-red-600">{saveError}</p>}
                 <button onClick={() => setShowModal(false)}
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancelar</button>
                 <button

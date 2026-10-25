@@ -1,5 +1,5 @@
 import {
-  IsString, IsInt, IsOptional, IsNumber, IsDateString, IsArray, Min, Max, ArrayNotEmpty, IsEnum,
+  IsString, IsInt, IsOptional, IsNumber, IsDateString, IsArray, Min, Max, ArrayNotEmpty, IsEnum, MinLength, MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TimeEntryCategory } from '@prisma/client';
@@ -7,15 +7,18 @@ import { TimeEntryCategory } from '@prisma/client';
 export class CreatePlanDto {
   @ApiProperty({ example: 2026 })
   @IsInt()
+  @Min(2000) @Max(2100)
   year: number;
 
   @ApiProperty({ example: 'Plan Anual de Auditoría 2026' })
   @IsString()
+  @MinLength(3)
   name: string;
 
   @ApiPropertyOptional({ example: 1800 })
   @IsOptional()
   @IsNumber()
+  @Min(0)
   totalHours?: number;
 
   @ApiPropertyOptional({ type: [String], example: ['Fortalecer cobertura de procesos TI'] })
@@ -29,11 +32,13 @@ export class UpdatePlanDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MinLength(3)
   name?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @Min(0)
   totalHours?: number;
 
   @ApiPropertyOptional({ type: [String] })
@@ -41,11 +46,15 @@ export class UpdatePlanDto {
   @IsArray()
   @IsString({ each: true })
   objectives?: string[];
+}
 
-  @ApiPropertyOptional({ description: 'Historial de cambios del plan (JSON array)' })
-  @IsOptional()
-  @IsArray()
-  amendments?: any[];
+/** Registrar un cambio en el historial del plan: el servidor pone la fecha, la persona y su rol (el navegador ya no escribe el historial). */
+export class AddPlanAmendmentDto {
+  @ApiProperty({ description: 'Qué cambió y por qué' })
+  @IsString()
+  @MinLength(5)
+  @MaxLength(1000)
+  description: string;
 }
 
 export class CreatePlanItemDto {
@@ -55,6 +64,7 @@ export class CreatePlanItemDto {
 
   @ApiProperty({ example: 320 })
   @IsNumber()
+  @Min(0)
   estimatedHours: number;
 
   @ApiPropertyOptional({ example: '2026-01-15' })
@@ -84,6 +94,7 @@ export class UpdatePlanItemDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @Min(0)
   estimatedHours?: number;
 
   @ApiPropertyOptional()

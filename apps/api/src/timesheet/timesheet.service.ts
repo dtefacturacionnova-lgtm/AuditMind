@@ -9,7 +9,7 @@ import {
   QueryTimesheetEntriesDto, QueryTimesheetReportDto, TimesheetReportGroupBy,
 } from './dto/timesheet.dto';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
-import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg } from './daily-hours-cap.util';
+import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg, completeTimeAnchors } from './daily-hours-cap.util';
 import { hiddenAuditIds, RESTRICTED_AUDIT_TITLE } from '../common/utils/investigation-scope.util';
 import {
   assertPeriodsOpen, validateEntryRules, validateCategoryLinkage, mergeEntryChanges, entrySnapshot, logEntryChange, logEntryChanges, TX_OPTIONS,
@@ -73,6 +73,8 @@ export class TimesheetService {
     if (error) throw new BadRequestException(error);
     assertValidHours(dto.hours);
     await assertTimeAnchorsInOrg(this.prisma, user, [dto]);
+    // Una sola definición de encargo/ítem de plan (ver completeTimeAnchors): el plan, su reporte y el encargo cuentan las mismas horas.
+    const anchors = await completeTimeAnchors(this.prisma, dto);
 
     await assertDailyHoursCap(this.prisma, user.id, new Map([[dto.workDate, dto.hours]]));
 
@@ -85,8 +87,8 @@ export class TimesheetService {
         data: {
           organizationId: user.organizationId,
           userId:         user.id,
-          auditId:        dto.auditId,
-          planItemId:     dto.planItemId,
+          auditId:        anchors.auditId,
+          planItemId:     anchors.planItemId,
           workDate:       new Date(dto.workDate),
           hours:          dto.hours,
           description:    dto.description,
@@ -100,7 +102,7 @@ export class TimesheetService {
       });
       return created;
     }, TX_OPTIONS);
-    await recalculateAuditActualHours(this.prisma, dto.auditId);
+    await recalculateAuditActualHours(this.prisma, anchors.auditId);
     return entry;
   }
 
@@ -121,6 +123,7 @@ export class TimesheetService {
 
     dto.entries.forEach((entry) => assertValidHours(entry.hours));
     await assertTimeAnchorsInOrg(this.prisma, user, dto.entries);
+    const anchorsOf = await Promise.all(dto.entries.map((e) => completeTimeAnchors(this.prisma, e)));
 
     const hoursByDate = new Map<string, number>();
     for (const entry of dto.entries) {
@@ -139,11 +142,11 @@ export class TimesheetService {
         throw new BadRequestException({ message: 'Una o más entradas del lote son inválidas', errors: ruleErrors });
       }
       const rows = await tx.timeEntry.createManyAndReturn({
-        data: dto.entries.map((entry) => ({
+        data: dto.entries.map((entry, i) => ({
           organizationId: user.organizationId,
           userId:         user.id,
-          auditId:        entry.auditId,
-          planItemId:     entry.planItemId,
+          auditId:        anchorsOf[i].auditId,
+          planItemId:     anchorsOf[i].planItemId,
           workDate:       new Date(entry.workDate),
           hours:          entry.hours,
           description:    entry.description,
@@ -158,7 +161,7 @@ export class TimesheetService {
       return rows;
     }, TX_OPTIONS);
 
-    const affectedAuditIds = [...new Set(dto.entries.map((e) => e.auditId).filter((v): v is string => !!v))];
+    const affectedAuditIds = [...new Set(anchorsOf.map((a) => a.auditId).filter((v): v is string => !!v))];
     await Promise.all(affectedAuditIds.map((id) => recalculateAuditActualHours(this.prisma, id)));
 
     return { created: created.length };
@@ -195,6 +198,7 @@ export class TimesheetService {
     if (linkError) throw new BadRequestException(linkError);
     assertValidHours(merged.hours);
     await assertTimeAnchorsInOrg(this.prisma, user, [merged]);
+    const anchors = await completeTimeAnchors(this.prisma, merged);
     await assertDailyHoursCap(this.prisma, user.id, new Map([[merged.workDate, merged.hours]]), [id]);
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -208,7 +212,7 @@ export class TimesheetService {
         where: { id },
         data: {
           workDate: new Date(merged.workDate), hours: merged.hours, category: merged.category,
-          description: merged.description, auditId: merged.auditId, planItemId: merged.planItemId,
+          description: merged.description, auditId: anchors.auditId ?? null, planItemId: anchors.planItemId ?? null,
           nonBillableReason: merged.nonBillableReason,
         },
       });

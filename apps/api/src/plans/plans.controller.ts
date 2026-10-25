@@ -5,7 +5,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PlansService } from './plans.service';
 import {
   CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
-  CreateTimeEntryDto, LinkAuditDto,
+  CreateTimeEntryDto, LinkAuditDto, AddPlanAmendmentDto,
 } from './dto/plan.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -44,6 +44,20 @@ export class PlansController {
   @ApiOperation({ summary: 'Actualizar plan (DRAFT o APPROVED)' })
   update(@Param('id') id: string, @Body() dto: UpdatePlanDto, @CurrentUser() user: AuthUser) {
     return this.service.update(id, dto, user);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Eliminar un plan en borrador (un plan aprobado, activo o cerrado no se borra)' })
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.remove(id, user);
+  }
+
+  @Post(':id/amendments')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Registrar un cambio en el historial del plan (fecha y persona las pone el servidor)' })
+  addAmendment(@Param('id') id: string, @Body() dto: AddPlanAmendmentDto, @CurrentUser() user: AuthUser) {
+    return this.service.addAmendment(id, dto, user);
   }
 
   @Post(':id/approve')

@@ -140,7 +140,6 @@ export interface CreatePlanData {
   name:        string;
   totalHours?: number;
   objectives?: string[];
-  amendments?: any[];
 }
 
 export interface CreatePlanItemData {
@@ -192,6 +191,26 @@ export function useUpdatePlan(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: Partial<CreatePlanData>) => apiClient.patch<AuditPlan>(`/plans/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['plan', id] });
+      qc.invalidateQueries({ queryKey: ['plans'] });
+    },
+  });
+}
+
+export function useDeletePlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<{ deleted: boolean }>(`/plans/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plans'] }),
+  });
+}
+
+/** Registrar un cambio en el historial del plan: el servidor pone la fecha y la persona. */
+export function useAddPlanAmendment(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (description: string) => apiClient.post<AuditPlan>(`/plans/${id}/amendments`, { description }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['plan', id] });
       qc.invalidateQueries({ queryKey: ['plans'] });
@@ -258,11 +277,13 @@ export function useRemovePlanItem(planId: string) {
 }
 
 // ── Vincular a un encargo real (horas reales) ─────────────────────────────────
-export function useLinkableAudits(planId: string) {
+/** Solo para quien puede vincular (gerente o superior): el API rechaza a los demás y el 403 se reintentaba en cada carga. */
+export function useLinkableAudits(planId: string, enabled = true) {
   return useQuery<LinkableAudit[]>({
     queryKey:  ['plan-linkable-audits', planId],
     queryFn:   () => apiClient.get(`/plans/${planId}/linkable-audits`),
-    enabled:   !!planId,
+    enabled:   !!planId && enabled,
+    retry:     false,
     staleTime: 15_000,
   });
 }

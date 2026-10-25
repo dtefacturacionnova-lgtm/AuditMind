@@ -5,16 +5,17 @@ import { TimeEntryCategory, TimeEntryLogAction } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
+import { Prisma } from '@prisma/client';
 import {
   assertAuditVisible, assertInvestigationAccess, AUDIT_ACCESS_SELECT, canSeeAudit, RESTRICTED_AUDIT_TITLE, visibleAuditWhere,
 } from '../common/utils/investigation-scope.util';
-import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg } from '../timesheet/daily-hours-cap.util';
+import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg, completeTimeAnchors } from '../timesheet/daily-hours-cap.util';
 import {
-  assertPeriodsOpen, validateEntryRules, entrySnapshot, logEntryChange, TX_OPTIONS, ENTRY_PUBLIC_SELECT,
+  assertPeriodsOpen, validateEntryRules, validateCategoryLinkage, entrySnapshot, logEntryChange, TX_OPTIONS, ENTRY_PUBLIC_SELECT,
 } from '../timesheet/hours-close.util';
 import {
   CreatePlanDto, UpdatePlanDto, CreatePlanItemDto, UpdatePlanItemDto, ImportFromProjectsDto,
-  CreateTimeEntryDto, LinkAuditDto,
+  CreateTimeEntryDto, LinkAuditDto, AddPlanAmendmentDto,
 } from './dto/plan.dto';
 
 const ITEM_INCLUDE = {
@@ -26,7 +27,7 @@ const ITEM_INCLUDE = {
       id: true, correlative: true, name: true,
       finalRiskScore: true, finalRiskLevel: true,
       totalBudget: true, plannedHours: true,
-      riskCategory: true,
+      riskCategory: true, legalBasis: true,
     },
   },
   // Horas reales — solo se llena una vez que el ítem se vincula a un encargo real
@@ -98,17 +99,23 @@ export class PlansService {
     });
     if (existing) throw new ConflictException(`Ya existe un plan para el año ${dto.year}`);
 
-    const plan = await this.prisma.auditPlan.create({
-      data: {
-        organizationId: user.organizationId,
-        year:       dto.year,
-        name:       dto.name,
-        totalHours: dto.totalHours ?? 0,
-        objectives: (dto.objectives ?? []) as any,
-        status:     'DRAFT',
-      },
-      include: PLAN_INCLUDE,
-    });
+    let plan;
+    try {
+      plan = await this.prisma.auditPlan.create({
+        data: {
+          organizationId: user.organizationId,
+          year:       dto.year,
+          name:       dto.name,
+          totalHours: dto.totalHours ?? 0,
+          objectives: (dto.objectives ?? []) as any,
+          status:     'DRAFT',
+        },
+        include: PLAN_INCLUDE,
+      });
+    } catch (e) {
+      if ((e as { code?: string })?.code === 'P2002') throw new ConflictException(`Ya existe un plan para el año ${dto.year}`);
+      throw e;
+    }
 
     return this.present(plan, user);
   }
@@ -134,16 +141,67 @@ export class PlansService {
     const plan = await this.getPlanOrThrow(id, user);
     if (plan.status === 'CLOSED') throw new ForbiddenException('No se puede modificar un plan cerrado');
 
-    const updated = await this.prisma.auditPlan.update({
-      where: { id },
-      data: {
-        ...(dto.name       != null && { name:       dto.name }),
-        ...(dto.totalHours != null && { totalHours: dto.totalHours }),
-        ...(dto.objectives != null && { objectives: dto.objectives as any }),
-        ...(dto.amendments != null && { amendments: dto.amendments as any }),
-      },
-      include: PLAN_INCLUDE,
+    const hoursChanged = dto.totalHours != null && dto.totalHours !== plan.totalHours;
+    const objectivesChanged = dto.objectives != null && JSON.stringify(dto.objectives) !== JSON.stringify(plan.objectives);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.auditPlan.update({
+        where: { id },
+        data: {
+          ...(dto.name       != null && { name:       dto.name }),
+          ...(dto.totalHours != null && { totalHours: dto.totalHours }),
+          ...(dto.objectives != null && { objectives: dto.objectives as any }),
+        },
+      });
+      // Una vez aprobado, lo que cambia deja huella en el historial (antes se podía cambiar la capacidad y los objetivos sin rastro).
+      if (plan.status !== 'DRAFT') {
+        if (hoursChanged) await this.recordAmendment(tx, id, user, `Horas totales del plan: ${plan.totalHours} → ${dto.totalHours}`, true);
+        if (objectivesChanged) await this.recordAmendment(tx, id, user, 'Se modificaron los objetivos del plan', true);
+      }
     });
+    const updated = await this.prisma.auditPlan.findUniqueOrThrow({ where: { id }, include: PLAN_INCLUDE });
+    return this.present(updated, user);
+  }
+
+  /** Solo un plan en borrador se puede borrar (con un año equivocado no había forma de corregirlo: la unicidad es por año). */
+  async remove(id: string, user: AuthUser) {
+    const plan = await this.getPlanOrThrow(id, user);
+    if (plan.status !== 'DRAFT') throw new ForbiddenException('Solo se puede eliminar un plan en borrador.');
+    const res = await this.prisma.auditPlan.deleteMany({ where: { id, organizationId: user.organizationId, status: 'DRAFT' } });
+    if (res.count === 0) throw new ConflictException('El plan cambió de estado y ya no se puede eliminar.');
+    return { deleted: true };
+  }
+
+  // ── Historial de cambios ───────────────────────────────────────────────────
+  /**
+   * Agrega un renglón al historial con la fecha del servidor y la persona real. El historial lo escribe SOLO el servidor y se
+   * lee-modifica-escribe bajo candado de la fila, así dos gerentes registrando a la vez no se pisan.
+   */
+  private async recordAmendment(tx: Prisma.TransactionClient, planId: string, user: AuthUser, description: string, auto = false) {
+    await tx.$queryRaw`SELECT id FROM audit_plans WHERE id = ${planId} FOR UPDATE`;
+    const row = await tx.auditPlan.findUniqueOrThrow({ where: { id: planId }, select: { amendments: true, version: true } });
+    const list = Array.isArray(row.amendments) ? (row.amendments as unknown[]) : [];
+    const entry = {
+      date: new Date().toISOString(), description, approvedBy: user.name, approvedById: user.id, role: user.role, ...(auto && { auto: true }),
+    };
+    await tx.auditPlan.update({
+      where: { id: planId },
+      data: { amendments: [...list, entry] as unknown as Prisma.InputJsonValue, version: row.version + 1 },
+    });
+  }
+
+  async addAmendment(id: string, dto: AddPlanAmendmentDto, user: AuthUser) {
+    const plan = await this.getPlanOrThrow(id, user);
+    if (plan.status === 'CLOSED') throw new ForbiddenException('No se puede modificar un plan cerrado');
+    await this.prisma.$transaction((tx) => this.recordAmendment(tx, id, user, dto.description.trim()));
+    return this.findOne(id, user);
+  }
+
+  /** Cambio de estado atómico: solo si el plan sigue en el estado esperado (un doble clic o dos gerentes a la vez no lo hacen dos veces). */
+  private async transition(id: string, from: string, data: Prisma.AuditPlanUpdateManyMutationInput, user: AuthUser, message: string) {
+    const res = await this.prisma.auditPlan.updateMany({ where: { id, organizationId: user.organizationId, status: from }, data });
+    if (res.count === 0) throw new ConflictException(message);
+    const updated = await this.prisma.auditPlan.findUniqueOrThrow({ where: { id }, include: PLAN_INCLUDE });
     return this.present(updated, user);
   }
 
@@ -151,45 +209,28 @@ export class PlansService {
   async approve(id: string, user: AuthUser) {
     const plan = await this.getPlanOrThrow(id, user);
     if (plan.status !== 'DRAFT') throw new ForbiddenException('Solo se puede aprobar un plan en DRAFT');
-
-    const updated = await this.prisma.auditPlan.update({
-      where: { id },
-      data:  { status: 'APPROVED', approvedById: user.id, approvedAt: new Date() },
-      include: PLAN_INCLUDE,
-    });
-    return this.present(updated, user);
+    return this.transition(id, 'DRAFT', { status: 'APPROVED', approvedById: user.id, approvedAt: new Date() }, user, 'El plan ya fue aprobado.');
   }
 
   // ── Activate plan ──────────────────────────────────────────────────────────
   async activate(id: string, user: AuthUser) {
     const plan = await this.getPlanOrThrow(id, user);
     if (plan.status !== 'APPROVED') throw new ForbiddenException('Solo se puede activar un plan APPROVED');
-
-    const updated = await this.prisma.auditPlan.update({
-      where: { id },
-      data:  { status: 'ACTIVE' },
-      include: PLAN_INCLUDE,
-    });
-    return this.present(updated, user);
+    return this.transition(id, 'APPROVED', { status: 'ACTIVE' }, user, 'El plan ya fue activado.');
   }
 
   // ── Close plan ─────────────────────────────────────────────────────────────
   async close(id: string, user: AuthUser) {
     const plan = await this.getPlanOrThrow(id, user);
     if (plan.status !== 'ACTIVE') throw new ForbiddenException('Solo se puede cerrar un plan ACTIVE');
-
-    const updated = await this.prisma.auditPlan.update({
-      where: { id },
-      data:  { status: 'CLOSED' },
-      include: PLAN_INCLUDE,
-    });
-    return this.present(updated, user);
+    return this.transition(id, 'ACTIVE', { status: 'CLOSED' }, user, 'El plan ya fue cerrado.');
   }
 
   // ── Add item ───────────────────────────────────────────────────────────────
   async addItem(planId: string, dto: CreatePlanItemDto, user: AuthUser) {
     const plan = await this.getPlanOrThrow(planId, user);
     if (plan.status === 'CLOSED') throw new ForbiddenException('No se puede modificar un plan cerrado');
+    this.assertDates(dto.tentativeStartDate, dto.tentativeEndDate);
 
     // Check entity belongs to org
     const entity = await this.prisma.auditEntity.findFirst({
@@ -197,23 +238,33 @@ export class PlansService {
     });
     if (!entity) throw new NotFoundException('Entidad no encontrada');
 
-    // Check not already in plan
-    const existing = plan.items.find(i => i.auditEntityId === dto.auditEntityId);
-    if (existing) throw new ConflictException('Esta entidad ya está en el plan');
-
-    await this.prisma.auditPlanItem.create({
-      data: {
-        planId,
-        auditEntityId:     dto.auditEntityId,
-        estimatedHours:    dto.estimatedHours,
-        priority:          dto.priority ?? 2,
-        notes:             dto.notes,
-        tentativeStartDate: dto.tentativeStartDate ? new Date(dto.tentativeStartDate) : null,
-        tentativeEndDate:   dto.tentativeEndDate   ? new Date(dto.tentativeEndDate)   : null,
-      },
+    // Bajo candado del plan: dos altas a la vez de la misma entidad no crean dos ítems.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM audit_plans WHERE id = ${planId} FOR UPDATE`;
+      const existing = await tx.auditPlanItem.findFirst({ where: { planId, auditEntityId: dto.auditEntityId }, select: { id: true } });
+      if (existing) throw new ConflictException('Esta entidad ya está en el plan');
+      await tx.auditPlanItem.create({
+        data: {
+          planId,
+          auditEntityId:     dto.auditEntityId,
+          estimatedHours:    dto.estimatedHours,
+          priority:          dto.priority ?? 2,
+          notes:             dto.notes,
+          tentativeStartDate: dto.tentativeStartDate ? new Date(dto.tentativeStartDate) : null,
+          tentativeEndDate:   dto.tentativeEndDate   ? new Date(dto.tentativeEndDate)   : null,
+        },
+      });
+      if (plan.status !== 'DRAFT') await this.recordAmendment(tx, planId, user, `Se agregó «${entity.name}» al plan (${dto.estimatedHours} h)`, true);
     });
 
     return this.findOne(planId, user);
+  }
+
+  /** La fecha de fin no puede ser anterior a la de inicio. */
+  private assertDates(start?: string | null, end?: string | null) {
+    if (start && end && new Date(end) < new Date(start)) {
+      throw new BadRequestException('La fecha de fin no puede ser anterior a la de inicio.');
+    }
   }
 
   // ── Update item ────────────────────────────────────────────────────────────
@@ -223,18 +274,28 @@ export class PlansService {
 
     const item = plan.items.find(i => i.id === itemId);
     if (!item) throw new NotFoundException('Item no encontrado en el plan');
+    this.assertDates(
+      dto.tentativeStartDate ?? item.tentativeStartDate?.toISOString(),
+      dto.tentativeEndDate ?? item.tentativeEndDate?.toISOString(),
+    );
 
-    await this.prisma.auditPlanItem.update({
-      where: { id: itemId },
-      data: {
-        ...(dto.estimatedHours    != null && { estimatedHours:    dto.estimatedHours }),
-        ...(dto.priority          != null && { priority:          dto.priority }),
-        ...(dto.notes             != null && { notes:             dto.notes }),
-        ...(dto.tentativeStartDate != null && { tentativeStartDate: new Date(dto.tentativeStartDate) }),
-        ...(dto.tentativeEndDate   != null && { tentativeEndDate:   new Date(dto.tentativeEndDate) }),
-        ...(dto.responsibleName   != null && { responsibleName:   dto.responsibleName }),
-        ...(dto.teamNotes         != null && { teamNotes:         dto.teamNotes }),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.auditPlanItem.update({
+        where: { id: itemId },
+        data: {
+          ...(dto.estimatedHours    != null && { estimatedHours:    dto.estimatedHours }),
+          ...(dto.priority          != null && { priority:          dto.priority }),
+          ...(dto.notes             != null && { notes:             dto.notes }),
+          ...(dto.tentativeStartDate != null && { tentativeStartDate: new Date(dto.tentativeStartDate) }),
+          ...(dto.tentativeEndDate   != null && { tentativeEndDate:   new Date(dto.tentativeEndDate) }),
+          ...(dto.responsibleName   != null && { responsibleName:   dto.responsibleName }),
+          ...(dto.teamNotes         != null && { teamNotes:         dto.teamNotes }),
+        },
+      });
+      if (plan.status !== 'DRAFT' && dto.estimatedHours != null && dto.estimatedHours !== item.estimatedHours) {
+        const name = item.auditProject?.name ?? item.auditEntity?.name ?? 'un ítem';
+        await this.recordAmendment(tx, planId, user, `Horas de «${name}»: ${item.estimatedHours} → ${dto.estimatedHours}`, true);
+      }
     });
 
     return this.findOne(planId, user);
@@ -250,7 +311,13 @@ export class PlansService {
     // Borrar el ítem soltaría la investigación del plan: lo mismo que desvincularla.
     if (item.audit) assertInvestigationAccess(item.audit, user);
 
-    await this.prisma.auditPlanItem.delete({ where: { id: itemId } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.auditPlanItem.delete({ where: { id: itemId } });
+      if (plan.status !== 'DRAFT') {
+        const name = item.auditProject?.name ?? item.auditEntity?.name ?? 'un ítem';
+        await this.recordAmendment(tx, planId, user, `Se quitó «${name}» del plan (${item.estimatedHours} h)`, true);
+      }
+    });
     return this.findOne(planId, user);
   }
 
@@ -283,6 +350,11 @@ export class PlansService {
       }
       throw e;
     }
+    // Una sola definición de «horas del ítem»: las anotadas al ítem pasan al encargo y las del encargo al ítem (solo en meses abiertos:
+    // un mes cerrado no se toca). Antes el plan mostraba las horas del encargo y el reporte «por plan» las del ítem, y no coincidían.
+    await this.prisma.timeEntry.updateMany({ where: { planItemId: itemId, auditId: null, closedAt: null }, data: { auditId: dto.auditId } });
+    await this.prisma.timeEntry.updateMany({ where: { auditId: dto.auditId, planItemId: null, closedAt: null }, data: { planItemId: itemId } });
+    await recalculateAuditActualHours(this.prisma, dto.auditId);
 
     return this.findOne(planId, user);
   }
@@ -309,7 +381,7 @@ export class PlansService {
   async getLinkableAudits(planId: string, user: AuthUser) {
     await this.getPlanOrThrow(planId, user);
     return this.prisma.audit.findMany({
-      where: { ...visibleAuditWhere(user), planItem: null },
+      where: { ...visibleAuditWhere(user), planItem: null, status: { notIn: ['CLOSED', 'CANCELLED'] } },
       select: { id: true, title: true, status: true, actualHours: true },
       orderBy: { title: 'asc' },
     });
@@ -320,48 +392,54 @@ export class PlansService {
     const plan = await this.getPlanOrThrow(planId, user);
     if (plan.status === 'CLOSED') throw new ForbiddenException('No se puede modificar un plan cerrado');
 
+    const projectIds = [...new Set(dto.projectIds)];
     // Fetch the requested projects, verifying org ownership
     const projects = await this.prisma.auditProject.findMany({
       where: {
-        id:             { in: dto.projectIds },
+        id:             { in: projectIds },
         organizationId: user.organizationId,
         active:         true,
       },
     });
 
-    const alreadyImported = new Set(
-      plan.items
-        .map(i => (i as any).auditProjectId as string | undefined)
-        .filter((v): v is string => !!v),
-    );
+    // Bajo candado del plan y releyendo los ítems DENTRO: dos importaciones a la vez del mismo proyecto no lo duplican
+    // (antes se sumaban sus horas dos veces en la capacidad).
+    const { imported, skipped } = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM audit_plans WHERE id = ${planId} FOR UPDATE`;
+      const current = await tx.auditPlanItem.findMany({ where: { planId, auditProjectId: { not: null } }, select: { auditProjectId: true } });
+      const alreadyImported = new Set(current.map((i) => i.auditProjectId as string));
 
-    let imported = 0;
-    let skipped  = 0;
+      let imported = 0;
+      let skipped = 0;
+      for (const project of projects) {
+        if (alreadyImported.has(project.id)) { skipped++; continue; }
 
-    for (const project of projects) {
-      if (alreadyImported.has(project.id)) { skipped++; continue; }
+        // Map risk level → priority (CRITICO/ALTO → 1, MEDIO → 2, BAJO → 3)
+        const priority =
+          project.finalRiskLevel === 'CRITICO' || project.finalRiskLevel === 'ALTO' ? 1
+          : project.finalRiskLevel === 'MEDIO' ? 2
+          : 3;
 
-      // Map risk level → priority (CRITICO/ALTO → 1, MEDIO → 2, BAJO → 3)
-      const priority =
-        project.finalRiskLevel === 'CRITICO' || project.finalRiskLevel === 'ALTO' ? 1
-        : project.finalRiskLevel === 'MEDIO' ? 2
-        : 3;
-
-      await this.prisma.auditPlanItem.create({
-        data: {
-          planId,
-          auditProjectId: project.id,
-          estimatedHours: project.plannedHours ?? 80,
-          priority,
-          originScore:    project.finalRiskScore ?? undefined,
-          isMandatory:    false,
-        },
-      });
-      imported++;
-    }
+        await tx.auditPlanItem.create({
+          data: {
+            planId,
+            auditProjectId: project.id,
+            estimatedHours: project.plannedHours ?? 80,
+            priority,
+            originScore:    project.finalRiskScore ?? undefined,
+            isMandatory:    false,
+          },
+        });
+        imported++;
+      }
+      if (plan.status !== 'DRAFT' && imported > 0) {
+        await this.recordAmendment(tx, planId, user, `Se importaron ${imported} proyecto(s) del Banco al plan`, true);
+      }
+      return { imported, skipped };
+    });
 
     const updated = await this.findOne(planId, user);
-    return { ...updated, importResult: { imported, skipped, notFound: dto.projectIds.length - projects.length } };
+    return { ...updated, importResult: { imported, skipped, notFound: projectIds.length - projects.length } };
   }
 
   // ── Get project candidates for a plan year ─────────────────────────────────
@@ -381,7 +459,7 @@ export class PlansService {
         strategicLine:      { select: { id: true, code: true, name: true } },
         responsibleEntity:  { select: { id: true, name: true } },
       },
-      orderBy: [{ finalRiskScore: 'desc' }, { name: 'asc' }],
+      orderBy: [{ finalRiskScore: { sort: 'desc', nulls: 'last' } }, { name: 'asc' }],
     });
 
     // Tag which are already in the plan
@@ -395,15 +473,22 @@ export class PlansService {
   }
 
   // ── L2.8: Timesheet — create time entry ──────────────────────────────────────
-  async createTimeEntry(dto: CreateTimeEntryDto, user: AuthUser) {
-    assertValidHours(dto.hours);
-    await assertTimeAnchorsInOrg(this.prisma, user, [dto]);
+  async createTimeEntry(rawDto: CreateTimeEntryDto, user: AuthUser) {
+    const category = rawDto.category ?? TimeEntryCategory.CLIENT_BILLABLE;
+    // Mismas reglas que la captura general: una hora de cliente necesita encargo o ítem de plan (antes se guardaba sin ninguno), y la
+    // categoría que declara el cuerpo se respeta (antes se ignoraba y siempre quedaba como facturable).
+    const linkError = validateCategoryLinkage({ category, auditId: rawDto.auditId, planItemId: rawDto.planItemId });
+    if (linkError) throw new BadRequestException(linkError);
+    assertValidHours(rawDto.hours);
+    await assertTimeAnchorsInOrg(this.prisma, user, [rawDto]);
+    const anchors = await completeTimeAnchors(this.prisma, rawDto);
+    const dto = { ...rawDto, ...anchors, category };
     await assertDailyHoursCap(this.prisma, user.id, new Map([[dto.workDate, dto.hours]]));
 
     // Misma comprobación de mes cerrado y misma bitácora que la captura general (TimesheetService): son las dos rutas que escriben horas.
     const entry = await this.prisma.$transaction(async (tx) => {
       const settings = await assertPeriodsOpen(tx, user.organizationId, user.id, [dto.workDate]);
-      const ruleError = validateEntryRules({ category: TimeEntryCategory.CLIENT_BILLABLE, description: dto.description }, settings.enabled);
+      const ruleError = validateEntryRules({ category: dto.category, description: dto.description }, settings.enabled);
       if (ruleError) throw new BadRequestException(ruleError);
       const created = await tx.timeEntry.create({
         data: {
@@ -414,6 +499,7 @@ export class PlansService {
           workDate:       new Date(dto.workDate),
           hours:          dto.hours,
           description:    dto.description,
+          category:       dto.category,
         },
       });
       await logEntryChange(tx, {

@@ -300,7 +300,7 @@ export class AuditUniverseService {
         auditType: dto.auditType ?? 'OPERATIONAL',
         isMandatory: dto.isMandatory ?? false,
         mandatoryBasis: dto.mandatoryBasis,
-        strategicLineId: dto.strategicLineId ?? null,
+        strategicLineId: dto.strategicLineId || null, // '' (formulario) = sin línea: la FK no admite cadenas vacías
         riskType: dto.riskType ?? null,
         notes: dto.notes,
       },
@@ -338,7 +338,10 @@ export class AuditUniverseService {
     await assertInOrg(this.prisma.strategicLine, dto.strategicLineId, scope, 'La línea estratégica');
     await assertInOrg(this.prisma.auditEntity, (dto as { auditEntityId?: string }).auditEntityId, scope, 'La entidad');
     await assertInOrg(this.prisma.auditProcess, (dto as { auditProcessId?: string }).auditProcessId, scope, 'El proceso');
-    return this.prisma.auditableUnit.update({ where: { id }, data: dto });
+    return this.prisma.auditableUnit.update({
+      where: { id },
+      data: { ...dto, ...(dto.strategicLineId !== undefined && { strategicLineId: dto.strategicLineId || null }) },
+    });
   }
 
   async removeUnit(id: string, user: AuthUser) {

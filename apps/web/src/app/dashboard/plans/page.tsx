@@ -7,6 +7,7 @@ import {
   BarChart3, TrendingUp,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
+import { useUser } from '@/hooks/useUser';
 import {
   usePlans, useCreatePlan,
   PLAN_STATUS_CONFIG, CreatePlanData, AuditPlan,
@@ -44,7 +45,7 @@ function CreatePlanModal({ open, onClose }: { open: boolean; onClose: () => void
                 ...p, year: +e.target.value,
                 name: `Plan Anual de Auditoría ${e.target.value}`,
               }))}
-              min={2020} max={2030} className={cls} />
+              min={2020} max={2100} className={cls} />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-600">Nombre del plan *</label>
@@ -215,7 +216,9 @@ function CapacityBar({ pct, allocated, total }: { pct: number; allocated: number
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function PlansPage() {
   const router = useRouter();
-  const { data: plans = [], isLoading } = usePlans();
+  const { data: plans = [], isLoading, isError, error } = usePlans();
+  const { hasRole } = useUser();
+  const canCreate = hasRole(['AUDIT_MANAGER']); // crear y editar planes es de gerente o superior en el API
   const [showCreate, setCreate] = useState(false);
 
   const active   = plans.filter(p => p.status === 'ACTIVE').length;
@@ -238,7 +241,7 @@ export default function PlansPage() {
           {[
             { label: 'Total planes',       value: plans.length, icon: CalendarDays, color: 'text-blue-600',   bg: 'bg-blue-50' },
             { label: 'Activos',            value: active,       icon: Zap,          color: 'text-emerald-600',bg: 'bg-emerald-50' },
-            { label: 'En aprobación',      value: approved,     icon: CheckCircle2, color: 'text-amber-600',  bg: 'bg-amber-50' },
+            { label: 'Aprobados',          value: approved,     icon: CheckCircle2, color: 'text-amber-600',  bg: 'bg-amber-50' },
             { label: 'Entidades planificadas', value: totalItems, icon: BarChart3,  color: 'text-purple-600', bg: 'bg-purple-50' },
           ].map(({ label, value, icon: Icon, color, bg }) => (
             <div key={label} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
@@ -256,12 +259,14 @@ export default function PlansPage() {
           <h2 className="text-sm font-semibold text-gray-700">
             {plans.length} plan{plans.length !== 1 ? 'es' : ''} registrado{plans.length !== 1 ? 's' : ''}
           </h2>
-          <button
-            onClick={() => setCreate(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" /> Nuevo plan
-          </button>
+          {canCreate && (
+            <button
+              onClick={() => setCreate(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700"
+            >
+              <Plus className="w-4 h-4" /> Nuevo plan
+            </button>
+          )}
         </div>
 
         {/* Plans list */}
@@ -269,15 +274,21 @@ export default function PlansPage() {
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : isError ? (
+          <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">
+            No se pudieron cargar los planes: {(error as Error)?.message ?? 'error desconocido'}.
+          </p>
         ) : plans.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
             <CalendarDays className="w-12 h-12 mb-3 opacity-30" />
             <p className="text-sm font-medium">Sin planes anuales</p>
-            <p className="text-xs mt-1">Crea el primer plan anual de auditoría</p>
-            <button onClick={() => setCreate(true)}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700">
-              Crear plan
-            </button>
+            {canCreate && <p className="text-xs mt-1">Crea el primer plan anual de auditoría</p>}
+            {canCreate && (
+              <button onClick={() => setCreate(true)}
+                className="mt-4 px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700">
+                Crear plan
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

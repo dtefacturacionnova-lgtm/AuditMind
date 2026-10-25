@@ -1714,7 +1714,11 @@ function TimesheetTab({ auditId }: { auditId: string }) {
   const deleteEntry = useDeleteTimeEntry();
   const { data: closeSettings } = useHoursCloseSettings();
   const requireDesc = !!closeSettings?.enabled; // con el cierre de horas activo, las horas de cliente piden descripción
-  const [date, setDate]   = useState(new Date().toISOString().slice(0, 10));
+  // Hoy en la fecha LOCAL (toISOString() usa UTC: después de las 18:00 en El Salvador proponía mañana).
+  const [date, setDate]   = useState(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  });
   const [hours, setHours] = useState('');
   const [desc, setDesc]   = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -1798,7 +1802,7 @@ function TimesheetTab({ auditId }: { auditId: string }) {
               {entries.map(e => (
                 <tr key={e.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
                   <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">
-                    {new Date(e.workDate).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {new Date(e.workDate).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })}
                   </td>
                   <td className="px-4 py-2.5 text-right font-bold text-gray-800">{e.hours}h</td>
                   <td className="px-4 py-2.5 text-gray-600">{e.description ?? <span className="text-gray-300">—</span>}</td>

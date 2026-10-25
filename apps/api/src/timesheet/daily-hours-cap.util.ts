@@ -89,3 +89,28 @@ export async function assertDailyHoursCap(
     }
   }
 }
+
+/**
+ * Una sola definición de «a qué encargo y a qué ítem de plan pertenece una hora» (revisión del Plan Anual, 2026-10-25): si la hora trae
+ * solo el ítem y el ítem ya está vinculado a un encargo, hereda el encargo; si trae solo el encargo y este tiene ítem de plan, hereda
+ * el ítem. Así las horas reales del plan, el reporte «por plan» y las horas del encargo cuentan lo mismo. Una hora no puede nombrar un
+ * ítem vinculado a otro encargo.
+ */
+export async function completeTimeAnchors(
+  prisma: Pick<Prisma.TransactionClient, 'auditPlanItem'>,
+  a: { auditId?: string | null; planItemId?: string | null },
+): Promise<{ auditId: string | undefined; planItemId: string | undefined }> {
+  let auditId = a.auditId ?? undefined;
+  let planItemId = a.planItemId ?? undefined;
+  if (planItemId) {
+    const item = await prisma.auditPlanItem.findUnique({ where: { id: planItemId }, select: { auditId: true } });
+    if (item?.auditId) {
+      if (auditId && auditId !== item.auditId) throw new BadRequestException('El ítem de plan indicado está vinculado a otro encargo.');
+      auditId = item.auditId;
+    }
+  } else if (auditId) {
+    const item = await prisma.auditPlanItem.findUnique({ where: { auditId }, select: { id: true } });
+    if (item) planItemId = item.id;
+  }
+  return { auditId, planItemId };
+}

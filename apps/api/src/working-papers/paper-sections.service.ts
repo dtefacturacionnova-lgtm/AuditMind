@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, FindingSeverity, FindingStatus, ConfirmationStatus, ConfirmationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
-import { assertInvestigationAccess, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
+import { assertAuditVisible, assertInvestigationAccess, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
 import { PaperGraphService } from './paper-graph.service';
 import { PAPER_TEMPLATES } from './paper-templates';
 import { AiService } from '../ai/ai.service';
@@ -2874,12 +2874,8 @@ ${hasRag ? `- En columnas de tipo "Base Normativa" o similar, cita artículo/nor
    * Usado por el semáforo de cuentas de B-00 S6.
    */
   async getMaterialidadByAudit(auditId: string, user: AuthUser) {
-    // Verify org membership via any paper in the audit
-    const sample = await this.prisma.workingPaper.findFirst({
-      where:   { auditId, audit: { organizationId: user.organizationId } },
-      select:  { id: true },
-    });
-    if (!sample) throw new ForbiddenException();
+    // Modo investigación (2026-10-25): la auditoría debe ser de la organización y visible para el usuario.
+    await assertAuditVisible(this.prisma, auditId, user);
 
     const paper = await this.prisma.workingPaper.findFirst({
       where:   { auditId, paperCode: 'PT-A4' },
@@ -2910,11 +2906,7 @@ ${hasRag ? `- En columnas de tipo "Base Normativa" o similar, cita artículo/nor
    * pierde. El importador de S5 debe usarse justo después de cada ejecución.
    */
   async getSamplingExecutionByAudit(auditId: string, user: AuthUser) {
-    const sample = await this.prisma.workingPaper.findFirst({
-      where:  { auditId, audit: { organizationId: user.organizationId } },
-      select: { id: true },
-    });
-    if (!sample) throw new ForbiddenException();
+    await assertAuditVisible(this.prisma, auditId, user); // modo investigación (2026-10-25): población e ítems seleccionados
 
     const paper = await this.prisma.workingPaper.findFirst({
       where:   { auditId, paperCode: 'PT-A4' },

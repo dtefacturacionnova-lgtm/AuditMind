@@ -1,9 +1,10 @@
 import {
-  Injectable, NotFoundException, ForbiddenException,
+  Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { RefType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertAuditVisible, assertInvestigationAccess, AUDIT_ACCESS_SELECT } from '../common/utils/investigation-scope.util';
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -40,11 +41,7 @@ export class PaperReferencesService {
    */
   async getMentionIndex(auditId: string, user: AuthUser): Promise<MentionItem[]> {
     // Verify audit belongs to org
-    const audit = await this.prisma.audit.findFirst({
-      where: { id: auditId, organizationId: user.organizationId },
-      select: { id: true },
-    });
-    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    await assertAuditVisible(this.prisma, auditId, user); // modo investigación (2026-10-25): índice de todos los papeles y secciones
 
     const papers = await this.prisma.workingPaper.findMany({
       where:   { auditId },
@@ -87,22 +84,26 @@ export class PaperReferencesService {
     // Verify source paper belongs to org
     const sourcePaper = await this.prisma.workingPaper.findFirst({
       where:  { id: sourcePaperId },
-      select: { id: true, audit: { select: { organizationId: true } } },
+      select: { id: true, auditId: true, audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!sourcePaper)
       throw new NotFoundException('Papel origen no encontrado');
     if (sourcePaper.audit.organizationId !== user.organizationId)
       throw new ForbiddenException('Sin acceso');
+    assertInvestigationAccess(sourcePaper.audit, user);
 
     // Verify target paper belongs to same org
     const targetPaper = await this.prisma.workingPaper.findFirst({
       where:  { id: dto.targetPaperId },
-      select: { id: true, audit: { select: { organizationId: true } } },
+      select: { id: true, auditId: true, audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!targetPaper)
       throw new NotFoundException('Papel destino no encontrado');
     if (targetPaper.audit.organizationId !== user.organizationId)
       throw new ForbiddenException('Sin acceso al papel destino');
+    assertInvestigationAccess(targetPaper.audit, user);
+    // Las referencias @mención son entre papeles de la misma auditoría (el índice de mención es por auditoría).
+    if (targetPaper.auditId !== sourcePaper.auditId) throw new BadRequestException('Solo se puede hacer referencia a papeles de la misma auditoría.');
 
     // Determine refType
     const refType: RefType = dto.refType
@@ -145,11 +146,12 @@ export class PaperReferencesService {
   async getReferencesForPaper(paperId: string, user: AuthUser) {
     const paper = await this.prisma.workingPaper.findFirst({
       where:  { id: paperId },
-      select: { id: true, audit: { select: { organizationId: true } } },
+      select: { id: true, audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!paper) throw new NotFoundException('Papel no encontrado');
     if (paper.audit.organizationId !== user.organizationId)
       throw new ForbiddenException('Sin acceso');
+    assertInvestigationAccess(paper.audit, user);
 
     return this.prisma.paperReference.findMany({
       where: { sourcePaperId: paperId },

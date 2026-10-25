@@ -9,6 +9,7 @@ import { AuthUser } from '../../auth/jwt.strategy';
 import { AiService } from '../../ai/ai.service';
 import { PaperReferencesService } from '../paper-references.service';
 import { InvestigationGraphService } from '../../investigation-graph/investigation-graph.service';
+import { assertInvestigationAccess, AUDIT_ACCESS_SELECT } from '../../common/utils/investigation-scope.util';
 
 // Kinds que el pipeline sabe procesar hoy — las 4 fases completas (EVD-15 cierra
 // Fase 4, video corto) + PDF_DOCUMENT (Fase 2a Investigador Forense).
@@ -89,10 +90,11 @@ export class FieldEvidenceService {
   private async assertPaperAccess(paperId: string, user: AuthUser) {
     const wp = await this.prisma.workingPaper.findUnique({
       where: { id: paperId },
-      include: { audit: { select: { organizationId: true } } },
+      include: { audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
     if (wp.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(wp.audit, user); // modo investigación (2026-10-25): transcripciones, citas, audio/video y anotaciones
     return wp;
   }
 

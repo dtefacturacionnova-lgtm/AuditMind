@@ -21,6 +21,7 @@ import {
 import {
   construirDefGenerica, construirDefDesdeLayout, GenericLayoutDescriptor,
 } from './excel-generic-template.service';
+import { assertInvestigationAccess, AUDIT_ACCESS_SELECT, INVESTIGATION_SELECT } from '../../common/utils/investigation-scope.util';
 
 /**
  * Motor genérico de plantillas Excel (EXC-02 — implementación de EXC-01).
@@ -346,10 +347,11 @@ export class ExcelTemplateEngineService {
   private async accesoMinimoPapel(paperId: string, user: AuthUser) {
     const wp = await this.prisma.workingPaper.findUnique({
       where: { id: paperId },
-      select: { paperCode: true, auditId: true, audit: { select: { organizationId: true } } },
+      select: { paperCode: true, auditId: true, audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
     if (wp.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(wp.audit, user); // modo investigación (2026-10-25)
     if (!wp.paperCode) throw new BadRequestException('Este papel no tiene un paperCode asignado — no se puede generar una plantilla');
     return { paperCode: wp.paperCode, auditId: wp.auditId, organizationId: wp.audit.organizationId };
   }
@@ -540,11 +542,12 @@ export class ExcelTemplateEngineService {
       where:   { id: paperId },
       include: { audit: { select: {
         id: true, organizationId: true, title: true,
-        auditPeriodStart: true, auditPeriodEnd: true, auditEntityId: true,
+        auditPeriodStart: true, auditPeriodEnd: true, auditEntityId: true, ...INVESTIGATION_SELECT,
       } } },
     });
     if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
     if (wp.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(wp.audit, user); // modo investigación (2026-10-25): secciones, saldos del balance y materialidad
     if (!wp.paperCode || !def.paperCodeAplicable.includes(wp.paperCode)) {
       throw new BadRequestException(`La plantilla '${def.key}' no aplica al papel '${wp.paperCode ?? wp.code}'`);
     }

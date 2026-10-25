@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInvestigationAccess, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,10 +63,11 @@ export class PaperLiveService {
     // Look up the paper to get auditId
     const paper = await this.prisma.workingPaper.findUnique({
       where:   { id: paperId },
-      include: { audit: { select: { organizationId: true, title: true } } },
+      include: { audit: { select: { organizationId: true, title: true, ...INVESTIGATION_SELECT } } },
     });
     if (!paper) throw new NotFoundException('Papel de trabajo no encontrado');
     if (paper.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(paper.audit, user); // modo investigación (2026-10-25): títulos de hallazgos, equipo, horas
 
     return this.getStatsByAuditId(paper.auditId, paper.audit.title);
   }
@@ -73,10 +75,11 @@ export class PaperLiveService {
   async getLiveStatsByAuditId(auditId: string, user: AuthUser): Promise<LiveStats> {
     const audit = await this.prisma.audit.findUnique({
       where:   { id: auditId },
-      select:  { organizationId: true, title: true },
+      select:  { organizationId: true, title: true, ...INVESTIGATION_SELECT },
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
     if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(audit, user);
     return this.getStatsByAuditId(auditId, audit.title);
   }
 

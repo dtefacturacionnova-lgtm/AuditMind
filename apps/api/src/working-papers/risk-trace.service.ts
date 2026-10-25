@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInvestigationAccess, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
 
 /**
  * Ficha de Riesgo — trazabilidad de UN riesgo/área a través de toda la cadena
@@ -261,10 +262,11 @@ export class RiskTraceService {
   ): Promise<RiskTraceResponse> {
     const audit = await this.prisma.audit.findUnique({
       where:  { id: auditId },
-      select: { organizationId: true },
+      select: { organizationId: true, ...INVESTIGATION_SELECT },
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
     if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(audit, user); // modo investigación (2026-10-25): riesgos, controles, deficiencias y conclusiones
 
     // ── 1. Papeles y secciones de la cadena, en una sola consulta ──────────
     const codes = [...new Set(BLOCK_SPECS.map(b => b.paperCode))];
@@ -417,10 +419,11 @@ export class RiskTraceService {
   async getSummary(auditId: string, user: AuthUser): Promise<ControlInternoSummary> {
     const audit = await this.prisma.audit.findUnique({
       where:  { id: auditId },
-      select: { organizationId: true },
+      select: { organizationId: true, ...INVESTIGATION_SELECT },
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
     if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(audit, user); // modo investigación (2026-10-25): riesgos, controles, deficiencias y conclusiones
 
     const codes = [...new Set(BLOCK_SPECS.map(b => b.paperCode))];
     const papers = await this.prisma.workingPaper.findMany({
@@ -551,10 +554,11 @@ export class RiskTraceService {
   async getIntegratedReportData(auditId: string, user: AuthUser): Promise<IntegratedReportData> {
     const audit = await this.prisma.audit.findUnique({
       where:  { id: auditId },
-      select: { organizationId: true, title: true, auditEntity: { select: { name: true } } },
+      select: { organizationId: true, title: true, auditEntity: { select: { name: true } }, ...INVESTIGATION_SELECT },
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
     if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(audit, user);
 
     const codes = ['PT-MRCI', 'PT-NIA265', 'PT-COSO'];
     const papers = await this.prisma.workingPaper.findMany({

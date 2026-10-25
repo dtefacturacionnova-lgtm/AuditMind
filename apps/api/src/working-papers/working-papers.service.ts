@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException,
 } from '@nestjs/common';
 import { assertInOrg, assertCanSelfReview } from '../common/utils/tenant.util';
-import { assertInvestigationAccess, INVESTIGATION_SELECT, visibleAuditWhere } from '../common/utils/investigation-scope.util';
+import { assertInvestigationAccess, AUDIT_ACCESS_SELECT, INVESTIGATION_SELECT, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -662,10 +662,11 @@ export class WorkingPapersService {
   async getTbAccountsForPaper(paperId: string, user: AuthUser) {
     const paper = await this.prisma.workingPaper.findUnique({
       where:   { id: paperId },
-      include: { audit: { select: { id: true, organizationId: true } } },
+      include: { audit: { select: { id: true, organizationId: true, ...INVESTIGATION_SELECT } } },
     });
     if (!paper) throw new NotFoundException('Papel no encontrado');
     if (paper.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(paper.audit, user); // modo investigación (2026-10-25): todas las cuentas con saldo actual y anterior
 
     const b00 = await this.prisma.workingPaper.findFirst({
       where:  { auditId: paper.audit.id, paperCode: 'PT-FIN-B00' },
@@ -913,10 +914,11 @@ export class WorkingPapersService {
   async removeTickMarkEntry(entryId: string, user: AuthUser) {
     const entry = await this.prisma.tickMarkEntry.findUnique({
       where:   { id: entryId },
-      include: { paper: { include: { audit: { select: { organizationId: true } } } } },
+      include: { paper: { include: { audit: { select: AUDIT_ACCESS_SELECT } } } },
     });
     if (!entry) throw new NotFoundException('Marca de auditoría no encontrada');
     if (entry.paper.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(entry.paper.audit, user);
 
     await this.prisma.tickMarkEntry.delete({ where: { id: entryId } });
     return { deleted: true };
@@ -935,10 +937,11 @@ export class WorkingPapersService {
   async resolveComment(commentId: string, user: AuthUser) {
     const comment = await this.prisma.workingPaperComment.findUnique({
       where:   { id: commentId },
-      include: { paper: { include: { audit: { select: { organizationId: true } } } } },
+      include: { paper: { include: { audit: { select: AUDIT_ACCESS_SELECT } } } },
     });
     if (!comment) throw new NotFoundException('Comentario no encontrado');
     if (comment.paper.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(comment.paper.audit, user);
 
     return this.prisma.workingPaperComment.update({
       where: { id: commentId },
@@ -1314,10 +1317,11 @@ export class WorkingPapersService {
   }
 
   async linkPbc(paperId: string, pbcId: string, user: AuthUser) {
-    await this.findOne(paperId, user);
-    // Validate pbc belongs to same org
+    const wp = await this.findOne(paperId, user);
+    // La solicitud PBC debe ser de la MISMA auditoría que el papel: vincular una de otra (por ejemplo una investigación)
+    // y luego listar los vínculos entregaba sus datos y archivos.
     const pbc = await this.prisma.pbcRequest.findFirst({
-      where: { id: pbcId, audit: { organizationId: user.organizationId } },
+      where: { id: pbcId, auditId: wp.auditId, audit: { organizationId: user.organizationId } },
     });
     if (!pbc) throw new NotFoundException('Solicitud PBC no encontrada');
 
@@ -1331,10 +1335,11 @@ export class WorkingPapersService {
   async unlinkPbc(linkId: string, user: AuthUser) {
     const link = await this.prisma.pbcPaperLink.findUnique({
       where:   { id: linkId },
-      include: { paper: { include: { audit: { select: { organizationId: true } } } } },
+      include: { paper: { include: { audit: { select: AUDIT_ACCESS_SELECT } } } },
     });
     if (!link) throw new NotFoundException('Vínculo no encontrado');
     if (link.paper.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(link.paper.audit, user);
 
     await this.prisma.pbcPaperLink.delete({ where: { id: linkId } });
     return { deleted: true };
@@ -1370,9 +1375,9 @@ export class WorkingPapersService {
   }
 
   async linkPbcToRow(paperId: string, sectionKey: string, rowId: string, pbcId: string, user: AuthUser) {
-    await this.findOne(paperId, user);
+    const wp = await this.findOne(paperId, user);
     const pbc = await this.prisma.pbcRequest.findFirst({
-      where: { id: pbcId, audit: { organizationId: user.organizationId } },
+      where: { id: pbcId, auditId: wp.auditId, audit: { organizationId: user.organizationId } },
     });
     if (!pbc) throw new NotFoundException('Solicitud PBC no encontrada');
     if (!sectionKey || !rowId) throw new BadRequestException('sectionKey y rowId son requeridos para vincular por fila');
@@ -1414,7 +1419,8 @@ export class WorkingPapersService {
 
     // 2a. Collect upstream papers via explicit PaperLinks
     const links = await this.prisma.paperLink.findMany({
-      where:   { targetId: id, isActive: true },
+      // Solo fuentes de la MISMA auditoría: un vínculo a un papel de otra auditoría copiaría su contenido a este papel.
+      where:   { targetId: id, isActive: true, source: { auditId: wp.auditId } },
       include: {
         source: {
           select: {

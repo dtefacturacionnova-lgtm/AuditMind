@@ -1,11 +1,12 @@
 import {
-  Injectable, NotFoundException, ForbiddenException,
+  Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { SyncStatus, WorkingPaperStatus } from '@prisma/client';
 import { CreatePaperLinkDto } from './dto/paper-section.dto';
+import { assertInvestigationAccess, AUDIT_ACCESS_SELECT, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
 
 @Injectable()
 export class PaperGraphService {
@@ -202,18 +203,23 @@ export class PaperGraphService {
     // Verify target paper belongs to user's org
     const target = await this.prisma.workingPaper.findUnique({
       where:   { id: targetId },
-      include: { audit: { select: { organizationId: true } } },
+      include: { audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!target) throw new NotFoundException('Papel destino no encontrado');
     if (target.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(target.audit, user);
 
     // Verify source paper belongs to user's org
     const source = await this.prisma.workingPaper.findUnique({
       where:   { id: dto.sourceId },
-      include: { audit: { select: { organizationId: true } } },
+      include: { audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!source) throw new NotFoundException('Papel fuente no encontrado');
     if (source.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(source.audit, user);
+    // Modo investigación (2026-10-25): un vínculo entre papeles de AUDITORÍAS distintas permitía vincular como fuente un
+    // papel de una investigación ajena a un papel propio y consolidar para copiar su contenido.
+    if (source.auditId !== target.auditId) throw new BadRequestException('Solo se pueden vincular papeles de la misma auditoría.');
 
     return this.prisma.paperLink.create({
       data: {
@@ -239,10 +245,11 @@ export class PaperGraphService {
   async getAuditGraph(auditId: string, user: AuthUser) {
     const audit = await this.prisma.audit.findUnique({
       where:   { id: auditId },
-      select:  { id: true, title: true, organizationId: true },
+      select:  { id: true, title: true, organizationId: true, ...INVESTIGATION_SELECT },
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
     if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(audit, user);
 
     // 1. All papers in this audit with section counts
     const papers = await this.prisma.workingPaper.findMany({
@@ -316,10 +323,11 @@ export class PaperGraphService {
   async getGraphForPaper(paperId: string, user: AuthUser) {
     const paper = await this.prisma.workingPaper.findUnique({
       where:   { id: paperId },
-      include: { audit: { select: { organizationId: true } } },
+      include: { audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!paper) throw new NotFoundException('Papel de trabajo no encontrado');
     if (paper.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(paper.audit, user);
 
     const [sources, targets] = await Promise.all([
       this.getUpstreamPapers(paperId),

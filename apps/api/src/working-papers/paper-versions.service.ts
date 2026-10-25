@@ -11,6 +11,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { SyncStatus } from '@prisma/client';
+import { assertInvestigationAccess, AUDIT_ACCESS_SELECT } from '../common/utils/investigation-scope.util';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,10 +66,11 @@ export class PaperVersionsService {
   private async assertPaperAccess(paperId: string, user: AuthUser) {
     const wp = await this.prisma.workingPaper.findUnique({
       where:   { id: paperId },
-      include: { audit: { select: { organizationId: true } } },
+      include: { audit: { select: AUDIT_ACCESS_SELECT } },
     });
     if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
     if (wp.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(wp.audit, user); // modo investigación (2026-10-25): contenido completo y restauración
     return wp;
   }
 

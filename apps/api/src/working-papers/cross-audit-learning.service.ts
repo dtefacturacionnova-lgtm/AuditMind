@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nest
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInvestigationAccess, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,10 +62,12 @@ export class CrossAuditLearningService {
       where:   { id: auditId },
       include: {
         auditEntity: { select: { id: true, name: true, sector: true, category: true } },
+        team:        { select: { userId: true } },
       },
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
     if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(audit, user); // modo investigación (2026-10-25): secciones del destino enviadas a la IA
 
     // ─── Contexto del papel actual (para contextualizar las sugerencias) ──
     let paperContext: { paperCode: string | null; title: string; type: string } | null = null;
@@ -86,7 +89,8 @@ export class CrossAuditLearningService {
     const previousAudits = entityId
       ? await this.prisma.audit.findMany({
           where: {
-            organizationId: user.organizationId,
+            // Solo auditorías que el usuario puede ver: los hallazgos de una investigación ajena no entran al historial.
+            AND:            [visibleAuditWhere(user)],
             auditEntityId:  entityId,
             id:             { not: auditId },
           },
@@ -103,7 +107,7 @@ export class CrossAuditLearningService {
     const fallbackAuditIds = prevAuditIds.length === 0 && audit.type
       ? (await this.prisma.audit.findMany({
           where: {
-            organizationId: user.organizationId,
+            AND:            [visibleAuditWhere(user)],
             type:           audit.type,
             id:             { not: auditId },
           },

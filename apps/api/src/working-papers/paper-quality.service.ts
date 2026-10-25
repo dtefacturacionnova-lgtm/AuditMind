@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nest
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInvestigationAccess, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,12 +63,13 @@ export class PaperQualityService {
     const wp = await this.prisma.workingPaper.findUnique({
       where:   { id: paperId },
       include: {
-        audit:    { select: { organizationId: true, title: true } },
+        audit:    { select: { organizationId: true, title: true, ...INVESTIGATION_SELECT } },
         sections: { orderBy: { sortOrder: 'asc' } },
       },
     });
     if (!wp) throw new NotFoundException('Papel de trabajo no encontrado');
     if (wp.audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(wp.audit, user); // modo investigación (2026-10-25): manda las secciones a la IA y escribe la nota de calidad
 
     const sections = wp.sections;
     if (sections.length === 0) {

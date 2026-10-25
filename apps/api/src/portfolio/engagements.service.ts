@@ -3,18 +3,31 @@ import {
   Logger,
 } from '@nestjs/common';
 import {
-  AuditOriginType, AuditStatus, AuditType, ClientStatus, EngagementStatus, Prisma,
+  AuditOriginType, AuditStatus, AuditType, ClientInvoiceStatus, ClientStatus, EngagementKind, EngagementStatus, PhaseStatus, PhaseType, Prisma,
+  ScheduleItemStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AuditIndexService } from '../audits/audit-index.service';
 import { AuditFoldersService } from '../audit-folders/audit-folders.service';
 import { ClientsService } from './clients.service';
-import { CreateEngagementDto } from './dto/engagement.dto';
-import { maskHiddenAudits } from '../common/utils/investigation-scope.util';
+import {
+  assertFiscalYearEnd, assertReadyToApprove, auditPeriodStartFor, findExternalFinancialTemplateId, PARTNER_ROLES,
+} from './engagement-readiness.util';
+import { CreateEngagementDto, UpdateEngagementDto } from './dto/engagement.dto';
+import { lockEngagement, logCollection } from '../collections/collections.common';
+import { assertAuditVisible, maskHiddenAudits } from '../common/utils/investigation-scope.util';
 
-/** Código estable de la plantilla de sistema "Auditoría Financiera Externa v1.0". */
-const EXTERNAL_FINANCIAL_TEMPLATE_CODE = 'AUDIT_EXTERNAL_FINANCIAL_V1';
+
+/**
+ * Etapas básicas de una consultoría (acordadas con el despacho, 2026-10-23). No lleva plantilla de papeles ni expediente
+ * precargado: depende demasiado del tipo de consultoría y se define más adelante.
+ */
+export const CONSULTING_PHASES: ReadonlyArray<{ phaseType: PhaseType; name: string }> = [
+  { phaseType: PhaseType.PLANNING,  name: 'Planificación' },
+  { phaseType: PhaseType.FIELDWORK, name: 'Ejecución' },
+  { phaseType: PhaseType.REPORTING, name: 'Informes y cierre' },
+];
 
 const ENGAGEMENT_INCLUDE = {
   client:   { select: { id: true, legalName: true, tradeName: true, status: true, auditEntityId: true } },
@@ -55,26 +68,41 @@ export class EngagementsService {
       );
     }
 
-    const duplicate = await this.prisma.engagement.findUnique({
-      where: { clientId_fiscalYear: { clientId: dto.clientId, fiscalYear: dto.fiscalYear } },
-      select: { id: true },
-    });
-    if (duplicate) {
-      throw new ConflictException(
-        `Ya existe un encargo para este cliente en el ejercicio ${dto.fiscalYear} (${duplicate.id}).`,
-      );
+    const kind = dto.kind ?? EngagementKind.AUDIT;
+    const title = dto.title?.trim() || null;
+    if (kind === EngagementKind.CONSULTING) {
+      if (!title || title.length < 3) throw new BadRequestException('Una consultoría necesita un nombre de al menos 3 caracteres (por ejemplo «Asesoría tributaria 2026»).');
+      if (dto.templateId) throw new BadRequestException('Las consultorías no usan plantilla de auditoría.');
     }
+
+    // Una AUDITORÍA por cliente y año (índice parcial en la base); las consultorías pueden ser varias.
+    if (kind === EngagementKind.AUDIT) {
+      const duplicate = await this.prisma.engagement.findFirst({
+        where: { clientId: dto.clientId, fiscalYear: dto.fiscalYear, kind: EngagementKind.AUDIT },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new ConflictException(
+          `Ya existe un encargo para este cliente en el ejercicio ${dto.fiscalYear} (${duplicate.id}).`,
+        );
+      }
+    }
+
+    assertFiscalYearEnd(dto.fiscalYear, dto.fiscalYearEndDate);
 
     if (dto.engagementLetterId) {
       const letter = await this.prisma.engagementLetter.findUnique({
         where:  { id: dto.engagementLetterId },
-        select: { id: true, organizationId: true, clientId: true },
+        select: { id: true, organizationId: true, clientId: true, status: true },
       });
       if (!letter || letter.organizationId !== user.organizationId) {
         throw new NotFoundException('Carta de compromiso no encontrada');
       }
       if (letter.clientId !== dto.clientId) {
         throw new BadRequestException('La carta de compromiso pertenece a otro cliente.');
+      }
+      if (letter.status !== 'SIGNED') {
+        throw new BadRequestException('Solo se vincula una carta de compromiso firmada: el encargo se acuerda por escrito (NIA 210).');
       }
     }
 
@@ -88,10 +116,10 @@ export class EngagementsService {
 
     if (dto.leadPartnerId) {
       const partner = await this.prisma.user.findFirst({
-        where:  { id: dto.leadPartnerId, organizationId: user.organizationId },
+        where:  { id: dto.leadPartnerId, organizationId: user.organizationId, active: true, role: { in: [...PARTNER_ROLES] } },
         select: { id: true },
       });
-      if (!partner) throw new NotFoundException('Socio a cargo no encontrado en la organización');
+      if (!partner) throw new BadRequestException('El socio a cargo debe ser un usuario activo de la organización con rol de gerente o superior.');
     }
 
     return this.prisma.engagement.create({
@@ -99,6 +127,8 @@ export class EngagementsService {
         organizationId:     user.organizationId,
         clientId:           dto.clientId,
         engagementLetterId: dto.engagementLetterId ?? null,
+        kind,
+        title,
         fiscalYear:         dto.fiscalYear,
         fiscalYearEndDate:  new Date(dto.fiscalYearEndDate),
         plannedStartDate:   dto.plannedStartDate ? new Date(dto.plannedStartDate) : null,
@@ -126,6 +156,86 @@ export class EngagementsService {
     });
     // Modo investigación (2026-10-25): el encargo cuya auditoría es una investigación ajena al equipo no muestra su título ni estado.
     return maskHiddenAudits(this.prisma, rows, user);
+  }
+
+  // ── Editar datos descriptivos ─────────────────────────────────────────────
+  /**
+   * Cambia nombre, fechas previstas, socio a cargo y notas. No toca cliente, ejercicio ni tipo (de eso depende el honorario
+   * y el calendario de cobros). El socio solo se cambia mientras el encargo es borrador: después el responsable vive en la auditoría.
+   */
+  async update(id: string, dto: UpdateEngagementDto, user: AuthUser) {
+    const engagement = await this.getEngagementOrThrow(id, user);
+    if (engagement.status === EngagementStatus.CANCELLED) {
+      throw new BadRequestException('Un encargo cancelado no se puede editar.');
+    }
+    if (dto.title !== undefined && engagement.kind === EngagementKind.AUDIT) {
+      throw new BadRequestException('El nombre solo se edita en las consultorías: la auditoría se nombra con el cliente y el ejercicio.');
+    }
+    if (dto.leadPartnerId !== undefined) {
+      if (engagement.status !== EngagementStatus.DRAFT) {
+        throw new BadRequestException('El socio a cargo solo se cambia mientras el encargo es borrador; después se cambia en la auditoría.');
+      }
+      const partner = await this.prisma.user.findFirst({
+        where:  { id: dto.leadPartnerId, organizationId: user.organizationId, active: true, role: { in: [...PARTNER_ROLES] } },
+        select: { id: true },
+      });
+      if (!partner) throw new BadRequestException('El socio a cargo debe ser un usuario activo de la organización con rol de gerente o superior.');
+    }
+
+    // La carta que respalda el encargo y el cierre del ejercicio se corrigen solo mientras es borrador (después de aprobar ya
+    // nacieron la auditoría y su período). Antes no había forma de vincular la carta desde el encargo ni de corregir el cierre.
+    if (dto.engagementLetterId !== undefined || dto.fiscalYearEndDate !== undefined) {
+      if (engagement.status !== EngagementStatus.DRAFT) {
+        throw new BadRequestException('La carta de compromiso y el cierre del ejercicio solo se cambian mientras el encargo es borrador.');
+      }
+    }
+    if (dto.engagementLetterId) {
+      const letter = await this.prisma.engagementLetter.findFirst({
+        where:  { id: dto.engagementLetterId, organizationId: user.organizationId, clientId: engagement.clientId },
+        select: { id: true, status: true },
+      });
+      if (!letter) throw new NotFoundException('Carta de compromiso no encontrada para este cliente');
+      if (letter.status !== 'SIGNED') throw new BadRequestException('Solo se vincula una carta de compromiso firmada (NIA 210).');
+    }
+    if (dto.fiscalYearEndDate) assertFiscalYearEnd(engagement.fiscalYear, dto.fiscalYearEndDate);
+
+    const start = dto.plannedStartDate ? new Date(dto.plannedStartDate) : undefined;
+    const end   = dto.plannedEndDate   ? new Date(dto.plannedEndDate)   : undefined;
+    const effStart = start ?? engagement.plannedStartDate ?? undefined;
+    const effEnd   = end   ?? engagement.plannedEndDate   ?? undefined;
+    if (effStart && effEnd && effEnd < effStart) {
+      throw new BadRequestException('La fecha de fin prevista no puede ser anterior a la de inicio.');
+    }
+
+    const newTitle = dto.title !== undefined ? dto.title.trim() : undefined;
+    if (newTitle !== undefined && newTitle.length < 3) throw new BadRequestException('El nombre debe tener al menos 3 caracteres.');
+    // Modo investigación (2026-10-25): renombrar la consultoría renombra su auditoría; no se hace sobre una investigación ajena.
+    if (newTitle !== undefined && engagement.auditId) await assertAuditVisible(this.prisma, engagement.auditId, user);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.engagement.update({
+        where: { id },
+        data: {
+          ...(newTitle !== undefined && { title: newTitle }),
+          ...(start && { plannedStartDate: start }),
+          ...(end && { plannedEndDate: end }),
+          ...(dto.leadPartnerId !== undefined && { leadPartnerId: dto.leadPartnerId }),
+          ...(dto.engagementLetterId && { engagementLetterId: dto.engagementLetterId }),
+          ...(dto.fiscalYearEndDate && { fiscalYearEndDate: new Date(dto.fiscalYearEndDate) }),
+          ...(dto.notes !== undefined && { notes: dto.notes }),
+        },
+        include: ENGAGEMENT_INCLUDE,
+      });
+      // El nombre de la consultoría es también el de su auditoría real: se mantienen iguales.
+      if (newTitle !== undefined && engagement.auditId) {
+        await tx.audit.update({
+          where: { id: engagement.auditId },
+          data:  { title: `${engagement.client.legalName} — ${newTitle}` },
+        });
+      }
+      return updated;
+    });
+    // ...y la respuesta no muestra título ni estado de una investigación ajena (igual que el listado).
+    return (await maskHiddenAudits(this.prisma, [result], user))[0];
   }
 
   // ── Aprobar encargo → crear la auditoría real ─────────────────────────────
@@ -157,18 +267,20 @@ export class EngagementsService {
       );
     }
 
-    // 2. Resolver la plantilla
+    if (engagement.kind === EngagementKind.CONSULTING) return this.approveConsulting(engagement, user);
+
+    // 2. Precondiciones de negocio (cliente activo, carta firmada, aceptación del ejercicio) y plantilla
+    const readiness = await assertReadyToApprove(this.prisma, engagement);
     const templateId = await this.resolveTemplateId(engagement.templateId, user);
 
-    // 3. AuditEntity espejo del cliente (si aún no existe)
-    const auditEntityId = await this.ensureAuditEntity(engagement.clientId, user);
-
-    // 4. Transacción atómica: Audit + LEAD del equipo + vínculo en el Engagement
+    // 3-4. Transacción atómica: reclamo del encargo + AuditEntity espejo del cliente + Audit + LEAD del equipo + vínculo
     const title = `${engagement.client.legalName} — Auditoría EEFF ${engagement.fiscalYear}`;
     const leadAuditorId = engagement.leadPartnerId ?? user.id;
-    const scope = await this.buildScope(engagement.engagementLetter?.id ?? null, engagement.client.legalName, engagement.fiscalYear);
+    const scope = await this.buildScope(engagement.engagementLetter?.id ?? readiness.letterId, engagement.client.legalName, engagement.fiscalYear);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      await this.claimDraft(tx, id);
+      const auditEntityId = await this.ensureAuditEntity(tx, engagement.clientId, user);
       const audit = await tx.audit.create({
         data: {
           organizationId:   user.organizationId,
@@ -185,7 +297,7 @@ export class EngagementsService {
           leadAuditorId,
           startDate:        engagement.plannedStartDate ?? null,
           endDate:          engagement.plannedEndDate   ?? null,
-          auditPeriodStart: new Date(Date.UTC(engagement.fiscalYear, 0, 1)),
+          auditPeriodStart: auditPeriodStartFor(engagement.fiscalYearEndDate),
           auditPeriodEnd:   engagement.fiscalYearEndDate,
           estimatedHours:   0,
           scope,
@@ -205,7 +317,7 @@ export class EngagementsService {
 
       const updated = await tx.engagement.update({
         where: { id },
-        data:  { auditId: audit.id, status: EngagementStatus.APPROVED },
+        data:  { auditId: audit.id, status: EngagementStatus.APPROVED, ...(engagement.engagementLetterId ? {} : { engagementLetterId: readiness.letterId }) },
         include: ENGAGEMENT_INCLUDE,
       });
 
@@ -232,6 +344,71 @@ export class EngagementsService {
     return result;
   }
 
+  /**
+   * Aprobar una consultoría: crea su auditoría real (tipo OPERATIONAL, subtipo CONSULTORIA) con las tres etapas básicas y
+   * SIN plantilla de papeles ni expediente precargado. Las horas y los costos se registran contra esa auditoría, igual que
+   * en una auditoría. Todo en una transacción: o quedan la auditoría, el equipo, las etapas y el vínculo, o nada.
+   */
+  private async approveConsulting(
+    engagement: Awaited<ReturnType<EngagementsService['getEngagementOrThrow']>>,
+    user: AuthUser,
+  ) {
+    const leadAuditorId = engagement.leadPartnerId ?? user.id;
+    const name = engagement.title ?? `Consultoría ${engagement.fiscalYear}`;
+    const title = `${engagement.client.legalName} — ${name}`;
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.claimDraft(tx, engagement.id);
+      const auditEntityId = await this.ensureAuditEntity(tx, engagement.clientId, user);
+      const audit = await tx.audit.create({
+        data: {
+          organizationId:   user.organizationId,
+          title,
+          type:             AuditType.OPERATIONAL,
+          subtype:          'CONSULTORIA',
+          status:           AuditStatus.PLANNING,
+          originType:       AuditOriginType.UNPLANNED_MANAGEMENT,
+          auditEntityId,
+          templateId:       null,
+          leadAuditorId,
+          startDate:        engagement.plannedStartDate ?? null,
+          endDate:          engagement.plannedEndDate   ?? null,
+          auditPeriodStart: new Date(Date.UTC(engagement.fiscalYear, 0, 1)),
+          auditPeriodEnd:   engagement.fiscalYearEndDate,
+          estimatedHours:   0,
+          scope:            engagement.notes ?? `${name} para ${engagement.client.legalName}, ejercicio ${engagement.fiscalYear}.`,
+        },
+      });
+      await tx.auditTeam.upsert({
+        where:  { auditId_userId: { auditId: audit.id, userId: leadAuditorId } },
+        create: { auditId: audit.id, userId: leadAuditorId, role: 'LEAD' },
+        update: { role: 'LEAD' },
+      });
+      await tx.auditPhase.createMany({
+        data: CONSULTING_PHASES.map((p, order) => ({
+          auditId: audit.id, phaseType: p.phaseType, name: p.name, order, status: PhaseStatus.PENDING,
+        })),
+      });
+      return tx.engagement.update({
+        where:   { id: engagement.id },
+        data:    { auditId: audit.id, status: EngagementStatus.APPROVED },
+        include: ENGAGEMENT_INCLUDE,
+      });
+    });
+  }
+
+  /**
+   * Reclama el paso DRAFT → APPROVED de forma atómica: de dos aprobaciones simultáneas (doble clic) gana una y la otra recibe 409,
+   * en lugar de crear dos auditorías y dejar una huérfana. La fila queda bloqueada hasta que confirme la transacción.
+   */
+  private async claimDraft(tx: Prisma.TransactionClient, id: string) {
+    const res = await tx.engagement.updateMany({
+      where: { id, status: EngagementStatus.DRAFT, auditId: null },
+      data:  { status: EngagementStatus.APPROVED },
+    });
+    if (res.count !== 1) throw new ConflictException('El encargo ya fue aprobado (o lo está aprobando otra persona).');
+  }
+
   // ── Cancelar encargo ──────────────────────────────────────────────────────
   async cancel(id: string, user: AuthUser) {
     const engagement = await this.getEngagementOrThrow(id, user);
@@ -246,10 +423,34 @@ export class EngagementsService {
       throw new BadRequestException('El encargo ya está cancelado.');
     }
 
-    return this.prisma.engagement.update({
-      where:   { id },
-      data:    { status: EngagementStatus.CANCELLED },
-      include: ENGAGEMENT_INCLUDE,
+    // Un encargo con facturas vigentes no se cancela (el dinero ya está registrado): primero se anulan esas facturas.
+    // Las cuotas aún sin facturar se cancelan con él, para que no queden cobros programados de un encargo muerto.
+    // Todo bajo el candado del encargo (el mismo que toman registrar factura y generar calendario) y releyendo el estado después.
+    return this.prisma.$transaction(async (tx) => {
+      await lockEngagement(tx, id);
+      const fresh = await tx.engagement.findUnique({ where: { id }, select: { status: true, auditId: true } });
+      if (!fresh) throw new NotFoundException('Encargo no encontrado');
+      if (fresh.auditId) throw new BadRequestException('El encargo ya generó una auditoría real; no se puede cancelar desde Cartera.');
+      if (fresh.status === EngagementStatus.CANCELLED) throw new BadRequestException('El encargo ya está cancelado.');
+      const invoices = await tx.clientInvoice.count({ where: { engagementId: id, status: { not: ClientInvoiceStatus.VOID } } });
+      if (invoices > 0) {
+        throw new BadRequestException('El encargo tiene facturas registradas: anúlalas en Cobranza antes de cancelarlo.');
+      }
+      const planned = await tx.billingScheduleItem.findMany({ where: { engagementId: id, status: ScheduleItemStatus.PLANNED } });
+      if (planned.length) {
+        await tx.billingScheduleItem.updateMany({ where: { id: { in: planned.map((p) => p.id) } }, data: { status: ScheduleItemStatus.CANCELLED } });
+        for (const item of planned) {
+          await logCollection(tx, {
+            organizationId: user.organizationId, entityType: 'SCHEDULE_ITEM', entityId: item.id, action: 'SCHEDULE_ITEM_CANCELLED', actorId: user.id,
+            before: { status: 'PLANNED', amount: item.amount.toString() }, after: { status: 'CANCELLED' }, note: 'Encargo cancelado',
+          });
+        }
+      }
+      return tx.engagement.update({
+        where:   { id },
+        data:    { status: EngagementStatus.CANCELLED },
+        include: ENGAGEMENT_INCLUDE,
+      });
     });
   }
 
@@ -265,18 +466,14 @@ export class EngagementsService {
       return template.id;
     }
 
-    const fallback = await this.prisma.auditTemplate.findFirst({
-      where:  { organizationId: user.organizationId, code: EXTERNAL_FINANCIAL_TEMPLATE_CODE },
-      select: { id: true },
-    });
+    const fallback = await findExternalFinancialTemplateId(this.prisma, user.organizationId);
     if (!fallback) {
       throw new NotFoundException(
-        'No se encontró la plantilla de Auditoría Financiera Externa (code = ' +
-        `${EXTERNAL_FINANCIAL_TEMPLATE_CODE}) para esta organización — ejecuta el reseed del sistema ` +
-        '(POST /audit-templates/reseed-system) o indica templateId en el encargo.',
+        'No se encontró la plantilla «Auditoría Financiera Externa v1.0» para esta organización: abre Plantillas de Auditoría ' +
+        '(se siembran solas) o indica la plantilla en el encargo.',
       );
     }
-    return fallback.id;
+    return fallback;
   }
 
   /**
@@ -285,12 +482,14 @@ export class EngagementsService {
    * así que al aprobar se crea el espejo una sola vez y queda cacheado en
    * `Client.auditEntityId` (@unique, relación 1-1).
    */
-  private async ensureAuditEntity(clientId: string, user: AuthUser): Promise<string> {
-    const client = await this.prisma.client.findUnique({ where: { id: clientId } });
+  private async ensureAuditEntity(db: Prisma.TransactionClient, clientId: string, user: AuthUser): Promise<string> {
+    // Dos encargos del mismo cliente aprobados a la vez no deben crear dos espejos: se serializa por la fila del cliente.
+    await db.$queryRaw`SELECT id FROM clients WHERE id = ${clientId} FOR UPDATE`;
+    const client = await db.client.findUnique({ where: { id: clientId } });
     if (!client) throw new NotFoundException('Cliente no encontrado');
     if (client.auditEntityId) return client.auditEntityId;
 
-    const entity = await this.prisma.auditEntity.create({
+    const entity = await db.auditEntity.create({
       data: {
         organizationId: user.organizationId,
         name:           client.legalName,
@@ -307,7 +506,7 @@ export class EngagementsService {
       select: { id: true },
     });
 
-    await this.prisma.client.update({
+    await db.client.update({
       where: { id: clientId },
       data:  { auditEntityId: entity.id },
     });

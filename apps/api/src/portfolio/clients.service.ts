@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, ForbiddenException,
+  Injectable, NotFoundException, ForbiddenException, ConflictException,
 } from '@nestjs/common';
 import { Client, ClientStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -54,7 +54,24 @@ export class ClientsService {
   }
 
   // ── Crear prospecto ────────────────────────────────────────────────────────
+  /** Otro cliente de la organización con el mismo NIT (sin guiones ni espacios): evita registrar dos veces al mismo sujeto. */
+  private async assertTaxIdFree(taxId: string | null | undefined, organizationId: string, exceptId?: string) {
+    const normalized = (taxId ?? '').replace(/[\s-]/g, '').toLowerCase();
+    if (!normalized) return;
+    const others = await this.prisma.client.findMany({
+      where: { organizationId, taxId: { not: null }, ...(exceptId && { id: { not: exceptId } }) },
+      select: { id: true, legalName: true, taxId: true, status: true },
+    });
+    const dup = others.find((o) => (o.taxId ?? '').replace(/[\s-]/g, '').toLowerCase() === normalized);
+    if (dup) {
+      throw new ConflictException(
+        `Ya existe un cliente con ese NIT: «${dup.legalName}»${dup.status === ClientStatus.DECLINED ? ' (declinado en la evaluación de aceptación)' : ''}.`,
+      );
+    }
+  }
+
   async create(dto: CreateClientDto, user: AuthUser) {
+    await this.assertTaxIdFree(dto.taxId, user.organizationId);
     return this.prisma.client.create({
       data: {
         organizationId:     user.organizationId,
@@ -109,6 +126,7 @@ export class ClientsService {
   // ── Editar datos generales (nunca el status) ──────────────────────────────
   async update(id: string, dto: UpdateClientDto, user: AuthUser) {
     await this.getClientOrThrow(id, user);
+    if (dto.taxId != null) await this.assertTaxIdFree(dto.taxId, user.organizationId, id);
 
     return this.prisma.client.update({
       where: { id },

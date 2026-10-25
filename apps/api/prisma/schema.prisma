@@ -1387,6 +1387,8 @@ model Engagement {
   organizationId     String
   clientId           String
   engagementLetterId String?
+  kind               EngagementKind   @default(AUDIT) // AUDIT o CONSULTING (consultoría: lleva encargo, horas y costos, con menos rigor)
+  title              String? // nombre visible, sobre todo de las consultorías ("Asesoría tributaria 2026")
   fiscalYear         Int
   fiscalYearEndDate  DateTime
   plannedStartDate   DateTime?
@@ -1407,9 +1409,11 @@ model Engagement {
   audit            Audit?            @relation("EngagementAudit", fields: [auditId], references: [id])
   createdBy        User              @relation("EngagementCreator", fields: [createdById], references: [id])
 
-  @@unique([clientId, fiscalYear])
+  // La unicidad "una AUDITORÍA por cliente y año" vive como índice parcial (WHERE kind = 'AUDIT') en
+  // infrastructure/db-migrations/2026-10-cobros-0-consultorias.sql: Prisma no declara índices parciales.
   @@index([organizationId])
   @@index([organizationId, status])
+  @@index([clientId, fiscalYear])
   @@map("engagements")
 }
 
@@ -3606,4 +3610,268 @@ model SignatureAttachment {
 
   @@index([requestId])
   @@map("signature_attachments")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// COBROS DE HONORARIOS — Fase 3 (docs/cobros-honorarios-diseno.md)
+// Calendario de cobros del contrato, facturas DTE REGISTRADAS (no se emiten aquí) y cobros aplicados a facturas.
+// Sin relaciones de Prisma a propósito: las claves foráneas son COMPUESTAS (organización + cliente) y viven solo en el SQL
+// (infrastructure/db-migrations/2026-10-cobros-3a.sql), junto con los CHECK de saldos y los índices únicos parciales.
+// ═════════════════════════════════════════════════════════════════════════════
+
+enum EngagementKind {
+  AUDIT
+  CONSULTING
+}
+
+enum FeeType {
+  FIXED // honorario fijo del contrato
+  TIME_BASED // consultoría por tiempo: se factura libremente
+}
+
+enum FeeSource {
+  PROPOSAL
+  MANUAL
+}
+
+enum FeeProgressMethod {
+  HOURS // horas facturables / presupuesto de horas
+  MILESTONES // cuotas con completedAt / honorario
+  MANUAL // porcentaje que escribe la dirección
+}
+
+enum ScheduleItemKind {
+  INSTALLMENT
+  MILESTONE
+  ADVANCE // anticipo previsto en el contrato
+}
+
+enum ScheduleItemStatus {
+  PLANNED
+  INVOICED
+  CANCELLED
+}
+
+enum ClientInvoiceStatus {
+  OPEN // sin movimientos
+  PARTIAL // con movimientos y saldo > 0
+  SETTLED // saldo = 0
+  VOID
+}
+
+enum ClientPaymentStatus {
+  ACTIVE
+  VOID
+}
+
+enum ClientPaymentMethod {
+  TRANSFER
+  CHECK
+  CASH
+  CARD
+  OTHER
+}
+
+enum WithholdingTaxType {
+  IVA
+  RENTA
+  OTHER
+}
+
+enum CollectionLogAction {
+  FEE_SET
+  FEE_DELETED
+  FEE_AMENDED
+  SCHEDULE_GENERATED
+  SCHEDULE_ITEM_CREATED
+  SCHEDULE_ITEM_UPDATED
+  SCHEDULE_ITEM_CANCELLED
+  SCHEDULE_ITEM_DELETED
+  INVOICE_REGISTERED
+  INVOICE_UPDATED
+  INVOICE_VOIDED
+  PAYMENT_REGISTERED
+  PAYMENT_UPDATED
+  PAYMENT_APPLIED
+  APPLICATION_REVERSED
+  PAYMENT_VOIDED
+  WITHHOLDING_ADDED
+  WITHHOLDING_REVERSED
+  CREDIT_NOTE_REGISTERED
+  CREDIT_NOTE_VOIDED
+  WRITE_OFF_REGISTERED
+  WRITE_OFF_REVERSED
+  COLLECTION_NOTE_ADDED
+  PROMISE_STATUS_CHANGED
+}
+
+// Honorario de un encargo (1 a 1). Siempre en NETO y en USD.
+model EngagementFee {
+  id                String            @id @default(cuid())
+  organizationId    String
+  engagementId      String            @unique
+  feeType           FeeType
+  totalAmount       Decimal?          @db.Decimal(12, 2) // nulo si y solo si TIME_BASED
+  source            FeeSource
+  proposalId        String? // único cuando no es nulo (índice parcial en el SQL)
+  paymentTermDays   Int               @default(30)
+  progressMethod    FeeProgressMethod @default(HOURS)
+  manualProgressPct Float?
+  notes             String?
+  createdById       String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([organizationId])
+  @@map("engagement_fees")
+}
+
+model EngagementFeeAmendment {
+  id             String   @id @default(cuid())
+  organizationId String
+  feeId          String
+  date           DateTime @db.Date
+  reason         String
+  amountDelta    Decimal  @db.Decimal(12, 2) // distinto de 0; puede ser negativo
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@index([feeId])
+  @@map("engagement_fee_amendments")
+}
+
+// Calendario de cobros. `dueDate` es la fecha PROGRAMADA DE FACTURACIÓN. El vínculo con la factura vive solo en la factura.
+model BillingScheduleItem {
+  id             String             @id @default(cuid())
+  organizationId String
+  engagementId   String
+  sequence       Int // único por encargo; nunca se renumera
+  label          String
+  kind           ScheduleItemKind   @default(INSTALLMENT)
+  dueDate        DateTime           @db.Date
+  amount         Decimal            @db.Decimal(12, 2) // neto
+  status         ScheduleItemStatus @default(PLANNED)
+  completedAt    DateTime? // hito cumplido (mide el avance por hitos)
+  createdById    String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([engagementId, status])
+  @@map("billing_schedule_items")
+}
+
+// Factura REGISTRADA (se emite fuera, como DTE). invoiceNumber = número de control del DTE.
+model ClientInvoice {
+  id               String              @id @default(cuid())
+  organizationId   String
+  clientId         String
+  engagementId     String
+  scheduleItemId   String?
+  invoiceNumber    String
+  generationCode   String?
+  documentType     String // código del tipo de DTE: 03 comprobante de crédito fiscal, 01 factura, ...
+  invoiceDate      DateTime            @db.Date
+  dueDate          DateTime            @db.Date
+  description      String?
+  netAmount        Decimal             @db.Decimal(12, 2)
+  taxAmount        Decimal             @default(0) @db.Decimal(12, 2)
+  totalAmount      Decimal             @db.Decimal(12, 2)
+  // Cachés que solo escriben las transacciones de cada operación (ver la consulta de invariantes)
+  paidAmount       Decimal             @default(0) @db.Decimal(12, 2)
+  withheldAmount   Decimal             @default(0) @db.Decimal(12, 2)
+  creditedAmount   Decimal             @default(0) @db.Decimal(12, 2)
+  writtenOffAmount Decimal             @default(0) @db.Decimal(12, 2)
+  status           ClientInvoiceStatus @default(OPEN)
+  voidedAt         DateTime?
+  voidedById       String?
+  voidReason       String?
+  createdById      String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([organizationId, clientId, status])
+  @@index([engagementId])
+  @@map("client_invoices")
+}
+
+model ClientPayment {
+  id              String              @id @default(cuid())
+  organizationId  String
+  clientId        String
+  paymentDate     DateTime            @db.Date
+  amount          Decimal             @db.Decimal(12, 2)
+  appliedAmount   Decimal             @default(0) @db.Decimal(12, 2) // caché: solo DINERO aplicado (las retenciones no consumen el cobro)
+  method          ClientPaymentMethod
+  reference       String?
+  notes           String?
+  status          ClientPaymentStatus @default(ACTIVE)
+  clientRequestId String? // idempotencia: único por organización (índice parcial en el SQL)
+  voidedAt        DateTime?
+  voidedById      String?
+  voidReason      String?
+  createdById     String
+  createdAt       DateTime            @default(now())
+
+  @@index([organizationId, clientId])
+  @@map("client_payments")
+}
+
+// Movimientos de aplicación de dinero: solo se agregan; se revierten marcando reversedAt (no se borran).
+model PaymentApplication {
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String
+  paymentId      String
+  invoiceId      String
+  amount         Decimal   @db.Decimal(12, 2)
+  appliedOn      DateTime  @db.Date
+  reversedAt     DateTime?
+  reversedById   String?
+  reverseReason  String?
+  createdById    String
+  createdAt      DateTime  @default(now())
+
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@map("payment_applications")
+}
+
+// Retenciones que practica el cliente (al emitir o al pagar). NO son dinero recibido.
+model InvoiceWithholding {
+  id                String             @id @default(cuid())
+  organizationId    String
+  clientId          String
+  invoiceId         String
+  paymentId         String?
+  taxType           WithholdingTaxType
+  amount            Decimal            @db.Decimal(12, 2)
+  appliedOn         DateTime           @db.Date
+  certificateNumber String?
+  reversedAt        DateTime?
+  reversedById      String?
+  reverseReason     String?
+  createdById       String
+  createdAt         DateTime           @default(now())
+
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@map("invoice_withholdings")
+}
+
+// Bitácora de todo lo anterior: solo se agrega (un disparador rechaza UPDATE y DELETE).
+model CollectionLog {
+  id             String              @id @default(cuid())
+  organizationId String
+  entityType     String
+  entityId       String
+  action         CollectionLogAction
+  actorId        String
+  before         Json?
+  after          Json?
+  note           String?
+  createdAt      DateTime            @default(now())
+
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, createdAt])
+  @@map("collection_logs")
 }

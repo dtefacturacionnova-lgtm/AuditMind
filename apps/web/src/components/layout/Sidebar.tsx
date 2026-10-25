@@ -54,7 +54,8 @@ const NAV_ITEMS: NavItem[] = [
     icon: Handshake,
     module: 'EXTERNAL',
     children: [
-      { label: 'Cartera de Clientes', href: '/dashboard/portfolio', icon: Handshake },
+      { label: 'Cartera de Clientes', href: '/dashboard/portfolio', icon: Handshake, minRole: 'AUDIT_MANAGER', hint: 'Prospectos, aceptación, propuestas, cartas de compromiso y encargos' },
+      { label: 'Cobranza', href: '/dashboard/collections', icon: Wallet, minRole: 'AUDIT_MANAGER', hint: 'Facturas por cobrar, cobros recibidos y retenciones' },
     ],
   },
   // ── Planificación Anual ───────────────────────────────────────────────────

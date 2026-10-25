@@ -1,10 +1,10 @@
 import {
-  Controller, Get, Post, Body, Param, Query,
+  Controller, Get, Post, Patch, Body, Param, Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { EngagementsService } from './engagements.service';
-import { CreateEngagementDto, ListEngagementsQueryDto } from './dto/engagement.dto';
+import { CreateEngagementDto, ListEngagementsQueryDto, UpdateEngagementDto } from './dto/engagement.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -27,6 +27,13 @@ export class EngagementsController {
   @ApiOperation({ summary: 'Listar encargos, filtrables por clientId y status' })
   findAll(@Query() query: ListEngagementsQueryDto, @CurrentUser() user: AuthUser) {
     return this.service.findAll(user, query.clientId, query.status);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Editar nombre, fechas previstas, socio a cargo y notas del encargo' })
+  update(@Param('id') id: string, @Body() dto: UpdateEngagementDto, @CurrentUser() user: AuthUser) {
+    return this.service.update(id, dto, user);
   }
 
   @Post(':id/approve')

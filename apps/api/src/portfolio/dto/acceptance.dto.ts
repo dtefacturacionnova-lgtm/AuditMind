@@ -1,5 +1,5 @@
 import {
-  IsString, IsOptional, IsEnum, IsArray, ValidateNested,
+  IsString, IsOptional, IsEnum, IsArray, ValidateNested, IsNotEmpty, MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -85,11 +85,27 @@ export class UpdateAcceptanceCheckDto {
   checklist?: AcceptanceChecklistItemDto[];
 }
 
-export class DecideAcceptanceDto {
+/**
+ * Decidir el Radar. Acepta también las 5 calificaciones y sus notas tal como están en pantalla: se guardan junto con la decisión
+ * en una sola operación (antes se decidía con lo último GUARDADO, así que un cambio sin guardar se perdía y la pantalla seguía
+ * mostrando otra cosa junto al semáforo).
+ */
+export class DecideAcceptanceDto extends UpdateAcceptanceCheckDto {
   @ApiProperty({
     example: 'Se acepta el encargo: no se identificaron amenazas a la independencia y el equipo cuenta con la competencia requerida.',
     description: 'Justificación profesional de la decisión de aceptación/continuidad',
   })
   @IsString()
+  @IsNotEmpty()
+  @MinLength(10, { message: 'La justificación debe tener al menos 10 caracteres.' })
   overallJustification: string;
+}
+
+/** Reabrir un Radar ya decidido (solo CAE o superior): deja constancia del motivo. */
+export class ReopenAcceptanceDto {
+  @ApiProperty({ description: 'Por qué se reabre la decisión (cambió la información, error en la evaluación…)' })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(10, { message: 'El motivo debe tener al menos 10 caracteres.' })
+  reason: string;
 }

@@ -346,6 +346,8 @@ describe('Resumen del mes para el gerente', () => {
   it('avisa de días sin horas, horas bajas, días largos, falta de descripción y de perfiles', async () => {
     const { db, u, ts, hc } = setup();
     db.tables.userAvailabilityProfile.rows.push({ organizationId: 'org1', userId: u.auditor.id, year: 2026, standardDailyHours: 8 });
+    // la organización sí costea (a otra persona): por eso falta el perfil de quien registra horas
+    db.tables.userCostProfile.rows.push({ organizationId: 'org1', userId: u.senior.id, year: 2026, costRatePerHour: 20 });
     await ts.createEntry(entry({ workDate: '2026-09-01', hours: 14 }), u.auditor);
     db.tables.timeEntry.rows.push({ ...db.entries()[0], id: 'sin-desc', workDate: new Date('2026-09-02T00:00:00Z'), hours: 4, description: '' });
     const view = await hc.overview(2026, 9, u.manager);
@@ -359,6 +361,15 @@ describe('Resumen del mes para el gerente', () => {
     expect(senior.availableHours).toBeNull();
     expect(view.summary).toMatchObject({ people: 5, closed: 0 });
     expect(view).toMatchObject({ enabled: true, finished: true, entryDeadline: '2026-10-07', closeDeadline: '2026-10-14' });
+  });
+
+  it('una organización que no costea a nadie (auditoría interna) no recibe el aviso de «sin perfil de costeo»', async () => {
+    const { db, u, ts, hc } = setup();
+    await ts.createEntry(entry({ workDate: '2026-09-01', hours: 8 }), u.auditor);
+    expect(db.tables.userCostProfile.rows).toHaveLength(0);
+    const view = await hc.overview(2026, 9, u.manager);
+    const row = view.rows.find((r) => r.userId === u.auditor.id)!;
+    expect(row.warnings.map((w) => w.code)).not.toContain('NO_COST_PROFILE');
   });
 
   it('los días futuros del mes en curso no cuentan como faltantes', async () => {

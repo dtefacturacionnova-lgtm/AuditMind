@@ -1,5 +1,5 @@
 import {
-  IsString, IsOptional, IsEmail, IsInt, IsEnum, IsArray, IsNumber, Min, Max, ValidateNested,
+  IsString, IsOptional, IsEmail, IsInt, IsEnum, IsArray, IsNumber, Min, Max, ValidateNested, MinLength,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -33,7 +33,9 @@ export class BeneficialOwnerDto {
 
 export class CreateClientDto {
   @ApiProperty({ example: 'Empresa Comercial Demo SA de CV' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @MinLength(2, { message: 'La razón social debe tener al menos 2 caracteres.' })
   legalName: string;
 
   @ApiPropertyOptional({ example: 'Comercial Demo' })

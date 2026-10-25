@@ -72,12 +72,51 @@ function SignModal({ letterId, onClose }: { letterId: string; onClose: () => voi
   );
 }
 
+const FRAMEWORKS: Array<{ value: 'NIIF_COMPLETAS' | 'NIIF_PYMES' | 'OTRO'; label: string }> = [
+  { value: 'NIIF_COMPLETAS', label: 'NIIF completas' },
+  { value: 'NIIF_PYMES', label: 'NIIF para las PYMES' },
+  { value: 'OTRO', label: 'Otro marco' },
+];
+
+/** Emitir la carta desde una propuesta aceptada. La carta debe nombrar el marco de información financiera (NIA 210.6(a)). */
+function IssueLetterBox({ proposalId, year }: { proposalId: string; year: number }) {
+  const createLetter = useCreateEngagementLetter();
+  const [framework, setFramework] = useState<'NIIF_COMPLETAS' | 'NIIF_PYMES' | 'OTRO' | ''>('');
+  const [other, setOther] = useState('');
+  const ready = framework !== '' && (framework !== 'OTRO' || other.trim().length >= 3);
+  return (
+    <div className="w-full max-w-md bg-white border border-gray-200 rounded-2xl p-5 text-left space-y-3">
+      <p className="text-sm font-medium text-gray-700">Propuesta {year} aceptada — emita la carta de compromiso</p>
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-gray-600">Marco de información financiera aplicable *</label>
+        <select value={framework} onChange={e => setFramework(e.target.value as typeof framework)} className={cls}>
+          <option value="">Seleccione…</option>
+          {FRAMEWORKS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+        </select>
+        {framework === 'OTRO' && (
+          <input value={other} onChange={e => setOther(e.target.value)} placeholder="Nombre del marco" className={`${cls} mt-1`} />
+        )}
+        <p className="text-[11px] text-gray-400">La carta debe identificar el marco (NIA 210): se escribe en el texto y se puede ajustar antes de enviarla.</p>
+      </div>
+      <button
+        onClick={() => createLetter.mutate({ proposalId, reportingFramework: framework || undefined, reportingFrameworkOther: framework === 'OTRO' ? other.trim() : undefined })}
+        disabled={createLetter.isPending || !ready}
+        className="px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60"
+      >
+        {createLetter.isPending ? 'Generando…' : 'Emitir Carta de Compromiso (NIA 210)'}
+      </button>
+      {createLetter.isError && (
+        <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{(createLetter.error as Error)?.message}</p>
+      )}
+    </div>
+  );
+}
+
 export function EngagementLetterTab({ client }: { client: ClientDetail }) {
   const [content, setContent] = useState<string | null>(null);
   const [showSign, setShowSign] = useState(false);
   const [confirmSave, setConfirmSave] = useState(false);
 
-  const createLetter = useCreateEngagementLetter();
   const updateLetter = useUpdateEngagementLetter();
   const qc = useQueryClient();
 
@@ -95,21 +134,7 @@ export function EngagementLetterTab({ client }: { client: ClientDetail }) {
       <div className="flex flex-col items-center justify-center py-16 text-gray-400 max-w-md mx-auto text-center">
         <FileText className="w-10 h-10 mb-3 opacity-40" />
         {pendingProposal ? (
-          <>
-            <p className="text-sm font-medium text-gray-600">Propuesta aceptada — emita la carta de compromiso</p>
-            <button
-              onClick={() => createLetter.mutate({ proposalId: pendingProposal.id })}
-              disabled={createLetter.isPending}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60"
-            >
-              {createLetter.isPending ? 'Generando…' : 'Emitir Carta de Compromiso (NIA 210)'}
-            </button>
-            {createLetter.isError && (
-              <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-3">
-                {(createLetter.error as Error)?.message}
-              </p>
-            )}
-          </>
+          <IssueLetterBox proposalId={pendingProposal.id} year={pendingProposal.year} />
         ) : (
           <>
             <AlertTriangle className="w-8 h-8 mb-2 opacity-40" />
@@ -141,6 +166,11 @@ export function EngagementLetterTab({ client }: { client: ClientDetail }) {
 
   return (
     <div className="max-w-3xl space-y-4">
+      {pendingProposal && (
+        <div className="flex justify-center pb-4 border-b border-gray-100">
+          <IssueLetterBox proposalId={pendingProposal.id} year={pendingProposal.year} />
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-700">Carta de Compromiso {letter.year}</h3>
         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>

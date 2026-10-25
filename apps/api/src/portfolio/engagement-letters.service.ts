@@ -8,8 +8,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { SignatureRequestsService } from '../signatures/signature-requests.service';
 import {
-  CreateEngagementLetterDto, UpdateEngagementLetterDto, SignEngagementLetterDto,
+  CreateEngagementLetterDto, UpdateEngagementLetterDto, SignEngagementLetterDto, ReportingFramework,
 } from './dto/engagement-letter.dto';
+
+const FRAMEWORK_TEXT: Record<ReportingFramework, string> = {
+  NIIF_COMPLETAS: 'las Normas Internacionales de Información Financiera (NIIF completas)',
+  NIIF_PYMES: 'la Norma Internacional de Información Financiera para Pequeñas y Medianas Entidades (NIIF para las PYMES)',
+  OTRO: '',
+};
 
 const LETTER_INCLUDE = {
   client:   { select: { id: true, legalName: true, status: true } },
@@ -53,24 +59,38 @@ export class EngagementLettersService {
         `La propuesta ya tiene una carta de compromiso vinculada (${proposal.engagementLetter.id}).`,
       );
     }
+    if (proposal.client.status === ClientStatus.DECLINED) {
+      throw new BadRequestException('El cliente fue declinado en la evaluación de aceptación: no se emite carta de compromiso.');
+    }
 
-    const letter = await this.prisma.engagementLetter.create({
-      data: {
-        organizationId: user.organizationId,
-        clientId:       proposal.clientId,
-        proposalId:     proposal.id,
-        year:           proposal.year,
-        content:        this.buildNia210Content(proposal, proposal.client),
-        status:         EngagementLetterStatus.DRAFT,
-        createdById:    user.id,
-      },
-      include: LETTER_INCLUDE,
-    });
+    const framework = dto.reportingFramework === 'OTRO'
+      ? (dto.reportingFrameworkOther?.trim() || null)
+      : dto.reportingFramework ? FRAMEWORK_TEXT[dto.reportingFramework] : null;
 
-    // El cliente queda a la espera de la firma. Es el único punto del pipeline
-    // que produce ClientStatus.PENDING_SIGNATURE.
-    await this.prisma.client.update({
-      where: { id: proposal.clientId },
+    let letter;
+    try {
+      letter = await this.prisma.engagementLetter.create({
+        data: {
+          organizationId: user.organizationId,
+          clientId:       proposal.clientId,
+          proposalId:     proposal.id,
+          year:           proposal.year,
+          content:        this.buildNia210Content(proposal, proposal.client, framework),
+          status:         EngagementLetterStatus.DRAFT,
+          createdById:    user.id,
+        },
+        include: LETTER_INCLUDE,
+      });
+    } catch (e) {
+      // Dos «Emitir carta» a la vez para la misma propuesta: la segunda choca con la unicidad de la base.
+      if ((e as { code?: string })?.code === 'P2002') throw new BadRequestException('La propuesta ya tiene una carta de compromiso vinculada.');
+      throw e;
+    }
+
+    // El cliente queda a la espera de la firma (único punto del pipeline que produce PENDING_SIGNATURE). Un cliente ya ACTIVO
+    // (carta de otro ejercicio) no retrocede: dejaría de poder registrar encargos hasta que se firme.
+    await this.prisma.client.updateMany({
+      where: { id: proposal.clientId, status: { not: ClientStatus.ACTIVE } },
       data:  { status: ClientStatus.PENDING_SIGNATURE },
     });
 
@@ -140,8 +160,15 @@ export class EngagementLettersService {
       include: LETTER_INCLUDE,
     });
 
-    // Carta firmada ⇒ el prospecto se convierte en cliente activo y ya puede registrar encargos.
-    await tx.client.update({ where: { id: letter.clientId }, data: { status: ClientStatus.ACTIVE } });
+    // Carta firmada ⇒ el prospecto se convierte en cliente activo y ya puede registrar encargos. Un cliente declinado en la evaluación
+    // de aceptación NO se reactiva firmando (la decisión del Radar manda); la carta en curso ya se rechazó al decidir en Rojo.
+    const reactivated = await tx.client.updateMany({
+      where: { id: letter.clientId, status: { not: ClientStatus.DECLINED } },
+      data:  { status: ClientStatus.ACTIVE },
+    });
+    if (reactivated.count === 0) {
+      throw new BadRequestException('El cliente fue declinado en la evaluación de aceptación: la carta no puede firmarse.');
+    }
     return updated;
   }
 
@@ -173,7 +200,7 @@ export class EngagementLettersService {
    * Es editable después vía PATCH — aquí solo se deja un texto de arranque
    * conforme a NIA 210 (Acuerdo de los términos del encargo de auditoría).
    */
-  private buildNia210Content(proposal: Proposal, client: Client): string {
+  private buildNia210Content(proposal: Proposal, client: Client, framework: string | null): string {
     const fee = proposal.feeAmount == null
       ? '[honorarios a definir]'
       : `${proposal.feeCurrency} ${Number(proposal.feeAmount).toLocaleString('es-SV', {
@@ -181,13 +208,18 @@ export class EngagementLettersService {
         })}`;
 
     const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+    // El ejercicio es el que se audita (el año en que cierra el período), no el año en que se emite la carta.
+    const fiscalYear = proposal.fiscalPeriodEnd?.getUTCFullYear() ?? proposal.year;
+    const marco = framework
+      ? `de conformidad con ${framework}`
+      : 'de conformidad con el marco de información financiera aplicable [IDENTIFICAR EL MARCO: NIIF completas / NIIF para las PYMES / otro — NIA 210.6(a)]';
     const start = iso(proposal.fiscalPeriodStart);
     const end   = iso(proposal.fiscalPeriodEnd);
     const periodo = start && end
       ? `el período comprendido del ${start} al ${end}`
       : end
         ? `el ejercicio terminado el ${end}`
-        : `el ejercicio ${proposal.year}`;
+        : `el ejercicio ${fiscalYear}`;
 
     const alcance = proposal.scope
       ?? 'la auditoría de los estados financieros de propósito general (Balance General, Estado de Resultados, '
@@ -199,14 +231,14 @@ export class EngagementLettersService {
 Señores
 ${client.legalName}
 ${client.address ?? '[dirección]'}
-Atención: ${client.contactName ?? '[representante legal]'}
+Atención: ${client.legalRepName ?? client.contactName ?? '[representante legal]'}
 
 Estimados señores:
 
 La presente carta confirma nuestro entendimiento y acuerdo sobre los términos del encargo de auditoría de los estados financieros de ${client.legalName} correspondientes a ${periodo}, y tiene su origen en la propuesta de servicios profesionales aceptada por ustedes.
 
 1. OBJETIVO Y ALCANCE DE LA AUDITORÍA
-Hemos sido contratados para realizar ${alcance}. El objetivo de la auditoría es expresar una opinión independiente sobre si dichos estados financieros presentan razonablemente, en todos los aspectos materiales, la situación financiera, el rendimiento financiero y los flujos de efectivo de la entidad, de conformidad con el marco de información financiera aplicable.
+Hemos sido contratados para realizar ${alcance}. El objetivo de la auditoría es expresar una opinión independiente sobre si dichos estados financieros presentan razonablemente, en todos los aspectos materiales, la situación financiera, el rendimiento financiero y los flujos de efectivo de la entidad, ${marco}.
 
 2. RESPONSABILIDADES DEL AUDITOR
 Realizaremos la auditoría de conformidad con las Normas Internacionales de Auditoría (NIA) adoptadas por el Consejo de Vigilancia de la Profesión de Contaduría Pública y Auditoría. Dichas normas exigen que cumplamos los requerimientos de ética aplicables y que planifiquemos y ejecutemos la auditoría con el fin de obtener una seguridad razonable de que los estados financieros están libres de incorrección material.
@@ -215,7 +247,7 @@ Debido a las limitaciones inherentes a la auditoría, junto con las limitaciones
 
 3. RESPONSABILIDADES DE LA ADMINISTRACIÓN
 La administración es responsable de:
-a) La preparación y presentación razonable de los estados financieros conforme al marco de información financiera aplicable.
+a) La preparación y presentación razonable de los estados financieros ${marco.replace('de conformidad con', 'conforme a')}.
 b) El control interno que la administración considere necesario para permitir la preparación de estados financieros libres de incorrección material, debida a fraude o error.
 c) Proporcionarnos acceso irrestricto a toda la información relevante (registros, documentación y demás material), la información adicional que solicitemos y el acceso sin restricción a las personas de la entidad de las cuales consideremos necesario obtener evidencia de auditoría.
 d) Confirmar por escrito, mediante carta de representación al cierre del encargo, las manifestaciones efectuadas durante la auditoría.
@@ -227,7 +259,7 @@ Como resultado del encargo emitiremos: (i) el dictamen del auditor independiente
 Nuestros honorarios profesionales ascienden a ${fee}, más los impuestos que correspondan. Los honorarios se han determinado con base en el tiempo estimado del equipo asignado y en el alcance descrito en el numeral 1; cambios materiales en el alcance, en el volumen de operaciones o en la disponibilidad de la información podrán dar lugar a una revisión de los mismos, la cual se comunicará y acordará previamente.
 
 6. VIGENCIA
-Esta carta será efectiva para el ejercicio ${proposal.year} y para ejercicios sucesivos, salvo que sea sustituida, modificada o terminada por acuerdo de las partes.
+Esta carta será efectiva para el ejercicio ${fiscalYear} y para ejercicios sucesivos, salvo que sea sustituida, modificada o terminada por acuerdo de las partes.
 
 Agradecemos firmar y devolver la copia adjunta de esta carta como constancia de su conformidad con los términos del encargo.
 

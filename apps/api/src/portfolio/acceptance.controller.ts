@@ -4,7 +4,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { AcceptanceService } from './acceptance.service';
-import { UpdateAcceptanceCheckDto, DecideAcceptanceDto } from './dto/acceptance.dto';
+import { UpdateAcceptanceCheckDto, DecideAcceptanceDto, ReopenAcceptanceDto } from './dto/acceptance.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -53,6 +53,17 @@ export class AcceptanceController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.decide(id, dto, user);
+  }
+
+  @Post('acceptance-checks/:id/reopen')
+  @Roles(UserRole.CAE)
+  @ApiOperation({ summary: 'Reabrir un Radar ya decidido (CAE o superior): exige el motivo y conserva la decisión anterior en la justificación' })
+  reopen(
+    @Param('id') id: string,
+    @Body() dto: ReopenAcceptanceDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.reopen(id, dto, user);
   }
 
   @Post('acceptance-checks/:id/screen-sanctions')

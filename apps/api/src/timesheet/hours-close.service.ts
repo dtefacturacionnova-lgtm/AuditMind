@@ -210,7 +210,9 @@ export class HoursCloseService {
       }
       if (longDays > 0) warnings.push({ code: 'LONG_DAYS', detail: `${longDays} día(s) con más de ${LONG_DAY_HOURS} h` });
       if (noDescription > 0) warnings.push({ code: 'NO_DESCRIPTION', detail: `${noDescription} registro(s) de cliente sin descripción` });
-      if (totalHours > 0 && !withCost.has(person.id)) {
+      // Solo avisa si la organización costea a alguien ese año: la auditoría interna no se costea (solo existe la planilla de pago)
+      // y avisarle a toda la plantilla sería ruido.
+      if (totalHours > 0 && withCost.size > 0 && !withCost.has(person.id)) {
         warnings.push({ code: 'NO_COST_PROFILE', detail: 'Sin perfil de costeo de ese año: las horas quedarían sin costear' });
       }
 

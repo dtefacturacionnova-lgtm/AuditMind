@@ -146,7 +146,7 @@ function ArchivedSection({ clients }: { clients: Client[] }) {
 }
 
 export default function PortfolioPipelinePage() {
-  const { data: clients = [], isLoading } = useClients();
+  const { data: clients = [], isLoading, isError, error } = useClients();
   const [showCreate, setShowCreate] = useState(false);
 
   const byStatus = (status: ClientStatus) => clients.filter(c => c.status === status);
@@ -173,6 +173,10 @@ export default function PortfolioPipelinePage() {
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : isError ? (
+          <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">
+            No se pudo cargar la cartera: {(error as Error)?.message ?? 'error desconocido'}. La Cartera es para gerentes y la dirección.
+          </p>
         ) : (
           <>
             <div className="flex gap-4 overflow-x-auto pb-2">

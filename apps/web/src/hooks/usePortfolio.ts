@@ -12,6 +12,8 @@ export type AcceptanceRating = 'PENDING' | 'GREEN' | 'YELLOW' | 'RED';
 export type ProposalStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED';
 export type EngagementLetterStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'DECLINED';
 export type EngagementStatus = 'DRAFT' | 'APPROVED' | 'CANCELLED';
+/** Auditoría o consultoría: ambas llevan encargo, horas y costos; la consultoría es menos rigurosa. */
+export type EngagementKind = 'AUDIT' | 'CONSULTING';
 
 export interface BeneficialOwner {
   name:              string;
@@ -67,6 +69,10 @@ export interface SanctionsMatchRecord {
 }
 
 export interface SanctionsScreeningResult {
+  /** Constancia del screening (Art. 15 DDC): quién lo corrió, cuándo y qué nombres se revisaron. */
+  screenedAt?:     string;
+  screenedByName?: string;
+  namesChecked?:   string[];
   total_screened:  number;
   matches_found:   number;
   risk_score:       number;
@@ -167,6 +173,8 @@ export interface Engagement {
   organizationId:      string;
   clientId:            string;
   engagementLetterId?: string | null;
+  kind:                EngagementKind;
+  title?:              string | null;
   fiscalYear:          number;
   fiscalYearEndDate:   string;
   plannedStartDate?:   string | null;
@@ -182,7 +190,8 @@ export interface Engagement {
   client?:   { id: string; legalName: string; tradeName?: string | null; status: ClientStatus; auditEntityId?: string | null };
   template?: { id: string; name: string; code: string } | null;
   engagementLetter?: { id: string; status: EngagementLetterStatus; signedAt?: string | null; year: number } | null;
-  audit?: { id: string; title: string; status: string; type: string; templateId?: string | null } | null;
+  /** `restricted`: investigación ajena al equipo del usuario; el API solo manda id y un título genérico. */
+  audit?: { id: string; title: string; status?: string; type?: string; templateId?: string | null; restricted?: boolean } | null;
 }
 
 export interface ClientDetail extends Client {
@@ -249,6 +258,9 @@ export interface UpdateProposalData {
 
 export interface CreateEngagementLetterData {
   proposalId: string;
+  /** Marco de información financiera que nombra la carta (NIA 210.6(a)). */
+  reportingFramework?: 'NIIF_COMPLETAS' | 'NIIF_PYMES' | 'OTRO';
+  reportingFrameworkOther?: string;
 }
 
 export interface UpdateEngagementLetterData {
@@ -263,6 +275,8 @@ export interface SignEngagementLetterData {
 
 export interface CreateEngagementData {
   clientId:            string;
+  kind?:               EngagementKind;
+  title?:              string;
   engagementLetterId?: string;
   fiscalYear:          number;
   fiscalYearEndDate:   string;
@@ -408,11 +422,25 @@ export function useUpdateAcceptanceCheck() {
   });
 }
 
+/** Se decide con las calificaciones y notas tal como están en pantalla (el servidor las guarda junto con la decisión). */
 export function useDecideAcceptance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, overallJustification }: { id: string; overallJustification: string }) =>
-      apiClient.post<AcceptanceCheck>(`/portfolio/acceptance-checks/${id}/decide`, { overallJustification }),
+    mutationFn: ({ id, ...body }: { id: string; overallJustification: string } & UpdateAcceptanceCheckData) =>
+      apiClient.post<AcceptanceCheck>(`/portfolio/acceptance-checks/${id}/decide`, body),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: [CLIENT_KEY, result.clientId] });
+      qc.invalidateQueries({ queryKey: [CLIENTS_KEY] });
+    },
+  });
+}
+
+/** Reabrir un Radar ya decidido (solo CAE o superior): exige el motivo. */
+export function useReopenAcceptance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiClient.post<AcceptanceCheck>(`/portfolio/acceptance-checks/${id}/reopen`, { reason }),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: [CLIENT_KEY, result.clientId] });
       qc.invalidateQueries({ queryKey: [CLIENTS_KEY] });
@@ -590,6 +618,31 @@ export function useCreateEngagement() {
   });
 }
 
+export interface UpdateEngagementData {
+  title?:            string;
+  /** Solo mientras el encargo es borrador. */
+  engagementLetterId?: string;
+  fiscalYearEndDate?: string;
+  plannedStartDate?: string;
+  plannedEndDate?:   string;
+  leadPartnerId?:    string;
+  notes?:            string;
+}
+
+export function useUpdateEngagement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateEngagementData }) =>
+      apiClient.patch<Engagement>(`/portfolio/engagements/${id}`, data),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: [ENGAGEMENTS_KEY] });
+      qc.invalidateQueries({ queryKey: [CLIENT_KEY, result.clientId] });
+      qc.invalidateQueries({ queryKey: ['audits'] });
+      qc.invalidateQueries({ queryKey: ['collections'] });
+    },
+  });
+}
+
 export function useApproveEngagement() {
   const qc = useQueryClient();
   return useMutation({
@@ -690,10 +743,11 @@ export const ENGAGEMENT_STATUS_CONFIG: Record<EngagementStatus, { label: string;
 };
 
 /** Umbrales semánticos de margen % para Rentabilidad por Encargo.
- *  >30% sano, 10–30% ajustado, <10% (incluye negativo) crítico, null = no calculable. */
+ *  >30% sano, 10–30% ajustado, 0–10% bajo, <0 negativo, null = no calculable. */
 export function marginTone(pct: number | null): { label: string; text: string; bg: string; border: string; dot: string } {
   if (pct === null) return { label: 'No calculable', text: 'text-gray-500',    bg: 'bg-gray-50',    border: 'border-gray-200',    dot: 'bg-gray-300' };
   if (pct >= 30)     return { label: 'Margen sano',    text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' };
   if (pct >= 10)     return { label: 'Margen ajustado', text: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-200',   dot: 'bg-amber-500' };
+  if (pct >= 0)      return { label: 'Margen bajo',     text: 'text-red-700',    bg: 'bg-red-50',     border: 'border-red-200',     dot: 'bg-red-500' };
   return               { label: 'Margen negativo',    text: 'text-red-700',    bg: 'bg-red-50',     border: 'border-red-200',     dot: 'bg-red-500' };
 }

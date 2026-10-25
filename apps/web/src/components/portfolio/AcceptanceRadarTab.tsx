@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Radar, ShieldCheck, Users, Scale, AlertTriangle, Lock, ShieldAlert, Search, Loader2, GraduationCap } from 'lucide-react';
+import { Radar, ShieldCheck, Users, Scale, AlertTriangle, Lock, ShieldAlert, Search, Loader2, GraduationCap, RotateCcw } from 'lucide-react';
 import {
-  useStartAcceptance, useUpdateAcceptanceCheck, useDecideAcceptance, useScreenSanctions,
+  useStartAcceptance, useUpdateAcceptanceCheck, useDecideAcceptance, useScreenSanctions, useReopenAcceptance,
   useCompetenceSummary,
   ACCEPTANCE_RATING_CONFIG, ClientDetail, AcceptanceRating, AcceptanceCheck,
 } from '@/hooks/usePortfolio';
@@ -80,6 +80,12 @@ function SanctionsScreeningBlock({
               : `Sin coincidencias en ${result.total_screened} nombre(s) verificado(s)`}
           </p>
           <p className="text-[11px] mt-1 opacity-80">{result.lists_consulted}</p>
+          {result.screenedAt && (
+            <p className="text-[11px] mt-1 opacity-80">
+              Verificado por {result.screenedByName ?? '—'} el {formatDate(result.screenedAt)}
+              {result.namesChecked && result.namesChecked.length > 0 && <> · Nombres revisados: {result.namesChecked.join(', ')}</>}
+            </p>
+          )}
           {result.findings[0]?.sample_records?.map((r, i) => (
             <p key={i} className="mt-1">
               &bull; &ldquo;{r.uploaded_name}&rdquo; ≈ &ldquo;{r.matched_watchlist_name}&rdquo; ({r.score.toFixed(0)}%, {r.source_list})
@@ -133,12 +139,21 @@ function CompetenceSummaryBlock() {
 
 export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
   const currentYear = new Date().getFullYear();
-  const check = client.acceptanceChecks.find(c => c.year === currentYear) ?? client.acceptanceChecks[0];
+  const currentCheck = client.acceptanceChecks.find(c => c.year === currentYear);
+  const check = currentCheck ?? client.acceptanceChecks[0];
+  // Cliente recurrente: el Radar más reciente es de un año anterior. Hay que iniciar el del año en curso (continuidad, NIA 220 / ISQM 1)
+  // antes de proponer o aprobar el encargo de este ejercicio.
+  const needsNewYear = !currentCheck && client.acceptanceChecks.length > 0;
 
+  const { hasRole } = useUser();
+  const isCae = hasRole(['CAE']);
   const startAcceptance = useStartAcceptance();
   const updateCheck = useUpdateAcceptanceCheck();
   const decide = useDecideAcceptance();
+  const reopen = useReopenAcceptance();
   const screenSanctions = useScreenSanctions();
+  const [showReopen, setShowReopen] = useState(false);
+  const [reopenReason, setReopenReason] = useState('');
 
   const [form, setForm] = useState<Record<string, string>>({});
   const [justification, setJustification] = useState('');
@@ -190,26 +205,71 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
     } catch { /* shown below */ }
   };
 
+  // Se decide con lo que se ve en pantalla (calificaciones y notas), no solo con lo último guardado.
   const handleDecide = async () => {
     try {
-      await decide.mutateAsync({ id: check.id, overallJustification: justification });
+      await decide.mutateAsync({
+        id: check.id,
+        independenceStatus: form.independenceStatus as AcceptanceRating, independenceNotes: form.independenceNotes,
+        competenceStatus:   form.competenceStatus as AcceptanceRating,   competenceNotes:   form.competenceNotes,
+        integrityStatus:    form.integrityStatus as AcceptanceRating,    integrityNotes:    form.integrityNotes,
+        riskStatus:         form.riskStatus as AcceptanceRating,         riskNotes:         form.riskNotes,
+        sanctionsStatus:    form.sanctionsStatus as AcceptanceRating,    sanctionsNotes:    form.sanctionsNotes,
+        overallJustification: justification,
+      });
       setShowDecide(false);
       setJustification('');
     } catch { /* shown below */ }
   };
 
+  const handleReopen = async () => {
+    try {
+      await reopen.mutateAsync({ id: check.id, reason: reopenReason });
+      setShowReopen(false);
+      setReopenReason('');
+    } catch { /* shown below */ }
+  };
+
+  const sanctionsNotesMissing = !(form.sanctionsNotes ?? '').trim();
+
   const cls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400';
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {needsNewYear && (
+        <div className="flex items-center justify-between gap-4 bg-blue-50 border border-blue-200 rounded-2xl px-5 py-4">
+          <div>
+            <p className="text-sm font-semibold text-blue-800">Continuidad del cliente — ejercicio {currentYear}</p>
+            <p className="text-xs text-blue-700 mt-0.5">
+              Abajo está el Radar {check.year}. Para seguir con este cliente este año hay que evaluar de nuevo su continuidad
+              (independencia, integridad, recursos, riesgo y sanciones) antes de la propuesta y del encargo.
+            </p>
+            {startAcceptance.isError && <p className="text-xs text-red-600 mt-1">{(startAcceptance.error as Error)?.message ?? 'No se pudo iniciar'}</p>}
+          </div>
+          <button
+            onClick={() => startAcceptance.mutate(client.id)}
+            disabled={startAcceptance.isPending}
+            className="shrink-0 px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 disabled:opacity-60"
+          >
+            {startAcceptance.isPending ? 'Iniciando…' : `Iniciar Radar ${currentYear}`}
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-gray-700">Radar de Aceptación {check.year}</h3>
           <p className="text-xs text-gray-400 mt-0.5">NIA 220 / ISQM 1 — evaluación de aceptación y continuidad del encargo</p>
         </div>
         {decided && (
-          <span className="flex items-center gap-1.5 text-xs text-gray-400">
-            <Lock className="w-3.5 h-3.5" /> Decidido — solo lectura
+          <span className="flex items-center gap-3 text-xs text-gray-400">
+            <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Decidido — definitivo</span>
+            {isCae && (
+              <button onClick={() => setShowReopen(true)}
+                className="flex items-center gap-1 px-2.5 py-1 border border-amber-200 text-amber-700 rounded-lg hover:bg-amber-50">
+                <RotateCcw className="w-3 h-3" /> Reabrir
+              </button>
+            )}
           </span>
         )}
       </div>
@@ -323,11 +383,17 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
             <textarea
               rows={4}
               required
-              placeholder="Justificación profesional de la decisión…"
+              placeholder="Justificación profesional de la decisión (mínimo 10 caracteres)…"
               value={justification}
               onChange={e => setJustification(e.target.value)}
               className={cls}
             />
+            {sanctionsNotesMissing && (
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2">
+                Falta la nota de <strong>Sanciones / PLD</strong>: documenta si el despacho es sujeto obligado para este cliente (Art. 7.7) y,
+                si hubo coincidencias en el screening, por qué se descartan. Ciérralo y escríbela en esa tarjeta.
+              </p>
+            )}
             {decide.isError && (
               <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-2">
                 {(decide.error as Error)?.message ?? 'Error al decidir'}
@@ -340,10 +406,34 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
               </button>
               <button
                 onClick={handleDecide}
-                disabled={decide.isPending || !justification.trim()}
+                disabled={decide.isPending || justification.trim().length < 10 || sanctionsNotesMissing}
                 className="flex-1 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-60"
               >
                 {decide.isPending ? 'Decidiendo…' : 'Confirmar decisión'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showReopen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6">
+            <h2 className="text-base font-semibold text-gray-800 mb-1">Reabrir la decisión</h2>
+            <p className="text-xs text-gray-400 mb-4">
+              La decisión actual queda copiada en la justificación junto con el motivo, quién y cuándo. Si el cliente había quedado
+              Declinado por este Radar, vuelve a «En aceptación». Las propuestas y cartas que se cerraron al declinarlo no se reabren.
+            </p>
+            <textarea rows={3} placeholder="Motivo (mínimo 10 caracteres)…" value={reopenReason}
+              onChange={e => setReopenReason(e.target.value)} className={cls} />
+            {reopen.isError && (
+              <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-2">{(reopen.error as Error)?.message ?? 'No se pudo reabrir'}</p>
+            )}
+            <div className="flex gap-2 pt-4">
+              <button onClick={() => setShowReopen(false)}
+                className="flex-1 py-2 border border-gray-200 text-sm font-medium rounded-xl text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleReopen} disabled={reopen.isPending || reopenReason.trim().length < 10}
+                className="flex-1 py-2 bg-amber-600 text-white text-sm font-medium rounded-xl hover:bg-amber-700 disabled:opacity-60">
+                {reopen.isPending ? 'Reabriendo…' : 'Reabrir'}
               </button>
             </div>
           </div>

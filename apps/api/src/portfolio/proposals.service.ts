@@ -85,8 +85,10 @@ export class ProposalsService {
       include: PROPOSAL_INCLUDE,
     });
 
-    await this.prisma.client.update({
-      where: { id: dto.clientId },
+    // Solo avanza a un prospecto o a un cliente en evaluación: un cliente ya ACTIVO (una propuesta para otro ejercicio) no retrocede,
+    // porque en «Propuesta en curso» no podría registrar encargos.
+    await this.prisma.client.updateMany({
+      where: { id: dto.clientId, status: { in: [ClientStatus.PROSPECT, ClientStatus.IN_ACCEPTANCE] } },
       data:  { status: ClientStatus.PROPOSAL_IN_PROGRESS },
     });
 
@@ -158,9 +160,9 @@ export class ProposalsService {
     });
 
     // El cliente vuelve a IN_ACCEPTANCE (no a PROSPECT): el Radar del año sigue
-    // vigente, así que se puede emitir una propuesta nueva sin repetirlo.
-    await this.prisma.client.update({
-      where: { id: proposal.clientId },
+    // vigente, así que se puede emitir una propuesta nueva sin repetirlo. Un cliente ACTIVO o declinado no cambia de estado.
+    await this.prisma.client.updateMany({
+      where: { id: proposal.clientId, status: { in: [ClientStatus.PROPOSAL_IN_PROGRESS, ClientStatus.PENDING_SIGNATURE] } },
       data:  { status: ClientStatus.IN_ACCEPTANCE },
     });
 

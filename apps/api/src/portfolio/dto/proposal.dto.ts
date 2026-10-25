@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsString, IsOptional, IsNumber, IsDateString, IsArray, ValidateNested, Min, Length,
 } from 'class-validator';
@@ -33,17 +34,19 @@ export class CreateProposalDto {
 
   @ApiPropertyOptional({ example: '2026-01-01' })
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsDateString()
   fiscalPeriodStart?: string;
 
   @ApiPropertyOptional({ example: '2026-12-31' })
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsDateString()
   fiscalPeriodEnd?: string;
 
   @ApiPropertyOptional({ example: 12500 })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   feeAmount?: number;
 
@@ -69,17 +72,19 @@ export class UpdateProposalDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsDateString()
   fiscalPeriodStart?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsDateString()
   fiscalPeriodEnd?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   feeAmount?: number;
 

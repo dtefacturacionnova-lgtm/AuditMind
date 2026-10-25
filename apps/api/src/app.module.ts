@@ -46,6 +46,7 @@ import { InvestigationReportModule } from './investigation-report/investigation-
 import { CapacityModule } from './capacity/capacity.module';
 import { TimesheetModule } from './timesheet/timesheet.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
+import { CollectionsModule } from './collections/collections.module';
 import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
 import { WatchlistsModule } from './watchlists/watchlists.module';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -98,6 +99,7 @@ import { InterviewSignatureModule } from './working-papers/interview-signature/i
     TimesheetModule,
     CapacityModule,
     PortfolioModule,
+    CollectionsModule,
     AdminTasksModule,
     WatchlistsModule,
     // Límite de intentos: ThrottlerModule es global, pero NO hay guard global — cada controlador

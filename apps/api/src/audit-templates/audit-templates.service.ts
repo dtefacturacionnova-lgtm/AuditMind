@@ -12,6 +12,7 @@ import { CreateAuditTemplateDto, UpdateAuditTemplateDto } from './dto/audit-temp
 import { PAPER_TEMPLATES } from '../working-papers/paper-templates';
 import { AuditFoldersService } from '../audit-folders/audit-folders.service';
 import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
+import { EXTERNAL_FINANCIAL_TEMPLATE_CODE } from './system-template-codes';
 
 // ─── PaperDef mirrors audit-index.service interface ──────────────────────────
 
@@ -56,6 +57,8 @@ interface PaperLinkDef {
 
 interface SystemTemplateSeed {
   name: string;
+  /** Identificador estable (`AuditTemplate.code`): solo las plantillas que el código referencia lo llevan. */
+  code?: string;
   description: string;
   auditTypes: AuditType[];
   sections: SectionDef[];
@@ -248,6 +251,7 @@ export class AuditTemplatesService {
         data: {
           organizationId,
           name:        seed.name,
+          ...(seed.code && { code: seed.code }),
           description: seed.description,
           auditTypes:  seed.auditTypes as any,
           papers:      seed.papers     as any,
@@ -272,7 +276,7 @@ export class AuditTemplatesService {
     const seeds = this.getSystemTemplates();
     const existing = await this.prisma.auditTemplate.findMany({
       where: { organizationId: user.organizationId, isSystem: true },
-      select: { id: true, name: true },
+      select: { id: true, name: true, code: true },
     });
 
     let updated = 0;
@@ -289,6 +293,8 @@ export class AuditTemplatesService {
             papers:      seed.papers     as any,
             sections:    seed.sections   as any,
             links:       (seed.links ?? null) as any,
+            // Rellena el código estable en las organizaciones sembradas antes de que existiera (no pisa otro valor ya puesto).
+            ...(seed.code && !match.code && { code: seed.code }),
           },
         });
         updated++;
@@ -297,6 +303,7 @@ export class AuditTemplatesService {
           data: {
             organizationId: user.organizationId,
             name:           seed.name,
+            ...(seed.code && { code: seed.code }),
             description:    seed.description,
             auditTypes:     seed.auditTypes as any,
             papers:         seed.papers     as any,
@@ -1915,6 +1922,7 @@ export class AuditTemplatesService {
       // ═══════════════════════════════════════════════════════════════════════
       {
         name: 'Auditoría Financiera Externa v1.0',
+        code: EXTERNAL_FINANCIAL_TEMPLATE_CODE,
         description:
           'Plantilla especializada para Auditoría Financiera Externa con lead schedules automáticos y ' +
           'cédulas sumarias inteligentes. Importa el balance de comprobación (Excel/ERP/manual), lo ' +

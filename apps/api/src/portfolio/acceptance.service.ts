@@ -1,12 +1,12 @@
 import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
-import { AcceptanceCheck, AcceptanceRating, ClientStatus, Prisma } from '@prisma/client';
+import { AcceptanceCheck, AcceptanceRating, ClientStatus, EngagementLetterStatus, Prisma, ProposalStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AiService } from '../ai/ai.service';
 import { ClientsService } from './clients.service';
-import { UpdateAcceptanceCheckDto, DecideAcceptanceDto } from './dto/acceptance.dto';
+import { UpdateAcceptanceCheckDto, DecideAcceptanceDto, ReopenAcceptanceDto } from './dto/acceptance.dto';
 import { DEFAULT_MIN_CPE_HOURS_YEAR } from '../common/constants/competency.constants';
 
 /**
@@ -70,7 +70,9 @@ export class AcceptanceService {
 
     // El prospecto entra formalmente en evaluación. Si ya estaba más adelante en
     // el pipeline (o fue declinado) no se retrocede el estado.
-    if (client.status === ClientStatus.PROSPECT) {
+    if (!check.decidedAt && (
+      client.status === ClientStatus.PROSPECT || client.status === ClientStatus.DECLINED || client.status === ClientStatus.INACTIVE
+    )) {
       await this.prisma.client.update({
         where: { id: clientId },
         data:  { status: ClientStatus.IN_ACCEPTANCE },
@@ -82,7 +84,8 @@ export class AcceptanceService {
 
   // ── Actualizar dimensiones / checklist ────────────────────────────────────
   async update(id: string, dto: UpdateAcceptanceCheckDto, user: AuthUser) {
-    await this.getCheckOrThrow(id, user);
+    const stored = await this.getCheckOrThrow(id, user);
+    this.assertOpen(stored);
 
     return this.prisma.acceptanceCheck.update({
       where: { id },
@@ -103,13 +106,38 @@ export class AcceptanceService {
     });
   }
 
+  /** La decisión del Radar es definitiva: ya no se editan las calificaciones, no se vuelve a decidir ni a correr el screening. */
+  private assertOpen(check: AcceptanceCheck) {
+    if (check.decidedAt) {
+      throw new BadRequestException(
+        'Este Radar de Aceptación ya fue decidido y es definitivo. Si cambió la información, un CAE puede reabrirlo indicando el motivo.',
+      );
+    }
+  }
+
   /**
    * Decisión de aceptación/continuidad: consolida las 4 dimensiones en
    * `overallResult` (la peor) y deja constancia de quién y cuándo decidió.
    * Si el resultado es RED, el cliente queda DECLINED.
    */
   async decide(id: string, dto: DecideAcceptanceDto, user: AuthUser) {
-    const check = await this.getCheckOrThrow(id, user);
+    const stored = await this.getCheckOrThrow(id, user);
+    this.assertOpen(stored);
+
+    // Se decide con lo que el usuario tiene en pantalla: las calificaciones y notas recibidas pisan lo guardado.
+    const check = {
+      ...stored,
+      ...(dto.independenceStatus != null && { independenceStatus: dto.independenceStatus }),
+      ...(dto.independenceNotes  != null && { independenceNotes:  dto.independenceNotes }),
+      ...(dto.competenceStatus   != null && { competenceStatus:   dto.competenceStatus }),
+      ...(dto.competenceNotes    != null && { competenceNotes:    dto.competenceNotes }),
+      ...(dto.integrityStatus    != null && { integrityStatus:    dto.integrityStatus }),
+      ...(dto.integrityNotes     != null && { integrityNotes:     dto.integrityNotes }),
+      ...(dto.riskStatus         != null && { riskStatus:         dto.riskStatus }),
+      ...(dto.riskNotes          != null && { riskNotes:          dto.riskNotes }),
+      ...(dto.sanctionsStatus    != null && { sanctionsStatus:    dto.sanctionsStatus }),
+      ...(dto.sanctionsNotes     != null && { sanctionsNotes:     dto.sanctionsNotes }),
+    };
 
     const dimensions: Array<[string, AcceptanceRating]> = [
       ['independenceStatus', check.independenceStatus],
@@ -133,25 +161,79 @@ export class AcceptanceService {
       AcceptanceRating.GREEN,
     );
 
-    const updated = await this.prisma.acceptanceCheck.update({
-      where: { id },
-      data: {
-        overallResult,
-        overallJustification: dto.overallJustification,
-        decidedById:          user.id,
-        decidedAt:            new Date(),
-      },
-      include: CHECK_INCLUDE,
-    });
-
-    if (overallResult === AcceptanceRating.RED) {
-      await this.prisma.client.update({
-        where: { id: check.clientId },
-        data:  { status: ClientStatus.DECLINED },
-      });
+    // Sanciones/PLD: la nota documenta si el despacho es sujeto obligado para este cliente (Art. 7.7) y la revisión del screening.
+    // Sin esa constancia un «Verde» no distingue «revisado» de «no aplica»; con coincidencias, una nota que las descarte es obligatoria.
+    const screening = check.sanctionsScreeningResult as { findings?: unknown[] } | null;
+    const hasMatches = (screening?.findings?.length ?? 0) > 0;
+    if (!check.sanctionsNotes?.trim()) {
+      throw new BadRequestException(
+        hasMatches
+          ? 'El screening de sanciones tiene coincidencias: documenta en las notas de Sanciones/PLD por qué se descartan o qué se resolvió.'
+          : 'Documenta en las notas de Sanciones/PLD si el despacho es sujeto obligado para este cliente (Art. 7.7) y la revisión realizada.',
+      );
     }
 
-    return updated;
+    // La decisión se reclama de forma condicional: dos personas decidiendo a la vez no se pisan.
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.acceptanceCheck.updateMany({
+        where: { id, organizationId: user.organizationId, decidedAt: null },
+        data: {
+          independenceStatus: check.independenceStatus, independenceNotes: check.independenceNotes,
+          competenceStatus:   check.competenceStatus,   competenceNotes:   check.competenceNotes,
+          integrityStatus:    check.integrityStatus,    integrityNotes:    check.integrityNotes,
+          riskStatus:         check.riskStatus,         riskNotes:         check.riskNotes,
+          sanctionsStatus:    check.sanctionsStatus,    sanctionsNotes:    check.sanctionsNotes,
+          ...(dto.checklist != null && { checklist: dto.checklist as unknown as Prisma.InputJsonValue }),
+          overallResult,
+          overallJustification: dto.overallJustification,
+          decidedById:          user.id,
+          decidedAt:            new Date(),
+        },
+      });
+      if (res.count === 0) return null;
+      if (overallResult === AcceptanceRating.RED) {
+        await tx.client.update({ where: { id: check.clientId }, data: { status: ClientStatus.DECLINED } });
+        // Declinar al cliente cierra lo que estaba abierto: las propuestas por responder y las cartas por firmar ya no pueden
+        // aceptarse ni firmarse (firmar una carta reactivaría al cliente Declinado).
+        await tx.proposal.updateMany({
+          where: { clientId: check.clientId, status: { in: [ProposalStatus.DRAFT, ProposalStatus.SENT] } },
+          data:  { status: ProposalStatus.REJECTED, respondedAt: new Date() },
+        });
+        await tx.engagementLetter.updateMany({
+          where: { clientId: check.clientId, status: { in: [EngagementLetterStatus.DRAFT, EngagementLetterStatus.SENT] } },
+          data:  { status: EngagementLetterStatus.DECLINED, declineReason: 'El cliente fue declinado en la evaluación de aceptación.' },
+        });
+      }
+      return tx.acceptanceCheck.findUniqueOrThrow({ where: { id }, include: CHECK_INCLUDE });
+    });
+    if (!claimed) this.assertOpen(await this.getCheckOrThrow(id, user));
+    return claimed!;
+  }
+
+  /**
+   * Reabre un Radar decidido (solo CAE o superior, lo exige el controlador). La decisión anterior queda copiada en la justificación
+   * junto con el motivo, quién y cuándo; si el cliente había quedado Declinado por este Radar vuelve a «En aceptación».
+   */
+  async reopen(id: string, dto: ReopenAcceptanceDto, user: AuthUser) {
+    const check = await this.getCheckOrThrow(id, user);
+    if (!check.decidedAt) throw new BadRequestException('Este Radar todavía no se ha decidido.');
+    const previous = `Decisión anterior: ${check.overallResult} (${check.decidedAt.toISOString().slice(0, 10)}). ${check.overallJustification ?? ''}`.trim();
+    const trace = `[Reabierto por ${user.name} el ${new Date().toISOString().slice(0, 10)}: ${dto.reason.trim()}]\n${previous}`;
+
+    return this.prisma.$transaction(async (tx) => {
+      const res = await tx.acceptanceCheck.updateMany({
+        where: { id, organizationId: user.organizationId, decidedAt: { not: null } },
+        data: { overallResult: AcceptanceRating.PENDING, overallJustification: trace, decidedById: null, decidedAt: null },
+      });
+      if (res.count === 0) throw new BadRequestException('Este Radar todavía no se ha decidido.');
+      if (check.overallResult === AcceptanceRating.RED) {
+        await tx.client.updateMany({
+          where: { id: check.clientId, status: ClientStatus.DECLINED },
+          data:  { status: ClientStatus.IN_ACCEPTANCE },
+        });
+      }
+      return tx.acceptanceCheck.findUniqueOrThrow({ where: { id }, include: CHECK_INCLUDE });
+    });
   }
 
   /**
@@ -169,6 +251,7 @@ export class AcceptanceService {
    */
   async screenSanctions(id: string, user: AuthUser) {
     const check = await this.getCheckOrThrow(id, user);
+    this.assertOpen(check);
     const client = await this.clients.getClientOrThrow(check.clientId, user);
 
     const owners = (client.beneficialOwners as unknown as Array<{ name?: string }>) ?? [];
@@ -180,9 +263,18 @@ export class AcceptanceService {
 
     const result = await this.aiService.runCaats('sanctions_screening', { records });
 
+    // Constancia del screening (Art. 15 DDC): quién lo corrió, cuándo y qué nombres se revisaron (con y sin coincidencia).
+    const evidence = {
+      ...(result as Record<string, unknown>),
+      screenedAt:     new Date().toISOString(),
+      screenedById:   user.id,
+      screenedByName: user.name,
+      namesChecked:   records.map((r) => r.vendor_name),
+    };
+
     return this.prisma.acceptanceCheck.update({
       where: { id },
-      data:  { sanctionsScreeningResult: result as Prisma.InputJsonValue },
+      data:  { sanctionsScreeningResult: evidence as Prisma.InputJsonValue },
       include: CHECK_INCLUDE,
     });
   }

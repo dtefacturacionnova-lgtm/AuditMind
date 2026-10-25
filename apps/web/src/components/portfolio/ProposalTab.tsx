@@ -249,7 +249,10 @@ export function ProposalTab({ client }: { client: ClientDetail }) {
   const gateOk = !!check && (check.overallResult === 'GREEN' || check.overallResult === 'YELLOW');
 
   const latest = client.proposals[0];
-  const canCreateNew = !latest || latest.status === 'REJECTED' || latest.status === 'EXPIRED';
+  // También se puede emitir una nueva si la última es de un ejercicio anterior (cliente recurrente: la propuesta y la carta del año pasado
+  // ya cumplieron su función).
+  const fromPreviousYear = !!latest && latest.year < currentYear;
+  const canCreateNew = !latest || latest.status === 'REJECTED' || latest.status === 'EXPIRED' || fromPreviousYear;
 
   if (!gateOk) {
     return (
@@ -273,7 +276,11 @@ export function ProposalTab({ client }: { client: ClientDetail }) {
       )}
       {canCreateNew && (
         <div className={latest ? 'pt-6 border-t border-gray-100' : ''}>
-          {latest && <p className="text-xs text-gray-400 mb-3">La propuesta anterior fue rechazada. Puede emitir una nueva:</p>}
+          {latest && (
+            <p className="text-xs text-gray-400 mb-3">
+              {fromPreviousYear ? `La propuesta anterior es del ejercicio ${latest.year}. Puede emitir la de ${currentYear}:` : 'La propuesta anterior fue rechazada. Puede emitir una nueva:'}
+            </p>
+          )}
           <CreateProposalForm clientId={client.id} />
         </div>
       )}

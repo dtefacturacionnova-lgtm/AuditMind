@@ -100,10 +100,12 @@ Toda operación toma los candados en este orden: **1.** encargo (`pg_advisory_xa
 ### 4.2 Facturas (gerente registra; dirección anula)
 - **Desde una cuota:** precarga monto y etiqueta; `invoiceDate` por defecto hoy; **`dueDate = invoiceDate + paymentTermDays`** (30). Siempre con encargo. Al registrarla se pueden anotar las **retenciones que trae el DTE** (tipo y monto): quedan como movimientos con la fecha de la factura.
 - **Editar:** sin movimientos, todo; con cobros, retenciones, notas de crédito o castigos, solo fechas y descripción, nunca neto ni IVA (las retenciones se corrigen con sus propios movimientos, 4.4). **Anular:** solo sin cobros, retenciones, notas de crédito ni castigos vigentes, bajo `FOR UPDATE` y escritura condicional, motivo ≥ 10; la cuota vuelve a PLANNED y el número queda libre.
+- **La cuota al anular:** vuelve a PLANNED solo por lo que cabe (`honorario − facturado vigente − programado`); si la factura era por menos que la cuota y el resto ya se reprogramó, regresa con ese monto menor. Cada cambio de estado de una cuota queda en la bitácora.
+- **Al anular** se revierten solas las retenciones que solo viven en la factura (las del DTE y las que llegaron tarde), con la nota «Anulación de la factura»; las retenciones practicadas dentro de un cobro bloquean la anulación hasta quitar o anular ese cobro.
 - Una factura VOID nunca recibe cobros, retenciones, notas de crédito ni castigos.
 
 ### 4.3 Cobros y aplicación (reglas heredadas de `ar_apply_payment`)
-**Registrar un cobro** (una transacción): cliente de la organización, fecha no futura (en El Salvador), monto > 0 y ≤ 2 decimales; cobro; aplicaciones de dinero si las hay y **retenciones practicadas en este pago** si las hay (`[{ invoiceId, taxType, amount, certificateNumber? }]`). **Todo o nada**: una aplicación inválida rechaza el cobro entero. Sin aplicaciones queda como saldo a favor (en la práctica casi no habrá anticipos fuera del calendario). Idempotencia: el mismo `clientRequestId` devuelve el cobro ya creado **solo si el contenido coincide**; si difiere, 409.
+**Registrar un cobro** (una transacción): cliente de la organización, fecha no futura (en El Salvador), monto > 0 y ≤ 2 decimales; cobro; aplicaciones de dinero si las hay y **retenciones practicadas en este pago** si las hay (`[{ invoiceId, taxType, amount, certificateNumber? }]`). **Todo o nada**: una aplicación inválida rechaza el cobro entero. Sin aplicaciones queda como saldo a favor (en la práctica casi no habrá anticipos fuera del calendario). Idempotencia: el mismo `clientRequestId` devuelve el cobro ya creado **solo si la huella del contenido coincide** (cliente, fecha, monto, forma, referencia, notas, reparto automático, aplicaciones Y retenciones; la huella se guarda en la bitácora del cobro); si difiere, 409.
 
 **Aplicar `[{ invoiceId, monto }]`:** valida la lista sin tocar la base (no vacía, ids válidos, monto > 0 y ≤ 1.000.000.000, ≤ 2 decimales, sin facturas repetidas) → cobro `FOR UPDATE` (404 / 409 si VOID / 422 si la suma excede lo no aplicado) → facturas por id `FOR UPDATE`, cada una del mismo cliente (422), OPEN o PARTIAL (409) y monto ≤ saldo (422) → escribe los renglones, `paid`, el estado y `applied`. Si el pago trae retenciones, para cada factura se valida **dinero aplicado + retenciones nuevas ≤ saldo** bajo los mismos candados; las retenciones no consumen el monto del cobro.
 
@@ -153,7 +155,7 @@ Controlador `collections` (NestJS), `@Roles` como primera barrera y el servicio 
 | Registrar factura, registrar cobro, aplicar cobro, anotar retenciones, registrar notas de gestión de cobro | Gerente o superior |
 | Definir o cambiar el honorario, adendas, generar o editar el calendario, anular factura, anular cobro, quitar una aplicación, **revertir retenciones, registrar o anular notas de crédito, castigar y reversar castigos**, avance manual | Dirección (CAE o superior) |
 
-Rutas principales: `GET/PUT engagements/:id/fee`, `POST engagements/:id/fee/amendments`, `POST engagements/:id/schedule/generate`, `PATCH/DELETE schedule/:itemId`, `POST schedule/:itemId/invoice`, `POST/GET invoices`, `PATCH invoices/:id`, `POST invoices/:id/void`, `POST invoices/:id/withholdings`, `POST withholdings/:id/reverse`, `POST invoices/:id/credit-notes`, `POST credit-notes/:id/void`, `POST invoices/:id/write-offs`, `POST write-offs/:id/reverse`, `POST/GET payments`, `POST payments/:id/apply`, `DELETE payments/:id/applications/:applicationId`, `POST payments/:id/void`, `POST/GET collection-notes`, `PATCH collection-notes/:id/promise`, `GET alerts`, `GET reports/aging?asOf=`, `GET reports/withholdings?from=&to=`, `GET clients/:id/statement`, `GET engagements/:id/collections-summary`.
+Rutas principales: `GET/PUT engagements/:id/fee`, `POST engagements/:id/fee/amendments`, `POST engagements/:id/schedule/generate`, `PATCH/DELETE schedule/:itemId`, `POST schedule/:itemId/invoice`, `POST/GET invoices`, `PATCH invoices/:id`, `POST invoices/:id/void`, `POST invoices/:id/withholdings`, `POST withholdings/:id/reverse`, `POST invoices/:id/credit-notes`, `POST credit-notes/:id/void`, `POST invoices/:id/write-offs`, `POST write-offs/:id/reverse`, `POST/GET payments`, `POST payments/:id/apply`, `POST payments/:id/applications/:applicationId/remove`, `POST payments/:id/void`, `POST/GET collection-notes`, `PATCH collection-notes/:id/promise`, `GET alerts`, `GET reports/aging?asOf=`, `GET reports/withholdings?from=&to=`, `GET clients/:id/statement`, `GET engagements/:id/collections-summary`.
 
 ## 6. Pantallas
 
@@ -163,6 +165,25 @@ Rutas principales: `GET/PUT engagements/:id/fee`, `POST engagements/:id/fee/amen
 4. **Detalle de la factura:** movimientos (cobros aplicados, notas de crédito, castigos), «Registrar nota de crédito» y «Castigar» (dirección), notas de gestión.
 5. **Detalle del cobro:** aplicaciones, aplicar el saldo a favor, quitar una aplicación, anular con motivo. Sin recibo.
 6. **Antigüedad por cliente** (corriente, 1-30, 31-60, 61-90, más de 90 **días vencidos**, con fecha de corte) y **estado de cuenta** en PDF.
+
+### 6.1 CRUD en las pantallas (pedido del despacho, 2026-10-23) — construido en 3b
+Implementado: `apps/web/src/components/collections/` (panel «Cobros» del encargo, ventanas de honorario, adenda, calendario, factura, retención y cobro) y la página `/dashboard/collections` (Por cobrar · Cobros · Retenciones).
+Cada pantalla de la fase 3b ofrece **crear, ver (lista y detalle), editar y eliminar** lo que le corresponde. En lo que es dinero, «eliminar» no es borrar la fila: es **anular o revertir con motivo**, porque la base lo impide a propósito (`ON DELETE RESTRICT`) y porque un auditor debe poder reconstruir cualquier saldo a cualquier fecha. Solo lo que no mueve dinero se borra de verdad.
+
+| Entidad | Crear | Ver | Editar | Eliminar |
+|---|---|---|---|---|
+| Honorario | Definir (dirección) | Detalle con adendas | Monto solo sin cuotas ni facturas; después, adenda | Borrar solo si no tiene adendas, cuotas ni facturas |
+| Adenda | Agregar | En el honorario | — (se corrige con otra adenda en sentido contrario) | — |
+| Cuota del calendario | Generar o agregar a mano | Calendario del encargo | Etiqueta, fecha y monto mientras esté PLANNED | Cancelar (PLANNED); borrar solo si nunca tuvo factura |
+| Factura | Desde cuota o libre | Lista con filtros, detalle con movimientos | Fechas y descripción; todo si no tiene movimientos | **Anular** con motivo (sin movimientos vigentes) |
+| Cobro | Registrar (con aplicaciones y retenciones) | Lista y detalle | Fecha, forma, referencia y notas; el monto solo si no tiene aplicaciones ni retenciones | **Anular** con motivo (revierte sus aplicaciones) |
+| Aplicación | Aplicar | En el cobro y en la factura | — | **Quitar** con motivo |
+| Retención | Anotar (al emitir, al pagar o después) | En la factura | — (se revierte y se vuelve a anotar) | **Revertir** con motivo |
+| Nota de crédito, castigo (3d) | Registrar | En la factura | — | Anular o reversar con motivo |
+| Nota de gestión de cobro (3d) | Agregar | Línea de tiempo | El texto, por su autor o la dirección, dejando la versión anterior en la bitácora | Borrar por su autor o la dirección, con rastro en la bitácora |
+| Encargo / consultoría | Nuevo encargo (tipo y título) | Cartera | Título y datos del encargo | Cancelar (como hoy) |
+
+Rutas que esto agrega a las de la sección 5: `GET engagements/:id/fee/amendments`, `DELETE engagements/:id/fee`, `POST schedule` (cuota a mano), `GET schedule/:itemId`, `GET invoices/:id`, `GET payments/:id`, `PATCH payments/:id`, `GET withholdings`, `PATCH collection-notes/:id`, `DELETE collection-notes/:id`. Cada formulario de edición muestra por qué un campo está bloqueado (por ejemplo «tiene cobros aplicados») en vez de ocultarlo.
 
 ## 7. Defectos de Nexus que no se copian
 
@@ -197,7 +218,7 @@ La base en memoria del cierre de horas serializa las transacciones, devuelve vac
 ## 9. Decisiones del despacho (2026-10-23) y lo que sigue abierto
 
 **Decididas:**
-- Facturación dentro de AuditMind solo como **registro**; todo se emite como **DTE** (obligatorio para todos desde diciembre de 2026, según indica el despacho): el número de factura es el número de control del DTE. Tipos más frecuentes: **03 (comprobante de crédito fiscal) y 01 (factura)**; los demás se permiten.
+- Facturación dentro de AuditMind solo como **registro**; todo se emite como **DTE** (obligatorio para todos desde diciembre de 2026, según indica el despacho): el número de factura es el número de control del DTE. El despacho confirmó **03 (comprobante de crédito fiscal) y 01 (factura)**: son los únicos que el sistema acepta hoy (exportación, sujeto excluido u otros se agregan cuando el contador defina su tratamiento). El número de control se guarda en mayúsculas y sin espacios para que el mismo DTE no entre dos veces.
 - Quién hace qué: como en la sección 5.
 - **Consultorías llevan encargo, horas y costos como las auditorías** (menos rigurosas): toda factura cuelga de un encargo; tipo de encargo en 3.0. **No tienen plantilla de papeles** (depende del tipo de consultoría) pero sí las **tres etapas básicas: Planificación, Ejecución e Informes y cierre**.
 - Avance del devengado: **horas facturables ÷ presupuesto** (nulo si no hay presupuesto completo).
@@ -226,3 +247,7 @@ Un segundo modelo revisó la versión 1 contra el código de AuditMind y de Nexu
 | **3c Reportes y devengado** | Antigüedad con corte, estado de cuenta, resumen pactado / devengado / facturado / cobrado, rentabilidad devengada | Sonnet construye; **Opus revisa el cambio de cálculo** | Mediano |
 | **3d Notas de crédito, castigo y gestión de cobro** | Servicios, reglas, pantallas y alertas de 4.5 a 4.7 | Sonnet; **Opus revisa** | Mediano (~500 líneas backend + ~700 de pruebas + ~700 web) |
 | Después | Facturar horas de consultoría (Fase 4), cuadros de gestión | A pedido | |
+
+
+## 12. Correcciones de la revisión independiente (2026-10-23)
+Un revisor independiente (Opus) encontró 13 defectos, todos reproducidos y corregidos con una prueba que falla con el código anterior: (1) anular una factura devolvía la cuota entera aunque eso comprometiera más que el honorario; (2) editar el honorario sin cambiar el monto soltaba el vínculo con la propuesta y otro encargo la podía importar de nuevo; (3) la idempotencia ignoraba las retenciones; (4) cancelar el encargo no tomaba el candado del encargo; (5) un cobro anulado mostraba saldo a favor; (6) el número de control distinguía mayúsculas; (7) las claves compuestas tenían `ON UPDATE CASCADE` (ahora `RESTRICT`, ver `2026-10-cobros-3a-fix1.sql`); (8) aprobar dos veces a la vez creaba dos auditorías (ahora se reclama el paso DRAFT → APPROVED con una escritura condicional y se serializa por la fila del cliente); (9) posible interbloqueo del reparto automático (ahora un solo bloqueo ordenado); (10) el reparto automático no descontaba las retenciones del mismo pago; (11) bitácora incompleta (estados de cuota, movimientos en los detalles, adendas); (12) listas truncadas en silencio (retenciones y saldo a favor, ahora paginadas con total exacto); (13) hitos con `null`, nombre de solo espacios.

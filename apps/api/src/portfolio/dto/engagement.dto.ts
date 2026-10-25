@@ -1,14 +1,31 @@
 import {
-  IsString, IsOptional, IsInt, IsDateString, IsEnum, Min, Max,
+  IsString, IsOptional, IsInt, IsDateString, IsEnum, Min, Max, MinLength, MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { EngagementStatus } from '@prisma/client';
+import { EngagementKind, EngagementStatus } from '@prisma/client';
 
 export class CreateEngagementDto {
   @ApiProperty({ example: 'clx0000client' })
   @IsString()
   clientId: string;
+
+  @ApiPropertyOptional({
+    enum: EngagementKind, default: EngagementKind.AUDIT,
+    description: 'AUDIT (por defecto) o CONSULTING. Una consultoría lleva encargo, horas y costos como la auditoría, con menos rigor.',
+  })
+  @IsOptional()
+  @IsEnum(EngagementKind)
+  kind?: EngagementKind;
+
+  @ApiPropertyOptional({
+    example: 'Asesoría tributaria 2026',
+    description: 'Nombre visible del encargo. Obligatorio en las consultorías.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(3) @MaxLength(200)
+  title?: string;
 
   @ApiPropertyOptional({ example: 'clx0000letter' })
   @IsOptional()
@@ -51,6 +68,46 @@ export class CreateEngagementDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  notes?: string;
+}
+
+/** Edición de un encargo todavía sin auditoría real: solo datos descriptivos, nunca cliente, ejercicio ni tipo. */
+export class UpdateEngagementDto {
+  @ApiPropertyOptional({ example: 'Asesoría tributaria 2026' })
+  @IsOptional()
+  @IsString()
+  @MinLength(3) @MaxLength(200)
+  title?: string;
+
+  @ApiPropertyOptional({ example: '2027-01-15' })
+  @IsOptional()
+  @IsDateString()
+  plannedStartDate?: string;
+
+  @ApiPropertyOptional({ example: '2027-03-31' })
+  @IsOptional()
+  @IsDateString()
+  plannedEndDate?: string;
+
+  @ApiPropertyOptional({ description: 'Socio a cargo del encargo (User.id)' })
+  @IsOptional()
+  @IsString()
+  leadPartnerId?: string;
+
+  @ApiPropertyOptional({ description: 'Carta de compromiso FIRMADA del cliente que respalda el encargo (solo mientras es borrador)' })
+  @IsOptional()
+  @IsString()
+  engagementLetterId?: string;
+
+  @ApiPropertyOptional({ example: '2026-06-30', description: 'Cierre del ejercicio (solo mientras es borrador; debe caer en el ejercicio del encargo)' })
+  @IsOptional()
+  @IsDateString()
+  fiscalYearEndDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
   notes?: string;
 }
 

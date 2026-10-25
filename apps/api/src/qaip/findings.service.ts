@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInOrg } from '../common/utils/tenant.util';
+import { assertAuditVisible } from '../common/utils/investigation-scope.util';
 import {
   CreateQaipFindingDto, UpdateQaipFindingStatusDto,
   CreateQaipRootCauseDto, CreateQaipRemediationActionDto, UpdateQaipRemediationActionDto,
@@ -53,6 +54,8 @@ export class FindingsService {
     }
     // engagementId no tiene @relation en el esquema: se valida a mano.
     await assertInOrg(this.prisma.audit, dto.engagementId, { organizationId: user.organizationId }, 'El encargo');
+    // Modo investigación (2026-10-25): un hallazgo de calidad solo se vincula a un encargo que el usuario ve.
+    if (dto.engagementId) await assertAuditVisible(this.prisma, dto.engagementId, user);
     return this.prisma.qaipFinding.create({
       data: {
         organizationId: user.organizationId,

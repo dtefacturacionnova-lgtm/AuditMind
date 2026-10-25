@@ -5,7 +5,7 @@ import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
 import { ROLE_HIERARCHY } from '../common/guards/roles.guard';
 import { resolveCostRate } from '../timesheet/frozen-rates';
 import {
-  assertAuditVisible, assertInvestigationAccess, INVESTIGATION_SELECT, visibleAuditWhere,
+  assertAuditVisible, assertInvestigationAccess, INVESTIGATION_SELECT, seesAllInvestigations, visibleAuditWhere,
 } from '../common/utils/investigation-scope.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
@@ -248,7 +248,14 @@ export class AuditsService {
   }
 
   async update(id: string, dto: UpdateAuditDto, user: AuthUser) {
-    await this.findOne(id, user);
+    const current = await this.findOne(id, user);
+    // Modo investigación (2026-10-25): activarlo o apagarlo en una auditoría que ya existe lo decide la dirección. Si un gerente
+    // del equipo pudiera apagarlo, la investigación quedaría a la vista de toda la organización; si pudiera encenderlo, podría
+    // esconder una auditoría a sus colegas. Reenviar el valor que ya tiene no cuenta como cambio. Al CREAR sí puede marcarla
+    // quien la crea (queda más restringida, y el CAE la sigue viendo).
+    if (dto.isInvestigationMode !== undefined && dto.isInvestigationMode !== current.isInvestigationMode && !seesAllInvestigations(user)) {
+      throw new ForbiddenException('Solo CAE, ADMIN o SUPER_ADMIN pueden activar o desactivar el modo investigación de una auditoría existente.');
+    }
 
     const materialityData = dto.materiality
       ? this.computeMateriality(dto.materiality.base, dto.materiality.percentage)
@@ -335,6 +342,9 @@ export class AuditsService {
         materialityAccumulation: source.materialityAccumulation ?? null,
         materialityBase:    source.materialityBase ?? null,
         materialityBaseAmount:   source.materialityBaseAmount ?? null,
+        // Modo investigación (2026-10-25): la auditoría del año siguiente de una investigación sigue siendo una investigación.
+        // Antes nacía como una auditoría normal y, con carryOpenFindings, copiaba los hallazgos a la vista de toda la organización.
+        isInvestigationMode: source.isInvestigationMode,
         status:             AuditStatus.PLANNING,
       },
     });
@@ -345,6 +355,15 @@ export class AuditsService {
       create: { auditId: newAudit.id, userId: user.id, role: 'LEAD' },
       update: { role: 'LEAD' },
     });
+
+    // ...y conserva el mismo equipo (quien ya la veía sigue viéndola; el resto, no).
+    if (source.isInvestigationMode) {
+      const previousTeam = await this.prisma.auditTeam.findMany({ where: { auditId: id }, select: { userId: true } });
+      await this.prisma.auditTeam.createMany({
+        data: previousTeam.filter((m) => m.userId !== user.id).map((m) => ({ auditId: newAudit.id, userId: m.userId, role: 'AUDITOR' as const })),
+        skipDuplicates: true,
+      });
+    }
 
     // Copy working paper structure (shell only — no content, reset status)
     const sourcePapers = await this.prisma.workingPaper.findMany({
@@ -374,10 +393,11 @@ export class AuditsService {
       });
     }
 
-    // Optionally carry open/in-progress findings
+    // Optionally carry open/in-progress findings (antes la lista traía 'REOPENED', que no es un estado de hallazgo: Prisma rechazaba la consulta
+    // y el traspaso de hallazgos abiertos nunca funcionó).
     if (dto.carryOpenFindings) {
       const openFindings = await this.prisma.finding.findMany({
-        where: { auditId: id, status: { in: ['DRAFT', 'IN_REVIEW', 'APPROVED', 'REOPENED'] as any } },
+        where: { auditId: id, status: { in: ['DRAFT', 'IN_REVIEW', 'APPROVED', 'IN_PROGRESS', 'OVERDUE'] as any } },
       });
       for (const f of openFindings) {
         await this.prisma.finding.create({

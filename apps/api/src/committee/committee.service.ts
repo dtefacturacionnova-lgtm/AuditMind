@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { ProfitabilityService } from '../portfolio/profitability.service';
@@ -8,6 +9,7 @@ import {
   lastNPeriods, isPeriodType,
 } from './period.util';
 import { COSO_COMPONENTS, computeCosoAuditScore, cosoBandFor } from './coso-score.util';
+import { canSeeAudit, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
 // Papel/fase "terminado" para efectos de avance ponderado.
 const PROGRESS_DONE = new Set(['REVIEWED', 'SIGNED_OFF', 'CLOSED', 'APPROVED', 'ARCHIVED']);
@@ -232,10 +234,10 @@ export class CommitteeService {
   // papel PT-COSO (`coso-score.util.ts`, puerto server-side de
   // `CosoScorePanel.tsx::computeComponent` — mismos pesos, misma fórmula de
   // riesgo, mismas bandas 100-400).
-  private async computeControlInternoGlobal(orgId: string) {
+  private async computeControlInternoGlobal(orgId: string, scope: Prisma.AuditWhereInput) {
     const [papers, totalAuditsOrg] = await Promise.all([
       this.prisma.workingPaper.findMany({
-        where: { paperCode: 'PT-COSO', audit: { organizationId: orgId, status: { not: 'CANCELLED' } } },
+        where: { paperCode: 'PT-COSO', audit: { AND: [scope], organizationId: orgId, status: { not: 'CANCELLED' } } },
         select: {
           auditId: true,
           audit: { select: { title: true } },
@@ -245,7 +247,7 @@ export class CommitteeService {
           },
         },
       }),
-      this.prisma.audit.count({ where: { organizationId: orgId, status: { not: 'CANCELLED' } } }),
+      this.prisma.audit.count({ where: { AND: [scope], organizationId: orgId, status: { not: 'CANCELLED' } } }),
     ]);
 
     const scores = papers.map(p => {
@@ -396,8 +398,17 @@ export class CommitteeService {
     return { ...payload, meta: { frozen: false, isCurrent, periodKey, periodType, publishedAt: null, preparedByName: null } };
   }
 
-  private async computeDashboard(user: AuthUser, periodType: PeriodType, periodKey: string, today: Date) {
+  /**
+   * `viewer` decide qué investigaciones (modo investigación) entran en las cifras: por defecto, las que ve `user`. La foto que
+   * se congela para el comité (`publishSnapshot`) se calcula con un visor sin acceso a ninguna, porque después la leen todos
+   * los gerentes: una investigación nunca queda dentro de un acta.
+   */
+  private async computeDashboard(
+    user: AuthUser, periodType: PeriodType, periodKey: string, today: Date,
+    viewer: Pick<AuthUser, 'id' | 'role' | 'organizationId'> = user,
+  ) {
     const orgId = user.organizationId;
+    const scope = visibleAuditWhere(viewer);
     const { end: periodEnd } = getPeriodRange(periodKey, periodType);
     const year = getPeriodYear(periodKey, periodType);
 
@@ -411,13 +422,15 @@ export class CommitteeService {
             auditEntity: { select: { name: true } },
             auditProject: { select: { name: true } },
             auditableUnit: { select: { name: true } },
-            audit: { select: { id: true, title: true, status: true, estimatedHours: true } },
+            audit: { select: { id: true, title: true, status: true, estimatedHours: true, isInvestigationMode: true, team: { select: { userId: true } } } },
           },
         },
       },
     });
+    // Un ítem vinculado a una investigación que el visor no ve no existe para este tablero (ni en el período ni en el universo).
+    const planItems = (plan?.items ?? []).filter(i => !i.audit || canSeeAudit(i.audit, viewer));
 
-    const itemsInPeriod = (plan?.items ?? []).filter(i => {
+    const itemsInPeriod = planItems.filter(i => {
       const anchor = i.tentativeEndDate ?? i.tentativeStartDate;
       if (!anchor) return false;
       return getPeriodKey(anchor, periodType) === periodKey;
@@ -449,9 +462,9 @@ export class CommitteeService {
     const hoursPlanned = planExecution.reduce((s, i) => s + i.hoursPlanned, 0);
 
     // Cobertura del universo anual (todo el plan del año, no solo el período)
-    const yearTotal = plan?.items.length ?? 0;
+    const yearTotal = planItems.length;
     const yearDone = plan
-      ? (await Promise.all(plan.items.map(async i => {
+      ? (await Promise.all(planItems.map(async i => {
           if (!i.audit) return false;
           const trigger = await this.prisma.workingPaper.findFirst({
             where: { auditId: i.audit.id, isCompletionTrigger: true },
@@ -464,29 +477,29 @@ export class CommitteeService {
     // KPIs de gobierno (org-wide, punto en el tiempo — no filtrados por período)
     const [openBySeverity, overdueActions, escalatedFindings, totalFindingsYear, closedFindingsYear, materialOpen, recurring] =
       await Promise.all([
-        this.prisma.finding.groupBy({ by: ['severity'], where: { organizationId: orgId, status: OPEN_FINDING as any }, _count: { id: true } }),
+        this.prisma.finding.groupBy({ by: ['severity'], where: { organizationId: orgId, audit: scope, status: OPEN_FINDING as any }, _count: { id: true } }),
         this.prisma.findingAction.findMany({
-          where: { organizationId: orgId, status: { not: 'COMPLETED' as any }, dueDate: { lt: today } },
+          where: { organizationId: orgId, finding: { audit: scope }, status: { not: 'COMPLETED' as any }, dueDate: { lt: today } },
           include: { finding: { select: { id: true, title: true, severity: true, status: true } } },
           orderBy: { dueDate: 'asc' }, take: 30,
         }),
         this.prisma.finding.findMany({
-          where: { organizationId: orgId, status: OPEN_FINDING as any, escalationLevel: { not: 'NONE' as any } },
+          where: { organizationId: orgId, audit: scope, status: OPEN_FINDING as any, escalationLevel: { not: 'NONE' as any } },
           orderBy: [{ severity: 'asc' }, { createdAt: 'asc' }], take: 15,
           select: { id: true, title: true, severity: true, escalationLevel: true, dueDate: true, createdAt: true,
             audit: { select: { id: true, title: true } }, responsible: { select: { name: true } } },
         }),
-        this.prisma.finding.count({ where: { organizationId: orgId, createdAt: { gte: new Date(today.getFullYear(), 0, 1) } } }),
-        this.prisma.finding.count({ where: { organizationId: orgId, status: 'CLOSED' as any, updatedAt: { gte: new Date(today.getFullYear(), 0, 1) } } }),
-        this.prisma.finding.count({ where: { organizationId: orgId, isMaterial: true, status: OPEN_FINDING as any } }),
+        this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, createdAt: { gte: new Date(today.getFullYear(), 0, 1) } } }),
+        this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, status: 'CLOSED' as any, updatedAt: { gte: new Date(today.getFullYear(), 0, 1) } } }),
+        this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, isMaterial: true, status: OPEN_FINDING as any } }),
         this.prisma.finding.findMany({
-          where: { organizationId: orgId, isRecurring: true, status: OPEN_FINDING as any },
+          where: { organizationId: orgId, audit: scope, isRecurring: true, status: OPEN_FINDING as any },
           take: 5, orderBy: { createdAt: 'desc' },
           select: { id: true, title: true, audit: { select: { title: true } } },
         }),
       ]);
 
-    const controlInternoGlobal = await this.computeControlInternoGlobal(orgId);
+    const controlInternoGlobal = await this.computeControlInternoGlobal(orgId, scope);
     const qaip = await this.computeQaipSummary(orgId, year);
 
     // Extensiones de rentabilidad/capacidad agregada (roadmap pendiente desde
@@ -497,7 +510,7 @@ export class CommitteeService {
     // payload — este es el mismo tipo de cruce de límite de rol, a propósito.
     const [orgProfitability, firmUtilization] = await Promise.all([
       this.profitability.getOrgWideProfitability(orgId, periodEnd),
-      this.capacity.getFirmDashboard(year, user),
+      this.capacity.getFirmDashboard(year, { ...user, id: viewer.id, role: viewer.role } as AuthUser),
     ]);
 
     const openSevSet = new Set(openBySeverity.map((f: any) => f.severity));
@@ -564,7 +577,10 @@ export class CommitteeService {
     if (!isPeriodType(periodTypeRaw)) throw new BadRequestException('periodType inválido');
     const orgId = user.organizationId;
     const today = new Date();
-    const payload = await this.computeDashboard(user, periodTypeRaw, periodKeyRaw, today);
+    // Modo investigación (2026-10-25): el acta del comité no incluye investigaciones. La foto se calcula con un visor sin acceso a
+    // ninguna (ni siquiera la ve completa quien la publica, aunque sea CAE) porque luego la sirve a todos los gerentes.
+    const snapshotViewer = { id: '__acta-del-comite__', role: 'AUDIT_MANAGER', organizationId: orgId };
+    const payload = await this.computeDashboard(user, periodTypeRaw, periodKeyRaw, today, snapshotViewer);
 
     const report = await this.prisma.committeeReport.upsert({
       where: { organizationId_period_type: { organizationId: orgId, period: periodKeyRaw, type: periodTypeRaw } },

@@ -26,6 +26,16 @@ import { HoursCloseService } from '../../timesheet/hours-close.service';
 import { PlansService } from '../../plans/plans.service';
 import { AuditUniverseService } from '../../audit-universe/audit-universe.service';
 import { AuditProjectsService } from '../../audit-projects/audit-projects.service';
+import { DashboardService } from '../../dashboard/dashboard.service';
+import { CommitteeService } from '../../committee/committee.service';
+import { EqrService } from '../../qaip/eqr.service';
+import { FindingsService as QaipFindingsService } from '../../qaip/findings.service';
+import { AiController } from '../../ai/ai.controller';
+import { Anexo12Service } from '../../fiscal/anexo12.service';
+import { DataSourcesService } from '../../data-sources/data-sources.service';
+import { EngagementsService } from '../../portfolio/engagements.service';
+import { ClientsService } from '../../portfolio/clients.service';
+import { AuditsService } from '../../audits/audits.service';
 
 /**
  * Modo investigación · barrido de módulos contra un Postgres REAL (docs/seguridad: revisión del 2026-10-25).
@@ -722,6 +732,265 @@ suite('modo investigación · barrido por módulo (Postgres real)', () => {
         for (const who of ['outsider', 'manager'] as const) expect(new Date(await last(w.users[who])).toISOString().slice(0, 10)).toBe('2024-06-30');
         for (const who of ['member', 'lead', 'cae'] as const) expect(new Date(await last(w.users[who])).toISOString().slice(0, 10)).toBe('2025-12-31');
       });
+    });
+  });
+
+  // ═══ Lote 10 · Panel de control y comité ═══════════════════════════════════════════════════════════
+  describe('lote 10 · panel y comité', () => {
+    let dash: DashboardService; let committee: CommitteeService;
+    const d: Record<string, any> = {};
+    const tomorrow = new Date(Date.now() + 86_400_000);
+    const yesterday = new Date(Date.now() - 86_400_000);
+    const mkFinding = (auditId: string, extra: any = {}) => prisma.finding.create({
+      data: { auditId, organizationId: w.org.id, title: `Hallazgo del panel ${randomUUID().slice(0, 6)}`, condition: 'c', criteria: 'k', cause: 'z', effect: 'e', risk: 'r', recommendation: 'rec', severity: 'CRITICAL', status: 'DRAFT', ...extra },
+    });
+
+    beforeAll(async () => {
+      dash = new DashboardService(prisma as any);
+      const profitability = { getOrgWideProfitability: async () => ({}), getAuditFinancialSummary: async () => null } as any;
+      const capacity = { getFirmDashboard: async () => ({}) } as any;
+      committee = new CommitteeService(prisma as any, profitability, capacity);
+      for (const a of [w.inv, w.nor]) await prisma.audit.update({ where: { id: a.id }, data: { status: 'IN_PROGRESS', startDate: yesterday, endDate: tomorrow } });
+      for (const [k, a] of [['inv', w.inv], ['nor', w.nor]] as const) {
+        const finding = await mkFinding(a.id, { status: 'IN_REVIEW', escalationLevel: 'CAE', isMaterial: true });
+        const action = await prisma.findingAction.create({ data: { findingId: finding.id, organizationId: w.org.id, description: 'plan', dueDate: yesterday } });
+        const pbc = await prisma.pbcRequest.create({ data: { auditId: a.id, organizationId: w.org.id, title: `Entrega ${k}`, description: 'd', requestedToEmail: `${k}@t.test`, createdById: w.users.lead.id, dueDate: tomorrow } });
+        d[k] = { finding, action, pbc };
+      }
+    });
+
+    it('KPIs: las investigaciones ajenas no suman (el CAE y el equipo sí las cuentan)', async () => {
+      const outsider: any = await dash.getKpis(w.users.outsider);
+      for (const who of ['member', 'lead', 'cae'] as const) {
+        const full: any = await dash.getKpis(w.users[who]);
+        expect(full.auditsInProgress).toBe(outsider.auditsInProgress + 1);
+        expect(full.openFindings).toBeGreaterThan(outsider.openFindings);
+        expect(full.criticalFindings).toBeGreaterThan(outsider.criticalFindings);
+        expect(full.overduePbcRequests).toBeGreaterThanOrEqual(outsider.overduePbcRequests);
+      }
+      const manager: any = await dash.getKpis(w.users.manager);
+      expect(manager.auditsInProgress).toBe(outsider.auditsInProgress);
+    });
+
+    it('línea de tiempo, hallazgos recientes y vencimientos: la investigación ajena no aparece', async () => {
+      await checkListing('getAuditTimeline', (u) => dash.getAuditTimeline(u), (r) => r.map((a: any) => a.id), w.inv.id, w.nor.id);
+      await checkListing('getRecentFindings', (u) => dash.getRecentFindings(u, 500), (r) => r.map((f: any) => f.id), d.inv.finding.id, d.nor.finding.id);
+      await checkListing('pbcDue', async (u) => (await dash.getUpcomingDeadlines(u)).pbcDue, (r) => r.map((x: any) => x.id), d.inv.pbc.id, d.nor.pbc.id);
+      await checkListing('auditsEnding', async (u) => (await dash.getUpcomingDeadlines(u)).auditsEnding, (r) => r.map((x: any) => x.id), w.inv.id, w.nor.id);
+    });
+
+    it('vista del gerente: pendientes de aprobación, escalados, tendencia y cifras del año', async () => {
+      await checkListing('pendingApproval', async (u) => (await dash.getManagerDashboard(u)).pendingApproval, (r) => r.map((f: any) => f.id), d.inv.finding.id, d.nor.finding.id);
+      await checkListing('escalated', async (u) => (await dash.getManagerDashboard(u)).escalated, (r) => r.map((f: any) => f.id), d.inv.finding.id, d.nor.finding.id);
+      const asManager: any = await dash.getManagerDashboard(w.users.manager);
+      const asCae: any = await dash.getManagerDashboard(w.users.cae);
+      expect(asCae.kpis.findingsThisYear).toBeGreaterThan(asManager.kpis.findingsThisYear);
+      const sum = (r: any) => r.findingsTrend.reduce((n: number, m: any) => n + m.total, 0);
+      expect(sum(asCae)).toBeGreaterThan(sum(asManager));
+    });
+
+    it('vista del comité del panel: hallazgos abiertos, escalados y acciones vencidas', async () => {
+      await checkListing('committee.escalatedFindings', async (u) => (await dash.getCommitteeDashboard(u)).escalatedFindings, (r) => r.map((f: any) => f.id), d.inv.finding.id, d.nor.finding.id);
+      await checkListing('committee.overdueActions', async (u) => (await dash.getCommitteeDashboard(u)).overdueActions, (r) => r.map((a: any) => a.id), d.inv.action.id, d.nor.action.id);
+      const asManager: any = await dash.getCommitteeDashboard(w.users.manager);
+      const asCae: any = await dash.getCommitteeDashboard(w.users.cae);
+      expect(asCae.kpis.openFindings).toBeGreaterThan(asManager.kpis.openFindings);
+      expect(asCae.kpis.materialOpen).toBeGreaterThan(asManager.kpis.materialOpen);
+    });
+
+    it('«mis pendientes»: si lo sacaron del equipo de una investigación deja de ver su hallazgo', async () => {
+      const mine = async (auditId: string) => (await mkFinding(auditId, { responsibleId: w.users.outsider.id })).id;
+      const invMine = await mine(w.inv.id); const norMine = await mine(w.nor.id);
+      const r: any = await dash.getMyWorkload(w.users.outsider);
+      const ids = r.myFindings.map((f: any) => f.id);
+      expect(ids).toContain(norMine);
+      expect(ids).not.toContain(invMine);
+    });
+
+    it('el acta del comité nunca lleva investigaciones, ni siquiera cuando la publica el CAE', async () => {
+      const year = new Date().getFullYear();
+      const mkAudit = async (title: string, inv: boolean) => {
+        const a = await prisma.audit.create({ data: { organizationId: w.org.id, title, type: 'EXTERNAL', isInvestigationMode: inv, leadAuditorId: w.users.lead.id } });
+        await prisma.auditTeam.create({ data: { auditId: a.id, userId: w.users.lead.id, role: 'LEAD' } });
+        await prisma.auditTeam.create({ data: { auditId: a.id, userId: w.users.member.id, role: 'MEMBER' } });
+        return a;
+      };
+      const cInv = await mkAudit('Investigación del acta', true);
+      const cNor = await mkAudit('Auditoría del acta', false);
+      const cFinding = await mkFinding(cInv.id, { title: 'Hallazgo reservado del acta' });
+      const plan = await prisma.auditPlan.create({ data: { organizationId: w.org.id, year, name: `Plan ${year}`, totalHours: 500, status: 'ACTIVE' } });
+      const end = new Date(year, new Date().getMonth(), 28);
+      const mkItem = (auditId: string) => prisma.auditPlanItem.create({ data: { planId: plan.id, estimatedHours: 40, tentativeStartDate: new Date(year, 0, 5), tentativeEndDate: end, auditId } });
+      await mkItem(cInv.id); await mkItem(cNor.id);
+      const periodKey = String(year); // corte anual: el rango abarca los ítems
+      const auditIdsOf = (r: any) => r.planExecution.map((i: any) => i.auditId);
+
+      // en vivo, cada quien ve lo suyo
+      const liveManager: any = await committee.getDashboard(w.users.manager, 'ANNUAL', periodKey);
+      expect(auditIdsOf(liveManager)).toContain(cNor.id);
+      expect(auditIdsOf(liveManager)).not.toContain(cInv.id);
+      const liveCae: any = await committee.getDashboard(w.users.cae, 'ANNUAL', periodKey);
+      expect(auditIdsOf(liveCae)).toEqual(expect.arrayContaining([cNor.id, cInv.id]));
+      expect(liveCae.summary.universeTotal).toBe(liveManager.summary.universeTotal + 1);
+
+      // el CAE publica la foto y luego la lee un gerente: sin la investigación
+      await committee.publishSnapshot(w.users.cae, 'ANNUAL', periodKey);
+      for (const who of ['manager', 'cae'] as const) {
+        const frozen: any = await committee.getDashboard(w.users[who], 'ANNUAL', periodKey);
+        expect(frozen.meta.frozen).toBe(true);
+        expect(auditIdsOf(frozen)).toContain(cNor.id);
+        expect(auditIdsOf(frozen)).not.toContain(cInv.id);
+        expect(JSON.stringify(frozen)).not.toContain('Investigación del acta');
+        expect(JSON.stringify(frozen)).not.toContain(cFinding.id);
+      }
+    });
+  });
+
+  // ═══ Lote 11 · QAIP y revisión de calidad del encargo (EQR) ════════════════════════════════════════
+  describe('lote 11 · QAIP y EQR', () => {
+    let eqr: EqrService; let qaipFindings: QaipFindingsService;
+    let auditEqr: { id: string };
+    beforeAll(async () => {
+      eqr = new EqrService(prisma as any);
+      qaipFindings = new QaipFindingsService(prisma as any);
+      auditEqr = await prisma.audit.create({ data: { organizationId: w.org.id, title: 'Investigación con EQR', type: 'EXTERNAL', isInvestigationMode: true, leadAuditorId: w.users.lead.id } });
+      await prisma.auditTeam.create({ data: { auditId: auditEqr.id, userId: w.users.lead.id, role: 'LEAD' } });
+      await prisma.auditTeam.create({ data: { auditId: auditEqr.id, userId: w.users.member.id, role: 'MEMBER' } });
+    });
+
+    it('la EQR de una investigación: ajenos bloqueados; equipo y CAE sí', async () => {
+      await check('eqr.get', (u) => eqr.get(w.inv.id, u), (u) => eqr.get(w.nor.id, u));
+      await check('eqr.require', (u) => eqr.require(w.inv.id, u), (u) => eqr.require(w.nor.id, u));
+      // el revisor asignado puede actuar sobre su EQR, así que aquí se designa al CAE (que ve todo) para no mezclar las dos reglas
+      await check('eqr.assignReviewer', (u) => eqr.assignReviewer(w.inv.id, { reviewerId: w.users.cae.id } as any, u), (u) => eqr.assignReviewer(w.nor.id, { reviewerId: w.users.cae.id } as any, u));
+      await check('eqr.updateChecklist', (u) => eqr.updateChecklist(w.inv.id, { notes: 'n' } as any, u), (u) => eqr.updateChecklist(w.nor.id, { notes: 'n' } as any, u));
+    });
+
+    it('el revisor asignado (independiente del equipo) sí puede leerla, llenarla y completarla; los demás no', async () => {
+      await eqr.require(auditEqr.id, w.users.cae);
+      // antes de asignar revisor, el gerente ajeno no entra
+      await expect(eqr.get(auditEqr.id, w.users.manager)).rejects.toThrow(/modo investigación/);
+      await eqr.assignReviewer(auditEqr.id, { reviewerId: w.users.manager.id } as any, w.users.cae);
+      // el revisor (manager, ajeno al equipo)
+      const seen: any = await eqr.get(auditEqr.id, w.users.manager);
+      expect(seen.reviewerId).toBe(w.users.manager.id);
+      expect(seen.audit.team).toEqual([]); // no recibe la lista del equipo
+      await expect(eqr.updateChecklist(auditEqr.id, { notes: 'revisado' } as any, w.users.manager)).resolves.toBeDefined();
+      // pedir la EQR o cambiar el revisor sigue siendo solo de quien ve la investigación
+      await expect(eqr.assignReviewer(auditEqr.id, { reviewerId: w.users.outsider.id } as any, w.users.manager)).rejects.toThrow(/modo investigación/);
+      await expect(eqr.require(auditEqr.id, w.users.manager)).rejects.toThrow(/modo investigación/);
+      // otra persona ajena que no es el revisor
+      await expect(eqr.get(auditEqr.id, w.users.outsider)).rejects.toThrow(/modo investigación/);
+      await expect(eqr.complete(auditEqr.id, { result: 'APPROVED' } as any, w.users.outsider)).rejects.toThrow(/modo investigación/);
+      // el equipo ve la lista completa
+      const teamView: any = await eqr.get(auditEqr.id, w.users.member);
+      expect(teamView.audit.team.length).toBeGreaterThan(0);
+    });
+
+    it('un hallazgo de calidad solo se vincula a un encargo que el usuario ve', async () => {
+      const dto = (engagementId: string) => ({ track: 'NIGC_EXTERNAL', source: 'EQR', severity: 'LOW', description: 'observación', engagementId }) as any;
+      await check('qaip.createFinding', (u) => qaipFindings.create(dto(w.inv.id), u), (u) => qaipFindings.create(dto(w.nor.id), u));
+    });
+  });
+
+  // ═══ Lote 12 · IA (análisis multi-año), Anexo 12 y conectores de datos ═════════════════════════════
+  describe('lote 12 · IA, Anexo 12 y conectores', () => {
+    let ai: AiController; let anexo: Anexo12Service; let sources: DataSourcesService;
+    const sent: any[] = [];
+    beforeAll(() => {
+      ai = new AiController({ multiYearAnalysis: async (payload: any) => { sent.push(payload); return payload; } } as any, prisma as any, {} as any);
+      anexo = new Anexo12Service(prisma as any);
+      sources = new DataSourcesService(prisma as any, { get: (_k: string, d?: unknown) => d ?? '' } as any);
+    });
+
+    it('análisis multi-año: una investigación ajena no se manda a la IA (mismo mensaje que una de otra organización)', async () => {
+      for (const who of ['outsider', 'manager'] as const) {
+        sent.length = 0;
+        await expect(ai.multiYearAnalysis({ auditIds: [w.inv.id, w.nor.id] }, w.users[who])).rejects.toThrow(/no pertenecen a su organización/);
+        expect(sent).toHaveLength(0);
+      }
+      for (const who of ['member', 'lead', 'cae'] as const) {
+        sent.length = 0;
+        await expect(ai.multiYearAnalysis({ auditIds: [w.inv.id, w.nor.id] }, w.users[who])).resolves.toBeDefined();
+        expect(sent[0].audits.map((a: any) => a.id).sort()).toEqual([w.inv.id, w.nor.id].sort());
+      }
+    });
+
+    it('Anexo 12 (hallazgos, montos y referencias normativas)', async () => {
+      await check('anexo12.generate', (u) => anexo.generate(w.inv.id, u), (u) => anexo.generate(w.nor.id, u));
+    });
+
+    it('importar a una auditoría desde un conector: solo a una que el usuario ve', async () => {
+      const ds = await prisma.dataSource.create({ data: { organizationId: w.org.id, name: 'Excel', type: 'EXCEL_UPLOAD' as any, status: 'ACTIVE' as any, createdById: w.users.cae.id } });
+      await expectBlocked('runImport', (u) => sources.runImport(ds.id, { auditId: w.inv.id } as any, u));
+    });
+  });
+
+  // ═══ Lote 13 · Cartera ═════════════════════════════════════════════════════════════════════════
+  describe('lote 13 · cartera', () => {
+    let engagements: EngagementsService; let clients: ClientsService;
+    const c: Record<string, any> = {};
+    beforeAll(async () => {
+      clients = new ClientsService(prisma as any);
+      engagements = new EngagementsService(prisma as any, clients, {} as any, {} as any);
+      c.client = await prisma.client.create({ data: { organizationId: w.org.id, legalName: 'Cliente de la investigación', createdById: w.users.cae.id } });
+      const mk = (auditId: string, fiscalYear: number) => prisma.engagement.create({
+        data: { organizationId: w.org.id, clientId: c.client.id, fiscalYear, fiscalYearEndDate: new Date(`${fiscalYear}-12-31`), status: 'APPROVED' as any, auditId, createdById: w.users.cae.id, kind: 'AUDIT' as any },
+      });
+      c.inv = await mk(w.inv.id, 2040); c.nor = await mk(w.nor.id, 2041);
+    });
+
+    it('el listado y la ficha del cliente muestran el encargo de una investigación ajena sin título ni estado', async () => {
+      for (const who of ['outsider', 'manager'] as const) {
+        const list: any[] = await engagements.findAll(w.users[who], c.client.id);
+        expect(list.find((e) => e.id === c.inv.id).audit).toEqual({ id: w.inv.id, title: 'Encargo restringido', restricted: true });
+        expect(list.find((e) => e.id === c.nor.id).audit).toMatchObject({ id: w.nor.id, title: 'Auditoría normal' });
+        const detail: any = await clients.findOne(c.client.id, w.users[who]);
+        expect(detail.engagements.find((e: any) => e.id === c.inv.id).audit.restricted).toBe(true);
+        expect(detail.engagements.find((e: any) => e.id === c.nor.id).audit.title).toBe('Auditoría normal');
+      }
+      for (const who of ['member', 'lead', 'cae'] as const) {
+        const list: any[] = await engagements.findAll(w.users[who], c.client.id);
+        expect(list.find((e) => e.id === c.inv.id).audit).toMatchObject({ id: w.inv.id, title: 'Investigación reservada' });
+        const detail: any = await clients.findOne(c.client.id, w.users[who]);
+        expect(detail.engagements.find((e: any) => e.id === c.inv.id).audit.title).toBe('Investigación reservada');
+      }
+    });
+  });
+
+  // ═══ Lote 14 · Gobierno del modo investigación ═════════════════════════════════════════════════════
+  describe('lote 14 · gobierno del modo', () => {
+    let audits: AuditsService;
+    beforeAll(() => {
+      audits = Object.create(AuditsService.prototype);
+      (audits as any).prisma = prisma;
+    });
+
+    it('activar o apagar el modo en una auditoría existente es solo de CAE, ADMIN o SUPER_ADMIN', async () => {
+      // el líder (del equipo, rol AUDITOR) no puede apagarlo ni encenderlo; reenviar el mismo valor no cuenta como cambio
+      await expect(audits.update(w.inv.id, { isInvestigationMode: false } as any, w.users.lead)).rejects.toThrow(/Solo CAE, ADMIN o SUPER_ADMIN/);
+      await expect(audits.update(w.nor.id, { isInvestigationMode: true } as any, w.users.lead)).rejects.toThrow(/Solo CAE, ADMIN o SUPER_ADMIN/);
+      await expect(audits.update(w.inv.id, { isInvestigationMode: true, scope: 'alcance' } as any, w.users.lead)).resolves.toBeDefined();
+      expect((await prisma.audit.findUniqueOrThrow({ where: { id: w.inv.id } })).isInvestigationMode).toBe(true);
+      expect((await prisma.audit.findUniqueOrThrow({ where: { id: w.nor.id } })).isInvestigationMode).toBe(false);
+      // el CAE sí; se deja como estaba
+      const spare = await prisma.audit.create({ data: { organizationId: w.org.id, title: 'Para alternar el modo', type: 'EXTERNAL', leadAuditorId: w.users.lead.id } });
+      await expect(audits.update(spare.id, { isInvestigationMode: true } as any, w.users.cae)).resolves.toMatchObject({ isInvestigationMode: true });
+      await expect(audits.update(spare.id, { isInvestigationMode: false } as any, w.users.cae)).resolves.toMatchObject({ isInvestigationMode: false });
+    });
+
+    it('el roll-forward de una investigación sigue siendo investigación y conserva el mismo equipo', async () => {
+      const next: any = await audits.rollForward(w.inv.id, { title: 'Investigación del año siguiente', carryOpenFindings: true }, w.users.cae);
+      expect(next.isInvestigationMode).toBe(true);
+      const team = await prisma.auditTeam.findMany({ where: { auditId: next.id }, select: { userId: true } });
+      expect(team.map((t) => t.userId).sort()).toEqual([w.users.cae.id, w.users.lead.id, w.users.member.id].sort());
+      // los hallazgos traspasados no quedan a la vista de la organización
+      await expect(audits.findOne(next.id, w.users.outsider)).rejects.toThrow(/modo investigación/);
+      await expect(audits.findOne(next.id, w.users.manager)).rejects.toThrow(/modo investigación/);
+      await expect(audits.findOne(next.id, w.users.member)).resolves.toBeDefined();
+      // una auditoría normal sigue dando una normal
+      const nextNormal: any = await audits.rollForward(w.nor.id, { title: 'Auditoría normal del año siguiente' }, w.users.cae);
+      expect(nextNormal.isInvestigationMode).toBe(false);
     });
   });
 });

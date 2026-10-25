@@ -3,6 +3,7 @@ import { Prisma, TimeEntryCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInOrg } from '../common/utils/tenant.util';
+import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
 import { resolveBillRate } from '../timesheet/frozen-rates';
 import {
   CreateHolidayDto, UpdateHolidayDto,
@@ -574,7 +575,9 @@ export class CapacityService {
         select: { auditId: true, userId: true, agreedRatePerHour: true },
       }),
       this.prisma.audit.findMany({
-        where: { organizationId: user.organizationId, status: { not: 'CLOSED' } },
+        // Modo investigación (2026-10-25): el ranking de encargos no nombra investigaciones ajenas al equipo del usuario (el comité
+        // también arma este tablero para los gerentes).
+        where: { ...visibleAuditWhere(user), status: { not: 'CLOSED' } },
         select: { id: true, title: true },
       }),
     ]);

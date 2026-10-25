@@ -11,6 +11,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { DataSourceType, ConnectorStatus, ImportStatus, Prisma } from '@prisma/client';
 import { assertPublicHttpUrl } from '../common/utils/ssrf.util';
 import { assertInOrg } from '../common/utils/tenant.util';
+import { assertAuditVisible } from '../common/utils/investigation-scope.util';
 
 /** Campos de `config` que son credenciales: se guardan, pero NUNCA vuelven al
  *  navegador (auditoría de seguridad 2026-10-18). */
@@ -195,6 +196,7 @@ export class DataSourcesService {
       throw new BadRequestException('Activa y prueba la conexión antes de importar');
     }
     await assertInOrg(this.prisma.audit, dto.auditId, { organizationId: user.organizationId }, 'La auditoría');
+    if (dto.auditId) await assertAuditVisible(this.prisma, dto.auditId, user); // modo investigación (2026-10-25)
 
     // Registrar el import en DB como PENDING → RUNNING
     const importRecord = await this.prisma.connectorImport.create({

@@ -11,6 +11,7 @@ import { AuditIndexService } from '../audits/audit-index.service';
 import { AuditFoldersService } from '../audit-folders/audit-folders.service';
 import { ClientsService } from './clients.service';
 import { CreateEngagementDto } from './dto/engagement.dto';
+import { maskHiddenAudits } from '../common/utils/investigation-scope.util';
 
 /** Código estable de la plantilla de sistema "Auditoría Financiera Externa v1.0". */
 const EXTERNAL_FINANCIAL_TEMPLATE_CODE = 'AUDIT_EXTERNAL_FINANCIAL_V1';
@@ -114,7 +115,7 @@ export class EngagementsService {
 
   // ── Listar ────────────────────────────────────────────────────────────────
   async findAll(user: AuthUser, clientId?: string, status?: EngagementStatus) {
-    return this.prisma.engagement.findMany({
+    const rows = await this.prisma.engagement.findMany({
       where: {
         organizationId: user.organizationId,
         ...(clientId && { clientId }),
@@ -123,6 +124,8 @@ export class EngagementsService {
       orderBy: [{ fiscalYear: 'desc' }, { createdAt: 'desc' }],
       include: ENGAGEMENT_INCLUDE,
     });
+    // Modo investigación (2026-10-25): el encargo cuya auditoría es una investigación ajena al equipo no muestra su título ni estado.
+    return maskHiddenAudits(this.prisma, rows, user);
   }
 
   // ── Aprobar encargo → crear la auditoría real ─────────────────────────────

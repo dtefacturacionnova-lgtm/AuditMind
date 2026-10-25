@@ -5,6 +5,7 @@ import { Client, ClientStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { CreateClientDto, UpdateClientDto } from './dto/client.dto';
+import { maskHiddenAudits } from '../common/utils/investigation-scope.util';
 
 /**
  * Detalle del cliente para la pantalla con tabs: cada etapa del pipeline
@@ -96,10 +97,13 @@ export class ClientsService {
   async findOne(id: string, user: AuthUser) {
     await this.getClientOrThrow(id, user);
     // findUnique + include: el guard de arriba ya validó tenant.
-    return this.prisma.client.findUnique({
+    const client = await this.prisma.client.findUnique({
       where:   { id },
       include: CLIENT_DETAIL_INCLUDE,
     });
+    if (!client) return client;
+    // Modo investigación (2026-10-25): los encargos cuya auditoría es una investigación ajena van sin título ni estado.
+    return { ...client, engagements: await maskHiddenAudits(this.prisma, client.engagements, user) };
   }
 
   // ── Editar datos generales (nunca el status) ──────────────────────────────

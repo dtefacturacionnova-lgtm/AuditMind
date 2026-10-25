@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AuditStatus, FindingStatus, PbcRequestStatus, EscalationLevel } from '@prisma/client';
+import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
 @Injectable()
 export class DashboardService {
@@ -9,6 +10,9 @@ export class DashboardService {
 
   async getKpis(user: AuthUser) {
     const orgId = user.organizationId;
+    // Modo investigación (2026-10-25): todo el panel cuenta y lista solo lo que este usuario puede ver (las investigaciones
+    // ajenas a su equipo no suman ni aparecen). CAE, ADMIN y SUPER_ADMIN ven todo.
+    const scope = visibleAuditWhere(user);
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -24,39 +28,39 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.audit.count({
         where: {
-          organizationId: orgId,
+          ...scope,
           status: { in: [AuditStatus.IN_PROGRESS, AuditStatus.REVIEW] },
         },
       }),
       this.prisma.audit.count({
-        where: { organizationId: orgId, status: AuditStatus.CLOSED },
+        where: { ...scope, status: AuditStatus.CLOSED },
       }),
       this.prisma.finding.count({
         where: {
-          organizationId: orgId,
+          organizationId: orgId, audit: scope,
           status: { notIn: [FindingStatus.CLOSED] },
         },
       }),
       this.prisma.finding.count({
         where: {
-          organizationId: orgId,
+          organizationId: orgId, audit: scope,
           severity: 'CRITICAL',
           status: { notIn: [FindingStatus.CLOSED] },
         },
       }),
       this.prisma.pbcRequest.count({
         where: {
-          organizationId: orgId,
+          organizationId: orgId, audit: scope,
           dueDate: { lt: now },
           status: { notIn: [PbcRequestStatus.ACCEPTED, PbcRequestStatus.REJECTED] },
         },
       }),
       this.prisma.audit.count({
-        where: { organizationId: orgId, status: { not: AuditStatus.CANCELLED } },
+        where: { ...scope, status: { not: AuditStatus.CANCELLED } },
       }),
       this.prisma.audit.count({
         where: {
-          organizationId: orgId,
+          ...scope,
           status: AuditStatus.CLOSED,
           updatedAt: { gte: new Date(now.getFullYear(), 0, 1) },
         },
@@ -91,7 +95,7 @@ export class DashboardService {
 
     return this.prisma.audit.findMany({
       where: {
-        organizationId: user.organizationId,
+        ...visibleAuditWhere(user),
         status: { notIn: [AuditStatus.CLOSED, AuditStatus.CANCELLED] },
         startDate: { lte: threeMonthsLater },
       },
@@ -118,7 +122,7 @@ export class DashboardService {
   async getRecentFindings(user: AuthUser, limit = 10) {
     return this.prisma.finding.findMany({
       where: {
-        organizationId: user.organizationId,
+        organizationId: user.organizationId, audit: visibleAuditWhere(user),
         status: { notIn: [FindingStatus.CLOSED] },
       },
       orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
@@ -139,7 +143,7 @@ export class DashboardService {
     const [pbcDue, auditsEnding] = await Promise.all([
       this.prisma.pbcRequest.findMany({
         where: {
-          organizationId: user.organizationId,
+          organizationId: user.organizationId, audit: visibleAuditWhere(user),
           dueDate: { lte: cutoff, gte: new Date() },
           status: { notIn: [PbcRequestStatus.ACCEPTED] },
         },
@@ -152,7 +156,7 @@ export class DashboardService {
       }),
       this.prisma.audit.findMany({
         where: {
-          organizationId: user.organizationId,
+          ...visibleAuditWhere(user),
           endDate: { lte: cutoff, gte: new Date() },
           status: { notIn: [AuditStatus.CLOSED, AuditStatus.CANCELLED] },
         },
@@ -168,10 +172,12 @@ export class DashboardService {
   // ─── VISTA CAE / AUDIT_MANAGER ──────────────────────────────────────────────
   async getManagerDashboard(user: AuthUser) {
     const orgId = user.organizationId;
+    const scope = visibleAuditWhere(user); // modo investigación (2026-10-25)
     const now   = new Date();
     const yearStart = new Date(now.getFullYear(), 0, 1);
 
-    // Carga del equipo: auditorías activas por auditor
+    // Carga del equipo: auditorías activas por auditor. Cuenta TODAS las de la organización (también investigaciones): es una
+    // medida de carga de trabajo por persona, no dice cuál es la auditoría; sacar las reservadas la subestimaría.
     const teamLoad = await this.prisma.auditTeam.groupBy({
       by: ['userId'],
       where: {
@@ -196,7 +202,7 @@ export class DashboardService {
 
     // Hallazgos pendientes de aprobación (IN_REVIEW)
     const pendingApproval = await this.prisma.finding.findMany({
-      where: { organizationId: orgId, status: FindingStatus.IN_REVIEW },
+      where: { organizationId: orgId, audit: scope, status: FindingStatus.IN_REVIEW },
       orderBy: [{ severity: 'asc' }, { createdAt: 'asc' }],
       take: 10,
       select: {
@@ -209,7 +215,7 @@ export class DashboardService {
     // Hallazgos escalados (nivel > NONE)
     const escalated = await this.prisma.finding.findMany({
       where: {
-        organizationId: orgId,
+        organizationId: orgId, audit: scope,
         status: { notIn: [FindingStatus.CLOSED] },
         escalationLevel: { not: EscalationLevel.NONE },
       },
@@ -225,23 +231,26 @@ export class DashboardService {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    const findingsTrend = await this.prisma.$queryRaw<{ month: string; total: bigint; closed: bigint }[]>`
-      SELECT
-        TO_CHAR(DATE_TRUNC('month', "createdAt"), 'YYYY-MM') AS month,
-        COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE status = 'CLOSED') AS closed
-      FROM findings
-      WHERE "organizationId" = ${orgId}
-        AND "createdAt" >= ${sixMonthsAgo}
-      GROUP BY DATE_TRUNC('month', "createdAt")
-      ORDER BY DATE_TRUNC('month', "createdAt")
-    `;
+    // Se agrupa en memoria (y no con SQL a mano) para reutilizar el mismo filtro de visibilidad que el resto del panel.
+    const trendRows = await this.prisma.finding.findMany({
+      where: { organizationId: orgId, audit: scope, createdAt: { gte: sixMonthsAgo } },
+      select: { createdAt: true, status: true },
+    });
+    const trendByMonth = new Map<string, { total: number; closed: number }>();
+    for (const f of trendRows) {
+      const month = f.createdAt.toISOString().slice(0, 7);
+      const bucket = trendByMonth.get(month) ?? { total: 0, closed: 0 };
+      bucket.total += 1;
+      if (f.status === FindingStatus.CLOSED) bucket.closed += 1;
+      trendByMonth.set(month, bucket);
+    }
+    const findingsTrend = [...trendByMonth.entries()].sort(([x], [y]) => x.localeCompare(y)).map(([month, v]) => ({ month, ...v }));
 
     const [closedYear, totalYear, totalFindings, closedFindings, activePlans] = await Promise.all([
-      this.prisma.audit.count({ where: { organizationId: orgId, status: AuditStatus.CLOSED, updatedAt: { gte: yearStart } } }),
-      this.prisma.audit.count({ where: { organizationId: orgId, createdAt: { gte: yearStart } } }),
-      this.prisma.finding.count({ where: { organizationId: orgId, createdAt: { gte: yearStart } } }),
-      this.prisma.finding.count({ where: { organizationId: orgId, status: FindingStatus.CLOSED, updatedAt: { gte: yearStart } } }),
+      this.prisma.audit.count({ where: { ...scope, status: AuditStatus.CLOSED, updatedAt: { gte: yearStart } } }),
+      this.prisma.audit.count({ where: { ...scope, createdAt: { gte: yearStart } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, createdAt: { gte: yearStart } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, status: FindingStatus.CLOSED, updatedAt: { gte: yearStart } } }),
       this.prisma.auditPlan.count({ where: { organizationId: orgId, status: { in: ['ACTIVE', 'APPROVED'] as any } } }),
     ]);
 
@@ -249,11 +258,7 @@ export class DashboardService {
       teamWorkload,
       pendingApproval,
       escalated,
-      findingsTrend: findingsTrend.map(r => ({
-        month:  r.month,
-        total:  Number(r.total),
-        closed: Number(r.closed),
-      })),
+      findingsTrend,
       kpis: {
         auditsClosedThisYear: closedYear,
         auditsTotalThisYear:  totalYear,
@@ -272,6 +277,7 @@ export class DashboardService {
   // ─── VISTA COMITÉ DE AUDITORÍA ──────────────────────────────────────────────
   async getCommitteeDashboard(user: AuthUser) {
     const orgId = user.organizationId;
+    const scope = visibleAuditWhere(user); // modo investigación (2026-10-25)
     const now   = new Date();
     const yearStart = new Date(now.getFullYear(), 0, 1);
 
@@ -288,16 +294,16 @@ export class DashboardService {
     ] = await Promise.all([
       this.prisma.finding.groupBy({
         by: ['severity'],
-        where: { organizationId: orgId, status: { notIn: ['CLOSED', 'ACCEPTED_RISK'] as any } },
+        where: { organizationId: orgId, audit: scope, status: { notIn: ['CLOSED', 'ACCEPTED_RISK'] as any } },
         _count: { id: true },
       }),
       this.prisma.finding.groupBy({
         by: ['status'],
-        where: { organizationId: orgId },
+        where: { organizationId: orgId, audit: scope },
         _count: { id: true },
       }),
       this.prisma.findingAction.findMany({
-        where: { organizationId: orgId, status: { not: 'COMPLETED' }, dueDate: { lt: now } },
+        where: { organizationId: orgId, finding: { audit: scope }, status: { not: 'COMPLETED' }, dueDate: { lt: now } },
         include: {
           finding: { select: { id: true, title: true, severity: true, status: true } },
         },
@@ -306,7 +312,7 @@ export class DashboardService {
       }),
       this.prisma.audit.groupBy({
         by: ['status'],
-        where: { organizationId: orgId, status: { not: AuditStatus.CANCELLED } },
+        where: { ...scope, status: { not: AuditStatus.CANCELLED } },
         _count: { id: true },
       }),
       this.prisma.auditPlan.findFirst({
@@ -319,7 +325,7 @@ export class DashboardService {
       }),
       this.prisma.finding.findMany({
         where: {
-          organizationId: orgId,
+          organizationId: orgId, audit: scope,
           status: { notIn: ['CLOSED', 'ACCEPTED_RISK'] as any },
           escalationLevel: { not: EscalationLevel.NONE },
         },
@@ -331,9 +337,9 @@ export class DashboardService {
           responsible: { select: { name: true } },
         },
       }),
-      this.prisma.finding.count({ where: { organizationId: orgId, createdAt: { gte: yearStart } } }),
-      this.prisma.finding.count({ where: { organizationId: orgId, status: 'CLOSED' as any, updatedAt: { gte: yearStart } } }),
-      this.prisma.finding.count({ where: { organizationId: orgId, isMaterial: true, status: { notIn: ['CLOSED', 'ACCEPTED_RISK'] as any } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, createdAt: { gte: yearStart } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, status: 'CLOSED' as any, updatedAt: { gte: yearStart } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, isMaterial: true, status: { notIn: ['CLOSED', 'ACCEPTED_RISK'] as any } } }),
     ]);
 
     // Postura de riesgo
@@ -411,6 +417,7 @@ export class DashboardService {
     const myFindings = await this.prisma.finding.findMany({
       where: {
         organizationId: orgId,
+        audit: visibleAuditWhere(user), // si lo sacaron del equipo de una investigación, deja de ver sus hallazgos aquí
         status: { notIn: [FindingStatus.CLOSED] },
         responsibleId: userId,
       },

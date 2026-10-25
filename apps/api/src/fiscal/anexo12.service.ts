@@ -15,6 +15,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
+import { assertInvestigationAccess } from '../common/utils/investigation-scope.util';
 
 export interface Anexo12Row {
   numero:      number;
@@ -55,6 +56,7 @@ export class Anexo12Service {
       include: {
         auditEntity:  { select: { name: true } },
         organization: { select: { name: true } },
+        team:         { select: { userId: true } },
         findings: {
           where:   { status: { in: ['APPROVED', 'IN_REVIEW', 'CLOSED', 'DRAFT'] } },
           orderBy: [{ severity: 'asc' }, { createdAt: 'asc' }],
@@ -70,6 +72,7 @@ export class Anexo12Service {
 
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
     if (audit.organizationId !== user.organizationId) throw new ForbiddenException();
+    assertInvestigationAccess(audit, user); // modo investigación (2026-10-25): hallazgos, montos y referencias normativas
 
     const formales:    Anexo12Row[] = [];
     const sustantivos: Anexo12Row[] = [];

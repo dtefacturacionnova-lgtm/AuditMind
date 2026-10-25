@@ -34,6 +34,7 @@ import { AiService } from './ai.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
 import { renderCaatsPdfBody } from '../pdf/caats-pdf';
+import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
 class MessageDto {
   @IsString() role!: string;
@@ -322,10 +323,12 @@ export class AiController {
     @CurrentUser() user: AuthUser,
   ) {
     // Fetch all audits with their findings from the DB
+    // Modo investigación (2026-10-25): una investigación ajena al equipo cuenta como «no pertenece a su organización»
+    // (mismo mensaje que una de otra organización; no confirma que existe). Antes sus hallazgos completos iban a la IA.
     const audits = await this.prisma.audit.findMany({
       where: {
+        ...visibleAuditWhere(user),
         id: { in: dto.auditIds },
-        organizationId: user.organizationId,
       },
       include: {
         auditEntity: { select: { name: true } },

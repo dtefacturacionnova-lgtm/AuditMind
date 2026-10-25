@@ -113,6 +113,22 @@ export async function assertAssigneeCanSee(
 }
 
 /**
+ * Filas que traen `audit: { id, ... }` (encargos de Cartera, ítems, horas): si la investigación es ajena al equipo del usuario, el
+ * `audit` se reemplaza por el id y un título genérico (nunca estado, tipo ni plantilla). Una sola consulta para todas las filas.
+ */
+export async function maskHiddenAudits<T extends { audit?: { id: string } | null }>(
+  prisma: Pick<Prisma.TransactionClient, 'audit'>,
+  rows: T[],
+  user: UserScope,
+): Promise<T[]> {
+  const hidden = await hiddenAuditIds(prisma, rows.map((r) => r.audit?.id), user);
+  if (hidden.size === 0) return rows;
+  return rows.map((r) => (r.audit && hidden.has(r.audit.id)
+    ? ({ ...r, audit: { id: r.audit.id, title: RESTRICTED_AUDIT_TITLE, restricted: true } } as unknown as T)
+    : r));
+}
+
+/**
  * De estos ids de auditoría, los que el usuario NO puede ver (investigaciones ajenas a su equipo). Para ocultar títulos,
  * descripciones y horas en las listas que mezclan encargos (horas, informes, panel): una sola consulta, sin cargar el equipo.
  */

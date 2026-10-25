@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../../prisma/prisma.service';
+import { visibleAuditWhere } from '../utils/investigation-scope.util';
 
 /**
  * Bucket `audit-files` PRIVADO (auditoría de seguridad 2026-10-18).
@@ -38,6 +39,38 @@ const safeDecode = (s: string): string => { try { return decodeURIComponent(s); 
 const SIGNATURE_PREFIX = 'signature-requests/';
 const SIGNED_PDF_RE = /^signature-requests\/[^/]+\/([0-9a-f-]{36})\/signed\.pdf$/;
 
+/**
+ * DUEÑO de cada ruta del bucket (2026-10-25, cierra la limitación de la auditoría de 2026-10-18): una URL en una respuesta
+ * solo se firma si la ruta pertenece a un encargo de la organización de quien consulta y que esa persona puede ver (modo
+ * investigación incluido). Antes se firmaba CUALQUIER ruta que apareciera en la respuesta, así que quien pegara en un campo de
+ * texto la ruta de un archivo de otra organización (o de una investigación ajena) recibía un enlace de descarga.
+ * Las familias de rutas son las que genera el propio código al subir (ver cada `.upload(...)`); una ruta que no encaja en
+ * ninguna NO se firma (se niega por defecto):
+ *   <auditId>/…                              archivos de papeles de expediente
+ *   evidence|request-docs|signed-papers|restored/<auditId>/…
+ *   sections|docevidence|acct-schedule/<paperId>/…
+ *   procedures/<paperId>/<procedureId>/…     y   procedures/steps/<stepId>/…
+ */
+const ID_SEGMENT = /^[A-Za-z0-9_-]{8,64}$/;
+const AUDIT_FAMILIES = new Set(['evidence', 'request-docs', 'signed-papers', 'restored']);
+const PAPER_FAMILIES = new Set(['sections', 'docevidence', 'acct-schedule']);
+
+export type PathOwner = { kind: 'audit' | 'paper' | 'step'; id: string };
+
+/** De quién es un archivo del bucket según su ruta, o null si la ruta no es de ninguna familia conocida. */
+export function ownerOfPath(path: string): PathOwner | null {
+  const seg = path.split('/');
+  const [first, second] = seg;
+  if (AUDIT_FAMILIES.has(first)) return seg.length >= 3 && ID_SEGMENT.test(second) ? { kind: 'audit', id: second } : null;
+  if (PAPER_FAMILIES.has(first)) return seg.length >= 3 && ID_SEGMENT.test(second) ? { kind: 'paper', id: second } : null;
+  if (first === 'procedures') {
+    if (second === 'steps') return seg.length >= 4 && ID_SEGMENT.test(seg[2]) ? { kind: 'step', id: seg[2] } : null;
+    return seg.length >= 4 && ID_SEGMENT.test(second) ? { kind: 'paper', id: second } : null;
+  }
+  if (first === 'signature-requests') return null; // tiene su propia regla (PDF sellado)
+  return seg.length >= 2 && ID_SEGMENT.test(first) ? { kind: 'audit', id: first } : null;
+}
+
 /** Ruta "normal" del bucket: sin `..`, sin segmentos vacíos, sin barras invertidas ni barra inicial. */
 export function isPlainStoragePath(p: string): boolean {
   return p.length > 0 && !p.startsWith('/') && !p.includes('\\') && p.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
@@ -46,6 +79,9 @@ export function isPlainStoragePath(p: string): boolean {
 export interface SigningScope {
   /** Organización de quien hace la petición (null en rutas sin sesión). */
   organizationId?: string | null;
+  /** Quién es (para el modo investigación). Sin estos dos datos no se firma ningún archivo de un encargo. */
+  userId?: string | null;
+  role?: string | null;
 }
 
 @Injectable()
@@ -61,7 +97,7 @@ export class StorageUrlService {
   /** Qué rutas de las encontradas en la respuesta se pueden firmar para quien consulta. */
   async allowedPaths(paths: string[], scope: SigningScope): Promise<string[]> {
     const plain = paths.filter(isPlainStoragePath);
-    const out = plain.filter((p) => !p.startsWith(SIGNATURE_PREFIX));
+    const out = await this.ownedPaths(plain.filter((p) => !p.startsWith(SIGNATURE_PREFIX)), scope);
     const signedPdfs = plain.filter((p) => SIGNED_PDF_RE.test(p));
     if (signedPdfs.length > 0 && scope.organizationId) {
       const rows = await this.prisma.signatureRequest.findMany({
@@ -71,6 +107,29 @@ export class StorageUrlService {
       for (const r of rows) if (r.signedPdfPath) out.push(r.signedPdfPath);
     }
     return out;
+  }
+
+  /** Las rutas cuyo dueño (encargo, papel o paso) es de la organización del usuario y él puede ver. Una consulta por tipo de dueño. */
+  private async ownedPaths(paths: string[], scope: SigningScope): Promise<string[]> {
+    if (paths.length === 0 || !scope.organizationId || !scope.userId || !scope.role) return [];
+    const viewer = { id: scope.userId, role: scope.role, organizationId: scope.organizationId };
+    const visible = visibleAuditWhere(viewer);
+    const owners = new Map<string, PathOwner>();
+    for (const p of paths) { const o = ownerOfPath(p); if (o) owners.set(p, o); }
+    const idsOf = (kind: PathOwner['kind']) => [...new Set([...owners.values()].filter((o) => o.kind === kind).map((o) => o.id))];
+
+    const [audits, papers, steps] = await Promise.all([
+      idsOf('audit').length === 0 ? [] : this.prisma.audit.findMany({ where: { id: { in: idsOf('audit') }, ...visible }, select: { id: true } }),
+      idsOf('paper').length === 0 ? [] : this.prisma.workingPaper.findMany({ where: { id: { in: idsOf('paper') }, audit: visible }, select: { id: true } }),
+      idsOf('step').length === 0 ? [] : this.prisma.auditStep.findMany({ where: { id: { in: idsOf('step') }, procedure: { section: { paper: { audit: visible } } } }, select: { id: true } }),
+    ]);
+    const okAudit = new Set(audits.map((a) => a.id));
+    const okPaper = new Set(papers.map((a) => a.id));
+    const okStep = new Set(steps.map((a) => a.id));
+    return paths.filter((p) => {
+      const o = owners.get(p);
+      return !!o && (o.kind === 'audit' ? okAudit : o.kind === 'paper' ? okPaper : okStep).has(o.id);
+    });
   }
 
   // ─── Recorrido de strings (solo objetos planos y arrays) ───────────────────

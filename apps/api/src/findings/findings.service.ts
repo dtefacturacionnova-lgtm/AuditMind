@@ -511,10 +511,12 @@ export class FindingsService {
     const keywords = title.toLowerCase().split(/\s+/).filter(w => w.length > 4);
     if (keywords.length === 0) return;
 
+    // Solo entre auditorías normales (que ve todo el mundo) y la propia: si el hallazgo nuevo quedara enlazado a uno de una
+    // investigación, quien lo lea en una auditoría normal recibiría un 403 al seguir el enlace (confirma que existe algo ahí).
     const similar = await this.prisma.finding.findFirst({
       where: {
         organizationId: user.organizationId,
-        audit: visibleAuditWhere(user),
+        audit: { organizationId: user.organizationId, OR: [{ isInvestigationMode: false }, { id: auditId }] },
         id: { not: findingId },
         title: { contains: keywords[0], mode: 'insensitive' },
       },

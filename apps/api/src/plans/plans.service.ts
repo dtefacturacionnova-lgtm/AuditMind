@@ -245,6 +245,8 @@ export class PlansService {
 
     const item = plan.items.find(i => i.id === itemId);
     if (!item) throw new NotFoundException('Item no encontrado en el plan');
+    // Borrar el ítem soltaría la investigación del plan: lo mismo que desvincularla.
+    if (item.audit) assertInvestigationAccess(item.audit, user);
 
     await this.prisma.auditPlanItem.delete({ where: { id: itemId } });
     return this.findOne(planId, user);
@@ -259,6 +261,8 @@ export class PlansService {
 
     const item = plan.items.find((i) => i.id === itemId);
     if (!item) throw new NotFoundException('Item no encontrado en el plan');
+    // Reemplazar el vínculo de una investigación ajena la sacaría del plan sin que quien lo hace pueda ni verla.
+    if (item.audit) assertInvestigationAccess(item.audit, user);
 
     const audit = await this.prisma.audit.findFirst({
       where: { id: dto.auditId, ...visibleAuditWhere(user) }, // una investigación ajena se trata como si no existiera

@@ -11,7 +11,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { DataSourceType, ConnectorStatus, ImportStatus, Prisma } from '@prisma/client';
 import { assertPublicHttpUrl } from '../common/utils/ssrf.util';
 import { assertInOrg } from '../common/utils/tenant.util';
-import { assertAuditVisible } from '../common/utils/investigation-scope.util';
+import { assertAuditVisible, hiddenInvestigationIds } from '../common/utils/investigation-scope.util';
 
 /** Campos de `config` que son credenciales: se guardan, pero NUNCA vuelven al
  *  navegador (auditoría de seguridad 2026-10-18). */
@@ -80,11 +80,14 @@ export class DataSourcesService {
   }
 
   async findOne(id: string, user: AuthUser) {
+    // Modo investigación (2026-10-25): las importaciones hechas para una investigación ajena (su resumen y errores) no se listan.
+    const hidden = await hiddenInvestigationIds(this.prisma, user);
     const ds = await this.prisma.dataSource.findFirst({
       where: { id, organizationId: user.organizationId },
       include: {
         createdBy: { select: { id: true, name: true } },
         imports: {
+          ...(hidden.length > 0 && { where: { OR: [{ auditId: null }, { auditId: { notIn: hidden } }] } }),
           orderBy: { startedAt: 'desc' },
           take: 10,
         },
@@ -223,6 +226,7 @@ export class DataSourcesService {
       where: { id: importId, sourceId },
     });
     if (!imp) throw new NotFoundException('Import no encontrado');
+    if (imp.auditId) await assertAuditVisible(this.prisma, imp.auditId, user);
     return imp;
   }
 

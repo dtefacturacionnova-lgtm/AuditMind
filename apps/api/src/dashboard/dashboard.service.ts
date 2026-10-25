@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AuditStatus, FindingStatus, PbcRequestStatus, EscalationLevel } from '@prisma/client';
-import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
+import { canSeeAudit, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
 @Injectable()
 export class DashboardService {
@@ -320,7 +320,7 @@ export class DashboardService {
         orderBy: { year: 'desc' },
         select: {
           id: true, name: true, year: true, status: true, totalHours: true,
-          items: { select: { id: true, estimatedHours: true, audit: { select: { status: true } } } },
+          items: { select: { id: true, estimatedHours: true, audit: { select: { status: true, isInvestigationMode: true, team: { select: { userId: true } } } } } },
         },
       }),
       this.prisma.finding.findMany({
@@ -352,9 +352,11 @@ export class DashboardService {
     // Resumen plan activo
     let planSummary: Record<string, unknown> | null = null;
     if (activePlan) {
-      const totalItems     = activePlan.items.length;
-      const completedItems = activePlan.items.filter((i: any) => i.audit?.status === 'CLOSED').length;
-      const allocatedHours = activePlan.items.reduce((s: number, i: any) => s + (i.estimatedHours || 0), 0);
+      // Modo investigación (2026-10-25): los ítems vinculados a una investigación ajena no cuentan (el avance delataría si está cerrada).
+      const visibleItems   = activePlan.items.filter((i: any) => !i.audit || canSeeAudit(i.audit, user));
+      const totalItems     = visibleItems.length;
+      const completedItems = visibleItems.filter((i: any) => i.audit?.status === 'CLOSED').length;
+      const allocatedHours = visibleItems.reduce((s: number, i: any) => s + (i.estimatedHours || 0), 0);
       planSummary = {
         id: activePlan.id, name: activePlan.name, year: activePlan.year, status: activePlan.status,
         totalItems, completedItems,

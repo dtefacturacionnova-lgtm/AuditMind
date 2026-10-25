@@ -266,15 +266,32 @@ export class HoursCloseService {
       ? await this.prisma.audit.findMany({ where: { id: { in: auditIds }, organizationId: user.organizationId }, select: { id: true, title: true } })
       : [];
     const titles = new Map(audits.map((a) => [a.id, a.title]));
-    // Modo investigación (2026-10-25): las horas de una investigación ajena se ven sin título ni descripción.
-    const hidden = await hiddenAuditIds(this.prisma, auditIds, user);
+    // Modo investigación (2026-10-25): las horas de una investigación ajena se ven sin título ni descripción. Una hora anclada
+    // solo a un ítem de plan hereda el encargo del ítem.
+    const auditOf = await this.auditOfEntries(entries);
+    const hidden = await hiddenAuditIds(this.prisma, entries.map(auditOf), user);
     return {
       user: { id: target.id, name: target.name },
       year, month,
-      entries: entries.map((e) => (e.auditId && hidden.has(e.auditId)
-        ? { ...e, description: null, auditTitle: RESTRICTED_AUDIT_TITLE }
-        : { ...e, auditTitle: e.auditId ? titles.get(e.auditId) ?? null : null })),
+      entries: entries.map((e) => {
+        const a = auditOf(e);
+        return a && hidden.has(a)
+          ? { ...e, description: null, auditTitle: RESTRICTED_AUDIT_TITLE }
+          : { ...e, auditTitle: e.auditId ? titles.get(e.auditId) ?? null : null };
+      }),
     };
+  }
+
+  /** Encargo efectivo de cada hora: el suyo, o el del ítem de plan al que está anclada (una consulta para todas). */
+  private async auditOfEntries(
+    entries: Array<{ auditId?: string | null; planItemId?: string | null }>,
+  ): Promise<(e: { auditId?: string | null; planItemId?: string | null }) => string | null> {
+    const itemIds = [...new Set(entries.filter((e) => !e.auditId && e.planItemId).map((e) => e.planItemId as string))];
+    const items = itemIds.length > 0
+      ? await this.prisma.auditPlanItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, auditId: true } })
+      : [];
+    const byItem = new Map(items.map((i) => [i.id, i.auditId]));
+    return (e) => e.auditId ?? (e.planItemId ? byItem.get(e.planItemId) ?? null : null);
   }
 
   // ── Cerrar ────────────────────────────────────────────────────────────────
@@ -498,13 +515,18 @@ export class HoursCloseService {
     const byId = new Map(entries.map((e) => [e.id, e]));
     // Modo investigación (2026-10-25): el gerente que no ve la investigación no lee la descripción de las horas de otros en ella
     // (ni la del cambio pedido). El pedido propio se muestra completo.
-    const anchored = [...entries.map((e) => e.auditId), ...rows.map((r) => (r.payload as { auditId?: string } | null)?.auditId)];
-    const hidden = await hiddenAuditIds(this.prisma, anchored, user);
+    const payloadAnchor = (r: { payload: unknown }) => {
+      const p = (r.payload ?? {}) as { auditId?: string | null; planItemId?: string | null };
+      return { auditId: p.auditId ?? null, planItemId: p.planItemId ?? null };
+    };
+    const auditOf = await this.auditOfEntries([...entries, ...rows.map(payloadAnchor)]);
+    const hidden = await hiddenAuditIds(this.prisma, [...entries.map(auditOf), ...rows.map((r) => auditOf(payloadAnchor(r)))], user);
     return rows.map((r) => {
       const entry = r.timeEntryId ? byId.get(r.timeEntryId) ?? null : null;
-      const payloadAudit = (r.payload as { auditId?: string } | null)?.auditId;
+      const entryAudit = entry ? auditOf(entry) : null;
+      const payloadAudit = auditOf(payloadAnchor(r));
       const redact = r.userId !== user.id
-        && ((!!entry?.auditId && hidden.has(entry.auditId)) || (!!payloadAudit && hidden.has(payloadAudit)));
+        && ((!!entryAudit && hidden.has(entryAudit)) || (!!payloadAudit && hidden.has(payloadAudit)));
       return {
         ...r,
         payload: redact && r.payload && typeof r.payload === 'object' ? { ...(r.payload as object), description: null } : r.payload,

@@ -106,7 +106,8 @@ export class PaperGraphService {
    */
   async getUpstreamPapers(paperId: string) {
     const links = await this.prisma.paperLink.findMany({
-      where:   { targetId: paperId, isActive: true },
+      // Solo papeles del mismo encargo (un vínculo anterior a la regla «misma auditoría» no debe servir para leer otro encargo).
+      where:   { targetId: paperId, isActive: true, source: { audit: { workingPapers: { some: { id: paperId } } } } },
       include: {
         source: {
           select: {
@@ -130,7 +131,7 @@ export class PaperGraphService {
    */
   async getDownstreamPapers(paperId: string) {
     const links = await this.prisma.paperLink.findMany({
-      where:   { sourceId: paperId, isActive: true },
+      where:   { sourceId: paperId, isActive: true, target: { audit: { workingPapers: { some: { id: paperId } } } } },
       include: {
         target: {
           select: {

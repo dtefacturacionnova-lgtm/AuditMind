@@ -154,7 +154,8 @@ export class PaperReferencesService {
     assertInvestigationAccess(paper.audit, user);
 
     return this.prisma.paperReference.findMany({
-      where: { sourcePaperId: paperId },
+      // Solo referencias a papeles del mismo encargo (modo investigación, 2026-10-25).
+      where: { sourcePaperId: paperId, targetPaper: { audit: { workingPapers: { some: { id: paperId } } } } },
       include: {
         targetPaper: { select: { code: true, title: true } },
       },

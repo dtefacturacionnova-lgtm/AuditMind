@@ -48,7 +48,7 @@ async function generateWpCode(
   return `${indexSection}-${String(maxSeq + 1).padStart(2, '0')}`;
 }
 
-const INCLUDE_FULL = {
+const includeFull = (user: Pick<AuthUser, 'id' | 'role' | 'organizationId'>) => ({
   preparedBy:  { select: { id: true, name: true, avatarUrl: true } },
   reviewedBy:  { select: { id: true, name: true, avatarUrl: true } },
   findings:    { select: { id: true, title: true, severity: true, status: true } },
@@ -56,7 +56,9 @@ const INCLUDE_FULL = {
   comments:    { orderBy: { createdAt: 'asc' as const } },
   // ─── Intelligent Papers ─────────────────────────────────────────────────
   sections:     { orderBy: { sortOrder: 'asc' as const } },
+  // Modo investigación (2026-10-25): solo vínculos hacia papeles de auditorías que este usuario puede ver.
   sourceLinks:  {
+    where: { target: { audit: visibleAuditWhere(user) } },
     include: {
       target: {
         select: { id: true, code: true, title: true, wpKind: true, syncStatus: true },
@@ -64,13 +66,14 @@ const INCLUDE_FULL = {
     },
   },
   targetLinks:  {
+    where: { source: { audit: visibleAuditWhere(user) } },
     include: {
       source: {
         select: { id: true, code: true, title: true, wpKind: true, syncStatus: true },
       },
     },
   },
-} as const;
+});
 
 @Injectable()
 export class WorkingPapersService {
@@ -154,7 +157,7 @@ export class WorkingPapersService {
         status:         WorkingPaperStatus.NOT_STARTED,
         version:        1,
       },
-      include: INCLUDE_FULL,
+      include: includeFull(user),
     });
   }
 
@@ -214,7 +217,7 @@ export class WorkingPapersService {
     const wp = await this.prisma.workingPaper.findUnique({
       where:   { id },
       include: {
-        ...INCLUDE_FULL,
+        ...includeFull(user),
         audit: {
           select: {
             id: true, title: true, type: true, scope: true,
@@ -343,7 +346,7 @@ export class WorkingPapersService {
 
   async getPbcLinksForPdf(paperId: string): Promise<Array<{ code: string; title: string; status: string }>> {
     const links = await this.prisma.pbcPaperLink.findMany({
-      where:   { paperId },
+      where:   { paperId, pbc: { audit: { workingPapers: { some: { id: paperId } } } } }, // solo solicitudes del mismo encargo
       include: { pbc: { select: { id: true, title: true, status: true } } },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -809,7 +812,7 @@ export class WorkingPapersService {
         ...(dto.aiAssisted  !== undefined && { aiAssisted: dto.aiAssisted }),
         version: { increment: 1 },
       },
-      include: INCLUDE_FULL,
+      include: includeFull(user),
     });
 
     // Propagate content changes to downstream graph dependents
@@ -845,7 +848,7 @@ export class WorkingPapersService {
     return this.prisma.workingPaper.update({
       where:   { id },
       data:    { status: dto.status, ...retentionData },
-      include: INCLUDE_FULL,
+      include: includeFull(user),
     });
   }
 
@@ -1229,7 +1232,7 @@ export class WorkingPapersService {
     const updated = await this.prisma.workingPaper.update({
       where:   { id },
       data:    data as any,
-      include: INCLUDE_FULL,
+      include: includeFull(user),
     });
 
     // Firma digital del PDF — mejor esfuerzo, no bloquea el sign-off (ver
@@ -1241,7 +1244,7 @@ export class WorkingPapersService {
       return this.prisma.workingPaper.update({
         where:   { id },
         data:    { [pdfField]: pdfPath } as any,
-        include: INCLUDE_FULL,
+        include: includeFull(user),
       });
     }
 
@@ -1290,7 +1293,7 @@ export class WorkingPapersService {
     // Return all PBC requests for the same audit, marking which are linked
     const [linked, allPbc] = await Promise.all([
       this.prisma.pbcPaperLink.findMany({
-        where:   { paperId },
+        where:   { paperId, pbc: { auditId: wp.auditId } }, // modo investigación: nunca una solicitud de otra auditoría
         include: {
           pbc: {
             select: {
@@ -1354,7 +1357,7 @@ export class WorkingPapersService {
     const wp = await this.findOne(paperId, user);
     const [linked, allPbc] = await Promise.all([
       this.prisma.pbcPaperLink.findMany({
-        where:   { paperId, sectionKey, rowId },
+        where:   { paperId, sectionKey, rowId, pbc: { auditId: wp.auditId } },
         include: {
           pbc: {
             select: { id: true, title: true, description: true, status: true, submittedAt: true },

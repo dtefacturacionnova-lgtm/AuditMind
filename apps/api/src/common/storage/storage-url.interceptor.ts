@@ -19,9 +19,9 @@ export class StorageUrlInterceptor implements NestInterceptor {
     if (context.getType() !== 'http') return next.handle();
     const skip = this.reflector.getAllAndOverride<boolean>(SKIP_STORAGE_SIGNING_KEY, [context.getHandler(), context.getClass()]);
     if (skip) return next.handle();
-    const req = context.switchToHttp().getRequest<{ body?: unknown; user?: { organizationId?: string } }>();
+    const req = context.switchToHttp().getRequest<{ body?: unknown; user?: { id?: string; role?: string; organizationId?: string } }>();
     if (req?.body && typeof req.body === 'object') this.storage.normalizeInbound(req.body);
-    const organizationId = req?.user?.organizationId ?? null;
-    return next.handle().pipe(switchMap((data) => this.storage.signResponse(data, { organizationId })));
+    const scope = { organizationId: req?.user?.organizationId ?? null, userId: req?.user?.id ?? null, role: req?.user?.role ?? null };
+    return next.handle().pipe(switchMap((data) => this.storage.signResponse(data, scope)));
   }
 }

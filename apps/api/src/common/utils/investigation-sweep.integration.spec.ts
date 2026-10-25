@@ -36,6 +36,12 @@ import { DataSourcesService } from '../../data-sources/data-sources.service';
 import { EngagementsService } from '../../portfolio/engagements.service';
 import { ClientsService } from '../../portfolio/clients.service';
 import { AuditsService } from '../../audits/audits.service';
+import { of, lastValueFrom } from 'rxjs';
+import { Reflector } from '@nestjs/core';
+import { StorageUrlService } from '../storage/storage-url.service';
+import { StorageUrlInterceptor } from '../storage/storage-url.interceptor';
+import { PerformanceService } from '../../qaip/performance.service';
+import { PbcService } from '../../pbc/pbc.service';
 
 /**
  * Modo investigación · barrido de módulos contra un Postgres REAL (docs/seguridad: revisión del 2026-10-25).
@@ -991,6 +997,232 @@ suite('modo investigación · barrido por módulo (Postgres real)', () => {
       // una auditoría normal sigue dando una normal
       const nextNormal: any = await audits.rollForward(w.nor.id, { title: 'Auditoría normal del año siguiente' }, w.users.cae);
       expect(nextNormal.isInvestigationMode).toBe(false);
+    });
+  });
+
+  // ═══ Lote 15 · Firma de URLs de Storage: solo archivos de encargos que el usuario ve ═════════════════════════
+  describe('lote 15 · firma de URLs de Storage', () => {
+    let storage: StorageUrlService;
+    const f: Record<string, string> = {};
+    const url = (path: string) => `https://proyecto.supabase.co/storage/v1/object/public/audit-files/${path}`;
+
+    beforeAll(async () => {
+      storage = new StorageUrlService(prisma as any);
+      // sin red: «firmar» devuelve la ruta marcada
+      jest.spyOn(storage as any, 'signPaths').mockImplementation((async (paths: string[]) => new Map(paths.map((x) => [x, `FIRMADA:${x}`]))) as any);
+      const mkPaper = async (auditId: string, code: string) => {
+        const paper = await prisma.workingPaper.create({ data: { auditId, code, indexSection: 'A', title: 'Papel', type: 'PLANNING_UNDERSTANDING' as any } });
+        const section = await prisma.paperSection.create({ data: { paperId: paper.id, sectionKey: 'S1', label: 'Procedimientos' } });
+        const procedure = await prisma.auditProcedure.create({ data: { sectionId: section.id, refNumber: 'P-1', description: 'p' } });
+        const step = await prisma.auditStep.create({ data: { procedureId: procedure.id, refNumber: 'P-1-A', description: 'a' } });
+        return { paper, step };
+      };
+      const inv = await mkPaper(w.inv.id, 'L15-inv'); const nor = await mkPaper(w.nor.id, 'L15-nor');
+      // otra organización con su propio encargo
+      const tag = randomUUID().slice(0, 8);
+      const otherOrg = await prisma.organization.create({ data: { name: `Otra ${tag}`, slug: `otra-${tag}` } });
+      const otherUser = await prisma.user.create({ data: { organizationId: otherOrg.id, supabaseUserId: randomUUID(), email: `x-${tag}@t.test`, name: 'x', role: 'CAE' } });
+      const otherAudit = await prisma.audit.create({ data: { organizationId: otherOrg.id, title: 'Ajena', type: 'EXTERNAL', leadAuditorId: otherUser.id } });
+      const other = await mkPaper(otherAudit.id, 'L15-otra');
+      Object.assign(f, {
+        invAudit: w.inv.id, norAudit: w.nor.id, invPaper: inv.paper.id, norPaper: nor.paper.id, invStep: inv.step.id, norStep: nor.step.id,
+        otherAudit: otherAudit.id, otherPaper: other.paper.id, otherStep: other.step.id,
+      });
+    });
+
+    const paths = () => ({
+      nor: [`${f.norAudit}/a.pdf`, `evidence/${f.norAudit}/p/e.jpg`, `sections/${f.norPaper}/S1/a.pdf`, `procedures/steps/${f.norStep}/a.pdf`, `signed-papers/${f.norAudit}/p/prepare_1.pdf`],
+      inv: [`${f.invAudit}/a.pdf`, `evidence/${f.invAudit}/p/e.jpg`, `sections/${f.invPaper}/S1/a.pdf`, `procedures/steps/${f.invStep}/a.pdf`, `request-docs/${f.invAudit}/o.pdf`],
+      other: [`${f.otherAudit}/a.pdf`, `sections/${f.otherPaper}/S1/a.pdf`, `procedures/steps/${f.otherStep}/a.pdf`, `evidence/${f.otherAudit}/p/e.jpg`],
+    });
+    const signedSet = async (user: any, all: string[]) => {
+      const out: any = await storage.signResponse({ urls: all.map(url) }, { organizationId: user.organizationId, userId: user.id, role: user.role });
+      return new Set<string>(out.urls.filter((u: string) => u.startsWith('FIRMADA:')).map((u: string) => u.slice('FIRMADA:'.length)));
+    };
+
+    it('ajenos al equipo: firman los archivos de la auditoría normal, no los de la investigación ni los de otra organización', async () => {
+      const { nor, inv, other } = paths();
+      for (const who of ['outsider', 'manager'] as const) {
+        const ok = await signedSet(w.users[who], [...nor, ...inv, ...other]);
+        expect([...ok].sort()).toEqual([...nor].sort());
+      }
+    });
+
+    it('equipo y CAE: firman también los de la investigación, nunca los de otra organización', async () => {
+      const { nor, inv, other } = paths();
+      for (const who of ['member', 'lead', 'cae'] as const) {
+        const ok = await signedSet(w.users[who], [...nor, ...inv, ...other]);
+        expect([...ok].sort()).toEqual([...nor, ...inv].sort());
+      }
+    });
+
+    it('el CAE de OTRA organización no obtiene nada de esta (aunque sea CAE)', async () => {
+      const { nor, inv } = paths();
+      const otherCae = await prisma.user.findFirstOrThrow({ where: { organizationId: (await prisma.audit.findUniqueOrThrow({ where: { id: f.otherAudit } })).organizationId } });
+      const ok = await signedSet({ id: otherCae.id, role: otherCae.role, organizationId: otherCae.organizationId }, [...nor, ...inv]);
+      expect(ok.size).toBe(0);
+    });
+
+    it('el interceptor entrega al servicio quién es el usuario (id, rol y organización) y firma lo que le corresponde', async () => {
+      const interceptor = new StorageUrlInterceptor(storage, new Reflector());
+      const { nor, inv } = paths();
+      const run = async (user: any) => {
+        const ctx: any = { getType: () => 'http', getHandler: () => () => undefined, getClass: () => class {}, switchToHttp: () => ({ getRequest: () => ({ body: undefined, user }) }) };
+        return lastValueFrom(interceptor.intercept(ctx, { handle: () => of({ urls: [...nor, ...inv].map(url) }) } as any) as any) as Promise<any>;
+      };
+      const asOutsider = await run(w.users.outsider);
+      expect(asOutsider.urls.filter((u: string) => u.startsWith('FIRMADA:'))).toHaveLength(nor.length);
+      const asCae = await run(w.users.cae);
+      expect(asCae.urls.filter((u: string) => u.startsWith('FIRMADA:'))).toHaveLength(nor.length + inv.length);
+    });
+  });
+
+  // ═══ Lote 16 · Huecos que halló la revisión independiente (2026-10-25) ══════════════════════════════
+  describe('lote 16 · revisión independiente', () => {
+    const mkAudit = async (title: string, inv: boolean, extra: any = {}) => {
+      const a = await prisma.audit.create({ data: { organizationId: w.org.id, title, type: 'EXTERNAL', isInvestigationMode: inv, leadAuditorId: w.users.lead.id, ...extra } });
+      await prisma.auditTeam.create({ data: { auditId: a.id, userId: w.users.lead.id, role: 'LEAD' } });
+      await prisma.auditTeam.create({ data: { auditId: a.id, userId: w.users.member.id, role: 'MEMBER' } });
+      return a;
+    };
+    const finding = (auditId: string, extra: any = {}) => prisma.finding.create({
+      data: { auditId, organizationId: w.org.id, title: `Hallazgo ${randomUUID().slice(0, 6)}`, condition: 'c', criteria: 'k', cause: 'z', effect: 'e', risk: 'r', recommendation: 'rec', severity: 'HIGH', ...extra },
+    });
+
+    it('QAIP: los hallazgos de calidad ligados a una investigación ajena no se listan ni se tocan, y no suman en el tablero', async () => {
+      const qaip = new QaipFindingsService(prisma as any);
+      const mk = (engagementId: string | null) => prisma.qaipFinding.create({ data: { organizationId: w.org.id, track: 'NIGC_EXTERNAL', source: 'EQR', severity: 'LOW', description: 'observación', createdById: w.users.cae.id, engagementId } });
+      const fInv = await mk(w.inv.id); const fNor = await mk(w.nor.id); const fFree = await mk(null);
+      const action = await prisma.qaipRemediationAction.create({ data: { findingId: fInv.id, description: 'plan', ownerId: w.users.cae.id, dueDate: new Date('2020-01-01') } });
+      const ids = (rows: any[]) => rows.map((r) => r.id);
+      for (const who of ['outsider', 'manager'] as const) {
+        const rows = ids(await qaip.list(w.users[who]));
+        expect(rows).not.toContain(fInv.id);
+        expect(rows).toEqual(expect.arrayContaining([fNor.id, fFree.id]));
+      }
+      for (const who of ['member', 'lead', 'cae'] as const) expect(ids(await qaip.list(w.users[who]))).toContain(fInv.id);
+      await check('qaip.updateStatus', (u) => qaip.updateStatus(fInv.id, { status: 'OPEN' } as any, u), (u) => qaip.updateStatus(fNor.id, { status: 'OPEN' } as any, u));
+      await check('qaip.addRootCause', (u) => qaip.addRootCause(fInv.id, { category: 'PROCESS', analysis: 'a' } as any, u), (u) => qaip.addRootCause(fNor.id, { category: 'PROCESS', analysis: 'a' } as any, u));
+      await expectBlocked('qaip.updateRemediationAction', (u) => qaip.updateRemediationAction(action.id, { status: 'DONE' } as any, u));
+      // tablero: las cifras del gerente ajeno no incluyen el hallazgo ni la acción vencida de la investigación
+      const perf = new PerformanceService(prisma as any, { getOrgWideProfitability: async () => ({}), getAuditFinancialSummary: async () => null } as any);
+      const asManager: any = await perf.getDashboard(w.users.manager, new Date().getFullYear());
+      const asCae: any = await perf.getDashboard(w.users.cae, new Date().getFullYear());
+      // (otras pruebas de este archivo también crean hallazgos de calidad en la investigación: aquí basta con que el CAE vea más)
+      expect(asCae.qualityFindings.open).toBeGreaterThan(asManager.qualityFindings.open);
+      expect(asCae.qualityFindings.overdueRemediationActions).toBe(asManager.qualityFindings.overdueRemediationActions + 1);
+    });
+
+    it('planes: reemplazar el vínculo o borrar el ítem de una investigación ajena tampoco está permitido', async () => {
+      const plans = new PlansService(prisma as any);
+      const invX = await mkAudit('Investigación del plan 16', true); const norX = await mkAudit('Auditoría para reemplazar', false);
+      const plan = await prisma.auditPlan.create({ data: { organizationId: w.org.id, year: 2033, name: 'Plan 2033', totalHours: 100 } });
+      const itemInv = await prisma.auditPlanItem.create({ data: { planId: plan.id, estimatedHours: 10, auditId: invX.id } });
+      await expectBlocked('linkAudit (reemplazo)', (u) => plans.linkAudit(plan.id, itemInv.id, { auditId: norX.id }, u));
+      await expectBlocked('removeItem', (u) => plans.removeItem(plan.id, itemInv.id, u));
+      // tras los intentos bloqueados el ítem sigue vinculado a la investigación
+      expect((await prisma.auditPlanItem.findUniqueOrThrow({ where: { id: itemInv.id } })).auditId).toBe(invX.id);
+      // quien ve la investigación sí puede reemplazar el vínculo o borrar el ítem
+      await expect(plans.linkAudit(plan.id, itemInv.id, { auditId: norX.id }, w.users.member)).resolves.toBeDefined();
+      await expect(plans.removeItem(plan.id, itemInv.id, w.users.member)).resolves.toBeDefined();
+    });
+
+    it('PBC: marcar vencidas solo toca las solicitudes de auditorías que el usuario ve', async () => {
+      const pbc: any = Object.create(PbcService.prototype);
+      pbc.prisma = prisma;
+      const invA = await mkAudit('Investigación PBC 16', true); const norA = await mkAudit('Normal PBC 16', false);
+      const mk = (auditId: string) => prisma.pbcRequest.create({ data: { auditId, organizationId: w.org.id, title: 'Vencida', description: 'd', requestedToEmail: 'v@t.test', createdById: w.users.lead.id, dueDate: new Date('2020-01-01') } });
+      const rInv = await mk(invA.id); const rNor = await mk(norA.id);
+      await pbc.markOverdue(w.users.manager);
+      expect((await prisma.pbcRequest.findUniqueOrThrow({ where: { id: rNor.id } })).status).toBe('OVERDUE');
+      expect((await prisma.pbcRequest.findUniqueOrThrow({ where: { id: rInv.id } })).status).toBe('PENDING');
+      await pbc.markOverdue(w.users.cae);
+      expect((await prisma.pbcRequest.findUniqueOrThrow({ where: { id: rInv.id } })).status).toBe('OVERDUE');
+    });
+
+    it('conectores: las importaciones hechas para una investigación ajena no se listan ni se consultan', async () => {
+      const sources = new DataSourcesService(prisma as any, { get: (_k: string, d?: unknown) => d ?? '' } as any);
+      const ds = await prisma.dataSource.create({ data: { organizationId: w.org.id, name: 'Excel 16', type: 'EXCEL_UPLOAD' as any, status: 'ACTIVE' as any, createdById: w.users.cae.id } });
+      const impInv = await prisma.connectorImport.create({ data: { sourceId: ds.id, auditId: w.inv.id, status: 'COMPLETED' as any, result: { resumen: 'reservado' } } });
+      const impNor = await prisma.connectorImport.create({ data: { sourceId: ds.id, auditId: w.nor.id, status: 'COMPLETED' as any } });
+      const impFree = await prisma.connectorImport.create({ data: { sourceId: ds.id, status: 'COMPLETED' as any } });
+      const importIds = async (u: any) => ((await sources.findOne(ds.id, u)) as any).imports.map((i: any) => i.id);
+      for (const who of ['outsider', 'manager'] as const) {
+        const got = await importIds(w.users[who]);
+        expect(got).not.toContain(impInv.id);
+        expect(got).toEqual(expect.arrayContaining([impNor.id, impFree.id]));
+      }
+      for (const who of ['member', 'lead', 'cae'] as const) expect(await importIds(w.users[who])).toContain(impInv.id);
+      await check('getImportStatus', (u) => sources.getImportStatus(ds.id, impInv.id, u), (u) => sources.getImportStatus(ds.id, impNor.id, u));
+    });
+
+    it('panel del comité: el avance del plan no delata si una investigación ajena está cerrada', async () => {
+      const dash = new DashboardService(prisma as any);
+      const invClosed = await mkAudit('Investigación cerrada 16', true, { status: 'CLOSED' });
+      const norClosed = await mkAudit('Normal cerrada 16', false, { status: 'CLOSED' });
+      const plan = await prisma.auditPlan.create({ data: { organizationId: w.org.id, year: 2034, name: 'Plan 2034', totalHours: 100, status: 'ACTIVE' } });
+      await prisma.auditPlanItem.create({ data: { planId: plan.id, estimatedHours: 10, auditId: invClosed.id } });
+      await prisma.auditPlanItem.create({ data: { planId: plan.id, estimatedHours: 10, auditId: norClosed.id } });
+      const summary = async (u: any) => ((await dash.getCommitteeDashboard(u)) as any).planSummary;
+      for (const who of ['outsider', 'manager'] as const) expect(await summary(w.users[who])).toMatchObject({ totalItems: 1, completedItems: 1 });
+      for (const who of ['member', 'lead', 'cae'] as const) expect(await summary(w.users[who])).toMatchObject({ totalItems: 2, completedItems: 2 });
+    });
+
+    it('horas ancladas solo a un ítem de plan de una investigación ajena también salen sin descripción', async () => {
+      const hc = new HoursCloseService(prisma as any, {} as any);
+      const invH = await mkAudit('Investigación horas 16', true);
+      const plan = await prisma.auditPlan.create({ data: { organizationId: w.org.id, year: 2035, name: 'Plan 2035', totalHours: 100 } });
+      const item = await prisma.auditPlanItem.create({ data: { planId: plan.id, estimatedHours: 10, auditId: invH.id } });
+      const entry = await prisma.timeEntry.create({ data: { organizationId: w.org.id, userId: w.users.member.id, planItemId: item.id, workDate: new Date('2027-06-10'), hours: 2, category: 'CLIENT_BILLABLE' as any, description: 'entrevista reservada' } });
+      const asManager: any = await hc.personEntries(w.users.member.id, 2027, 6, w.users.manager);
+      expect(asManager.entries.find((e: any) => e.id === entry.id)).toMatchObject({ description: null, auditTitle: 'Encargo restringido' });
+      const asCae: any = await hc.personEntries(w.users.member.id, 2027, 6, w.users.cae);
+      expect(asCae.entries.find((e: any) => e.id === entry.id).description).toBe('entrevista reservada');
+      const req = await prisma.timeAdjustmentRequest.create({ data: { organizationId: w.org.id, userId: w.users.member.id, year: 2027, month: 6, action: 'EDIT' as any, timeEntryId: entry.id, payload: { description: 'texto reservado nuevo' }, reason: 'corrección' } });
+      const listed: any[] = await hc.listAdjustments({} as any, w.users.manager);
+      const row = listed.find((r) => r.id === req.id);
+      expect(row.entry.description).toBeNull();
+      expect(row.payload.description).toBeNull();
+    });
+
+    it('recurrencia: una auditoría normal no queda enlazada a un hallazgo de una investigación (ni siquiera si la crea el CAE)', async () => {
+      const svc = new FindingsService(prisma as any);
+      const word = `xilofonia${randomUUID().slice(0, 5)}`;
+      const secret = await finding(w.inv.id, { title: `${word} irregular detectada` });
+      const created: any = await svc.create({ auditId: w.nor.id, title: `${word} contable`, condition: 'c', criteria: 'k', cause: 'z', effect: 'e', severity: 'LOW' } as any, w.users.cae);
+      const row = await prisma.finding.findUniqueOrThrow({ where: { id: created.id } });
+      expect(row.previousFindingId).not.toBe(secret.id);
+      expect(row.isRecurring).toBe(false);
+    });
+
+    it('vínculos anteriores a la regla «misma auditoría»: las lecturas ya no cruzan a otra auditoría', async () => {
+      const wps = new WorkingPapersService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+      const graph = new PaperGraphService(prisma as any, { emit: () => undefined } as any);
+      const refs = new PaperReferencesService(prisma as any);
+      const mkPaper = (auditId: string, code: string) => prisma.workingPaper.create({ data: { auditId, code, indexSection: 'A', title: `Papel ${code}`, type: 'PLANNING_UNDERSTANDING' as any } });
+      const pNor = await mkPaper(w.nor.id, 'L16-n'); const pInv = await mkPaper(w.inv.id, 'L16-i');
+      // vínculos «viejos» creados directamente en la base, de la auditoría normal hacia la investigación
+      await prisma.paperLink.create({ data: { sourceId: pInv.id, targetId: pNor.id, sourceField: 'S1.a', targetField: 'S1.b' } });
+      await prisma.paperLink.create({ data: { sourceId: pNor.id, targetId: pInv.id, sourceField: 'S1.c', targetField: 'S1.d' } });
+      await prisma.paperReference.create({ data: { sourcePaperId: pNor.id, sourceSectionKey: 'S1', targetPaperId: pInv.id, refType: 'INDEX' as any } });
+      const pbcInv = await prisma.pbcRequest.create({ data: { auditId: w.inv.id, organizationId: w.org.id, title: 'Solicitud reservada', description: 'd', requestedToEmail: 'reservado@t.test', createdById: w.users.lead.id, dueDate: new Date('2030-01-01') } });
+      await prisma.pbcPaperLink.create({ data: { pbcId: pbcInv.id, paperId: pNor.id, createdById: w.users.lead.id } });
+
+      for (const who of ['outsider', 'manager', 'member', 'cae'] as const) {
+        const u = w.users[who];
+        const one: any = await wps.findOne(pNor.id, u);
+        // el papel completo solo lista vínculos hacia auditorías que el usuario ve; el grafo, las referencias y las solicitudes PBC,
+        // solo las del mismo encargo
+        const canSeeInv = who === 'member' || who === 'cae';
+        expect(one.sourceLinks).toHaveLength(canSeeInv ? 1 : 0); expect(one.targetLinks).toHaveLength(canSeeInv ? 1 : 0);
+        const g: any = await graph.getGraphForPaper(pNor.id, u);
+        expect(g.sources).toHaveLength(0); expect(g.targets).toHaveLength(0);
+        expect(await refs.getReferencesForPaper(pNor.id, u)).toHaveLength(0);
+        const pbcs: any = await wps.getPbcLinks(pNor.id, u);
+        expect(JSON.stringify(pbcs)).not.toContain('reservado@t.test');
+        expect(pbcs.linkedItems).toHaveLength(0);
+        expect(await wps.getPbcLinksForPdf(pNor.id)).toHaveLength(0);
+      }
     });
   });
 });

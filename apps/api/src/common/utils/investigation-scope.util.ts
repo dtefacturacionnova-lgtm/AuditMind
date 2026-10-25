@@ -112,6 +112,19 @@ export async function assertAssigneeCanSee(
   throw new BadRequestException('En una investigación solo puede ser responsable alguien del equipo de la auditoría.');
 }
 
+/** Ids de las investigaciones de la organización que el usuario NO ve (vacío para CAE, ADMIN y SUPER_ADMIN). */
+export async function hiddenInvestigationIds(
+  prisma: Pick<Prisma.TransactionClient, 'audit'>,
+  user: UserScope,
+): Promise<string[]> {
+  if (seesAllInvestigations(user)) return [];
+  const rows = await prisma.audit.findMany({
+    where: { organizationId: user.organizationId, isInvestigationMode: true, team: { none: { userId: user.id } } },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
 /**
  * Filas que traen `audit: { id, ... }` (encargos de Cartera, ítems, horas): si la investigación es ajena al equipo del usuario, el
  * `audit` se reemplaza por el id y un título genérico (nunca estado, tipo ni plantilla). Una sola consulta para todas las filas.

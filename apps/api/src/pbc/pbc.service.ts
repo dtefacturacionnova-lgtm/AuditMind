@@ -327,6 +327,7 @@ export class PbcService {
     const result = await this.prisma.pbcRequest.updateMany({
       where: {
         organizationId: user.organizationId,
+        audit: visibleAuditWhere(user), // modo investigación (2026-10-25): no se tocan las solicitudes de una investigación ajena
         dueDate: { lt: new Date() },
         status:  { in: [PbcRequestStatus.PENDING, PbcRequestStatus.SUBMITTED] },
       },

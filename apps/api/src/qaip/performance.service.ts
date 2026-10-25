@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { ProfitabilityService } from '../portfolio/profitability.service';
 import { DEFAULT_MIN_CPE_HOURS_YEAR } from './competencies.service';
+import { hiddenInvestigationIds, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
 // Mismo umbral que classifyPlanItem() de CommitteeService — un papel de
 // disparo de informe final se considera "terminado" con estos estados.
@@ -32,6 +33,12 @@ export class PerformanceService {
     const yearStart = new Date(year, 0, 1);
     const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
     const today = new Date();
+    // Los hallazgos de calidad ligados a una investigación ajena no suman (`engagementId` no tiene @relation: se excluyen por id).
+    const hiddenEngagements = await hiddenInvestigationIds(this.prisma, user);
+    const qaipScope = {
+      organizationId: orgId,
+      ...(hiddenEngagements.length > 0 && { OR: [{ engagementId: null }, { engagementId: { notIn: hiddenEngagements } }] }),
+    };
 
     const [
       signedOffPapers,
@@ -44,19 +51,19 @@ export class PerformanceService {
       acceptedClients,
     ] = await Promise.all([
       this.prisma.workingPaper.findMany({
-        where: { audit: { organizationId: orgId }, signedOffAt: { gte: yearStart, lte: yearEnd } },
+        where: { audit: visibleAuditWhere(user), signedOffAt: { gte: yearStart, lte: yearEnd } },
         select: { reviewedAt: true, signedOffAt: true },
       }),
-      this.prisma.qaipFinding.count({ where: { organizationId: orgId, status: 'OPEN' } }),
-      this.prisma.qaipFinding.count({ where: { organizationId: orgId, status: 'REMEDIATED' } }),
-      this.prisma.qaipFinding.count({ where: { organizationId: orgId, status: 'CLOSED' } }),
+      this.prisma.qaipFinding.count({ where: { ...qaipScope, status: 'OPEN' } }),
+      this.prisma.qaipFinding.count({ where: { ...qaipScope, status: 'REMEDIATED' } }),
+      this.prisma.qaipFinding.count({ where: { ...qaipScope, status: 'CLOSED' } }),
       this.prisma.qaipRootCause.groupBy({
         by: ['category'],
-        where: { finding: { organizationId: orgId } },
+        where: { finding: qaipScope },
         _count: { id: true },
       }),
       this.prisma.qaipRemediationAction.count({
-        where: { status: 'OPEN', dueDate: { lt: today }, finding: { organizationId: orgId } },
+        where: { status: 'OPEN', dueDate: { lt: today }, finding: qaipScope },
       }),
       this.prisma.client.count({ where: { organizationId: orgId, status: 'ACTIVE' } }),
       this.prisma.client.count({
@@ -82,7 +89,7 @@ export class PerformanceService {
       this.computeCpeCompliance(orgId, year),
       this.computeWorkPlanCompliance(orgId, year, today),
       this.computeProfitabilityCompliance(orgId, year, yearEnd),
-      this.computeRecommendationsIndicators(orgId, year, today),
+      this.computeRecommendationsIndicators(user, year, today),
     ]);
 
     return {
@@ -244,15 +251,17 @@ export class PerformanceService {
   }
 
   // ─── Indicadores asociados a las recomendaciones (hallazgos y acciones) ───
-  private async computeRecommendationsIndicators(orgId: string, year: number, today: Date) {
+  private async computeRecommendationsIndicators(user: AuthUser, year: number, today: Date) {
+    const orgId = user.organizationId;
+    const scope = visibleAuditWhere(user); // modo investigación (2026-10-25): sin los hallazgos y acciones de investigaciones ajenas
     const yearStart = new Date(year, 0, 1);
     const [totalYear, closedYear, overdueActionsCount, totalActions, completedActions, recurringYear] = await Promise.all([
-      this.prisma.finding.count({ where: { organizationId: orgId, createdAt: { gte: yearStart } } }),
-      this.prisma.finding.count({ where: { organizationId: orgId, status: 'CLOSED' as any, updatedAt: { gte: yearStart } } }),
-      this.prisma.findingAction.count({ where: { organizationId: orgId, status: { not: 'COMPLETED' as any }, dueDate: { lt: today } } }),
-      this.prisma.findingAction.count({ where: { organizationId: orgId, createdAt: { gte: yearStart } } }),
-      this.prisma.findingAction.count({ where: { organizationId: orgId, status: 'COMPLETED' as any, createdAt: { gte: yearStart } } }),
-      this.prisma.finding.count({ where: { organizationId: orgId, isRecurring: true, createdAt: { gte: yearStart } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, createdAt: { gte: yearStart } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, status: 'CLOSED' as any, updatedAt: { gte: yearStart } } }),
+      this.prisma.findingAction.count({ where: { organizationId: orgId, finding: { audit: scope }, status: { not: 'COMPLETED' as any }, dueDate: { lt: today } } }),
+      this.prisma.findingAction.count({ where: { organizationId: orgId, finding: { audit: scope }, createdAt: { gte: yearStart } } }),
+      this.prisma.findingAction.count({ where: { organizationId: orgId, finding: { audit: scope }, status: 'COMPLETED' as any, createdAt: { gte: yearStart } } }),
+      this.prisma.finding.count({ where: { organizationId: orgId, audit: scope, isRecurring: true, createdAt: { gte: yearStart } } }),
     ]);
 
     return {

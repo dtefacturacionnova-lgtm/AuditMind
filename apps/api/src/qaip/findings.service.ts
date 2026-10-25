@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInOrg } from '../common/utils/tenant.util';
-import { assertAuditVisible } from '../common/utils/investigation-scope.util';
+import { assertAuditVisible, hiddenAuditIds } from '../common/utils/investigation-scope.util';
 import {
   CreateQaipFindingDto, UpdateQaipFindingStatusDto,
   CreateQaipRootCauseDto, CreateQaipRemediationActionDto, UpdateQaipRemediationActionDto,
@@ -27,11 +27,13 @@ export class FindingsService {
     const f = await this.prisma.qaipFinding.findUnique({ where: { id } });
     if (!f) throw new NotFoundException('Hallazgo de calidad no encontrado');
     if (f.organizationId !== user.organizationId) throw new ForbiddenException();
+    // Modo investigación (2026-10-25): un hallazgo de calidad ligado a una investigación solo lo toca quien la ve.
+    if (f.engagementId) await assertAuditVisible(this.prisma, f.engagementId, user);
     return f;
   }
 
   async list(user: AuthUser, track?: string, status?: string) {
-    return this.prisma.qaipFinding.findMany({
+    const rows = await this.prisma.qaipFinding.findMany({
       where: {
         organizationId: user.organizationId,
         ...(track && { track: track as any }),
@@ -40,6 +42,9 @@ export class FindingsService {
       include: FINDING_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
+    // `engagementId` no tiene @relation, así que no se puede filtrar en la consulta: se quitan las filas de investigaciones ajenas.
+    const hidden = await hiddenAuditIds(this.prisma, rows.map((r) => r.engagementId), user);
+    return hidden.size === 0 ? rows : rows.filter((r) => !r.engagementId || !hidden.has(r.engagementId));
   }
 
   async create(dto: CreateQaipFindingDto, user: AuthUser) {
@@ -108,6 +113,7 @@ export class FindingsService {
     });
     if (!action) throw new NotFoundException('Plan de acción no encontrado');
     if (action.finding.organizationId !== user.organizationId) throw new ForbiddenException();
+    if (action.finding.engagementId) await assertAuditVisible(this.prisma, action.finding.engagementId, user);
 
     const updated = await this.prisma.qaipRemediationAction.update({
       where: { id: actionId },

@@ -39,7 +39,9 @@ async function bootstrap() {
   }
   app.enableCors({
     origin: corsOrigins,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    // PUT: el honorario del encargo y los parámetros del cierre de horas lo usan; sin él, el navegador rechaza la petición
+    // cuando la web y la API están en orígenes distintos (desarrollo en localhost:3000 → :3001).
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
 

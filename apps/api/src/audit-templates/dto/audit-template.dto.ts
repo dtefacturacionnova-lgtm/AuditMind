@@ -5,6 +5,9 @@ import {
   IsEnum,
   ValidateNested,
   IsIn,
+  IsNumber,
+  Min,
+  Max,
 } from 'class-validator';
 import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -69,6 +72,16 @@ export class SectionDefDto {
   @ValidateNested({ each: true })
   @Type(() => SectionChildDto)
   children?: SectionChildDto[];
+
+  @ApiPropertyOptional({
+    example: 25,
+    description: 'Peso porcentual de la fase dentro del avance ponderado del encargo (0-100). Depende de la plantilla — no todas la usan.',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  weight?: number;
 }
 
 export class PaperDefDto {

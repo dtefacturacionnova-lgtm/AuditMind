@@ -31,6 +31,8 @@ export interface SectionDef {
   name: string;
   phaseType?: 'PLANNING' | 'FIELDWORK' | 'REPORTING' | 'FOLLOWUP';
   children?: Array<{ ref: string; name: string }>;
+  /** Peso % de la fase en el avance ponderado del encargo (0-100). Opcional, depende de la plantilla. */
+  weight?: number;
 }
 
 export type MappingType = 'DIRECT' | 'AGGREGATED' | 'AI_GENERATED';

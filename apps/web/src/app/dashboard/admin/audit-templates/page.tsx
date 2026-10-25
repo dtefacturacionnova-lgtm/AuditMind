@@ -247,6 +247,30 @@ function SectionsEditor({
                 </select>
               )}
 
+              {/* Weight */}
+              {readOnly ? (
+                section.weight != null && (
+                  <span className="shrink-0 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+                    {section.weight}%
+                  </span>
+                )
+              ) : (
+                <div className="flex shrink-0 items-center gap-0.5" title="Peso en el avance ponderado del encargo (opcional)">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={section.weight ?? ''}
+                    onChange={(e) => updateSection(
+                      idx, 'weight', e.target.value === '' ? undefined : Number(e.target.value),
+                    )}
+                    placeholder="Peso"
+                    className="w-14 rounded border border-slate-200 px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                  <span className="text-[10px] text-slate-400">%</span>
+                </div>
+              )}
+
               {/* Actions */}
               {!readOnly && (
                 <div className="flex items-center gap-1 shrink-0">
@@ -326,6 +350,18 @@ function SectionsEditor({
           </div>
         );
       })}
+
+      {sections.some((s) => s.weight != null) && (
+        <p className={cn(
+          'px-1 text-[11px]',
+          sections.reduce((sum, s) => sum + (s.weight ?? 0), 0) === 100
+            ? 'text-emerald-600'
+            : 'text-amber-600',
+        )}>
+          Suma de pesos: {sections.reduce((sum, s) => sum + (s.weight ?? 0), 0)}%
+          {sections.reduce((sum, s) => sum + (s.weight ?? 0), 0) !== 100 && ' — debería sumar 100% para calcular el avance ponderado del encargo'}
+        </p>
+      )}
 
       {!readOnly && (
         <button

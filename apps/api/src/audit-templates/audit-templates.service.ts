@@ -1924,7 +1924,7 @@ export class AuditTemplatesService {
           'Aplica a: Auditoría Externa, Financiera.',
         auditTypes: [AuditType.EXTERNAL, AuditType.FINANCIAL],
         sections: [
-          { ref: 'APE', name: 'Archivo Permanente del Cliente',            phaseType: 'PLANNING',
+          { ref: 'APE', name: 'Archivo Permanente del Cliente',            phaseType: 'PLANNING', weight: 5,
             children: [
               { ref: 'APE-01', name: 'Escrituras, NIT y Matrículas' },
               { ref: 'APE-02', name: 'Organigrama y Estructura Societaria' },
@@ -1934,8 +1934,10 @@ export class AuditTemplatesService {
               { ref: 'APE-06', name: 'Políticas Contables y Manuales CI' },
             ],
           },
-          { ref: 'A',   name: 'Planificación y Estrategia Global',        phaseType: 'PLANNING' },
-          { ref: 'B',   name: 'Estados Financieros y Cédulas Sumarias',   phaseType: 'FIELDWORK',
+          { ref: 'A',   name: 'Planificación y Estrategia Global',        phaseType: 'PLANNING',  weight: 20 },
+          // B es en gran parte mecánico/automatizado (motor de lead schedules propaga saldos
+          // desde el balance importado) — menos peso que C pese a ser igual de "FIELDWORK".
+          { ref: 'B',   name: 'Estados Financieros y Cédulas Sumarias',   phaseType: 'FIELDWORK', weight: 15,
             children: [
               { ref: 'B-00', name: 'Importación y Clasificador de Cuentas' },
               { ref: 'B-01', name: 'Activos Corrientes' },
@@ -1949,7 +1951,8 @@ export class AuditTemplatesService {
               { ref: 'B-09', name: 'Libro de AJEs' },
             ],
           },
-          { ref: 'C',   name: 'Pruebas Sustantivas por Área',             phaseType: 'FIELDWORK',
+          // Pruebas sustantivas por las 15 áreas — el grueso del trabajo de campo manual.
+          { ref: 'C',   name: 'Pruebas Sustantivas por Área',             phaseType: 'FIELDWORK', weight: 35,
             children: [
               { ref: 'C-01', name: 'Caja y Bancos' },
               { ref: 'C-02', name: 'Cuentas por Cobrar' },
@@ -1969,9 +1972,9 @@ export class AuditTemplatesService {
               { ref: 'C-16', name: 'Prevención de Lavado de Dinero' },
             ],
           },
-          { ref: 'D',   name: 'Cierre de la Auditoría',                   phaseType: 'REPORTING' },
-          { ref: 'E',   name: 'Informe del Auditor Independiente',         phaseType: 'REPORTING' },
-          { ref: 'F',   name: 'Cierre del Encargo y Control de Calidad',   phaseType: 'REPORTING' },
+          { ref: 'D',   name: 'Cierre de la Auditoría',                   phaseType: 'REPORTING', weight: 5 },
+          { ref: 'E',   name: 'Informe del Auditor Independiente',         phaseType: 'REPORTING', weight: 10 },
+          { ref: 'F',   name: 'Cierre del Encargo y Control de Calidad',   phaseType: 'REPORTING', weight: 10 },
         ],
         papers: [
           // ── APE — Archivo Permanente ─────────────────────────────────────

@@ -20,8 +20,10 @@ export interface PlanItemProject {
 export interface PlanItemAudit {
   id:          string;
   title:       string;
-  status:      string;
-  actualHours: number;
+  /** Ausentes cuando el encargo es una investigación ajena al equipo del usuario (`restricted`): el API solo manda id y título genérico. */
+  status?:      string;
+  actualHours?: number;
+  restricted?:  boolean;
 }
 
 export interface PlanItem {

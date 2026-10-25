@@ -384,7 +384,8 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
   const { data: linkableAudits = [] } = useLinkableAudits(planId);
   const pr = PRIORITY_CONFIG[item.priority] ?? PRIORITY_CONFIG[2];
 
-  const realHours = item.audit?.actualHours ?? null;
+  const restricted = !!item.audit?.restricted; // investigación ajena al equipo: sin horas, sin enlace
+  const realHours = restricted ? null : (item.audit?.actualHours ?? null);
   const realPct = realHours !== null && item.estimatedHours > 0
     ? Math.round((realHours / item.estimatedHours) * 100) : null;
   const realTone = realPct === null ? 'text-gray-500'
@@ -471,14 +472,22 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
               <User className="w-3 h-3" />{item.responsibleName}
             </span>
           )}
-          {item.audit ? (
+          {restricted ? (
+            <span
+              className="text-xs font-medium flex items-center gap-1 text-gray-400 italic"
+              title="Este encargo es reservado: solo lo ve su equipo y la dirección"
+            >
+              <Link2 className="w-3 h-3" />
+              Encargo restringido
+            </span>
+          ) : item.audit ? (
             <NextLink
               href={`/dashboard/audits/${item.audit.id}`}
               className={cn('text-xs font-medium flex items-center gap-1 hover:underline', realTone)}
               title="Horas reales trabajadas en el encargo vinculado"
             >
               <Link2 className="w-3 h-3" />
-              {realHours!.toFixed(1)}h reales{realPct !== null && ` (${realPct}%)`}
+              {(realHours ?? 0).toFixed(1)}h reales{realPct !== null && ` (${realPct}%)`}
             </NextLink>
           ) : linking ? null : (
             <span className="text-xs text-gray-300">Sin encargo vinculado — 0h reales</span>
@@ -558,7 +567,7 @@ function PlanItemRow({ item, planId, canEdit }: { item: PlanItem; planId: string
           <span className="text-xs font-mono text-gray-600 w-16 text-right">
             {item.estimatedHours.toLocaleString('es-CL')} h
           </span>
-          {canEdit && (
+          {canEdit && !restricted && (
             <>
               {item.audit ? (
                 <button

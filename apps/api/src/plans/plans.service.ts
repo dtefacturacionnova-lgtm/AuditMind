@@ -68,7 +68,6 @@ export class PlansService {
    * Siempre se quita la lista del equipo de la respuesta.
    */
   private present<P extends { totalHours: number; items: Array<{ estimatedHours: number; audit?: any }> }>(plan: P, user: AuthUser) {
-    const capacity = this.calcCapacity(plan.totalHours, plan.items);
     const items = plan.items.map((i) => {
       const a = i.audit;
       if (!a) return i;
@@ -76,6 +75,9 @@ export class PlansService {
       const { team: _team, ...visible } = a;
       return { ...i, audit: visible };
     });
+    // Los totales se calculan con lo que este usuario ve: las horas reales de una investigación ajena no suman (si no, restar lo
+    // visible del total delataría cuántas horas lleva). Las horas asignadas sí cuentan todas: son del plan, no del encargo.
+    const capacity = this.calcCapacity(plan.totalHours, items.map((i) => ({ estimatedHours: i.estimatedHours, audit: i.audit?.restricted ? null : i.audit })));
     return { ...plan, items, ...capacity };
   }
 

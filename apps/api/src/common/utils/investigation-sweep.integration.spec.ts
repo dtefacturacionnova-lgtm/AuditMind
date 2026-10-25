@@ -670,9 +670,13 @@ suite('modo investigación · barrido por módulo (Postgres real)', () => {
         expect(itemOf(one, seeded.itemInv.id).audit).toMatchObject({ id: w.inv.id, title: 'Investigación reservada' });
         expect(itemOf(one, seeded.itemInv.id).audit).not.toHaveProperty('team');
       }
-      // el total de horas reales del plan no cambia con quien lo mira
+      // los totales se calculan con lo visible: las horas de la investigación no se pueden deducir restando
       const a: any = await plans.findOne(seeded.plan.id, w.users.outsider); const b: any = await plans.findOne(seeded.plan.id, w.users.cae);
-      expect(a.realHours).toBe(b.realHours);
+      const visibleSum = a.items.reduce((n: number, i: any) => n + (i.audit && !i.audit.restricted ? (i.audit.actualHours ?? 0) : 0), 0);
+      expect(a.realHours).toBe(visibleSum);
+      expect(a.startedItems).toBe(a.items.filter((i: any) => i.audit && !i.audit.restricted).length);
+      expect(b.startedItems).toBeGreaterThanOrEqual(a.startedItems);
+      expect(a.allocatedHours).toBe(b.allocatedHours);
     });
 
     it('encargos que se pueden vincular: la investigación ajena no aparece', async () => {

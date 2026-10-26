@@ -4,12 +4,13 @@
  *  · Avance por HORAS = horas facturables ÷ horas presupuestadas del encargo. Sin presupuesto COMPLETO (alguien con horas sin presupuesto,
  *    o presupuesto 0) el avance es NULO: no se inventa. Tope 100 %, que se alcanza al emitirse el informe final (papel disparador firmado).
  *  · Por HITOS = Σ de cuotas con fecha de cumplimiento ÷ honorario.   · MANUAL = el porcentaje que fijó la dirección.
- *  · Por tiempo (TIME_BASED) no hay honorario fijo: el ingreso es lo facturado.
+ *  · Por tiempo (TIME_BASED) no hay honorario fijo: sin datos de horas el ingreso es lo facturado; con ellos (Fase 4, §15) el devengado es
+ *    lo facturado neto + las horas trabajadas aún sin facturar × su tarifa, y «por facturar» son esas horas.
  *  · Por facturar = devengado − facturado neto, sin negativos.
  * Todo en centavos enteros. Función pura: los datos los trae `AccrualService`.
  */
 export type AccrualMethod = 'HOURS' | 'MILESTONES' | 'MANUAL';
-export type AccrualBasis = 'HOURS' | 'COMPLETION' | 'MILESTONES' | 'MANUAL' | 'INVOICED' | 'NONE';
+export type AccrualBasis = 'HOURS' | 'COMPLETION' | 'MILESTONES' | 'MANUAL' | 'INVOICED' | 'TIME' | 'NONE';
 export type AccrualMissing = 'NO_BUDGET' | 'NO_MANUAL_PROGRESS';
 
 export interface AccrualInput {
@@ -26,6 +27,8 @@ export interface AccrualInput {
   completionDone: boolean;
   milestoneDoneCents: number;
   manualPct: number | null;
+  /** Solo TIME_BASED (Fase 4): horas trabajadas aún sin facturar al corte, por su tarifa, en centavos. Sin este dato se usa lo facturado. */
+  timeUnbilledCents?: number;
 }
 
 export interface AccrualResult {
@@ -41,6 +44,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function computeAccrual(i: AccrualInput): AccrualResult {
   if (i.feeType === 'TIME_BASED') {
+    if (i.timeUnbilledCents !== undefined) {
+      return { progressPct: null, accruedCents: i.invoicedNetCents + i.timeUnbilledCents, toInvoiceCents: i.timeUnbilledCents, basis: 'TIME', missing: null };
+    }
     return { progressPct: null, accruedCents: i.invoicedNetCents, toInvoiceCents: null, basis: 'INVOICED', missing: null };
   }
   const fee = i.feeTotalCents ?? 0;

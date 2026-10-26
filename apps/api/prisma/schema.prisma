@@ -3762,6 +3762,28 @@ model ClientCreditNote {
   @@map("client_credit_notes")
 }
 
+/// Una hora de trabajo facturada en una factura de una consultoría por tiempo (Fase 4, §15). Una sola línea VIGENTE por hora
+/// (índice único parcial en el SQL); anular la factura la libera. `hours` va a 4 decimales y `amount = ROUND(hours × rate, 2)`.
+model ClientInvoiceHour {
+  id             String    @id @default(cuid())
+  organizationId String
+  invoiceId      String
+  engagementId   String
+  timeEntryId    String
+  hours          Decimal   @db.Decimal(9, 4)
+  rate           Decimal   @db.Decimal(10, 2)
+  amount         Decimal   @db.Decimal(12, 2)
+  releasedAt     DateTime?
+  releasedById   String?
+  createdById    String
+  createdAt      DateTime  @default(now())
+
+  @@index([invoiceId])
+  @@index([timeEntryId])
+  @@index([engagementId])
+  @@map("client_invoice_hours")
+}
+
 /// Castigo de un saldo incobrable: parcial real (baja el saldo de la factura sin tocar lo cobrado) y reversible (§4.6).
 model ClientWriteOff {
   id             String         @id @default(cuid())

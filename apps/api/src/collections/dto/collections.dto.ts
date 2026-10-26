@@ -192,6 +192,10 @@ export class RegisterInvoiceDto {
   @ApiPropertyOptional({ description: 'IVA en USD; 0 si es exenta.' }) @IsOptional() @IsNumber({ ...MONEY }) @Min(0)
   taxAmount?: number;
 
+  @ApiPropertyOptional({ type: [String], description: 'Factura de HORAS (consultoría por tiempo): ids de las horas cerradas que se facturan. El neto debe ser la suma exacta de esas horas.' })
+  @IsOptional() @IsArray() @ArrayMaxSize(500) @IsString({ each: true }) @MinLength(8, { each: true }) @MaxLength(64, { each: true })
+  timeEntryIds?: string[];
+
   @ApiPropertyOptional({ type: [WithholdingInputDto], description: 'Retenciones que ya trae el DTE.' })
   @IsOptional() @IsArray() @ArrayMaxSize(5) @ValidateNested({ each: true }) @Type(() => WithholdingInputDto)
   withholdings?: WithholdingInputDto[];

@@ -89,7 +89,9 @@ export interface Statement {
 export interface AccrualView {
   asOf: string; feeType: 'FIXED' | 'TIME_BASED'; feeTotal: number | null; method: 'HOURS' | 'MILESTONES' | 'MANUAL'; invoicedNet: number;
   billableHours: number; budgetHours: number | null; completionDone: boolean; progressPct: number | null; accrued: number | null; toInvoice: number | null;
-  basis: 'HOURS' | 'COMPLETION' | 'MILESTONES' | 'MANUAL' | 'INVOICED' | 'NONE'; missing: 'NO_BUDGET' | 'NO_MANUAL_PROGRESS' | null;
+  basis: 'HOURS' | 'COMPLETION' | 'MILESTONES' | 'MANUAL' | 'INVOICED' | 'TIME' | 'NONE'; missing: 'NO_BUDGET' | 'NO_MANUAL_PROGRESS' | null;
+  /** Solo consultorías por tiempo: horas sin facturar al corte. */
+  time: { invoiceableHours: number; invoiceableAmount: number; provisionalHours: number; provisionalAmount: number; unratedHours: number } | null;
 }
 
 // ── Consultas ───────────────────────────────────────────────────────────────

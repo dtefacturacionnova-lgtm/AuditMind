@@ -14,6 +14,8 @@ import { assertWithinBalance } from './allocation.util';
 import { computeCommitments } from './fees.service';
 import { creditNoteRow, writeOffRow } from './collection-rows';
 import { assertNoNegativePast, firstMovementDate } from './retro.util';
+import { insertHourLines, prepareHourLines, releaseInvoiceHours } from './billable-hours.service';
+import { sumLines } from './billable-hours.util';
 import {
   AddWithholdingDto, ListInvoicesQueryDto, ListWithholdingsQueryDto, ReasonDto, RegisterInvoiceDto, UpdateInvoiceDto, WithholdingInputDto,
 } from './dto/collections.dto';
@@ -78,12 +80,28 @@ export class InvoicesService {
     return this.prisma.$transaction(async (tx) => {
       await lockEngagement(tx, dto.engagementId);
       const eng = await tx.engagement.findFirst({
-        where: { id: dto.engagementId, organizationId: user.organizationId }, select: { id: true, clientId: true, status: true },
+        where: { id: dto.engagementId, organizationId: user.organizationId }, select: { id: true, clientId: true, status: true, auditId: true },
       });
       if (!eng) throw new NotFoundException('Encargo no encontrado');
       if (eng.status === 'CANCELLED') throw new ConflictException('El encargo está cancelado: no se le pueden registrar facturas.');
       const fee = await tx.engagementFee.findUnique({ where: { engagementId: eng.id } });
       if (!fee) throw new ConflictException('Primero define el honorario del encargo.');
+
+      // Factura de HORAS (Fase 4): el neto es la suma exacta de las horas cerradas que se eligen.
+      const hoursMode = !!dto.timeEntryIds && dto.timeEntryIds.length > 0;
+      let hourLines: Awaited<ReturnType<typeof prepareHourLines>> = [];
+      if (hoursMode) {
+        if (dto.scheduleItemId) throw new BadRequestException('Una factura de horas no se liga a una cuota del calendario.');
+        if (fee.feeType !== FeeType.TIME_BASED) throw new ConflictException('Solo un honorario por tiempo se factura con horas.');
+        hourLines = await prepareHourLines(tx, { organizationId: user.organizationId, engagementId: eng.id, auditId: eng.auditId, timeEntryIds: dto.timeEntryIds as string[] });
+        const linesCents = sumLines(hourLines);
+        if (linesCents !== netCents) {
+          throw new UnprocessableEntityException(
+            `El neto de la factura (${formatMoney(netCents)}) no coincide con las horas elegidas (${formatMoney(linesCents)}). ` +
+            'El neto de una factura de horas es la suma de sus horas: ajusta la selección o el monto del DTE.',
+          );
+        }
+      }
 
       let item: Prisma.BillingScheduleItemGetPayload<object> | null = null;
       if (dto.scheduleItemId) {
@@ -121,6 +139,7 @@ export class InvoicesService {
         if (isUniqueViolation(e)) throw this.uniqueMessage(e);
         throw e;
       }
+      if (hoursMode) await insertHourLines(tx, { organizationId: user.organizationId, engagementId: eng.id, invoiceId: invoice.id, userId: user.id, lines: hourLines });
       for (const w of withholdings) {
         const row = await tx.invoiceWithholding.create({
           data: {
@@ -145,7 +164,7 @@ export class InvoicesService {
       }
       await logCollection(tx, {
         organizationId: user.organizationId, entityType: 'INVOICE', entityId: invoice.id, action: 'INVOICE_REGISTERED', actorId: user.id,
-        before: null, after: toJson(invoice),
+        before: null, after: toJson(invoice), note: hoursMode ? `Factura de ${hourLines.length} hora(s) de trabajo` : undefined,
       });
       return invoiceListRow(invoice, todayInSalvador());
     }, TX_OPTIONS);
@@ -222,6 +241,15 @@ export class InvoicesService {
       ? await this.prisma.clientPayment.findMany({ where: { id: { in: [...new Set(applications.map((a) => a.paymentId))] } }, select: { id: true, paymentDate: true, method: true, reference: true, status: true } })
       : [];
     const payBy = new Map(payments.map((p) => [p.id, p]));
+    const hourRows = await this.prisma.clientInvoiceHour.findMany({ where: { invoiceId: id }, orderBy: { createdAt: 'asc' } });
+    const hourEntries = hourRows.length
+      ? await this.prisma.timeEntry.findMany({ where: { id: { in: hourRows.map((h) => h.timeEntryId) } }, select: { id: true, userId: true, workDate: true, description: true } })
+      : [];
+    const hourUsers = hourEntries.length
+      ? await this.prisma.user.findMany({ where: { id: { in: [...new Set(hourEntries.map((e) => e.userId))] }, organizationId: user.organizationId }, select: { id: true, name: true } })
+      : [];
+    const entryBy = new Map(hourEntries.map((e) => [e.id, e]));
+    const userNameBy = new Map(hourUsers.map((u) => [u.id, u.name]));
     const today = todayInSalvador();
     const moves = applications.some((a) => !a.reversedAt) || withholdings.some((w) => !w.reversedAt) || toCents(inv.creditedAmount) > 0 || toCents(inv.writtenOffAmount) > 0;
     return {
@@ -236,6 +264,13 @@ export class InvoicesService {
       })),
       creditNotes: creditNotes.map(creditNoteRow),
       writeOffs: writeOffs.map(writeOffRow),
+      hours: hourRows.map((h) => {
+        const e = entryBy.get(h.timeEntryId);
+        return {
+          id: h.id, timeEntryId: h.timeEntryId, workDate: e ? ymd(e.workDate) : null, userName: e ? userNameBy.get(e.userId) ?? '—' : '—', description: e?.description ?? null,
+          hours: Number(h.hours), rate: Number(h.rate), amount: Number(h.amount), releasedAt: h.releasedAt,
+        };
+      }),
       log: log.map((l) => ({ id: l.id, action: l.action, actorId: l.actorId, note: l.note, createdAt: l.createdAt })),
       permissions: {
         canEditAll: !moves && inv.status !== 'VOID',
@@ -300,6 +335,9 @@ export class InvoicesService {
       if (dto.netAmount !== undefined || dto.taxAmount !== undefined) {
         const netCents = dto.netAmount !== undefined ? parseMoneyInput(dto.netAmount, 'El monto neto') : toCents(inv.netAmount);
         const taxCents = dto.taxAmount !== undefined ? parseNonNegativeMoneyInput(dto.taxAmount, 'El IVA') : toCents(inv.taxAmount);
+        if (netCents !== toCents(inv.netAmount) && (await tx.clientInvoiceHour.count({ where: { invoiceId: id, releasedAt: null } })) > 0) {
+          throw new ConflictException('La factura es de horas: su neto es la suma de las horas facturadas. Para cambiarlo, anúlala y vuelve a facturar las horas.');
+        }
         const fee = await tx.engagementFee.findUnique({ where: { engagementId: inv.engagementId } });
         if (fee?.feeType === FeeType.FIXED && fee.totalAmount) {
           const c = await computeCommitments(tx, inv.engagementId, fee.totalAmount);
@@ -363,7 +401,9 @@ export class InvoicesService {
       });
       if (res.count !== 1) throw new ConflictException('La factura cambió mientras se anulaba; vuelve a intentarlo.');
       if (inv.scheduleItemId) await this.releaseScheduleItem(tx, inv, user);
-      await logCollection(tx, { organizationId: user.organizationId, entityType: 'INVOICE', entityId: id, action: 'INVOICE_VOIDED', actorId: user.id, before: toJson(inv), after: null, note: reason });
+      // Las horas de una factura de horas quedan libres para facturarse otra vez.
+      const releasedHours = await releaseInvoiceHours(tx, id, user.id);
+      await logCollection(tx, { organizationId: user.organizationId, entityType: 'INVOICE', entityId: id, action: 'INVOICE_VOIDED', actorId: user.id, before: toJson(inv), after: releasedHours > 0 ? { releasedHours } : null, note: reason });
       const after = await tx.clientInvoice.findUniqueOrThrow({ where: { id } });
       return invoiceListRow(after, todayInSalvador());
     }, TX_OPTIONS);

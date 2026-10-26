@@ -48,6 +48,7 @@ function makeDb(data: Data) {
     engagementFeeAmendment: { findMany: async () => { hit('engagementFeeAmendment'); return data.amendments ?? []; } },
     clientInvoice: { findMany: async () => { hit('clientInvoice'); return data.invoices ?? []; } },
     clientCreditNote: { findMany: async () => { hit('clientCreditNote'); return data.creditNotes ?? []; } },
+    clientInvoiceHour: { findMany: async () => { hit('clientInvoiceHour'); return []; } },
     billingScheduleItem: { findMany: async () => { hit('billingScheduleItem'); return data.scheduleItems ?? []; } },
     workingPaper: { findMany: async () => { hit('workingPaper'); return data.triggers ?? []; } },
     proposal: {

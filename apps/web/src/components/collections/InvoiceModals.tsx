@@ -19,11 +19,15 @@ interface WhRow { taxType: TaxType; amount: string; certificateNumber: string }
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Registrar (o corregir) una factura que ya se emitió como DTE. No se factura en línea: aquí solo se anota. */
-export function InvoiceFormModal({ engagementId, scheduleItem, invoice, termDays = 30, onClose }: {
+export function InvoiceFormModal({ engagementId, scheduleItem, invoice, hours, termDays = 30, onClose }: {
   engagementId?: string; scheduleItem?: ScheduleItem; invoice?: InvoiceDetail; termDays?: number; onClose: () => void;
+  /** Factura de horas (Fase 4): las horas cerradas elegidas; el neto es su suma y no se edita. */
+  hours?: { ids: string[]; net: number; hoursTotal: number };
 }) {
   const editing = !!invoice;
   const coreLocked = editing && !invoice.permissions.canEditAll;
+  const hoursInvoice = !!hours || (editing && invoice.hours.some((h) => !h.releasedAt));
+  const netLocked = coreLocked || hoursInvoice;
   const engagements = useEngagements();
   const [engId, setEngId] = useState(engagementId ?? invoice?.engagementId ?? '');
   const [number, setNumber] = useState(invoice?.invoiceNumber ?? '');
@@ -31,8 +35,8 @@ export function InvoiceFormModal({ engagementId, scheduleItem, invoice, termDays
   const [docType, setDocType] = useState<DocumentType>(invoice?.documentType ?? '03');
   const [invDate, setInvDate] = useState(invoice?.invoiceDate ?? todayIso());
   const [dueDate, setDueDate] = useState(invoice?.dueDate ?? '');
-  const [description, setDescription] = useState(invoice?.description ?? scheduleItem?.label ?? '');
-  const [net, setNet] = useState(invoice ? String(invoice.netAmount) : scheduleItem ? String(scheduleItem.amount) : '');
+  const [description, setDescription] = useState(invoice?.description ?? scheduleItem?.label ?? (hours ? `Horas de trabajo (${Math.round(hours.hoursTotal * 100) / 100} h)` : ''));
+  const [net, setNet] = useState(invoice ? String(invoice.netAmount) : scheduleItem ? String(scheduleItem.amount) : hours ? String(hours.net) : '');
   const [tax, setTax] = useState(invoice ? String(invoice.taxAmount) : '');
   const [whs, setWhs] = useState<WhRow[]>([]);
   const register = useRegisterInvoice();
@@ -50,7 +54,7 @@ export function InvoiceFormModal({ engagementId, scheduleItem, invoice, termDays
         await update.mutateAsync({
           id: invoice.id,
           data: {
-            ...(coreLocked ? {} : { invoiceNumber: number, generationCode: genCode, documentType: docType, netAmount: Number(net), taxAmount: Number(tax || 0) }),
+            ...(coreLocked ? {} : { invoiceNumber: number, generationCode: genCode, documentType: docType, ...(hoursInvoice ? {} : { netAmount: Number(net) }), taxAmount: Number(tax || 0) }),
             invoiceDate: invDate, dueDate: dueDate || undefined, description,
           },
         });
@@ -58,6 +62,7 @@ export function InvoiceFormModal({ engagementId, scheduleItem, invoice, termDays
         await register.mutateAsync({
           engagementId: engId, scheduleItemId: scheduleItem?.id, invoiceNumber: number, generationCode: genCode || undefined, documentType: docType,
           invoiceDate: invDate, dueDate: dueDate || undefined, description: description || undefined, netAmount: Number(net), taxAmount: Number(tax || 0),
+          timeEntryIds: hours?.ids,
           withholdings: whs.filter((w) => w.amount !== '').map<WithholdingInput>((w) => ({ taxType: w.taxType, amount: Number(w.amount), certificateNumber: w.certificateNumber || undefined })),
         });
       }
@@ -66,7 +71,7 @@ export function InvoiceFormModal({ engagementId, scheduleItem, invoice, termDays
   };
 
   return (
-    <Modal title={editing ? `Editar factura ${invoice.invoiceNumber}` : scheduleItem ? `Registrar factura — ${scheduleItem.label}` : 'Registrar factura'} onClose={onClose} wide>
+    <Modal title={editing ? `Editar factura ${invoice.invoiceNumber}` : hours ? 'Facturar horas de trabajo' : scheduleItem ? `Registrar factura — ${scheduleItem.label}` : 'Registrar factura'} onClose={onClose} wide>
       <form onSubmit={submit} className="space-y-3">
         {!editing && !engagementId && (
           <Field label="Encargo *">
@@ -80,6 +85,7 @@ export function InvoiceFormModal({ engagementId, scheduleItem, invoice, termDays
             </select>
           </Field>
         )}
+        {hoursInvoice && <p className="text-xs text-blue-700 bg-blue-50 rounded-lg px-3 py-2">{hours ? `Factura de ${hours.ids.length} registro(s) de horas (${Math.round(hours.hoursTotal * 100) / 100} h): el neto es la suma exacta de las horas elegidas. Si el DTE que emitiste trae otro neto, cambia la selección de horas.` : 'Factura de horas: su neto es la suma de las horas facturadas y no se edita. Para cambiarlo, anúlala y vuelve a facturar las horas.'}</p>}
         {coreLocked && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">La factura ya tiene cobros, retenciones, notas de crédito o castigos: solo se editan las fechas y la descripción. Para corregir un movimiento, revíertelo desde el detalle de la factura.</p>}
         <div className="grid grid-cols-3 gap-3">
           <div className="col-span-2">
@@ -98,7 +104,7 @@ export function InvoiceFormModal({ engagementId, scheduleItem, invoice, termDays
         </div>
         <Field label="Descripción"><input value={description} onChange={(e) => setDescription(e.target.value)} className={inputCls} /></Field>
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Monto neto (USD) *"><input required type="number" step="0.01" min="0.01" value={net} onChange={(e) => setNet(e.target.value)} disabled={coreLocked} className={inputCls} /></Field>
+          <Field label="Monto neto (USD) *"><input required type="number" step="0.01" min="0.01" value={net} onChange={(e) => setNet(e.target.value)} disabled={netLocked} className={inputCls} /></Field>
           <Field label="IVA (USD)">
             <div className="flex gap-1">
               <input type="number" step="0.01" min="0" value={tax} onChange={(e) => setTax(e.target.value)} disabled={coreLocked} className={inputCls} />
@@ -131,7 +137,7 @@ export function InvoiceFormModal({ engagementId, scheduleItem, invoice, termDays
         <ErrorLine error={mutation.error} />
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className={`flex-1 ${btnGhost}`}>Cancelar</button>
-          <button type="submit" disabled={mutation.isPending || (!editing && !engId)} className={`flex-1 ${btnPrimary}`}>{mutation.isPending ? 'Guardando…' : editing ? 'Guardar cambios' : 'Registrar factura'}</button>
+          <button type="submit" disabled={mutation.isPending || (!editing && !engId)} className={`flex-1 ${btnPrimary}`}>{mutation.isPending ? 'Guardando…' : editing ? 'Guardar cambios' : hours ? 'Registrar factura de horas' : 'Registrar factura'}</button>
         </div>
       </form>
     </Modal>
@@ -266,6 +272,28 @@ export function InvoiceDetailModal({ invoiceId, canDirect, termDays, onRegisterP
           </dl>
           {inv.description && <p className="text-sm text-gray-600">{inv.description}</p>}
           {inv.status === 'VOID' && <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">Anulada: {inv.voidReason}</p>}
+
+          {inv.hours.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-600 mb-1">Horas facturadas</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-left text-gray-400"><th className="py-1">Fecha</th><th>Persona</th><th className="text-right">Horas</th><th className="text-right">Tarifa</th><th className="text-right">Monto</th></tr></thead>
+                  <tbody>
+                    {inv.hours.map((h) => (
+                      <tr key={h.id} className={`border-t border-gray-100 ${h.releasedAt ? 'text-gray-400 line-through' : ''}`}>
+                        <td className="py-1">{h.workDate ? formatDateUTC(h.workDate) : '—'}</td>
+                        <td>{h.userName}{h.description ? <span className="block text-[11px] text-gray-400">{h.description}</span> : null}</td>
+                        <td className="text-right">{h.hours} h</td>
+                        <td className="text-right">{formatMoney(h.rate)}</td>
+                        <td className="text-right font-medium">{formatMoney(h.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <div>
             <h4 className="text-xs font-semibold text-gray-600 mb-1">Cobros aplicados</h4>

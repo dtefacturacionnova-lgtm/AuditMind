@@ -187,9 +187,13 @@ export class FakeHoursDb {
   userCostProfile = this.tables.userCostProfile;
   auditTeam = this.tables.auditTeam;
 
-  /** Candado de transacción: no hay concurrencia real en las pruebas, solo se anota la llave. */
-  $queryRaw = async (strings: TemplateStringsArray, ...values: unknown[]) => {
-    this.lockKeys.push(String(values[0] ?? strings.join('')));
+  /**
+   * Candado de transacción: no hay concurrencia real en las pruebas, solo se anota la llave. Las consultas armadas con `Prisma.sql`
+   * (candados de filas y búsqueda de horas ya facturadas, de la cobranza) no son candados de persona y mes: responden «nada».
+   */
+  $queryRaw = async (strings: TemplateStringsArray | { sql?: string }, ...values: unknown[]) => {
+    if (!Array.isArray(strings)) return [];
+    this.lockKeys.push(String(values[0] ?? (strings as TemplateStringsArray).join('')));
     return [];
   };
 

@@ -9,6 +9,7 @@ import { EmailService, escHtml } from '../email/email.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { hiddenAuditIds, RESTRICTED_AUDIT_TITLE } from '../common/utils/investigation-scope.util';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
+import { assertEntryNotInvoiced, assertPersonMonthNotInvoiced, lockPersonMonthEntries, lockTimeEntryRows } from '../collections/invoiced-hours.guard';
 import { assertDailyHoursCap, assertTimeAnchorsInOrg, assertValidHours, completeTimeAnchors } from './daily-hours-cap.util';
 import {
   ClosePeriodDto, CreateAdjustmentDto, DecideAdjustmentDto, HoursCloseSettingsDto, QueryAdjustmentsDto, RemindPeriodDto,
@@ -396,6 +397,9 @@ export class HoursCloseService {
       });
       if (!existing || existing.status !== 'CLOSED') throw new ConflictException('Ese mes de esta persona no está cerrado.');
       const range = periodRange(period);
+      // Horas ya facturadas (Fase 4): reabrir soltaría su tarifa congelada. Primero se bloquean las filas, después se buscan las líneas.
+      await lockPersonMonthEntries(tx, user.organizationId, target.id, range);
+      await assertPersonMonthNotInvoiced(tx, user.organizationId, target.id, range);
       // Vuelve a ser provisional: se sueltan el costo y la tarifa congelados (afterClose se conserva como historia).
       await tx.timeEntry.updateMany({
         where: { organizationId: user.organizationId, userId: target.id, workDate: { gte: range.gte, lt: range.lt } },
@@ -442,6 +446,7 @@ export class HoursCloseService {
       if (entry.userId !== user.id) throw new ForbiddenException('Solo puedes pedir ajustes de tus propias horas.');
       timeEntryId = entry.id;
       period = periodKeyOf(entry.workDate);
+      await assertEntryNotInvoiced(this.prisma, entry.id, { showInvoice: false });
       if (dto.action === TimeAdjustmentAction.EDIT) {
         if (!dto.changes || Object.keys(dto.changes).length === 0) throw new BadRequestException('Indica qué cambia en "changes".');
         if (dto.changes.workDate && periodLabel(periodKeyOf(dto.changes.workDate)) !== periodLabel(period)) {
@@ -607,6 +612,9 @@ export class HoursCloseService {
         if (entry.userId !== req.userId || periodLabel(periodKeyOf(entry.workDate)) !== periodLabel(period)) {
           throw new ConflictException('La hora del pedido ya no está en ese mes. Rechaza el pedido y pide uno nuevo.');
         }
+        // Una hora ya facturada (Fase 4) no se cambia ni se borra: se bloquea la fila y se buscan las líneas vigentes. Para rechazar el pedido no hace falta.
+        await lockTimeEntryRows(tx, req.organizationId, [entry.id]);
+        await assertEntryNotInvoiced(tx, entry.id, { showInvoice: true });
         if (entry.auditId) touchedAudits.add(entry.auditId);
         if (req.action === TimeAdjustmentAction.DELETE) {
           await tx.timeEntry.delete({ where: { id: entry.id } });

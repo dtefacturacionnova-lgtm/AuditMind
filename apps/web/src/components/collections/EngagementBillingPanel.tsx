@@ -12,6 +12,7 @@ import { AmendmentModal, FeeModal } from './FeeModals';
 import { GenerateScheduleModal, ScheduleItemModal } from './ScheduleModals';
 import { InvoiceDetailModal, InvoiceFormModal } from './InvoiceModals';
 import { PaymentFormModal } from './PaymentModals';
+import { BillableHoursPanel } from './BillableHoursPanel';
 import { ConfirmModal, ErrorLine, Pill, btnSmall, btnSmallDanger, todayIso } from './ui';
 import { useSetItemCompletion } from '@/hooks/useCollectionsReports';
 
@@ -81,8 +82,9 @@ export function EngagementBillingPanel({ engagementId }: { engagementId: string 
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               {view.accrual.feeType === 'FIXED' && <div><p className="text-[11px] text-gray-400">Avance</p><p className="font-semibold text-gray-800">{view.accrual.progressPct}%{view.accrual.basis === 'COMPLETION' ? ' · informe final firmado' : ''}</p></div>}
-              <div><p className="text-[11px] text-gray-400">{view.accrual.feeType === 'FIXED' ? 'Devengado' : 'Ingreso (lo facturado)'}</p><p className="font-semibold text-gray-800">{formatMoney(view.accrual.accrued)}</p></div>
+              <div><p className="text-[11px] text-gray-400">{view.accrual.feeType === 'FIXED' ? 'Devengado' : view.accrual.basis === 'TIME' ? 'Devengado (facturado + horas por facturar)' : 'Ingreso (lo facturado)'}</p><p className="font-semibold text-gray-800">{formatMoney(view.accrual.accrued)}</p></div>
               {view.accrual.toInvoice !== null && <div><p className="text-[11px] text-gray-400">Por facturar</p><p className="font-semibold text-gray-800">{formatMoney(view.accrual.toInvoice)}</p></div>}
+              {view.accrual.time && <div><p className="text-[11px] text-gray-400">Horas listas / en meses abiertos</p><p className="font-semibold text-gray-800">{view.accrual.time.invoiceableHours} h ({formatMoney(view.accrual.time.invoiceableAmount)}) / {view.accrual.time.provisionalHours} h ({formatMoney(view.accrual.time.provisionalAmount)})</p></div>}
               {view.accrual.method === 'HOURS' && view.accrual.feeType === 'FIXED' && <div><p className="text-[11px] text-gray-400">Horas facturables / presupuesto</p><p className="font-semibold text-gray-800">{view.accrual.billableHours} / {view.accrual.budgetHours ?? '—'}</p></div>}
             </div>
           )}
@@ -108,7 +110,7 @@ export function EngagementBillingPanel({ engagementId }: { engagementId: string 
         ) : (
           <div className="text-sm text-gray-600 space-y-1">
             <p>
-              {fixed ? <>Monto fijo <strong>{formatMoney(fee.totalAmount)}</strong>{fee.originalAmount !== fee.totalAmount && <> (original {formatMoney(fee.originalAmount)})</>}</> : 'Honorario por tiempo: se factura libremente.'}
+              {fixed ? <>Monto fijo <strong>{formatMoney(fee.totalAmount)}</strong>{fee.originalAmount !== fee.totalAmount && <> (original {formatMoney(fee.originalAmount)})</>}</> : 'Honorario por tiempo: se facturan las horas cerradas a la tarifa pactada de cada persona.'}
               {' · '}crédito de {fee.paymentTermDays} días{fee.source === 'PROPOSAL' && ' · tomado de la propuesta'}
             </p>
             {fee.notes && <p className="text-xs text-gray-400">{fee.notes}</p>}
@@ -170,6 +172,9 @@ export function EngagementBillingPanel({ engagementId }: { engagementId: string 
           <ErrorLine error={completion.error} />
         </section>
       )}
+
+      {/* Horas por facturar (consultoría por tiempo) */}
+      {fee && !fixed && <BillableHoursPanel engagementId={engagementId} termDays={fee.paymentTermDays} />}
 
       {/* Facturas */}
       {fee && (

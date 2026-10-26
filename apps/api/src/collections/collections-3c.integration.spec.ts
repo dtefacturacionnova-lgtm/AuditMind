@@ -243,12 +243,12 @@ suite('cobranza 3c contra Postgres real', () => {
       expect(log.some((l) => l.note === 'Hito marcado como cumplido')).toBe(true);
     });
 
-    it('por tiempo: el ingreso es lo facturado (menos notas de crédito)', async () => {
+    it('por tiempo sin horas registradas: el devengado es lo facturado (menos notas de crédito) y no hay nada por facturar', async () => {
       const c = await seed();
       await fees.setFee(c.engA.id, { feeType: 'TIME_BASED' } as any, c.cae);
       const a = await invoice(c, 300);
       await credits.register(a.id, { creditNoteNumber: num('05'), netAmount: 50, taxAmount: 0, reason: 'Ajuste acordado con el cliente.' } as any, c.cae);
-      expect(((await fees.getFee(c.engA.id, c.manager)) as any).accrual).toMatchObject({ feeType: 'TIME_BASED', accrued: 250, progressPct: null, toInvoice: null, basis: 'INVOICED' });
+      expect(((await fees.getFee(c.engA.id, c.manager)) as any).accrual).toMatchObject({ feeType: 'TIME_BASED', accrued: 250, progressPct: null, toInvoice: 0, basis: 'TIME' });
     });
 
     it('la rentabilidad agrega el margen devengado junto al margen sobre el honorario total', async () => {

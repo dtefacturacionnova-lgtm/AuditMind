@@ -79,6 +79,11 @@ export interface WithholdingRow {
   certificateNumber: string | null; reversedAt: string | null; reverseReason: string | null; invoiceNumber?: string | null;
 }
 
+export interface InvoiceHourRow {
+  id: string; timeEntryId: string; workDate: string | null; userName: string; description: string | null;
+  hours: number; rate: number; amount: number; releasedAt: string | null;
+}
+
 export interface InvoiceDetail extends InvoiceRow {
   scheduleItem: { id: string; label: string; sequence: number } | null;
   applications: {
@@ -88,6 +93,8 @@ export interface InvoiceDetail extends InvoiceRow {
   withholdings: WithholdingRow[];
   creditNotes: CreditNoteRow[];
   writeOffs: WriteOffRow[];
+  /** Horas de trabajo facturadas (solo las facturas de una consultoría por tiempo); las liberadas ya no cuentan. */
+  hours: InvoiceHourRow[];
   log: { id: string; action: string; actorId: string; note: string | null; createdAt: string }[];
   permissions: {
     canEditAll: boolean; canEditBasics: boolean; canVoid: boolean; canReverseWithholding: boolean;
@@ -125,8 +132,10 @@ export interface WithholdingInput { taxType: TaxType; amount: number; certificat
 export interface RegisterInvoiceData {
   engagementId: string; scheduleItemId?: string; invoiceNumber: string; generationCode?: string; documentType: DocumentType;
   invoiceDate: string; dueDate?: string; description?: string; netAmount: number; taxAmount?: number; withholdings?: WithholdingInput[];
+  /** Factura de horas (consultoría por tiempo): las horas cerradas que se facturan; el neto debe ser su suma exacta. */
+  timeEntryIds?: string[];
 }
-export type UpdateInvoiceData = Partial<Omit<RegisterInvoiceData, 'engagementId' | 'scheduleItemId' | 'withholdings'>>;
+export type UpdateInvoiceData = Partial<Omit<RegisterInvoiceData, 'engagementId' | 'scheduleItemId' | 'withholdings' | 'timeEntryIds'>>;
 export interface RegisterPaymentData {
   clientId: string; paymentDate: string; amount: number; method: PaymentMethod; reference?: string; notes?: string; clientRequestId?: string;
   applications?: { invoiceId: string; amount: number }[]; autoAllocate?: boolean; withholdings?: (WithholdingInput & { invoiceId: string })[];
@@ -161,6 +170,33 @@ export function useInvoices(f: InvoiceFilters, enabled = true) {
 
 export function useInvoice(id: string | null) {
   return useQuery<InvoiceDetail>({ queryKey: [KEY, 'invoice', id], queryFn: () => apiClient.get(`/collections/invoices/${id}`), enabled: !!id });
+}
+
+// ── Horas por facturar (Fase 4) ──
+export interface BillableEntry { id: string; workDate: string; hours: number; amount: number; description: string | null; afterClose: boolean }
+export interface BillableGroup { userId: string; userName: string; month: string; rate: number; hours: number; amount: number; entries: BillableEntry[] }
+export type BillableBlockedReason = 'NO_FEE' | 'NOT_TIME_BASED' | 'NO_AUDIT' | 'CANCELLED' | 'CLOSE_DISABLED';
+export interface BillableHoursView {
+  engagement: { id: string; kind: 'AUDIT' | 'CONSULTING'; title: string | null; status: string; clientId: string; auditId: string | null };
+  feeType: FeeType | null; closeEnabled: boolean; canInvoice: boolean; blockedReason: BillableBlockedReason | null; maxPerInvoice: number;
+  invoiceable: { count: number; hours: number; amount: number };
+  groups: BillableGroup[];
+  provisional: { count: number; hours: number; amount: number; unratedHours: number };
+  withoutRate: { count: number; hours: number; groups: { userId: string; userName: string; month: string; hours: number; count: number }[] };
+  invoiced: { count: number; hours: number; amount: number };
+}
+export interface ReadyToInvoice { closeEnabled: boolean; items: { engagementId: string; title: string | null; clientName: string; count: number; hours: number; amount: number }[] }
+
+export function useBillableHours(engagementId: string | null, enabled = true) {
+  return useQuery<BillableHoursView>({
+    queryKey: [KEY, 'billable-hours', engagementId],
+    queryFn: () => apiClient.get(`/collections/engagements/${engagementId}/billable-hours`),
+    enabled: enabled && !!engagementId, staleTime: 10_000,
+  });
+}
+
+export function useReadyToInvoice(enabled = true) {
+  return useQuery<ReadyToInvoice>({ queryKey: [KEY, 'billable-hours', 'ready'], queryFn: () => apiClient.get('/collections/billable-hours/ready'), enabled, staleTime: 15_000 });
 }
 
 export interface PaymentFilters { clientId?: string; status?: PaymentStatus; unapplied?: boolean; from?: string; to?: string; page?: number; pageSize?: number }

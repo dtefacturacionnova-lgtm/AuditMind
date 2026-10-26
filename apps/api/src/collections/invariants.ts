@@ -13,6 +13,7 @@ export async function checkCollectionInvariants(db: Db, organizationId?: string)
   const orgP = organizationId ? Prisma.sql`AND p."organizationId" = ${organizationId}` : Prisma.empty;
   const orgE = organizationId ? Prisma.sql`AND f."organizationId" = ${organizationId}` : Prisma.empty;
   const orgS = organizationId ? Prisma.sql`AND s."organizationId" = ${organizationId}` : Prisma.empty;
+  const orgH = organizationId ? Prisma.sql`AND h."organizationId" = ${organizationId}` : Prisma.empty;
   const out: InvariantViolation[] = [];
   const run = async (rule: string, query: Prisma.Sql) => {
     const rows = await db.$queryRaw<{ id: string }[]>(query);
@@ -91,6 +92,28 @@ export async function checkCollectionInvariants(db: Db, organizationId?: string)
   await run('Una cuota programada o cancelada tiene una factura vigente', Prisma.sql`
     SELECT s.id FROM billing_schedule_items s WHERE s.status <> 'INVOICED' ${orgS}
       AND EXISTS (SELECT 1 FROM client_invoices i WHERE i."scheduleItemId" = s.id AND i.status <> 'VOID')`);
+
+  // ── Horas facturadas (Fase 4, docs/cobros-honorarios-diseno.md §15) ──
+  await run('Una factura de horas pertenece a un encargo que no es de honorario por tiempo', Prisma.sql`
+    SELECT h.id FROM client_invoice_hours h LEFT JOIN engagement_fees f ON f."engagementId" = h."engagementId"
+    WHERE h."releasedAt" IS NULL AND f."feeType" IS DISTINCT FROM 'TIME_BASED' ${orgH}`);
+
+  await run('El neto de una factura de horas no es la suma de sus horas vigentes', Prisma.sql`
+    SELECT i.id FROM client_invoices i
+    JOIN (SELECT "invoiceId", "organizationId", SUM(amount) AS s FROM client_invoice_hours WHERE "releasedAt" IS NULL GROUP BY "invoiceId", "organizationId") h ON h."invoiceId" = i.id
+    WHERE i."netAmount" <> h.s ${org}`);
+
+  await run('Una factura anulada conserva horas vigentes', Prisma.sql`
+    SELECT i.id FROM client_invoices i
+    WHERE i.status = 'VOID' AND EXISTS (SELECT 1 FROM client_invoice_hours h WHERE h."invoiceId" = i.id AND h."releasedAt" IS NULL) ${org}`);
+
+  await run('Una hora facturada ya no coincide con su registro: mes reabierto, otras horas, otra tarifa, otra categoría u otro encargo', Prisma.sql`
+    SELECT h.id FROM client_invoice_hours h
+    JOIN time_entries t ON t.id = h."timeEntryId"
+    JOIN engagements e ON e.id = h."engagementId"
+    WHERE h."releasedAt" IS NULL ${orgH}
+      AND (t."closedAt" IS NULL OR t."billRateSnapshot" IS DISTINCT FROM h.rate OR t.category::text <> 'CLIENT_BILLABLE'
+        OR ABS(ROUND(t.hours::numeric, 4) - h.hours) > 0.0001 OR t."auditId" IS DISTINCT FROM e."auditId")`);
 
   return out;
 }

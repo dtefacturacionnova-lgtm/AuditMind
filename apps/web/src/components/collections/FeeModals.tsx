@@ -44,7 +44,7 @@ export function FeeModal({ view, onClose }: { view: FeeView; onClose: () => void
         <Field label="Tipo de honorario">
           <select value={feeType} onChange={(e) => setFeeType(e.target.value as FeeType)} disabled={locked} className={inputCls}>
             <option value="FIXED">Monto fijo (con calendario de cobros)</option>
-            <option value="TIME_BASED">Por tiempo (se factura libremente)</option>
+            <option value="TIME_BASED">Por tiempo (se facturan las horas cerradas)</option>
           </select>
         </Field>
         {feeType === 'FIXED' && (

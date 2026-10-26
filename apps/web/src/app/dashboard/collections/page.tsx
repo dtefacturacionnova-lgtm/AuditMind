@@ -14,9 +14,10 @@ import { PaymentDetailModal, PaymentFormModal } from '@/components/collections/P
 import { ErrorLine, Pill, ReasonModal, btnPrimary, btnSmall, btnSmallDanger, inputCls } from '@/components/collections/ui';
 import { AgingPanel } from '@/components/collections/AgingPanel';
 import { ManagementPanel } from '@/components/collections/ManagementPanel';
+import { ReadyToInvoicePanel } from '@/components/collections/ReadyToInvoicePanel';
 import { useAlerts } from '@/hooks/useCollectionsReports';
 
-type Tab = 'invoices' | 'payments' | 'withholdings' | 'aging' | 'management';
+type Tab = 'invoices' | 'payments' | 'withholdings' | 'aging' | 'management' | 'hours';
 const DIRECTION = ['CAE', 'ADMIN', 'SUPER_ADMIN'];
 
 /** Cobranza: facturas por cobrar, cobros recibidos y retenciones sufridas, con alta, detalle, edición y anulación. */
@@ -89,7 +90,7 @@ export default function CollectionsPage() {
       </div>
 
       <div className="flex border-b border-gray-200">
-        {tabBtn('invoices', 'Por cobrar')}{tabBtn('aging', 'Antigüedad')}{tabBtn('payments', 'Cobros')}{tabBtn('withholdings', 'Retenciones')}{tabBtn('management', 'Gestión de cobro', alertCount)}
+        {tabBtn('invoices', 'Por cobrar')}{tabBtn('aging', 'Antigüedad')}{tabBtn('payments', 'Cobros')}{tabBtn('withholdings', 'Retenciones')}{tabBtn('management', 'Gestión de cobro', alertCount)}{tabBtn('hours', 'Horas por facturar')}
       </div>
 
       {tab === 'invoices' && (
@@ -138,6 +139,7 @@ export default function CollectionsPage() {
 
       {tab === 'aging' && <AgingPanel clientId={clientId} onOpenInvoice={setInvoiceId} />}
       {tab === 'management' && <ManagementPanel clientId={clientId} onOpenInvoice={setInvoiceId} />}
+      {tab === 'hours' && <ReadyToInvoicePanel />}
 
       {tab === 'payments' && (
         <section className="space-y-3">

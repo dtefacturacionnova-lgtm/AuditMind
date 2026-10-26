@@ -5,6 +5,7 @@ import { Db, dateFromYmd, todayInSalvador } from './collections.common';
 import { toCents } from './money.util';
 import { salvadorDay } from './cutoff.util';
 import { AccrualBasis, AccrualMissing, AccrualResult, computeAccrual } from './accrual.util';
+import { buildHourLine } from './billable-hours.util';
 
 /** Estados de un papel disparador que cuentan como «informe final emitido» (los mismos del Comité y de QAIP). */
 const TRIGGER_DONE = new Set(['SIGNED_OFF', 'CLOSED', 'APPROVED', 'ARCHIVED']);
@@ -25,6 +26,19 @@ export interface AccrualView {
   toInvoice: number | null;
   basis: AccrualBasis;
   missing: AccrualMissing | null;
+  /** Solo consultorías por tiempo: desglose de las horas sin facturar al corte. */
+  time: TimeAccrualView | null;
+}
+
+export interface TimeAccrualView {
+  /** Horas de meses cerrados con tarifa congelada que ya se pueden facturar. */
+  invoiceableHours: number;
+  invoiceableAmount: number;
+  /** Horas de meses abiertos, valoradas con la tarifa vigente (se devengan, pero aún no se facturan). */
+  provisionalHours: number;
+  provisionalAmount: number;
+  /** Horas sin tarifa pactada: no se valoran. */
+  unratedHours: number;
 }
 
 const dollars = (cents: number | null) => (cents === null ? null : cents / 100);
@@ -62,11 +76,14 @@ export async function computeAccruals(db: Db | PrismaService, organizationId: st
     auditIds.length
       ? db.timeEntry.groupBy({ by: ['auditId', 'userId'], where: { organizationId, auditId: { in: auditIds }, category: 'CLIENT_BILLABLE', workDate: { lte: cutoff } }, _sum: { hours: true } })
       : Promise.resolve([] as Array<{ auditId: string | null; userId: string; _sum: { hours: number | null } }>),
-    auditIds.length ? db.auditTeam.findMany({ where: { auditId: { in: auditIds } }, select: { auditId: true, userId: true, budgetedHours: true } }) : Promise.resolve([]),
+    auditIds.length ? db.auditTeam.findMany({ where: { auditId: { in: auditIds } }, select: { auditId: true, userId: true, budgetedHours: true, agreedRatePerHour: true } }) : Promise.resolve([]),
     auditIds.length
       ? db.workingPaper.findMany({ where: { auditId: { in: auditIds }, isCompletionTrigger: true }, select: { auditId: true, status: true, signedOffAt: true, updatedAt: true } })
       : Promise.resolve([]),
   ]);
+
+  // Consultorías por tiempo (Fase 4): horas trabajadas aún sin facturar al corte, valoradas por su tarifa.
+  const timeByEng = await computeTimeBased(db, organizationId, fees.filter((f) => f.feeType === FeeType.TIME_BASED).map((f) => f.engagementId), auditIdOf, team, cutoff, asOf);
 
   const lateByFee = new Map<string, number>();
   for (const a of lateAmendments) lateByFee.set(a.feeId, (lateByFee.get(a.feeId) ?? 0) + toCents(a.amountDelta));
@@ -125,11 +142,71 @@ export async function computeAccruals(db: Db | PrismaService, organizationId: st
     const result: AccrualResult = computeAccrual({
       feeType: fee.feeType, feeTotalCents, method: fee.progressMethod, invoicedNetCents, billableHours: billable, budgetHours: budget,
       completionDone, milestoneDoneCents: milestoneByEng.get(engId) ?? 0, manualPct: fee.manualProgressPct,
+      timeUnbilledCents: fee.feeType === FeeType.TIME_BASED ? timeByEng.get(engId)?.unbilledCents ?? 0 : undefined,
     });
     out.set(engId, {
       asOf, feeType: fee.feeType, feeTotal: dollars(feeTotalCents), method: fee.progressMethod, invoicedNet: invoicedNetCents / 100,
       billableHours: Math.round(billable * 100) / 100, budgetHours: budget === null ? null : Math.round(budget * 100) / 100, completionDone,
       progressPct: result.progressPct, accrued: dollars(result.accruedCents), toInvoice: dollars(result.toInvoiceCents), basis: result.basis, missing: result.missing,
+      time: fee.feeType === FeeType.TIME_BASED ? timeByEng.get(engId)?.view ?? EMPTY_TIME : null,
+    });
+  }
+  return out;
+}
+
+const EMPTY_TIME: TimeAccrualView = { invoiceableHours: 0, invoiceableAmount: 0, provisionalHours: 0, provisionalAmount: 0, unratedHours: 0 };
+
+/**
+ * Horas sin facturar de las consultorías por tiempo a una fecha de corte. Una hora cuenta como facturada si su factura existía ese día y
+ * no estaba anulada; una hora de un mes cerrado vale su tarifa congelada y una de un mes abierto, la tarifa pactada vigente.
+ */
+async function computeTimeBased(
+  db: Db | PrismaService, organizationId: string, engagementIds: string[], auditIdOf: Map<string, string | null>,
+  team: Array<{ auditId: string; userId: string; agreedRatePerHour: Prisma.Decimal | null }>, cutoff: Date, asOf: string,
+): Promise<Map<string, { unbilledCents: number; view: TimeAccrualView }>> {
+  const out = new Map<string, { unbilledCents: number; view: TimeAccrualView }>();
+  const audits = engagementIds.map((e) => auditIdOf.get(e)).filter((v): v is string => !!v);
+  if (audits.length === 0) return out;
+  const [entries, lines] = await Promise.all([
+    db.timeEntry.findMany({
+      where: { organizationId, auditId: { in: audits }, category: 'CLIENT_BILLABLE', workDate: { lte: cutoff } },
+      select: { id: true, auditId: true, userId: true, hours: true, closedAt: true, billRateSnapshot: true },
+    }),
+    db.clientInvoiceHour.findMany({ where: { organizationId, engagementId: { in: engagementIds } }, select: { timeEntryId: true, invoiceId: true } }),
+  ]);
+  const invoices = lines.length
+    ? await db.clientInvoice.findMany({ where: { id: { in: [...new Set(lines.map((l) => l.invoiceId))] } }, select: { id: true, invoiceDate: true, status: true, voidedAt: true } })
+    : [];
+  const invoiceBy = new Map(invoices.map((i) => [i.id, i]));
+  // Facturada al corte: alguna línea cuya factura ya existía y no estaba anulada ese día.
+  const billedAtCutoff = new Set<string>();
+  for (const l of lines) {
+    const inv = invoiceBy.get(l.invoiceId);
+    if (!inv || inv.invoiceDate > cutoff) continue;
+    const voidedOn = inv.status === ClientInvoiceStatus.VOID && inv.voidedAt ? salvadorDay(inv.voidedAt) : null;
+    if (voidedOn !== null && voidedOn <= asOf) continue;
+    billedAtCutoff.add(l.timeEntryId);
+  }
+  const liveRate = new Map(team.map((t) => [`${t.auditId}|${t.userId}`, t.agreedRatePerHour === null ? null : toCents(t.agreedRatePerHour)]));
+  const engOfAudit = new Map(engagementIds.map((e) => [auditIdOf.get(e) ?? '', e]));
+  const acc = new Map<string, { inv: number; invH: number; prov: number; provH: number; unrated: number }>();
+  for (const e of entries) {
+    if (!e.auditId || billedAtCutoff.has(e.id)) continue;
+    const engId = engOfAudit.get(e.auditId);
+    if (!engId) continue;
+    const a = acc.get(engId) ?? { inv: 0, invH: 0, prov: 0, provH: 0, unrated: 0 };
+    const rate = e.closedAt ? (e.billRateSnapshot === null ? null : toCents(e.billRateSnapshot)) : liveRate.get(`${e.auditId}|${e.userId}`) ?? null;
+    const line = buildHourLine(e.id, e.hours, rate);
+    if (!line) a.unrated += e.hours;
+    else if (e.closedAt) { a.inv += line.amountCents; a.invH += e.hours; }
+    else { a.prov += line.amountCents; a.provH += e.hours; }
+    acc.set(engId, a);
+  }
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  for (const [engId, a] of acc) {
+    out.set(engId, {
+      unbilledCents: a.inv + a.prov,
+      view: { invoiceableHours: r2(a.invH), invoiceableAmount: a.inv / 100, provisionalHours: r2(a.provH), provisionalAmount: a.prov / 100, unratedHours: r2(a.unrated) },
     });
   }
   return out;

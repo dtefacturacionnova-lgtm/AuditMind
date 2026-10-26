@@ -11,6 +11,7 @@ import { CreditNotesService } from './credit-notes.service';
 import { WriteOffsService } from './write-offs.service';
 import { CollectionNotesService } from './collection-notes.service';
 import { CollectionReportsService } from './reports.service';
+import { BillableHoursService } from './billable-hours.service';
 import {
   AgingQueryDto, StatementQueryDto, SummaryQueryDto, AlertsQueryDto, CreateCollectionNoteDto, ListCollectionNotesQueryDto, ListCreditNotesQueryDto, ListWriteOffsQueryDto, RegisterCreditNoteDto,
   RegisterWriteOffDto, SetItemCompletionDto, SetPromiseStatusDto, UpdateCollectionNoteDto,
@@ -38,6 +39,7 @@ export class CollectionsController {
     private readonly writeOffs: WriteOffsService,
     private readonly collectionNotes: CollectionNotesService,
     private readonly reports: CollectionReportsService,
+    private readonly billableHours: BillableHoursService,
   ) {}
 
   // ── Honorario y adendas ────────────────────────────────────────────────────
@@ -74,6 +76,21 @@ export class CollectionsController {
   @ApiOperation({ summary: 'Registrar una adenda que sube o baja el honorario (dirección)' })
   amendFee(@Param('engagementId') id: string, @Body() dto: AmendFeeDto, @CurrentUser() user: AuthUser) {
     return this.fees.amendFee(id, dto, user);
+  }
+
+  // ── Horas por facturar (consultorías por tiempo) ───────────────────────────
+  @Get('engagements/:engagementId/billable-hours')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Horas cerradas del encargo por tiempo que aún no están en una factura, por persona y mes' })
+  billableHoursOf(@Param('engagementId') id: string, @CurrentUser() user: AuthUser) {
+    return this.billableHours.list(id, user);
+  }
+
+  @Get('billable-hours/ready')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Consultorías por tiempo con horas listas para facturar' })
+  readyToInvoice(@CurrentUser() user: AuthUser) {
+    return this.billableHours.readyToInvoice(user);
   }
 
   // ── Calendario ─────────────────────────────────────────────────────────────

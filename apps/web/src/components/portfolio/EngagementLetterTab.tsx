@@ -173,7 +173,13 @@ export function EngagementLetterTab({ client }: { client: ClientDetail }) {
       )}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-700">Carta de Compromiso {letter.year}</h3>
-        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
+        <span className="flex items-center gap-2">
+          {letter.stale && (
+            <span className="px-2 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700"
+              title="Se envió hace más de 60 días y el cliente no la ha firmado">Sin firma +60 días</span>
+          )}
+          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
+        </span>
       </div>
 
       {letter.status === 'SIGNED' && (

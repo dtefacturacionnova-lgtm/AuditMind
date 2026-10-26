@@ -56,6 +56,12 @@ function ClientCard({ client }: { client: Client }) {
       className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 cursor-pointer hover:shadow-md hover:border-blue-200 transition-all"
     >
       <p className="text-sm font-semibold text-gray-900 line-clamp-2">{client.legalName}</p>
+      {client.dormant && (
+        <span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600"
+          title="Sin carta de compromiso firmada ni encargo vigente en el ejercicio anterior ni en el actual">
+          Sin actividad reciente
+        </span>
+      )}
       {client.tradeName && <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{client.tradeName}</p>}
       <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
         {client.industry && <span className="truncate">{client.industry}</span>}

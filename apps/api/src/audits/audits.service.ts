@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException,
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger,
 } from '@nestjs/common';
 import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
 import { cancelEngagementInTx } from '../portfolio/engagement-cancel.util';
@@ -25,6 +25,7 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 @Injectable()
 export class AuditsService {
+  private readonly logger = new Logger(AuditsService.name);
   private readonly supabaseAdmin: SupabaseClient;
 
   constructor(
@@ -962,8 +963,29 @@ export class AuditsService {
   // (dto.teamMemberIds) o al aprobar un Engagement de Cartera — no existía
   // ninguna forma de agregar/quitar gente ni cambiar su rol después.
 
+  /**
+   * Quién puede cambiar quién forma parte del equipo. Sumar a alguien al equipo de una INVESTIGACIÓN es darle acceso a ella, así que ahí
+   * solo lo hace el CAE (o superior) o el auditor líder de esa investigación; antes lo hacía cualquier gerente del equipo. Cada cambio
+   * en una investigación deja una línea en el registro del servidor (quién, cuándo y a quién).
+   */
+  private async assertCanChangeTeam(auditId: string, user: AuthUser, what: string): Promise<boolean> {
+    const audit = await this.prisma.audit.findFirst({
+      where: { id: auditId, organizationId: user.organizationId },
+      select: { isInvestigationMode: true, team: { select: { userId: true, role: true } } },
+    });
+    if (!audit) throw new NotFoundException('Auditoría no encontrada');
+    if (!audit.isInvestigationMode) return false;
+    const isLead = audit.team.some((m) => m.userId === user.id && m.role === 'LEAD');
+    if (!seesAllInvestigations(user) && !isLead) {
+      throw new ForbiddenException('En una investigación solo el CAE o el auditor líder de la investigación puede cambiar el equipo.');
+    }
+    this.logger.warn(`[Investigación ${auditId}] ${user.name} (${user.id}) ${what}`);
+    return true;
+  }
+
   async addTeamMember(auditId: string, dto: AddTeamMemberDto, user: AuthUser) {
     await this.findOne(auditId, user);
+    await this.assertCanChangeTeam(auditId, user, `agregó al equipo al usuario ${dto.userId} como ${dto.role ?? 'AUDITOR'}`);
 
     const targetUser = await this.prisma.user.findFirst({
       where: { id: dto.userId, organizationId: user.organizationId },
@@ -996,6 +1018,7 @@ export class AuditsService {
 
   async removeTeamMember(auditId: string, memberId: string, user: AuthUser) {
     await this.findOne(auditId, user);
+    await this.assertCanChangeTeam(auditId, user, `quitó del equipo al integrante ${memberId}`);
     const member = await this.prisma.auditTeam.findFirst({ where: { id: memberId, auditId } });
     if (!member) throw new NotFoundException('Miembro del equipo no encontrado en este encargo');
 
@@ -1007,6 +1030,8 @@ export class AuditsService {
 
   async updateTeamMember(auditId: string, memberId: string, dto: UpdateTeamMemberDto, user: AuthUser) {
     await this.findOne(auditId, user);
+    // Cambiar el rol (p. ej. nombrar un líder) cambia quién gobierna el equipo; las horas presupuestadas las puede ajustar cualquier gerente.
+    if (dto.role !== undefined) await this.assertCanChangeTeam(auditId, user, `cambió el rol del integrante ${memberId} a ${dto.role}`);
     const member = await this.prisma.auditTeam.findFirst({ where: { id: memberId, auditId } });
     if (!member) throw new NotFoundException('Miembro del equipo no encontrado en este encargo');
 

@@ -15,7 +15,7 @@ import { EngagementLettersService } from './engagement-letters.service';
 import { EngagementsService } from './engagements.service';
 import { auditPeriodStartFor } from './engagement-readiness.util';
 import { CreateProposalDto, UpdateProposalDto } from './dto/proposal.dto';
-import { DecideAcceptanceDto } from './dto/acceptance.dto';
+import { DecideAcceptanceDto, ReviewScreeningMatchDto } from './dto/acceptance.dto';
 
 /**
  * Actividades previas y de prospección de la auditoría externa (revisión de Cartera, 2026-10-25) contra un Postgres REAL:
@@ -33,6 +33,8 @@ suite('Cartera · de prospecto a auditoría (Postgres real)', () => {
   let manager: any; let cae: any; let auditor: any;
   let clients: ClientsService; let acceptance: AcceptanceService; let proposals: ProposalsService;
   let letters: EngagementLettersService; let engagements: EngagementsService;
+  // Lo que devuelve el motor de sanciones (se cambia por prueba); por defecto, sin coincidencias.
+  let caatsResult: any = { findings: [], total_screened: 1, matches_found: 0 };
   const year = new Date().getFullYear();
 
   beforeAll(async () => {
@@ -54,7 +56,7 @@ suite('Cartera · de prospecto a auditoría (Postgres real)', () => {
       },
     });
     clients = new ClientsService(prisma as any);
-    acceptance = new AcceptanceService(prisma as any, clients, { runCaats: async () => ({ findings: [], total_screened: 1, matches_found: 0 }) } as any);
+    acceptance = new AcceptanceService(prisma as any, clients, { runCaats: async () => caatsResult } as any);
     proposals = new ProposalsService(prisma as any, { get: () => '' } as any, clients);
     letters = new EngagementLettersService(prisma as any, { revokeActiveForTarget: async () => undefined } as any);
     engagements = new EngagementsService(prisma as any, clients, { scaffold: async () => undefined } as any, { initializeFromAuditTemplateSections: async () => undefined } as any);
@@ -63,7 +65,16 @@ suite('Cartera · de prospecto a auditoría (Postgres real)', () => {
 
   // ── utilidades del flujo ──────────────────────────────────────────────────
   const newClient = async (extra: any = {}) => clients.create({ legalName: `Cliente ${randomUUID().slice(0, 6)} SA`, ...extra } as any, manager);
-  const greens = { independenceStatus: 'GREEN', competenceStatus: 'GREEN', integrityStatus: 'GREEN', riskStatus: 'GREEN', sanctionsStatus: 'GREEN', sanctionsNotes: 'El despacho no es sujeto obligado para este cliente.' } as any;
+  // Verificaciones previas resueltas (auditor predecesor, conflictos, servicios previos): sin ellas no se acepta ni se continúa.
+  const resolvedChecklist = [
+    { key: 'PREDECESSOR', item: 'x', status: 'NOT_APPLICABLE', comment: 'Cliente nuevo sin auditor predecesor: lo audita el despacho por primera vez.' },
+    { key: 'CONFLICTS', item: 'x', status: 'DONE', comment: 'Se revisaron el socio, el equipo y sus familiares: sin conflictos.' },
+    { key: 'PRIOR_SERVICES', item: 'x', status: 'DONE', comment: 'El despacho no presta otros servicios al cliente.' },
+  ];
+  const greens = {
+    independenceStatus: 'GREEN', competenceStatus: 'GREEN', integrityStatus: 'GREEN', riskStatus: 'GREEN', sanctionsStatus: 'GREEN',
+    sanctionsNotes: 'El despacho no es sujeto obligado para este cliente.', checklist: resolvedChecklist,
+  } as any;
   const decideGreen = async (clientId: string, extra: any = {}) => {
     const check = await acceptance.startAcceptance(clientId, manager);
     return acceptance.decide(check.id, { ...greens, overallJustification: 'Sin amenazas a la independencia ni a la integridad.', ...extra } as any, manager);
@@ -285,5 +296,135 @@ suite('Cartera · de prospecto a auditoría (Postgres real)', () => {
     expect((await prisma.client.findUniqueOrThrow({ where: { id: c.id } })).status).toBe('DECLINED');
     await acceptance.startAcceptance(c.id, manager); // mismo año: devuelve el Radar ya decidido y NO reactiva al cliente
     expect((await prisma.client.findUniqueOrThrow({ where: { id: c.id } })).status).toBe('DECLINED');
+  });
+
+  // ═══ Lote B: verificaciones previas, screening por coincidencia, estados derivados, horas estimadas ═══════════
+  it('el Radar nuevo trae las tres verificaciones previas; un cliente de continuidad trae la del auditor predecesor como «No aplica»', async () => {
+    const c = await newClient();
+    const check: any = await acceptance.startAcceptance(c.id, manager);
+    expect(check.checklist.map((i: any) => [i.key, i.status])).toEqual([['PREDECESSOR', 'PENDING'], ['CONFLICTS', 'PENDING'], ['PRIOR_SERVICES', 'PENDING']]);
+    expect(check.checklist[0].item).toMatch(/auditor predecesor/);
+
+    const c2 = await newClient();
+    await prisma.engagement.create({ data: { organizationId: org.id, clientId: c2.id, fiscalYear: year - 1, fiscalYearEndDate: new Date(`${year - 1}-12-31`), status: 'APPROVED', createdById: manager.id } });
+    const check2: any = await acceptance.startAcceptance(c2.id, manager);
+    expect(check2.checklist[0]).toMatchObject({ key: 'PREDECESSOR', status: 'NOT_APPLICABLE' });
+    expect(check2.checklist[0].comment).toContain(String(year - 1));
+    expect(check2.checklist[1].status).toBe('PENDING');
+  });
+
+  it('aceptar o continuar exige resolver las tres verificaciones; declinar no; «Hecho» y «No aplica» exigen su constancia', async () => {
+    const c = await newClient();
+    const check = await acceptance.startAcceptance(c.id, manager);
+    const { checklist: _omit, ...base } = greens;
+    const just = { overallJustification: 'Sin amenazas a la independencia ni a la integridad.' };
+    await expect(acceptance.decide(check.id, { ...base, ...just } as any, manager)).rejects.toThrow(/verificaciones previas[\s\S]*auditor predecesor/);
+
+    const done = 'Se solicitó por correo al Lic. Pérez y respondió que no hay asuntos pendientes.';
+    await expect(acceptance.update(check.id, { checklist: [{ key: 'CONFLICTS', item: 'x', status: 'DONE', comment: 'ok' }] } as any, manager)).rejects.toThrow(/describe qué se hizo/);
+    await expect(acceptance.update(check.id, { checklist: [{ key: 'PREDECESSOR', item: 'x', status: 'DONE', comment: done }] } as any, manager)).rejects.toThrow(/fecha de la solicitud/);
+    await expect(acceptance.update(check.id, { checklist: [{ key: 'PREDECESSOR', item: 'x', status: 'DONE', date: '2999-01-01', comment: done }] } as any, manager)).rejects.toThrow(/futura/);
+    await expect(acceptance.update(check.id, { checklist: [{ key: 'CONFLICTS', item: 'x', status: 'NOT_APPLICABLE', comment: 'no' }] } as any, manager)).rejects.toThrow(/por qué no aplica/);
+
+    // se guarda de a poco; el texto de los ítems fijos lo pone el servidor
+    const saved: any = await acceptance.update(check.id, { checklist: [{ key: 'PREDECESSOR', item: 'texto del cliente', status: 'DONE', date: `${year}-01-05`, comment: done }] } as any, manager);
+    expect(saved.checklist).toHaveLength(3);
+    expect(saved.checklist[0]).toMatchObject({ status: 'DONE', date: `${year}-01-05` });
+    expect(saved.checklist[0].item).toMatch(/NIA 300/);
+    expect(saved.checklist[1].status).toBe('PENDING');
+    await expect(acceptance.decide(check.id, { ...base, ...just } as any, manager)).rejects.toThrow(/Conflictos de interés del socio y el equipo; Servicios previos al cliente/);
+
+    // declinar al cliente no exige completarlas
+    const red: any = await acceptance.decide(check.id, { ...base, independenceStatus: 'RED', overallJustification: 'Amenaza a la independencia sin salvaguardas.' } as any, manager);
+    expect(red.overallResult).toBe('RED');
+    expect(red.checklist[0]).toMatchObject({ status: 'DONE' }); // lo guardado se conserva
+
+    // el DTO rechaza una clave, un estado o una fecha inventados
+    const { AcceptanceChecklistItemDto } = await import('./dto/acceptance.dto');
+    for (const bad of [{ item: 'x', key: 'OTRA' }, { item: 'x', status: 'QUIZAS' }, { item: 'x', key: 'CONFLICTS', date: '5/1/2026' }]) {
+      expect((await validate(plainToInstance(AcceptanceChecklistItemDto, bad))).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('screening: cada coincidencia se revisa (falso positivo o confirmada, con motivo); una confirmada obliga a Rojo; volver a correrlo conserva lo revisado', async () => {
+    const c = await newClient({ legalRepName: 'Roberto Morales' });
+    const check = await acceptance.startAcceptance(c.id, manager);
+    const record = (u: string, m: string, list = 'OFAC SDN') => ({ uploaded_name: u, matched_watchlist_name: m, match_type: 'fuzzy', score: 91, source_list: list });
+    caatsResult = {
+      total_screened: 2, matches_found: 2, risk_score: 80, lists_consulted: 'OFAC · ONU',
+      findings: [{ test_name: 's', risk_level: 'CRITICAL', record_count: 2, description: 'd',
+        sample_records: [record('Roberto Morales', 'ROBERTO MORALES GOMEZ'), record(c.legalName, 'EMPRESA SANCIONADA SA', 'ONU')] }],
+    };
+    try {
+      const screened: any = await acceptance.screenSanctions(check.id, manager);
+      const m = screened.sanctionsScreeningResult.matches;
+      expect(m).toHaveLength(2);
+      expect(m.every((x: any) => x.review === null)).toBe(true);
+      const at = screened.sanctionsScreeningResult.screenedAt;
+      const justification = { overallJustification: 'Justificación suficiente de la decisión.' };
+
+      await expect(acceptance.decide(check.id, { ...greens, ...justification } as any, manager)).rejects.toThrow(/Faltan por revisar 2 coincidencia/);
+
+      // el motivo es obligatorio (DTO), el screening debe ser el vigente y la coincidencia debe existir
+      const errs = await validate(plainToInstance(ReviewScreeningMatchDto, { screenedAt: at, matchKey: m[0].key, decision: 'FALSE_POSITIVE', reason: 'corta' }));
+      expect(errs.some((e) => e.property === 'reason')).toBe(true);
+      const review = (matchKey: string, decision: string, reason: string, screenedAt = at, who = manager) =>
+        acceptance.reviewScreeningMatch(check.id, { screenedAt, matchKey, decision, reason } as any, who);
+      await expect(review(m[0].key, 'FALSE_POSITIVE', 'Homónimo: otra fecha de nacimiento.', 'otra-corrida')).rejects.toBeInstanceOf(ConflictException);
+      await expect(review('no-existe', 'FALSE_POSITIVE', 'Homónimo: otra fecha de nacimiento.')).rejects.toThrow(/ya no está/);
+
+      await review(m[0].key, 'FALSE_POSITIVE', 'Homónimo: distinta fecha de nacimiento y nacionalidad.');
+      const after: any = await review(m[1].key, 'CONFIRMED', 'Es la misma entidad sancionada por la ONU.', at, cae);
+      expect(after.sanctionsScreeningResult.matches.map((x: any) => x.review?.decision)).toEqual(['FALSE_POSITIVE', 'CONFIRMED']);
+      expect(after.sanctionsScreeningResult.matches[0].review).toMatchObject({ byName: 'gerente', reason: expect.stringContaining('Homónimo') });
+
+      // una coincidencia confirmada obliga a que Sanciones/PLD sea Rojo
+      await expect(acceptance.decide(check.id, { ...greens, ...justification } as any, manager)).rejects.toThrow(/Rojo/);
+
+      // volver a correr el screening conserva la revisión de las coincidencias que siguen siendo las mismas
+      const again: any = await acceptance.screenSanctions(check.id, manager);
+      expect(again.sanctionsScreeningResult.matches.map((x: any) => x.review?.decision)).toEqual(['FALSE_POSITIVE', 'CONFIRMED']);
+
+      // con Sanciones en Rojo se declina sin tener que revisar una por una
+      const red: any = await acceptance.decide(check.id, { ...greens, sanctionsStatus: 'RED', ...justification } as any, manager);
+      expect(red.overallResult).toBe('RED');
+      await expect(review(m[0].key, 'CONFIRMED', 'Cambio de opinión posterior a la decisión.', again.sanctionsScreeningResult.screenedAt)).rejects.toThrow(/definitivo/);
+    } finally {
+      caatsResult = { findings: [], total_screened: 1, matches_found: 0 };
+    }
+  });
+
+  it('un cliente ACTIVO sin carta firmada ni encargo reciente se marca inactivo; lo enviado sin respuesta se marca «sin respuesta»; un Radar antiguo muestra los tres ítems', async () => {
+    const { client } = await activeClient();
+    const dormantClient = await newClient();
+    await prisma.client.update({ where: { id: dormantClient.id }, data: { status: 'ACTIVE' } });
+    const prospect = await newClient(); // PROSPECT: solo los ACTIVOS se evalúan
+    const list: any[] = await clients.findAll(manager);
+    expect(list.find((x) => x.id === client.id).dormant).toBe(false);
+    expect(list.find((x) => x.id === dormantClient.id).dormant).toBe(true);
+    expect(list.find((x) => x.id === prospect.id).dormant).toBe(false);
+
+    const stale = await prisma.proposal.create({ data: { organizationId: org.id, clientId: dormantClient.id, year, createdById: manager.id, status: 'SENT', sentAt: new Date(Date.now() - 90 * 86_400_000) } });
+    const recent = await prisma.proposal.create({ data: { organizationId: org.id, clientId: dormantClient.id, year, createdById: manager.id, status: 'SENT', sentAt: new Date(Date.now() - 5 * 86_400_000) } });
+    await prisma.acceptanceCheck.create({ data: { organizationId: org.id, clientId: dormantClient.id, year, checklist: [] } });
+    const detail: any = await clients.findOne(dormantClient.id, manager);
+    expect(detail.dormant).toBe(true);
+    expect(detail.proposals.find((p: any) => p.id === stale.id).stale).toBe(true);
+    expect(detail.proposals.find((p: any) => p.id === recent.id).stale).toBe(false);
+    expect(detail.acceptanceChecks[0].checklist).toHaveLength(3);
+  });
+
+  it('al aprobar el encargo, las horas estimadas de la auditoría son las del equipo propuesto', async () => {
+    const c = await newClient();
+    await decideGreen(c.id);
+    const p: any = await proposals.create({
+      clientId: c.id, feeAmount: 5000, fiscalPeriodEnd: `${year}-12-31`,
+      teamJson: [{ name: 'Ana', role: 'Senior', hours: 120 }, { name: 'Beto', hours: 80.5 }, { name: 'Sin horas' }, { name: 'Negativas', hours: -5 }],
+    } as any, manager);
+    await proposals.send(p.id, manager); await proposals.accept(p.id, manager);
+    const l: any = await letters.create({ proposalId: p.id, reportingFramework: 'NIIF_PYMES' } as any, manager);
+    await letters.sign(l.id, { signedByClientName: 'Lic. Representante', signedByClientRole: 'Representante legal' } as any, manager);
+    const approved: any = await engagements.approve((await draftEngagement(c.id)).id, manager);
+    expect((await prisma.audit.findUniqueOrThrow({ where: { id: approved.auditId } })).estimatedHours).toBe(200.5);
   });
 });

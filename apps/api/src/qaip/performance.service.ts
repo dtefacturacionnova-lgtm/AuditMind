@@ -174,7 +174,7 @@ export class PerformanceService {
         items: {
           select: {
             id: true, tentativeEndDate: true,
-            audit: { select: { id: true } },
+            audit: { select: { id: true, isInvestigationMode: true } },
           },
         },
       },
@@ -183,7 +183,10 @@ export class PerformanceService {
       return { year, planExists: false, totalItems: 0, completedItems: 0, completedOnTimeItems: 0, completionPct: null };
     }
 
-    const withAudit = plan.items.filter(i => i.audit);
+    // Las investigaciones (modo investigación) no cuentan en el cumplimiento del plan: son confidenciales y no planeadas, y un gerente
+    // que no las ve podría inferir su existencia por cómo cambian los porcentajes.
+    const planItems = plan.items.filter(i => !i.audit?.isInvestigationMode);
+    const withAudit = planItems.filter(i => i.audit);
     const triggerStatuses = await Promise.all(withAudit.map(i => this.prisma.workingPaper.findFirst({
       where: { auditId: i.audit!.id, isCompletionTrigger: true },
       select: { status: true, signedOffAt: true, updatedAt: true },
@@ -206,11 +209,11 @@ export class PerformanceService {
       planId: plan.id,
       planName: plan.name,
       planStatus: plan.status,
-      totalItems: plan.items.length,
+      totalItems: planItems.length,
       startedItems: withAudit.length,
       completedItems: completed,
       completedOnTimeItems: completedOnTime,
-      completionPct: plan.items.length > 0 ? Math.round((completed / plan.items.length) * 100) : null,
+      completionPct: planItems.length > 0 ? Math.round((completed / planItems.length) * 100) : null,
       onTimePct: completed > 0 ? Math.round((completedOnTime / completed) * 100) : null,
     };
   }
@@ -219,11 +222,13 @@ export class PerformanceService {
   private async computeProfitabilityCompliance(orgId: string, year: number, yearEnd: Date) {
     const plan = await this.prisma.auditPlan.findUnique({
       where: { organizationId_year: { organizationId: orgId, year } },
-      select: { items: { select: { estimatedHours: true, audit: { select: { id: true, estimatedHours: true } } } } },
+      select: { items: { select: { estimatedHours: true, audit: { select: { id: true, estimatedHours: true, isInvestigationMode: true } } } } },
     });
 
-    const auditIds = (plan?.items ?? []).map(i => i.audit?.id).filter((id): id is string => !!id);
-    const hoursPlanned = (plan?.items ?? []).reduce((s, i) => s + (i.estimatedHours || i.audit?.estimatedHours || 0), 0);
+    // Sin investigaciones (ver computeWorkPlanCompliance): ni sus horas planeadas ni las reales entran en este indicador.
+    const planItems = (plan?.items ?? []).filter(i => !i.audit?.isInvestigationMode);
+    const auditIds = planItems.map(i => i.audit?.id).filter((id): id is string => !!id);
+    const hoursPlanned = planItems.reduce((s, i) => s + (i.estimatedHours || i.audit?.estimatedHours || 0), 0);
 
     const hoursRealAgg = auditIds.length > 0
       ? await this.prisma.timeEntry.aggregate({

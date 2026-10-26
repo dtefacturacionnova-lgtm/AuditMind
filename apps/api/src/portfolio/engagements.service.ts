@@ -12,7 +12,7 @@ import { AuditIndexService } from '../audits/audit-index.service';
 import { AuditFoldersService } from '../audit-folders/audit-folders.service';
 import { ClientsService } from './clients.service';
 import {
-  assertFiscalYearEnd, assertReadyToApprove, auditPeriodStartFor, findExternalFinancialTemplateId, PARTNER_ROLES,
+  assertFiscalYearEnd, assertReadyToApprove, auditPeriodStartFor, findExternalFinancialTemplateId, PARTNER_ROLES, proposedTeamHours,
 } from './engagement-readiness.util';
 import { CreateEngagementDto, UpdateEngagementDto } from './dto/engagement.dto';
 import { cancelEngagementInTx } from './engagement-cancel.util';
@@ -278,6 +278,12 @@ export class EngagementsService {
     const title = `${engagement.client.legalName} — Auditoría EEFF ${engagement.fiscalYear}`;
     const leadAuditorId = engagement.leadPartnerId ?? user.id;
     const scope = await this.buildScope(engagement.engagementLetter?.id ?? readiness.letterId, engagement.client.legalName, engagement.fiscalYear);
+    // Las horas del equipo propuesto al cliente son las horas estimadas de la auditoría (antes nacía con 0).
+    const letterForHours = await this.prisma.engagementLetter.findUnique({
+      where:  { id: engagement.engagementLetter?.id ?? readiness.letterId },
+      select: { proposal: { select: { teamJson: true } } },
+    });
+    const estimatedHours = proposedTeamHours(letterForHours?.proposal?.teamJson);
 
     const result = await this.prisma.$transaction(async (tx) => {
       await this.claimDraft(tx, id);
@@ -300,7 +306,7 @@ export class EngagementsService {
           endDate:          engagement.plannedEndDate   ?? null,
           auditPeriodStart: auditPeriodStartFor(engagement.fiscalYearEndDate),
           auditPeriodEnd:   engagement.fiscalYearEndDate,
-          estimatedHours:   0,
+          estimatedHours,
           scope,
           objectives:
             'Emitir una opinión independiente sobre si los estados financieros presentan razonablemente, ' +

@@ -115,3 +115,16 @@ export async function findExternalFinancialTemplateId(
   await db.auditTemplate.update({ where: { id: byName.id }, data: { code: EXTERNAL_FINANCIAL_TEMPLATE_CODE } }).catch(() => undefined);
   return byName.id;
 }
+
+/**
+ * Horas del equipo propuesto (`Proposal.teamJson`: [{ name, role, hours }]). Al aprobar el encargo pasan a ser sus horas estimadas
+ * (antes la auditoría nacía con 0 y el presupuesto se llenaba a mano); el presupuesto por persona sigue siendo del equipo del encargo.
+ */
+export function proposedTeamHours(teamJson: unknown): number {
+  if (!Array.isArray(teamJson)) return 0;
+  const total = teamJson.reduce((sum: number, m) => {
+    const h = typeof m?.hours === 'number' && Number.isFinite(m.hours) && m.hours > 0 ? m.hours : 0;
+    return sum + h;
+  }, 0);
+  return Math.round(total * 100) / 100;
+}

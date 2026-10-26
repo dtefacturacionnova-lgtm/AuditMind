@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { Radar, ShieldCheck, Users, Scale, AlertTriangle, Lock, ShieldAlert, Search, Loader2, GraduationCap, RotateCcw } from 'lucide-react';
 import {
   useStartAcceptance, useUpdateAcceptanceCheck, useDecideAcceptance, useScreenSanctions, useReopenAcceptance,
-  useCompetenceSummary,
-  ACCEPTANCE_RATING_CONFIG, ClientDetail, AcceptanceRating, AcceptanceCheck,
+  useCompetenceSummary, useReviewScreeningMatch,
+  ACCEPTANCE_RATING_CONFIG, ClientDetail, AcceptanceRating, AcceptanceCheck, AcceptanceChecklistItem, ChecklistStatus, ScreeningMatch,
 } from '@/hooks/usePortfolio';
 import { useUser } from '@/hooks/useUser';
 import { formatDate } from '@/lib/utils';
@@ -49,6 +49,45 @@ function Semaforo({ result }: { result: AcceptanceRating }) {
   );
 }
 
+/** Una coincidencia del screening: se descarta como falso positivo o se confirma, siempre con el motivo (queda quién y cuándo). */
+function MatchReview({ checkId, screenedAt, match, decided }: { checkId: string; screenedAt: string; match: ScreeningMatch; decided: boolean }) {
+  const review = useReviewScreeningMatch();
+  const [reason, setReason] = useState('');
+  const send = (decision: 'FALSE_POSITIVE' | 'CONFIRMED') =>
+    review.mutate({ id: checkId, screenedAt, matchKey: match.key, decision, reason: reason.trim() }, { onSuccess: () => setReason('') });
+  const done = match.review;
+
+  return (
+    <div className="mt-2 rounded-lg bg-white/70 border border-red-100 px-3 py-2 text-xs text-gray-700">
+      <p>
+        &ldquo;{match.uploadedName}&rdquo; ≈ &ldquo;{match.matchedName}&rdquo;
+        {match.score != null && <> ({match.score.toFixed(0)}%</>}{match.sourceList && <>, {match.sourceList}{match.score != null && ')'}</>}
+      </p>
+      {done ? (
+        <p className={`mt-1 font-medium ${done.decision === 'CONFIRMED' ? 'text-red-700' : 'text-emerald-700'}`}>
+          {done.decision === 'CONFIRMED' ? 'Confirmada' : 'Falso positivo'} — {done.reason}
+          <span className="block font-normal text-[11px] text-gray-500">Revisó {done.byName} el {formatDate(done.at)}</span>
+        </p>
+      ) : !decided && (
+        <div className="mt-1.5 space-y-1.5">
+          <input
+            value={reason} onChange={e => setReason(e.target.value)}
+            placeholder="Motivo (mín. 10 caracteres): homónimo, otra fecha de nacimiento, misma entidad…"
+            className="w-full rounded-md border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <div className="flex gap-1.5">
+            <button type="button" disabled={review.isPending || reason.trim().length < 10} onClick={() => send('FALSE_POSITIVE')}
+              className="px-2 py-1 rounded-md border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">Falso positivo</button>
+            <button type="button" disabled={review.isPending || reason.trim().length < 10} onClick={() => send('CONFIRMED')}
+              className="px-2 py-1 rounded-md border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50">Confirmada</button>
+          </div>
+          {review.isError && <p className="text-red-600">{(review.error as Error)?.message ?? 'No se pudo guardar la revisión'}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SanctionsScreeningBlock({
   check, decided, onScreen, isScreening, error,
 }: {
@@ -86,13 +125,75 @@ function SanctionsScreeningBlock({
               {result.namesChecked && result.namesChecked.length > 0 && <> · Nombres revisados: {result.namesChecked.join(', ')}</>}
             </p>
           )}
-          {result.findings[0]?.sample_records?.map((r, i) => (
-            <p key={i} className="mt-1">
-              &bull; &ldquo;{r.uploaded_name}&rdquo; ≈ &ldquo;{r.matched_watchlist_name}&rdquo; ({r.score.toFixed(0)}%, {r.source_list})
-            </p>
-          ))}
+          {result.matches && result.matches.length > 0
+            ? result.matches.map(m => (
+                <MatchReview key={m.key} checkId={check.id} screenedAt={result.screenedAt ?? ''} match={m} decided={decided} />
+              ))
+            : result.findings[0]?.sample_records?.map((r, i) => (
+                <p key={i} className="mt-1">
+                  &bull; &ldquo;{r.uploaded_name}&rdquo; ≈ &ldquo;{r.matched_watchlist_name}&rdquo; ({r.score.toFixed(0)}%, {r.source_list})
+                </p>
+              ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const STATUS_LABELS: Array<{ id: ChecklistStatus; label: string }> = [
+  { id: 'PENDING', label: 'Pendiente' }, { id: 'DONE', label: 'Hecho' }, { id: 'NOT_APPLICABLE', label: 'No aplica' },
+];
+
+/** Verificaciones previas a la aceptación: auditor predecesor, conflictos de interés y servicios previos (cada una con su constancia). */
+function ChecklistBlock({ items, decided, onChange }: {
+  items: AcceptanceChecklistItem[]; decided: boolean; onChange: (key: string, patch: Partial<AcceptanceChecklistItem>) => void;
+}) {
+  const fixed = items.filter(i => i.key);
+  if (fixed.length === 0) return null;
+  const inputCls = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400';
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+      <div>
+        <p className="text-sm font-semibold text-gray-800">Verificaciones previas a la aceptación</p>
+        <p className="text-xs text-gray-400">
+          Para aceptar o continuar con el cliente cada una debe quedar «Hecha» (con lo que se encontró) o «No aplica» (con el motivo).
+          Declinar al cliente no las exige.
+        </p>
+      </div>
+      {fixed.map(it => {
+        const status = it.status ?? 'PENDING';
+        return (
+          <div key={it.key} className="space-y-2 border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
+            <p className="text-sm text-gray-700">{it.item}</p>
+            <div className="flex gap-1.5">
+              {STATUS_LABELS.map(s => (
+                <button key={s.id} type="button" disabled={decided} onClick={() => onChange(it.key as string, { status: s.id })}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    status === s.id
+                      ? s.id === 'DONE' ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                        : s.id === 'NOT_APPLICABLE' ? 'bg-slate-100 text-slate-700 border-slate-300'
+                        : 'bg-amber-50 text-amber-700 border-amber-300'
+                      : 'border-gray-200 text-gray-400 hover:bg-gray-50'
+                  }`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {status === 'DONE' && it.key === 'PREDECESSOR' && (
+              <label className="block text-xs font-medium text-gray-600">Fecha de la solicitud al auditor predecesor
+                <input type="date" disabled={decided} value={it.date ?? ''} onChange={e => onChange('PREDECESSOR', { date: e.target.value })}
+                  className={`${inputCls} mt-1 max-w-[220px]`} />
+              </label>
+            )}
+            {status !== 'PENDING' && (
+              <textarea rows={2} disabled={decided} value={it.comment ?? ''}
+                onChange={e => onChange(it.key as string, { comment: e.target.value })}
+                placeholder={status === 'DONE' ? 'Qué se hizo y qué se encontró (mín. 10 caracteres)…' : 'Por qué no aplica (mín. 10 caracteres)…'}
+                className={inputCls} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -156,6 +257,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
   const [reopenReason, setReopenReason] = useState('');
 
   const [form, setForm] = useState<Record<string, string>>({});
+  const [checklist, setChecklist] = useState<AcceptanceChecklistItem[]>([]);
   const [justification, setJustification] = useState('');
   const [showDecide, setShowDecide] = useState(false);
 
@@ -168,6 +270,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
       riskStatus:         check.riskStatus,         riskNotes:         check.riskNotes ?? '',
       sanctionsStatus:    check.sanctionsStatus,    sanctionsNotes:    check.sanctionsNotes ?? '',
     });
+    setChecklist(check.checklist ?? []);
   }, [check?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!check) {
@@ -188,6 +291,15 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
   }
 
   const decided = check.overallResult !== 'PENDING';
+  // Solo los campos que el servidor acepta (no se devuelve nada de más: el servidor rechaza campos desconocidos).
+  const checklistPayload = checklist.map(i => ({
+    ...(i.key && { key: i.key }), item: i.item, ...(i.status && { status: i.status }),
+    ...(i.date && { date: i.date }), ...(i.comment && { comment: i.comment }), ...(i.answer && { answer: i.answer }),
+  }));
+  const setChecklistItem = (key: string, patch: Partial<AcceptanceChecklistItem>) =>
+    setChecklist(prev => prev.map(i => (i.key === key ? { ...i, ...patch } : i)));
+  const pendingChecks = checklist.filter(i => i.key && (i.status ?? 'PENDING') === 'PENDING').length;
+  const unreviewedMatches = (check.sanctionsScreeningResult?.matches ?? []).filter(m => !m.review).length;
   const allEvaluated = DIMENSIONS.every(d => form[statusField(d.key)] && form[statusField(d.key)] !== 'PENDING');
 
   const handleSave = async () => {
@@ -200,6 +312,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
           integrityStatus:    form.integrityStatus as AcceptanceRating,    integrityNotes:    form.integrityNotes,
           riskStatus:         form.riskStatus as AcceptanceRating,         riskNotes:         form.riskNotes,
           sanctionsStatus:    form.sanctionsStatus as AcceptanceRating,    sanctionsNotes:    form.sanctionsNotes,
+          checklist: checklistPayload,
         },
       });
     } catch { /* shown below */ }
@@ -215,6 +328,7 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
         integrityStatus:    form.integrityStatus as AcceptanceRating,    integrityNotes:    form.integrityNotes,
         riskStatus:         form.riskStatus as AcceptanceRating,         riskNotes:         form.riskNotes,
         sanctionsStatus:    form.sanctionsStatus as AcceptanceRating,    sanctionsNotes:    form.sanctionsNotes,
+        checklist: checklistPayload,
         overallJustification: justification,
       });
       setShowDecide(false);
@@ -346,6 +460,8 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
         })}
       </div>
 
+      <ChecklistBlock items={checklist} decided={decided} onChange={setChecklistItem} />
+
       {updateCheck.isError && (
         <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
           {(updateCheck.error as Error)?.message ?? 'Error al guardar'}
@@ -392,6 +508,13 @@ export function AcceptanceRadarTab({ client }: { client: ClientDetail }) {
               <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2">
                 Falta la nota de <strong>Sanciones / PLD</strong>: documenta si el despacho es sujeto obligado para este cliente (Art. 7.7) y,
                 si hubo coincidencias en el screening, por qué se descartan. Ciérralo y escríbela en esa tarjeta.
+              </p>
+            )}
+            {(pendingChecks > 0 || unreviewedMatches > 0) && form.sanctionsStatus !== 'RED' && (
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2">
+                {pendingChecks > 0 && <>Faltan <strong>{pendingChecks}</strong> verificación(es) previa(s) por resolver. </>}
+                {unreviewedMatches > 0 && <>Faltan <strong>{unreviewedMatches}</strong> coincidencia(s) del screening por revisar. </>}
+                Si el resultado va a ser Rojo no hacen falta.
               </p>
             )}
             {decide.isError && (

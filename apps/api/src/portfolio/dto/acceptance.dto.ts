@@ -1,23 +1,42 @@
 import {
-  IsString, IsOptional, IsEnum, IsArray, ValidateNested, IsNotEmpty, MinLength,
+  IsString, IsOptional, IsEnum, IsArray, ValidateNested, IsNotEmpty, MinLength, MaxLength, IsIn, Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AcceptanceRating } from '@prisma/client';
+import { CHECKLIST_KEYS, ChecklistStatus } from '../acceptance-checklist.util';
 
 export class AcceptanceChecklistItemDto {
+  @ApiPropertyOptional({ enum: CHECKLIST_KEYS, description: 'Ítem fijo del Radar (auditor predecesor, conflictos, servicios previos). Sin clave = ítem libre.' })
+  @IsOptional()
+  @IsIn(CHECKLIST_KEYS)
+  key?: string;
+
   @ApiProperty({ example: '¿Existen amenazas de autorevisión sobre el encargo?' })
   @IsString()
+  @MaxLength(1000)
   item: string;
+
+  @ApiPropertyOptional({ enum: ['PENDING', 'DONE', 'NOT_APPLICABLE'] })
+  @IsOptional()
+  @IsIn(['PENDING', 'DONE', 'NOT_APPLICABLE'])
+  status?: ChecklistStatus;
+
+  @ApiPropertyOptional({ example: '2026-10-20', description: 'Fecha de la solicitud al auditor predecesor' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'La fecha debe tener el formato AAAA-MM-DD.' })
+  date?: string;
 
   @ApiPropertyOptional({ example: 'NO' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   answer?: string;
 
   @ApiPropertyOptional({ example: 'La firma no presta servicios contables al cliente.' })
   @IsOptional()
   @IsString()
+  @MaxLength(4000)
   comment?: string;
 }
 
@@ -99,6 +118,31 @@ export class DecideAcceptanceDto extends UpdateAcceptanceCheckDto {
   @IsNotEmpty()
   @MinLength(10, { message: 'La justificación debe tener al menos 10 caracteres.' })
   overallJustification: string;
+}
+
+/** Revisión de UNA coincidencia del screening de sanciones: falso positivo o confirmada, siempre con el motivo. */
+export class ReviewScreeningMatchDto {
+  @ApiProperty({ description: 'Momento del screening revisado (`screenedAt`): si se volvió a correr, hay que recargar.' })
+  @IsString()
+  @IsNotEmpty()
+  screenedAt: string;
+
+  @ApiProperty({ description: 'Clave de la coincidencia (la entrega el servidor en `sanctionsScreeningResult.matches`).' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(600)
+  matchKey: string;
+
+  @ApiProperty({ enum: ['FALSE_POSITIVE', 'CONFIRMED'] })
+  @IsIn(['FALSE_POSITIVE', 'CONFIRMED'])
+  decision: 'FALSE_POSITIVE' | 'CONFIRMED';
+
+  @ApiProperty({ description: 'Por qué se descarta (homónimo, otra fecha de nacimiento, otro país…) o qué se hizo al confirmarla.' })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(10, { message: 'El motivo debe tener al menos 10 caracteres.' })
+  @MaxLength(2000)
+  reason: string;
 }
 
 /** Reabrir un Radar ya decidido (solo CAE o superior): deja constancia del motivo. */

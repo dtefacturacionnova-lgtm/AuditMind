@@ -4,7 +4,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { AcceptanceService } from './acceptance.service';
-import { UpdateAcceptanceCheckDto, DecideAcceptanceDto, ReopenAcceptanceDto } from './dto/acceptance.dto';
+import { UpdateAcceptanceCheckDto, DecideAcceptanceDto, ReopenAcceptanceDto, ReviewScreeningMatchDto } from './dto/acceptance.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -53,6 +53,17 @@ export class AcceptanceController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.decide(id, dto, user);
+  }
+
+  @Post('acceptance-checks/:id/review-screening-match')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Revisar una coincidencia del screening de sanciones: falso positivo o confirmada, con el motivo' })
+  reviewScreeningMatch(
+    @Param('id') id: string,
+    @Body() dto: ReviewScreeningMatchDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.reviewScreeningMatch(id, dto, user);
   }
 
   @Post('acceptance-checks/:id/reopen')

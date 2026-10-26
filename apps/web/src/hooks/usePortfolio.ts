@@ -22,6 +22,8 @@ export interface BeneficialOwner {
 }
 
 export interface Client {
+  /** Cliente ACTIVO sin carta firmada ni encargo vigente en el ejercicio anterior ni en el actual (se calcula al leer). */
+  dormant?:           boolean;
   id:                 string;
   organizationId:     string;
   legalName:          string;
@@ -51,10 +53,37 @@ export interface Client {
   };
 }
 
+export type ChecklistStatus = 'PENDING' | 'DONE' | 'NOT_APPLICABLE';
+
 export interface AcceptanceChecklistItem {
+  /** Ítem fijo del Radar (PREDECESSOR, CONFLICTS, PRIOR_SERVICES); sin clave = ítem libre de un Radar antiguo. */
+  key?:     string;
   item:     string;
+  status?:  ChecklistStatus;
+  /** Fecha de la solicitud al auditor predecesor (AAAA-MM-DD). */
+  date?:    string;
   answer?:  string;
   comment?: string;
+}
+
+export type ScreeningDecision = 'FALSE_POSITIVE' | 'CONFIRMED';
+
+export interface ScreeningReview {
+  decision: ScreeningDecision;
+  reason:   string;
+  byId:     string;
+  byName:   string;
+  at:       string;
+}
+
+/** Una coincidencia del screening de sanciones con su revisión (la arma el servidor). */
+export interface ScreeningMatch {
+  key:          string;
+  uploadedName: string;
+  matchedName:  string;
+  sourceList:   string;
+  score:        number | null;
+  review:       ScreeningReview | null;
 }
 
 export interface SanctionsMatchRecord {
@@ -75,6 +104,8 @@ export interface SanctionsScreeningResult {
   namesChecked?:   string[];
   total_screened:  number;
   matches_found:   number;
+  /** Coincidencias con la revisión de cada una (falso positivo / confirmada). */
+  matches?:        ScreeningMatch[];
   risk_score:       number;
   lists_consulted:  string;
   findings: Array<{
@@ -120,6 +151,8 @@ export interface ProposalTeamMember {
 }
 
 export interface Proposal {
+  /** Enviada hace más de 60 días sin respuesta (aviso; no cambia su estado). */
+  stale?:             boolean;
   id:                 string;
   organizationId:     string;
   clientId:           string;
@@ -148,6 +181,8 @@ export interface Proposal {
 }
 
 export interface EngagementLetter {
+  /** Enviada hace más de 60 días sin firmar (aviso; no cambia su estado). */
+  stale?:              boolean;
   id:                  string;
   organizationId:      string;
   clientId:            string;
@@ -442,6 +477,18 @@ export function useDecideAcceptance() {
 }
 
 /** Reabrir un Radar ya decidido (solo CAE o superior): exige el motivo. */
+/** Revisar UNA coincidencia del screening de sanciones: falso positivo o confirmada, siempre con el motivo. */
+export function useReviewScreeningMatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; screenedAt: string; matchKey: string; decision: ScreeningDecision; reason: string }) =>
+      apiClient.post<AcceptanceCheck>(`/portfolio/acceptance-checks/${id}/review-screening-match`, body),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: [CLIENT_KEY, result.clientId] });
+    },
+  });
+}
+
 export function useReopenAcceptance() {
   const qc = useQueryClient();
   return useMutation({

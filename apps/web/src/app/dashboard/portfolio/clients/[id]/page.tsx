@@ -106,8 +106,16 @@ export default function ClientDetailPage() {
                 </div>
               </div>
 
-              <span className={`px-3 py-1 rounded-full text-sm font-medium flex-shrink-0 ${st.bg} ${st.color}`}>
-                {st.label}
+              <span className="flex items-center gap-2 flex-shrink-0">
+                {client.dormant && (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600"
+                    title="Sin carta de compromiso firmada ni encargo vigente en el ejercicio anterior ni en el actual">
+                    Sin actividad reciente
+                  </span>
+                )}
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${st.bg} ${st.color}`}>
+                  {st.label}
+                </span>
               </span>
             </div>
           </div>

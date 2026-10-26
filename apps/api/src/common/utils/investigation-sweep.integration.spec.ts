@@ -744,10 +744,11 @@ suite('modo investigación · barrido por módulo (Postgres real)', () => {
         }
       });
 
-      it('la cobertura del banco de proyectos no revela la fecha de una investigación ajena', async () => {
+      it('la cobertura del banco de proyectos nunca cuenta una investigación: todos ven la fecha de la auditoría normal (coincide con el puntaje de sync-coverage)', async () => {
         const last = async (u: any) => ((await projects.findAll(u)) as any[]).find((p) => p.id === e.project.id).lastAuditDate;
-        for (const who of ['outsider', 'manager'] as const) expect(new Date(await last(w.users[who])).toISOString().slice(0, 10)).toBe('2024-06-30');
-        for (const who of ['member', 'lead', 'cae'] as const) expect(new Date(await last(w.users[who])).toISOString().slice(0, 10)).toBe('2025-12-31');
+        for (const who of ['outsider', 'manager', 'member', 'lead', 'cae'] as const) {
+          expect(new Date(await last(w.users[who])).toISOString().slice(0, 10)).toBe('2024-06-30');
+        }
       });
     });
   });

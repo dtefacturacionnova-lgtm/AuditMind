@@ -1,12 +1,17 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException,
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException,
 } from '@nestjs/common';
-import { AcceptanceCheck, AcceptanceRating, ClientStatus, EngagementLetterStatus, Prisma, ProposalStatus } from '@prisma/client';
+import {
+  AcceptanceCheck, AcceptanceRating, ClientStatus, EngagementKind, EngagementLetterStatus, EngagementStatus, Prisma, ProposalStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { AiService } from '../ai/ai.service';
 import { ClientsService } from './clients.service';
-import { UpdateAcceptanceCheckDto, DecideAcceptanceDto, ReopenAcceptanceDto } from './dto/acceptance.dto';
+import { UpdateAcceptanceCheckDto, DecideAcceptanceDto, ReopenAcceptanceDto, ReviewScreeningMatchDto } from './dto/acceptance.dto';
+import { mergeChecklist, reviewChecklist } from './acceptance-checklist.util';
+import { presentAcceptanceCheck } from './acceptance-present.util';
+import { carryOverReviews, screeningMatches, screeningReviewProblems, ScreeningReview } from './screening-review.util';
 import { DEFAULT_MIN_CPE_HOURS_YEAR } from '../common/constants/competency.constants';
 
 /**
@@ -42,6 +47,23 @@ export class AcceptanceService {
     private readonly clients: ClientsService,
     private readonly aiService: AiService,
   ) {}
+
+  private present<T extends AcceptanceCheck>(check: T) {
+    return presentAcceptanceCheck(check);
+  }
+
+  /** Año del último encargo de auditoría aprobado del cliente en un ejercicio anterior (cliente de continuidad), o null. */
+  private async continuityYear(clientId: string, organizationId: string): Promise<number | null> {
+    const prior = await this.prisma.engagement.findFirst({
+      where: {
+        organizationId, clientId, kind: EngagementKind.AUDIT, status: EngagementStatus.APPROVED,
+        fiscalYear: { lt: new Date().getFullYear() },
+      },
+      orderBy: { fiscalYear: 'desc' },
+      select: { fiscalYear: true },
+    });
+    return prior?.fiscalYear ?? null;
+  }
 
   private async getCheckOrThrow(id: string, user: AuthUser): Promise<AcceptanceCheck> {
     const check = await this.prisma.acceptanceCheck.findUnique({ where: { id } });
@@ -79,7 +101,20 @@ export class AcceptanceService {
       });
     }
 
-    return check;
+    // Un Radar sin decidir lleva sus tres verificaciones previas (auditor predecesor, conflictos, servicios previos). Un cliente de
+    // continuidad trae la del predecesor como «No aplica». Se guarda solo si cambió, para que un doble clic no escriba dos veces.
+    if (!check.decidedAt) {
+      const merged = mergeChecklist(check.checklist, undefined, { continuityYear: await this.continuityYear(clientId, user.organizationId) });
+      if (JSON.stringify(merged) !== JSON.stringify(check.checklist)) {
+        const seeded = await this.prisma.acceptanceCheck.updateMany({
+          where: { id: check.id, decidedAt: null },
+          data:  { checklist: merged as unknown as Prisma.InputJsonValue },
+        });
+        if (seeded.count === 1) return this.present(await this.prisma.acceptanceCheck.findUniqueOrThrow({ where: { id: check.id }, include: CHECK_INCLUDE }));
+      }
+    }
+
+    return this.present(check);
   }
 
   // ── Actualizar dimensiones / checklist ────────────────────────────────────
@@ -87,7 +122,14 @@ export class AcceptanceService {
     const stored = await this.getCheckOrThrow(id, user);
     this.assertOpen(stored);
 
-    return this.prisma.acceptanceCheck.update({
+    // Los ítems fijos del checklist se completan con el texto del servidor; uno marcado «Hecho» o «No aplica» exige su constancia.
+    const checklist = dto.checklist != null ? mergeChecklist(stored.checklist, dto.checklist) : null;
+    if (checklist) {
+      const { invalid } = reviewChecklist(checklist);
+      if (invalid.length > 0) throw new BadRequestException(invalid.join(' '));
+    }
+
+    return this.present(await this.prisma.acceptanceCheck.update({
       where: { id },
       data: {
         ...(dto.independenceStatus != null && { independenceStatus: dto.independenceStatus }),
@@ -100,10 +142,10 @@ export class AcceptanceService {
         ...(dto.riskNotes          != null && { riskNotes:          dto.riskNotes }),
         ...(dto.sanctionsStatus    != null && { sanctionsStatus:    dto.sanctionsStatus }),
         ...(dto.sanctionsNotes     != null && { sanctionsNotes:     dto.sanctionsNotes }),
-        ...(dto.checklist          != null && { checklist: dto.checklist as unknown as Prisma.InputJsonValue }),
+        ...(checklist && { checklist: checklist as unknown as Prisma.InputJsonValue }),
       },
       include: CHECK_INCLUDE,
-    });
+    }));
   }
 
   /** La decisión del Radar es definitiva: ya no se editan las calificaciones, no se vuelve a decidir ni a correr el screening. */
@@ -173,6 +215,22 @@ export class AcceptanceService {
       );
     }
 
+    // Coincidencias del screening: cada una revisada (falso positivo / confirmada, con motivo); una confirmada obliga a Sanciones en Rojo.
+    const screeningProblems = screeningReviewProblems(check.sanctionsScreeningResult as never, check.sanctionsStatus);
+    if (screeningProblems.length > 0) throw new BadRequestException(screeningProblems.join(' '));
+
+    // Verificaciones previas (auditor predecesor, conflictos, servicios previos): resueltas para aceptar o continuar. Si se declina
+    // al cliente (Rojo) no hace falta completarlas, pero lo que se haya escrito sí debe ser válido.
+    const checklist = mergeChecklist(stored.checklist, dto.checklist);
+    const checklistReview = reviewChecklist(checklist);
+    if (checklistReview.invalid.length > 0) throw new BadRequestException(checklistReview.invalid.join(' '));
+    if (overallResult !== AcceptanceRating.RED && checklistReview.pending.length > 0) {
+      throw new BadRequestException(
+        `Antes de aceptar o continuar con el cliente hay que resolver las verificaciones previas: ${checklistReview.pending.join('; ')}. ` +
+        'Márcalas como hechas (con lo que se encontró) o «No aplica» (con el motivo).',
+      );
+    }
+
     // La decisión se reclama de forma condicional: dos personas decidiendo a la vez no se pisan.
     const claimed = await this.prisma.$transaction(async (tx) => {
       const res = await tx.acceptanceCheck.updateMany({
@@ -183,7 +241,7 @@ export class AcceptanceService {
           integrityStatus:    check.integrityStatus,    integrityNotes:    check.integrityNotes,
           riskStatus:         check.riskStatus,         riskNotes:         check.riskNotes,
           sanctionsStatus:    check.sanctionsStatus,    sanctionsNotes:    check.sanctionsNotes,
-          ...(dto.checklist != null && { checklist: dto.checklist as unknown as Prisma.InputJsonValue }),
+          checklist: checklist as unknown as Prisma.InputJsonValue,
           overallResult,
           overallJustification: dto.overallJustification,
           decidedById:          user.id,
@@ -207,7 +265,7 @@ export class AcceptanceService {
       return tx.acceptanceCheck.findUniqueOrThrow({ where: { id }, include: CHECK_INCLUDE });
     });
     if (!claimed) this.assertOpen(await this.getCheckOrThrow(id, user));
-    return claimed!;
+    return this.present(claimed!);
   }
 
   /**
@@ -220,7 +278,7 @@ export class AcceptanceService {
     const previous = `Decisión anterior: ${check.overallResult} (${check.decidedAt.toISOString().slice(0, 10)}). ${check.overallJustification ?? ''}`.trim();
     const trace = `[Reabierto por ${user.name} el ${new Date().toISOString().slice(0, 10)}: ${dto.reason.trim()}]\n${previous}`;
 
-    return this.prisma.$transaction(async (tx) => {
+    const reopened = await this.prisma.$transaction(async (tx) => {
       const res = await tx.acceptanceCheck.updateMany({
         where: { id, organizationId: user.organizationId, decidedAt: { not: null } },
         data: { overallResult: AcceptanceRating.PENDING, overallJustification: trace, decidedById: null, decidedAt: null },
@@ -234,6 +292,7 @@ export class AcceptanceService {
       }
       return tx.acceptanceCheck.findUniqueOrThrow({ where: { id }, include: CHECK_INCLUDE });
     });
+    return this.present(reopened);
   }
 
   /**
@@ -264,19 +323,53 @@ export class AcceptanceService {
     const result = await this.aiService.runCaats('sanctions_screening', { records });
 
     // Constancia del screening (Art. 15 DDC): quién lo corrió, cuándo y qué nombres se revisaron (con y sin coincidencia).
-    const evidence = {
+    const evidence: Record<string, unknown> = {
       ...(result as Record<string, unknown>),
       screenedAt:     new Date().toISOString(),
       screenedById:   user.id,
       screenedByName: user.name,
       namesChecked:   records.map((r) => r.vendor_name),
     };
+    // Volver a correr el screening no borra lo ya revisado: se conserva la revisión de las coincidencias que siguen siendo las mismas.
+    const carried = carryOverReviews(check.sanctionsScreeningResult as never, evidence as never);
+    if (Object.keys(carried).length > 0) evidence.reviews = carried;
 
-    return this.prisma.acceptanceCheck.update({
+    return this.present(await this.prisma.acceptanceCheck.update({
       where: { id },
       data:  { sanctionsScreeningResult: evidence as Prisma.InputJsonValue },
       include: CHECK_INCLUDE,
+    }));
+  }
+
+  /**
+   * Revisión de UNA coincidencia del screening: falso positivo o confirmada, con el motivo, quién y cuándo. Bajo el candado de la
+   * fila, para que dos revisiones simultáneas de coincidencias distintas no se pisen.
+   */
+  async reviewScreeningMatch(id: string, dto: ReviewScreeningMatchDto, user: AuthUser) {
+    await this.getCheckOrThrow(id, user); // 404 / 403 antes de tomar el candado
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM acceptance_checks WHERE id = ${id} FOR UPDATE`;
+      const fresh = await tx.acceptanceCheck.findUniqueOrThrow({ where: { id } });
+      this.assertOpen(fresh);
+      const result = fresh.sanctionsScreeningResult as Record<string, unknown> | null;
+      if (!result) throw new BadRequestException('Todavía no se corrió el screening de sanciones de este cliente.');
+      if (result.screenedAt !== dto.screenedAt) {
+        throw new ConflictException('El screening se volvió a correr mientras revisabas: recarga la pantalla y revisa de nuevo.');
+      }
+      if (!screeningMatches(result as never).some((m) => m.key === dto.matchKey)) {
+        throw new NotFoundException('Esa coincidencia ya no está en el screening.');
+      }
+      const review: ScreeningReview = {
+        decision: dto.decision, reason: dto.reason.trim(), byId: user.id, byName: user.name, at: new Date().toISOString(),
+      };
+      const reviews = { ...((result.reviews as Record<string, ScreeningReview> | undefined) ?? {}), [dto.matchKey]: review };
+      return tx.acceptanceCheck.update({
+        where: { id },
+        data:  { sanctionsScreeningResult: { ...result, reviews } as unknown as Prisma.InputJsonValue },
+        include: CHECK_INCLUDE,
+      });
     });
+    return this.present(updated);
   }
 
   /**

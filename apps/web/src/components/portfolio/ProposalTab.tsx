@@ -156,7 +156,13 @@ function ManageProposal({ proposal }: { proposal: ClientDetail['proposals'][numb
             </p>
           )}
         </div>
-        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
+        <span className="flex items-center gap-2">
+          {proposal.stale && (
+            <span className="px-2 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700"
+              title="Se envió hace más de 60 días y el cliente no ha respondido">Sin respuesta +60 días</span>
+          )}
+          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
+        </span>
       </div>
 
       <div className="flex flex-col gap-1">

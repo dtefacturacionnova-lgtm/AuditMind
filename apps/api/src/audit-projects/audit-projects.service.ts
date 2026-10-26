@@ -162,6 +162,8 @@ export class AuditProjectsService {
         organizationId: user.organizationId,
         auditEntityId: { in: entityIds },
         status: AuditStatus.CLOSED,
+        // Una investigación no es cobertura de aseguramiento del proyecto, y si contara, quien no la ve podría inferirla del puntaje.
+        isInvestigationMode: false,
         AND: [NOT_A_PROJECT_AUDIT],
       },
       select: { auditEntityId: true, endDate: true, updatedAt: true },
@@ -178,7 +180,7 @@ export class AuditProjectsService {
 
     // Cobertura POR PROYECTO: la última auditoría cerrada de los ítems de plan que apuntan al proyecto; el área responsable solo
     // sirve de respaldo cuando el proyecto no tiene ninguna (si no, auditar un proyecto de la gerencia «cubría» a todos los demás).
-    const byProject = await this.lastClosedByProject(projects.map(p => p.id), { organizationId: user.organizationId });
+    const byProject = await this.lastClosedByProject(projects.map(p => p.id), { organizationId: user.organizationId, isInvestigationMode: false });
 
     const now = new Date();
     const updates: Array<{ id: string; correlative: string; name: string; oldValue: number | null; newValue: number }> = [];
@@ -247,11 +249,12 @@ export class AuditProjectsService {
     }
 
     // Single query: most recent CLOSED audit per entity (ordered desc → first seen = latest)
-    // Modo investigación (2026-10-25): la última auditoría cerrada que se muestra no incluye investigaciones ajenas al equipo
-    // (la fecha de cierre revelaría que existió una). El puntaje de cobertura de `syncCoverage` sí las considera: es de toda la organización.
+    // Modo investigación: la cobertura nunca incluye investigaciones, ni para quien las ve (la fecha de cierre de una investigación ajena
+    // revelaría que existió, y el puntaje de `syncCoverage` tampoco las cuenta: las dos cifras coinciden).
     const closedAudits = await this.prisma.audit.findMany({
       where: {
         ...visibleAuditWhere(user),
+        isInvestigationMode: false,
         auditEntityId: { in: entityIds },
         status: AuditStatus.CLOSED,
         AND: [NOT_A_PROJECT_AUDIT],
@@ -268,7 +271,7 @@ export class AuditProjectsService {
       }
     }
 
-    const byProject = await this.lastClosedByProject(projects.map(p => p.id), visibleAuditWhere(user));
+    const byProject = await this.lastClosedByProject(projects.map(p => p.id), { ...visibleAuditWhere(user), isInvestigationMode: false });
     const now = new Date();
     return projects.map(p => {
       const lastDate = byProject.get(p.id) ?? (p.responsibleEntityId ? lastAuditMap.get(p.responsibleEntityId) : undefined);

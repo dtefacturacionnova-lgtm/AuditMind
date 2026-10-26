@@ -13,7 +13,7 @@ import { ProfitabilityService } from './profitability.service';
  */
 type Row = Record<string, any>;
 interface Data {
-  engagements?: Row[]; proposals?: Row[]; entries?: Row[]; users?: Row[]; costProfiles?: Row[]; team?: Row[];
+  engagements?: Row[]; proposals?: Row[]; entries?: Row[]; users?: Row[]; costProfiles?: Row[]; team?: Row[]; fees?: Row[];
 }
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -30,6 +30,8 @@ function makeDb(data: Data) {
         return (data.engagements ?? []).filter((e) =>
           e.organizationId === where.organizationId
           && (where.fiscalYear === undefined || e.fiscalYear === where.fiscalYear)
+          && (where.status?.not === undefined || e.status !== where.status.not)
+          && (where.engagementLetter?.proposalId?.in === undefined || where.engagementLetter.proposalId.in.includes(e.engagementLetter?.proposalId))
           && (where.auditId?.not === null ? e.auditId !== null : true));
       },
       findUnique: async ({ where }: any) => { hit('engagement'); return (data.engagements ?? []).find((e) => e.id === where.id) ?? null; },
@@ -37,6 +39,9 @@ function makeDb(data: Data) {
         hit('engagement');
         return (data.engagements ?? []).find((e) => e.auditId === where.auditId && e.organizationId === where.organizationId) ?? null;
       },
+    },
+    engagementFee: {
+      findMany: async ({ where }: any) => { hit('engagementFee'); return (data.fees ?? []).filter((f) => inSet(where.engagementId.in, f.engagementId)); },
     },
     proposal: {
       findMany: async ({ where }: any) => { hit('proposal'); return (data.proposals ?? []).filter((p) => inSet(where.id.in, p.id)); },
@@ -267,7 +272,7 @@ describe('Lista por año', () => {
     const muchos = makeDb(varios());
     await new ProfitabilityService(muchos.prisma).listProfitability(2026, user());
     expect(muchos.total()).toBe(uno.total());
-    expect(muchos.total()).toBeLessThanOrEqual(6);
+    expect(muchos.total()).toBeLessThanOrEqual(8);
     expect(muchos.counts.timeEntry).toBe(1);
     expect(muchos.counts.userCostProfile).toBe(1);
     expect(muchos.counts.auditTeam).toBe(1);
@@ -279,6 +284,59 @@ describe('Lista por año', () => {
     expect(e2.totales).toMatchObject({ horasTotales: 10, costoTotal: 100, margenAbsoluto: 100, margenPct: 50 });
     expect(rows.find((r) => r.engagementId === 'e1').totales.horasTotales).toBe(27);
     expect(rows.find((r) => r.engagementId === 'e3').totales).toMatchObject({ horasTotales: 1, margenAbsoluto: null });
+  });
+});
+
+describe('Ingreso del encargo: el honorario de Cobranza manda y una propuesta compartida no se cuenta dos veces', () => {
+  const con = (over: (d: Data) => void) => { const data = mezclado(); over(data); return data; };
+  const ingreso = async (data: Data, id = 'e1') => {
+    const r: any = await new ProfitabilityService(makeDb(data).prisma).getEngagementProfitability(id, user());
+    return r;
+  };
+
+  it('el honorario registrado en Cobranza (con sus adendas) manda sobre el de la propuesta', async () => {
+    const r = await ingreso(con((d) => { d.fees = [{ engagementId: 'e1', feeType: 'FIXED', totalAmount: 1300 }]; }));
+    expect(r.ingreso).toEqual({ feeAmount: 1300, feeCurrency: 'USD' });
+    expect(r.ingresoOrigen).toBe('FEE');
+    expect(r.totales).toMatchObject({ margenAbsoluto: 1106, margenPct: 85.08 }); // 1300 − 194
+  });
+
+  it('un honorario por tiempo no tiene monto fijo: sin ingreso y con aviso, nunca $0 ni el de la propuesta', async () => {
+    const r = await ingreso(con((d) => { d.fees = [{ engagementId: 'e1', feeType: 'TIME_BASED', totalAmount: null }]; }));
+    expect(r.ingreso).toBeNull();
+    expect(r.ingresoAviso).toMatch(/por tiempo/);
+    expect(r.totales).toMatchObject({ margenAbsoluto: null, margenPct: null });
+  });
+
+  it('una consultoría sin carta toma su ingreso de Cobranza', async () => {
+    const r = await ingreso(con((d) => {
+      d.engagements!.push(engagement('e9', 'a9', null, { kind: 'CONSULTING' }));
+      d.fees = [{ engagementId: 'e9', feeType: 'FIXED', totalAmount: 600 }];
+    }), 'e9');
+    expect(r.ingreso).toEqual({ feeAmount: 600, feeCurrency: 'USD' });
+  });
+
+  it('la propuesta de una carta que respalda dos encargos vigentes no se cuenta completa en cada uno', async () => {
+    const data = con((d) => { d.engagements!.push(engagement('e2', 'a2', 'p1', { fiscalYear: 2027 })); });
+    const e1 = await ingreso(data, 'e1');
+    const e2 = await ingreso(data, 'e2');
+    for (const r of [e1, e2]) {
+      expect(r.ingreso).toBeNull();
+      expect(r.ingresoOrigen).toBe('PROPOSAL');
+      expect(r.ingresoAviso).toMatch(/varios encargos vigentes/);
+    }
+    // y en el consolidado de la organización el honorario no se suma dos veces
+    const org = await new ProfitabilityService(makeDb(data).prisma).getOrgWideProfitability('org1');
+    expect(org.totalIncome).toBe(0);
+    // registrar el honorario de cada uno en Cobranza lo resuelve
+    data.fees = [{ engagementId: 'e1', feeType: 'FIXED', totalAmount: 1000 }, { engagementId: 'e2', feeType: 'FIXED', totalAmount: 500 }];
+    expect((await new ProfitabilityService(makeDb(data).prisma).getOrgWideProfitability('org1')).totalIncome).toBe(1500);
+  });
+
+  it('si el otro encargo de la carta está cancelado, la propuesta vuelve a valer para el vigente', async () => {
+    const r = await ingreso(con((d) => { d.engagements!.push(engagement('e2', null, 'p1', { fiscalYear: 2027, status: 'CANCELLED' })); }));
+    expect(r.ingreso).toEqual({ feeAmount: 1000, feeCurrency: 'USD' });
+    expect(r.ingresoOrigen).toBe('PROPOSAL');
   });
 });
 
@@ -299,7 +357,7 @@ describe('Rentabilidad de toda la organización', () => {
       provisionalHours: 19 + 10 + 2,
     });
     expect(r.totalMarginPct).toBeCloseTo(75.5, 1);
-    expect(db.total()).toBeLessThanOrEqual(6); // encargos, propuestas, horas, personas, perfiles y tarifas: una consulta de cada
+    expect(db.total()).toBeLessThanOrEqual(8); // encargos, honorarios, propuestas (+ cuántos encargos respalda cada una), horas, personas, perfiles y tarifas
   });
   it('sin ingresos no hay porcentaje', async () => {
     const data: Data = { engagements: [engagement('e1', 'a1', null)] };

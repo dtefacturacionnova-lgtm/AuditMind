@@ -859,7 +859,7 @@ function DetallesTab({ planExecution, controlInternoGlobal: cig, orgProfitabilit
             Detalle Financiero por Auditoría — {planExecution.length > 0 ? 'período seleccionado en Resumen' : ''}
           </h3>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            Horas y costo cortados a la fecha de cierre del período · ingreso/utilidad según honorario de la Propuesta (cuando existe)
+            Horas y costo cortados a la fecha de cierre del período · ingreso/utilidad según el honorario del encargo en Cobranza (o el de la Propuesta cuando respalda un solo encargo)
           </p>
         </div>
         {planExecution.length === 0 ? (

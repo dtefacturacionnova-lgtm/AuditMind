@@ -74,7 +74,7 @@ export function ProfitabilityPanel({ engagementId }: { engagementId: string }) {
     );
   }
 
-  const { totales, porPersona, ingreso } = data;
+  const { totales, porPersona, ingreso, ingresoAviso, ingresoOrigen } = data;
   const tone = marginTone(totales.margenPct);
   // margenAbsoluto/margenPct null puede deberse a dos causas distintas — se distingue
   // el mensaje para no decir "sin costear" cuando en realidad falta el honorario.
@@ -104,6 +104,7 @@ export function ProfitabilityPanel({ engagementId }: { engagementId: string }) {
         <StatCard
           label="Ingreso"
           value={ingreso ? `${formatMoney(ingreso.feeAmount)} ${ingreso.feeCurrency}` : 'Honorario no definido'}
+          sub={ingresoAviso ?? (ingreso ? (ingresoOrigen === 'FEE' ? 'Honorario del encargo en Cobranza' : 'Honorario de la propuesta') : undefined)}
           muted={!ingreso}
         />
         <StatCard

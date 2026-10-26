@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { TimeEntryCategory } from '@prisma/client';
+import { EngagementStatus, FeeType, TimeEntryCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { resolveBillRate, resolveCostRate } from '../timesheet/frozen-rates';
@@ -55,6 +55,10 @@ export interface AuditCostSummary {
 export interface Revenue {
   feeAmount: number | null;
   feeCurrency: string | null;
+  /** De dónde sale el ingreso: el honorario del encargo en Cobranza (con sus adendas) o, a falta de él, el de la propuesta. */
+  source: 'FEE' | 'PROPOSAL' | null;
+  /** Por qué no hay ingreso (o de dónde viene) cuando no es evidente; se muestra junto a la cifra. */
+  note: string | null;
 }
 
 export interface Margin {
@@ -93,9 +97,7 @@ export class ProfitabilityService {
       throw new NotFoundException('Encargo no encontrado');
     }
 
-    const revenue = (await this.resolveRevenues([engagement.engagementLetter?.proposalId ?? null])).get(
-      engagement.engagementLetter?.proposalId ?? '',
-    ) ?? NO_REVENUE;
+    const revenue = (await this.resolveRevenues(user.organizationId, [engagement])).get(engagement.id) ?? NO_REVENUE;
     const ingreso = revenue.feeAmount !== null
       ? { feeAmount: revenue.feeAmount, feeCurrency: revenue.feeCurrency as string }
       : null;
@@ -103,6 +105,8 @@ export class ProfitabilityService {
       clientName: engagement.client.legalName,
       fiscalYear: engagement.fiscalYear,
       ingreso,
+      ingresoOrigen: revenue.source,
+      ingresoAviso: revenue.note,
       auditId: engagement.auditId,
     };
 
@@ -171,13 +175,13 @@ export class ProfitabilityService {
 
     // Una consulta por tipo de dato para TODOS los encargos (antes eran ~5 consultas por encargo).
     const [revenues, summaries] = await Promise.all([
-      this.resolveRevenues(engagements.map((e) => e.engagementLetter?.proposalId ?? null)),
+      this.resolveRevenues(user.organizationId, engagements),
       // auditId no puede ser null acá — filtrado arriba con { not: null }
       this.computeAuditCostSummaries(engagements.map((e) => e.auditId as string), user.organizationId),
     ]);
 
     const rows = engagements.map((e) => {
-      const revenue = revenues.get(e.engagementLetter?.proposalId ?? '') ?? NO_REVENUE;
+      const revenue = revenues.get(e.id) ?? NO_REVENUE;
       const summary = summaries.get(e.auditId as string) ?? emptySummary();
       const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
       const marginByRate = this.computeMarginByRate(summary);
@@ -190,6 +194,8 @@ export class ProfitabilityService {
         ingreso: revenue.feeAmount !== null
           ? { feeAmount: revenue.feeAmount, feeCurrency: revenue.feeCurrency as string }
           : null,
+        ingresoOrigen: revenue.source,
+        ingresoAviso: revenue.note,
         auditId: e.auditId,
         totales: this.totalsOf(summary, margin, marginByRate),
       };
@@ -220,14 +226,13 @@ export class ProfitabilityService {
   async getAuditFinancialSummary(auditId: string, organizationId: string, asOf?: Date): Promise<AuditFinancialSummary> {
     const engagement = await this.prisma.engagement.findFirst({
       where: { auditId, organizationId },
-      select: { engagementLetter: { select: { proposalId: true } } },
+      select: { id: true, engagementLetter: { select: { proposalId: true } } },
     });
-    const proposalId = engagement?.engagementLetter?.proposalId ?? null;
     const [revenues, summaries] = await Promise.all([
-      this.resolveRevenues([proposalId]),
+      this.resolveRevenues(organizationId, engagement ? [engagement] : []),
       this.computeAuditCostSummaries([auditId], organizationId, asOf),
     ]);
-    return this.financialSummaryOf(revenues.get(proposalId ?? '') ?? NO_REVENUE, summaries.get(auditId) ?? emptySummary());
+    return this.financialSummaryOf((engagement && revenues.get(engagement.id)) || NO_REVENUE, summaries.get(auditId) ?? emptySummary());
   }
 
   // ── Rentabilidad agregada de TODA la organización, para el dashboard de
@@ -239,15 +244,15 @@ export class ProfitabilityService {
   async getOrgWideProfitability(organizationId: string, asOf?: Date) {
     const engagements = await this.prisma.engagement.findMany({
       where: { organizationId, auditId: { not: null } },
-      select: { auditId: true, engagementLetter: { select: { proposalId: true } } },
+      select: { id: true, auditId: true, engagementLetter: { select: { proposalId: true } } },
     });
 
     const [revenues, costs] = await Promise.all([
-      this.resolveRevenues(engagements.map((e) => e.engagementLetter?.proposalId ?? null)),
+      this.resolveRevenues(organizationId, engagements),
       this.computeAuditCostSummaries(engagements.map((e) => e.auditId as string), organizationId, asOf),
     ]);
     const summaries = engagements.map((e) => this.financialSummaryOf(
-      revenues.get(e.engagementLetter?.proposalId ?? '') ?? NO_REVENUE,
+      revenues.get(e.id) ?? NO_REVENUE,
       costs.get(e.auditId as string) ?? emptySummary(),
     ));
 
@@ -315,20 +320,68 @@ export class ProfitabilityService {
   }
 
   /**
-   * Ingreso conocido de cada propuesta (EngagementLetter → Proposal), en UNA consulta. El mapa va por id de propuesta;
-   * una propuesta ausente o sin honorario no aparece con ingreso (null, nunca $0).
+   * Ingreso de cada encargo, por id de encargo y en pocas consultas (no una por encargo).
+   *  1. Si el encargo tiene honorario en Cobranza, ese manda: es el vigente, con sus adendas, en USD neto. Uno por tiempo no tiene
+   *     monto fijo y queda sin ingreso (con aviso).
+   *  2. Si no, el de la propuesta de su carta, SOLO cuando esa propuesta respalda un único encargo vigente. Una carta puede
+   *     servir a varios ejercicios o consultorías: dar a cada uno el monto completo contaría el mismo honorario varias veces,
+   *     así que ahí queda sin ingreso y se pide registrarlo en Cobranza.
+   * Nunca se asume $0: lo desconocido es null.
    */
-  private async resolveRevenues(proposalIds: (string | null)[]): Promise<Map<string, Revenue>> {
-    const ids = [...new Set(proposalIds.filter((v): v is string => !!v))];
+  private async resolveRevenues(
+    organizationId: string,
+    engagements: Array<{ id: string; engagementLetter?: { proposalId: string | null } | null }>,
+  ): Promise<Map<string, Revenue>> {
     const out = new Map<string, Revenue>();
-    if (ids.length === 0) return out;
-    const proposals = await this.prisma.proposal.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, feeAmount: true, feeCurrency: true },
+    if (engagements.length === 0) return out;
+
+    const fees = await this.prisma.engagementFee.findMany({
+      where: { organizationId, engagementId: { in: engagements.map((e) => e.id) } },
+      select: { engagementId: true, feeType: true, totalAmount: true },
     });
-    for (const p of proposals) {
-      if (p.feeAmount === null) continue;
-      out.set(p.id, { feeAmount: round2(Number(p.feeAmount)), feeCurrency: p.feeCurrency });
+    const feeByEngagement = new Map(fees.map((f) => [f.engagementId, f]));
+
+    const proposalIds = [...new Set(
+      engagements.filter((e) => !feeByEngagement.has(e.id)).map((e) => e.engagementLetter?.proposalId).filter((v): v is string => !!v),
+    )];
+    const proposals = new Map<string, { feeAmount: number | null; feeCurrency: string }>();
+    const livingEngagements = new Map<string, number>();
+    if (proposalIds.length > 0) {
+      const [rows, backed] = await Promise.all([
+        this.prisma.proposal.findMany({ where: { id: { in: proposalIds } }, select: { id: true, feeAmount: true, feeCurrency: true } }),
+        this.prisma.engagement.findMany({
+          where: { organizationId, status: { not: EngagementStatus.CANCELLED }, engagementLetter: { proposalId: { in: proposalIds } } },
+          select: { engagementLetter: { select: { proposalId: true } } },
+        }),
+      ]);
+      for (const p of rows) proposals.set(p.id, { feeAmount: p.feeAmount === null ? null : round2(Number(p.feeAmount)), feeCurrency: p.feeCurrency });
+      for (const b of backed) {
+        const pid = b.engagementLetter?.proposalId;
+        if (pid) livingEngagements.set(pid, (livingEngagements.get(pid) ?? 0) + 1);
+      }
+    }
+
+    for (const e of engagements) {
+      const fee = feeByEngagement.get(e.id);
+      if (fee) {
+        if (fee.feeType === FeeType.FIXED && fee.totalAmount !== null) {
+          out.set(e.id, { feeAmount: round2(Number(fee.totalAmount)), feeCurrency: 'USD', source: 'FEE', note: null });
+        } else {
+          out.set(e.id, { feeAmount: null, feeCurrency: null, source: 'FEE', note: 'Honorario por tiempo: no tiene un monto fijo con el cual calcular el margen.' });
+        }
+        continue;
+      }
+      const pid = e.engagementLetter?.proposalId;
+      const proposal = pid ? proposals.get(pid) : undefined;
+      if (!pid || !proposal || proposal.feeAmount === null) continue;
+      if ((livingEngagements.get(pid) ?? 0) > 1) {
+        out.set(e.id, {
+          feeAmount: null, feeCurrency: null, source: 'PROPOSAL',
+          note: 'La carta de compromiso respalda varios encargos vigentes: registra el honorario de este encargo en Cobranza.',
+        });
+      } else {
+        out.set(e.id, { feeAmount: proposal.feeAmount, feeCurrency: proposal.feeCurrency, source: 'PROPOSAL', note: null });
+      }
     }
     return out;
   }
@@ -490,4 +543,4 @@ export interface AuditFinancialSummary {
   margin: number | null; marginPct: number | null;
 }
 
-const NO_REVENUE: Revenue = { feeAmount: null, feeCurrency: null };
+const NO_REVENUE: Revenue = { feeAmount: null, feeCurrency: null, source: null, note: null };

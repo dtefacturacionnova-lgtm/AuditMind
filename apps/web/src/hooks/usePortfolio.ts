@@ -325,8 +325,12 @@ export interface ProfitabilityTotals {
 export interface EngagementProfitability {
   clientName:  string;
   fiscalYear:  number;
-  /** null = aún no hay propuesta con honorario vinculada — mostrar "Honorario no definido", nunca $0. */
+  /** null = aún no hay honorario (de Cobranza o de la propuesta) — mostrar "Honorario no definido", nunca $0. */
   ingreso:     { feeAmount: number; feeCurrency: string } | null;
+  /** De dónde sale el ingreso: el honorario del encargo en Cobranza o el de la propuesta de su carta. */
+  ingresoOrigen?: 'FEE' | 'PROPOSAL' | null;
+  /** Explicación cuando no hay ingreso aunque exista un honorario (carta compartida entre encargos, honorario por tiempo). */
+  ingresoAviso?:  string | null;
   /** null = el encargo no está aprobado todavía (estado válido, no error) — no hay horas que mostrar. */
   auditId:     string | null;
   porPersona:  ProfitabilityPersonRow[];
@@ -343,6 +347,8 @@ export interface PortfolioProfitabilitySummary {
   clientName:    string;
   fiscalYear:    number;
   ingreso:       { feeAmount: number; feeCurrency: string } | null;
+  ingresoOrigen?: 'FEE' | 'PROPOSAL' | null;
+  ingresoAviso?:  string | null;
   auditId:       string | null;
   totales:       ProfitabilityTotals;
 }

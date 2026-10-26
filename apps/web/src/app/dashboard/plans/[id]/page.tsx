@@ -14,13 +14,14 @@ import { apiClient } from '@/lib/api-client';
 import { Header } from '@/components/layout/Header';
 import {
   usePlan, useApprovePlan, useActivatePlan, useClosePlan,
-  useUpdatePlanItem, useRemovePlanItem, useUpdatePlan, useAddPlanAmendment, useDeletePlan,
+  useUpdatePlanItem, useRemovePlanItem, useUpdatePlan, useAddPlanAmendment, useDeletePlan, useAddPlanItem,
   useImportFromProjects, usePlanProjectCandidates,
   useLinkableAudits, useLinkAudit, useUnlinkAudit,
   PLAN_STATUS_CONFIG, PRIORITY_CONFIG, RISK_LEVEL_CONFIG,
   PlanItem, ProjectCandidate, AuditPlan,
 } from '@/hooks/usePlans';
 import { useAuditProjects } from '@/hooks/useAuditProjects';
+import { useEntityTree } from '@/hooks/useAuditUniverse2';
 import { useUser } from '@/hooks/useUser';
 import { cn } from '@/lib/utils';
 
@@ -1660,6 +1661,79 @@ function AddAmendmentForm({ planId }: { planId: string }) {
   );
 }
 
+// ─── Agregar una entidad al plan a mano ───────────────────────────────────────
+// Las entidades también entran por el Banco de Proyectos; esto cubre una auditoría que se decide fuera del Universo (una solicitud
+// de la dirección, un mandato). Antes el servidor ya lo permitía, pero no había dónde hacerlo en la pantalla.
+function flattenEntities(nodes: Array<{ id: string; name: string; children?: any[] }>, depth = 0): Array<{ id: string; label: string }> {
+  const out: Array<{ id: string; label: string }> = [];
+  for (const n of nodes) {
+    out.push({ id: n.id, label: `${'\u00A0\u00A0'.repeat(depth)}${depth > 0 ? '└ ' : ''}${n.name}` });
+    if (n.children?.length) out.push(...flattenEntities(n.children, depth + 1));
+  }
+  return out;
+}
+
+function AddEntityPanel({ planId, takenEntityIds, onClose }: { planId: string; takenEntityIds: Set<string>; onClose: () => void }) {
+  const { data: tree = [] } = useEntityTree();
+  const addItem = useAddPlanItem(planId);
+  const entities = useMemo(() => flattenEntities(tree as any[]), [tree]);
+  const [entityId, setEntityId] = useState('');
+  const [hours, setHours] = useState('80');
+  const [priority, setPriority] = useState('2');
+  const [notes, setNotes] = useState('');
+  const hoursNum = Number(hours);
+  const valid = !!entityId && Number.isFinite(hoursNum) && hoursNum > 0;
+
+  const save = async () => {
+    try {
+      await addItem.mutateAsync({ auditEntityId: entityId, estimatedHours: hoursNum, priority: Number(priority), notes: notes.trim() || undefined });
+      onClose();
+    } catch { /* el motivo se muestra abajo */ }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl space-y-3" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <p className="font-bold text-sm text-gray-800">Agregar entidad al plan</p>
+          <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded-lg hover:bg-gray-100"><X className="w-4 h-4" /></button>
+        </div>
+        <label className="block text-xs font-medium text-gray-600">Entidad
+          <select value={entityId} onChange={e => setEntityId(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">Selecciona una entidad…</option>
+            {entities.map(en => <option key={en.id} value={en.id} disabled={takenEntityIds.has(en.id)}>{en.label}{takenEntityIds.has(en.id) ? ' (ya está en el plan)' : ''}</option>)}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-xs font-medium text-gray-600">Horas estimadas
+            <input type="number" min={1} value={hours} onChange={e => setHours(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </label>
+          <label className="block text-xs font-medium text-gray-600">Prioridad
+            <select value={priority} onChange={e => setPriority(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="1">Alta</option><option value="2">Media</option><option value="3">Baja</option>
+            </select>
+          </label>
+        </div>
+        <label className="block text-xs font-medium text-gray-600">Motivo o nota (opcional)
+          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Solicitud de la dirección, mandato, etc."
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </label>
+        {addItem.isError && <p role="alert" className="text-xs text-red-600">{(addItem.error as Error)?.message}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="px-3 py-2 border border-gray-200 text-xs text-gray-600 rounded-lg">Cancelar</button>
+          <button onClick={save} disabled={!valid || addItem.isPending}
+            className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg disabled:opacity-50">
+            {addItem.isPending ? 'Agregando…' : 'Agregar al plan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Nombre y capacidad del plan + borrar el borrador ─────────────────────────
 function PlanBasics({ plan, canEdit, canDelete }: { plan: AuditPlan; canEdit: boolean; canDelete: boolean }) {
   const router = useRouter();
@@ -1729,6 +1803,7 @@ export default function PlanDetailPage() {
   const [objText, setObjText] = useState('');
   const [showAllItems, setShowAll] = useState(false);
   const [showImportPanel, setShowImportPanel] = useState(false);
+  const [showAddEntity, setShowAddEntity] = useState(false);
   const [planTab, setPlanTab] = useState<'audits' | 'analysis' | 'auditors'>('audits');
   const [showLog, setShowLog] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -1840,6 +1915,13 @@ Genera en español un resumen ejecutivo de 3-4 párrafos (máximo 350 palabras) 
         { label: `Plan ${plan.year}` },
       ]} />
 
+      {showAddEntity && (
+        <AddEntityPanel
+          planId={plan.id}
+          takenEntityIds={new Set(plan.items.map(i => i.auditEntityId).filter((v): v is string => !!v))}
+          onClose={() => setShowAddEntity(false)}
+        />
+      )}
       {showImportPanel && (
         <ImportFromBancoPanel planId={plan.id} planYear={plan.year} onClose={() => setShowImportPanel(false)} />
       )}
@@ -1934,6 +2016,14 @@ Genera en español un resumen ejecutivo de 3-4 párrafos (máximo 350 palabras) 
                     className="px-3 py-2 border border-indigo-300 text-indigo-700 bg-indigo-50 text-xs font-semibold rounded-xl hover:bg-indigo-100 transition-colors flex items-center gap-1.5">
                     <ClipboardList className="w-3.5 h-3.5" />
                     Importar del Banco
+                  </button>
+                )}
+                {canEdit && (
+                  <button
+                    onClick={() => setShowAddEntity(true)}
+                    className="px-3 py-2 border border-blue-300 text-blue-700 bg-blue-50 text-xs font-semibold rounded-xl hover:bg-blue-100 transition-colors flex items-center gap-1.5">
+                    <Plus className="w-3.5 h-3.5" />
+                    Agregar entidad
                   </button>
                 )}
                 {plan.status === 'DRAFT' && isManager && (

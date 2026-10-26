@@ -15,7 +15,7 @@ import {
   assertFiscalYearEnd, assertReadyToApprove, auditPeriodStartFor, findExternalFinancialTemplateId, PARTNER_ROLES,
 } from './engagement-readiness.util';
 import { CreateEngagementDto, UpdateEngagementDto } from './dto/engagement.dto';
-import { lockEngagement, logCollection } from '../collections/collections.common';
+import { cancelEngagementInTx } from './engagement-cancel.util';
 import { assertAuditVisible, maskHiddenAudits } from '../common/utils/investigation-scope.util';
 
 
@@ -78,7 +78,8 @@ export class EngagementsService {
     // Una AUDITORÍA por cliente y año (índice parcial en la base); las consultorías pueden ser varias.
     if (kind === EngagementKind.AUDIT) {
       const duplicate = await this.prisma.engagement.findFirst({
-        where: { clientId: dto.clientId, fiscalYear: dto.fiscalYear, kind: EngagementKind.AUDIT },
+        // Un encargo cancelado no ocupa el ejercicio (el índice único de la base tampoco lo cuenta).
+        where: { clientId: dto.clientId, fiscalYear: dto.fiscalYear, kind: EngagementKind.AUDIT, status: { not: EngagementStatus.CANCELLED } },
         select: { id: true },
       });
       if (duplicate) {
@@ -423,34 +424,10 @@ export class EngagementsService {
       throw new BadRequestException('El encargo ya está cancelado.');
     }
 
-    // Un encargo con facturas vigentes no se cancela (el dinero ya está registrado): primero se anulan esas facturas.
-    // Las cuotas aún sin facturar se cancelan con él, para que no queden cobros programados de un encargo muerto.
-    // Todo bajo el candado del encargo (el mismo que toman registrar factura y generar calendario) y releyendo el estado después.
+    // Facturas vigentes, cuotas por cobrar y candado: ver cancelEngagementInTx (lo comparte la cancelación de la auditoría).
     return this.prisma.$transaction(async (tx) => {
-      await lockEngagement(tx, id);
-      const fresh = await tx.engagement.findUnique({ where: { id }, select: { status: true, auditId: true } });
-      if (!fresh) throw new NotFoundException('Encargo no encontrado');
-      if (fresh.auditId) throw new BadRequestException('El encargo ya generó una auditoría real; no se puede cancelar desde Cartera.');
-      if (fresh.status === EngagementStatus.CANCELLED) throw new BadRequestException('El encargo ya está cancelado.');
-      const invoices = await tx.clientInvoice.count({ where: { engagementId: id, status: { not: ClientInvoiceStatus.VOID } } });
-      if (invoices > 0) {
-        throw new BadRequestException('El encargo tiene facturas registradas: anúlalas en Cobranza antes de cancelarlo.');
-      }
-      const planned = await tx.billingScheduleItem.findMany({ where: { engagementId: id, status: ScheduleItemStatus.PLANNED } });
-      if (planned.length) {
-        await tx.billingScheduleItem.updateMany({ where: { id: { in: planned.map((p) => p.id) } }, data: { status: ScheduleItemStatus.CANCELLED } });
-        for (const item of planned) {
-          await logCollection(tx, {
-            organizationId: user.organizationId, entityType: 'SCHEDULE_ITEM', entityId: item.id, action: 'SCHEDULE_ITEM_CANCELLED', actorId: user.id,
-            before: { status: 'PLANNED', amount: item.amount.toString() }, after: { status: 'CANCELLED' }, note: 'Encargo cancelado',
-          });
-        }
-      }
-      return tx.engagement.update({
-        where:   { id },
-        data:    { status: EngagementStatus.CANCELLED },
-        include: ENGAGEMENT_INCLUDE,
-      });
+      await cancelEngagementInTx(tx, id, user, { viaAudit: false });
+      return tx.engagement.findUniqueOrThrow({ where: { id }, include: ENGAGEMENT_INCLUDE });
     });
   }
 

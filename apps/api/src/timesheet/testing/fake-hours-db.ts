@@ -64,6 +64,10 @@ class Table {
         if ('equals' in cond && !eq(v, cond.equals)) return false;
         return true;
       }
+      // Filtro por una relación anidada (p. ej. `plan: { organizationId }`): la fila de prueba la trae como objeto.
+      if (cond && typeof cond === 'object' && !(cond instanceof Date) && !Array.isArray(cond) && v && typeof v === 'object' && !(v instanceof Date)) {
+        return this.match(v as Row, cond as Row);
+      }
       return eq(v, cond);
     });
   }

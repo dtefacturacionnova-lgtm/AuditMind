@@ -1409,8 +1409,9 @@ model Engagement {
   audit            Audit?            @relation("EngagementAudit", fields: [auditId], references: [id])
   createdBy        User              @relation("EngagementCreator", fields: [createdById], references: [id])
 
-  // La unicidad "una AUDITORÍA por cliente y año" vive como índice parcial (WHERE kind = 'AUDIT') en
-  // infrastructure/db-migrations/2026-10-cobros-0-consultorias.sql: Prisma no declara índices parciales.
+  // La unicidad "una AUDITORÍA por cliente y año" vive como índice parcial (WHERE kind = 'AUDIT' AND status <> 'CANCELLED';
+  // un encargo cancelado no ocupa el ejercicio) en infrastructure/db-migrations/2026-10-cobros-0-consultorias.sql y
+  // 2026-10-encargo-cancelado-ejercicio.sql: Prisma no declara índices parciales.
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([clientId, fiscalYear])

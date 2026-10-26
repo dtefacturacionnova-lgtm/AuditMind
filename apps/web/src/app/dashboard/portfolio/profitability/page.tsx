@@ -58,7 +58,7 @@ function EngagementRow({ item, closeEnabled }: { item: PortfolioProfitabilitySum
         <div className="text-right hidden sm:block">
           <p className="text-[10px] text-gray-400 uppercase tracking-wide">Ingreso</p>
           <p className="text-xs font-medium text-gray-700">
-            {item.ingreso ? formatMoney(item.ingreso.feeAmount) : <span className="text-gray-400 italic">No definido</span>}
+            {item.ingreso ? formatMoney(item.ingreso.feeAmount) : <span className="text-gray-400 italic" title={item.ingresoAviso ?? undefined}>No definido</span>}
           </p>
         </div>
         <div className="text-right hidden md:block">

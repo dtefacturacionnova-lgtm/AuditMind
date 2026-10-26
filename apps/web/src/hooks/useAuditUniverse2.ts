@@ -107,8 +107,10 @@ export interface AuditableUnitAssessment {
   lastAuditDate?: string;
   lastAuditOpinion?: string;
   recommendedFreqMonths: number;
-  nextRecommendedDate?: string;
-  coverageGapDays?: number;
+  nextRecommendedDate?: string | null;
+  /** Se recalcula al leer. null = nunca auditada (no hay brecha que contar). */
+  coverageGapDays?: number | null;
+  neverAudited?: boolean;
   notes?: string;
 }
 
@@ -130,11 +132,21 @@ export interface AuditableUnit {
   assessments?: AuditableUnitAssessment[];
   // computed en plan-candidates
   assessment?: AuditableUnitAssessment | null;
-  totalScore?: number;
-  riskLevel?: string;
+  /** false = la unidad aún no tiene evaluación de riesgo: se muestra «Sin evaluar», nunca como riesgo Medio. */
+  scored?: boolean;
+  /** true = la evaluación mostrada es de un año anterior al seleccionado. */
+  assessmentIsStale?: boolean;
+  totalScore?: number | null;
+  riskLevel?: string | null;
   coverageGapDays?: number | null;
+  /** true = sin fecha de última auditoría; null = sin evaluación, no se sabe. */
+  neverAudited?: boolean | null;
   isOverdue?: boolean;
   alreadyInCurrentPlan?: boolean;
+  /** Cómo se reconoció que ya está en el plan: la unidad, el proyecto del Banco promovido desde ella o la entidad completa. */
+  planMatch?: 'UNIT' | 'PROJECT' | 'ENTITY' | null;
+  /** Fecha de la última auditoría cerrada de la entidad (sugerencia al llenar «última auditoría»). */
+  entityLastClosedAt?: string | null;
 }
 
 export interface PlanCandidatesResult {
@@ -142,6 +154,7 @@ export interface PlanCandidatesResult {
   total: number;
   mandatory: number;
   overdue: number;
+  unscored?: number;
   candidates: AuditableUnit[];
 }
 

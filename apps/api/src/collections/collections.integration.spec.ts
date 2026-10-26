@@ -7,6 +7,10 @@ import { PaymentsService } from './payments.service';
 import { checkCollectionInvariants } from './invariants';
 import { todayInSalvador } from './collections.common';
 import { EngagementsService } from '../portfolio/engagements.service';
+import { AuditsService } from '../audits/audits.service';
+
+process.env.SUPABASE_URL ??= 'http://localhost:54321';
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'clave-de-prueba';
 
 /**
  * Cobranza contra un Postgres REAL (el mismo SQL de infrastructure/db-migrations). Una base falsa no puede probar los candados,
@@ -480,6 +484,55 @@ suite('cobranza contra Postgres real', () => {
       await setFixedFee(d, 1000);
       await invoice(d, 100);
       await expect(engs.cancel(d.engA.id, d.cae)).rejects.toThrow(/facturas registradas/);
+    });
+
+    it('un encargo cancelado libera el ejercicio: se puede crear otro, pero no dos vigentes (ni por la base)', async () => {
+      const c = await seed();
+      await engs.cancel(c.engA.id, c.cae);
+      const again: any = await engs.create({ clientId: c.clientA.id, fiscalYear: 2026, fiscalYearEndDate: '2026-12-31' } as any, c.manager);
+      expect(again.status).toBe('DRAFT');
+      await expect(engs.create({ clientId: c.clientA.id, fiscalYear: 2026, fiscalYearEndDate: '2026-12-31' } as any, c.manager)).rejects.toThrow(/Ya existe un encargo/);
+      // el índice de la base lo impone aunque la API se saltara la validación
+      await expect(prisma.engagement.create({
+        data: { organizationId: c.org.id, clientId: c.clientA.id, fiscalYear: 2026, fiscalYearEndDate: new Date('2026-12-31'), createdById: c.cae.id },
+      })).rejects.toThrow();
+      // una consultoría no compite con la auditoría
+      await expect(engs.create({ clientId: c.clientA.id, fiscalYear: 2026, fiscalYearEndDate: '2026-12-31', kind: 'CONSULTING', title: 'Asesoría' } as any, c.manager)).resolves.toBeDefined();
+    });
+
+    it('cancelar la auditoría de un encargo cancela también el encargo y sus cuotas; con facturas vigentes se rechaza sin cambiar nada', async () => {
+      const audits = new AuditsService(prisma as any, {} as any, {} as any, {} as any);
+      const withAudit = async (c: Ctx) => {
+        const a = await prisma.audit.create({ data: { organizationId: c.org.id, title: 'Auditoría EEFF', type: 'EXTERNAL_FINANCIAL', leadAuditorId: c.manager.id, status: 'PLANNING' } });
+        await prisma.engagement.update({ where: { id: c.engA.id }, data: { auditId: a.id, status: 'APPROVED' } });
+        return a;
+      };
+      const c = await seed();
+      await setFixedFee(c, 1000);
+      await fees.generateSchedule(c.engA.id, { mode: 'EQUAL', count: 3, firstDate: '2026-07-01', everyMonths: 1 } as any, c.cae);
+      const a = await withAudit(c);
+      await audits.updateStatus(a.id, { status: 'CANCELLED' } as any, c.cae);
+      expect((await prisma.audit.findUniqueOrThrow({ where: { id: a.id } })).status).toBe('CANCELLED');
+      expect((await prisma.engagement.findUniqueOrThrow({ where: { id: c.engA.id } })).status).toBe('CANCELLED');
+      expect(await prisma.billingScheduleItem.count({ where: { engagementId: c.engA.id, status: 'CANCELLED' } })).toBe(3);
+      expect(await prisma.collectionLog.count({ where: { organizationId: c.org.id, action: 'SCHEDULE_ITEM_CANCELLED', note: 'Auditoría cancelada' } })).toBe(3);
+      // el ejercicio queda libre para volver a abrirlo
+      await expect(engs.create({ clientId: c.clientA.id, fiscalYear: 2026, fiscalYearEndDate: '2026-12-31' } as any, c.manager)).resolves.toBeDefined();
+      await expectClean(c);
+
+      // con una factura vigente no se cancela ni la auditoría ni el encargo
+      const d = await seed();
+      await setFixedFee(d, 1000);
+      await invoice(d, 100);
+      const b = await withAudit(d);
+      await expect(audits.updateStatus(b.id, { status: 'CANCELLED' } as any, d.cae)).rejects.toThrow(/facturas registradas/);
+      expect((await prisma.audit.findUniqueOrThrow({ where: { id: b.id } })).status).toBe('PLANNING');
+      expect((await prisma.engagement.findUniqueOrThrow({ where: { id: d.engA.id } })).status).toBe('APPROVED');
+
+      // una auditoría sin encargo (interna, por ejemplo) se cancela como siempre
+      const free = await prisma.audit.create({ data: { organizationId: d.org.id, title: 'Interna', type: 'EXTERNAL', leadAuditorId: d.manager.id, status: 'PLANNING' } });
+      await audits.updateStatus(free.id, { status: 'CANCELLED' } as any, d.cae);
+      expect((await prisma.audit.findUniqueOrThrow({ where: { id: free.id } })).status).toBe('CANCELLED');
     });
 
     it('el reparto automático descuenta las retenciones del mismo pago', async () => {

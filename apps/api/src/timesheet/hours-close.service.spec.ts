@@ -291,6 +291,35 @@ describe('Ajustes de un mes cerrado', () => {
     expect(db.tables.hoursPeriodClose.rows[0]).toMatchObject({ entryCount: 0, totalHours: 0 });
   });
 
+  it('un ajuste completa el vínculo encargo ↔ ítem del plan igual que la captura normal (el plan y el encargo cuentan las mismas horas)', async () => {
+    const { db, u, hc, e } = await closed();
+    // el encargo se vinculó a su ítem del plan DESPUÉS de registrar la hora y de cerrar el mes
+    db.tables.auditPlanItem.rows.push({ id: 'pi1', plan: { organizationId: 'org1' }, auditId: 'aud1' });
+    expect(db.entries()[0].planItemId ?? null).toBeNull();
+
+    // ADD con solo el encargo → recibe su ítem
+    const add = await hc.createAdjustment({ action: 'ADD', entry: entry({ workDate: '2026-09-15', hours: 3 }), reason: 'Visita sin registrar' } as any, u.auditor);
+    await hc.decideAdjustment(add.id, { approve: true } as any, u.manager);
+    expect(db.entries({ workDate: new Date('2026-09-15T00:00:00Z') })[0]).toMatchObject({ auditId: 'aud1', planItemId: 'pi1' });
+
+    // ADD con solo el ítem → recibe su encargo (y la tarifa de ese encargo)
+    const addByItem = await hc.createAdjustment({ action: 'ADD', entry: entry({ workDate: '2026-09-16', hours: 2, auditId: undefined, planItemId: 'pi1' }), reason: 'Otra visita' } as any, u.auditor);
+    await hc.decideAdjustment(addByItem.id, { approve: true } as any, u.manager);
+    expect(db.entries({ workDate: new Date('2026-09-16T00:00:00Z') })[0]).toMatchObject({ auditId: 'aud1', planItemId: 'pi1', billRateSnapshot: 40 });
+
+    // EDIT de la hora original (solo cambia la descripción) → queda ligada al ítem
+    const edit = await hc.createAdjustment({ action: 'EDIT', timeEntryId: e.id, changes: { description: 'Revisión completa de cuentas' }, reason: 'Más detalle' } as any, u.auditor);
+    await hc.decideAdjustment(edit.id, { approve: true } as any, u.manager);
+    expect(db.entries().find((x) => x.id === e.id)).toMatchObject({ auditId: 'aud1', planItemId: 'pi1' });
+  });
+
+  it('un ajuste con un ítem de plan de otro encargo se rechaza al pedirlo', async () => {
+    const { db, u, hc } = await closed();
+    db.tables.auditPlanItem.rows.push({ id: 'pi2', plan: { organizationId: 'org1' }, auditId: 'aud-otro' });
+    await expect(hc.createAdjustment({ action: 'ADD', entry: entry({ workDate: '2026-09-15', planItemId: 'pi2' }), reason: 'Visita sin registrar' } as any, u.auditor))
+      .rejects.toThrow(/vinculado a otro encargo/);
+  });
+
   it('rechazar no cambia nada y deja la decisión', async () => {
     const { db, u, hc, e } = await closed();
     const req = await hc.createAdjustment({ action: 'DELETE', timeEntryId: e.id, reason: 'Quiero borrarla' } as any, u.auditor);

@@ -2,6 +2,7 @@ import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
+import { cancelEngagementInTx } from '../portfolio/engagement-cancel.util';
 import { ROLE_HIERARCHY } from '../common/guards/roles.guard';
 import { resolveCostRate } from '../timesheet/frozen-rates';
 import {
@@ -302,6 +303,16 @@ export class AuditsService {
       throw new BadRequestException(
         `Transición no permitida: ${audit.status} → ${dto.status}`,
       );
+    }
+
+    // Cancelar la auditoría de un encargo (Cartera) cancela también el encargo; antes quedaba «Aprobado» con una auditoría
+    // muerta y ese cliente no podía volver a tener su ejercicio. Si el encargo ya tiene facturas vigentes, no se cancela.
+    if (dto.status === AuditStatus.CANCELLED) {
+      return this.prisma.$transaction(async (tx) => {
+        const engagement = await tx.engagement.findUnique({ where: { auditId: id }, select: { id: true } });
+        if (engagement) await cancelEngagementInTx(tx, engagement.id, user, { viaAudit: true });
+        return tx.audit.update({ where: { id }, data: { status: dto.status } });
+      });
     }
 
     return this.prisma.audit.update({

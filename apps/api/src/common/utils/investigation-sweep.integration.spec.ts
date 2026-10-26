@@ -590,10 +590,17 @@ suite('modo investigación · barrido por módulo (Postgres real)', () => {
       expect(pick(asManager, reqInv.id).payload.description).toBeNull();
       expect(pick(asManager, reqNor.id).entry.description).toBe('entrevista con el gerente de compras');
       expect(pick(asManager, reqNor.id).payload.description).toBe('texto normal nuevo');
+      // el motivo del pedido (y la nota de quien lo resolvió, si no es el propio gerente) también cuentan lo que se hizo
+      expect(pick(asManager, reqInv.id).reason).toBeNull();
+      expect(pick(asManager, reqNor.id).reason).toBe('corrección');
+      await prisma.timeAdjustmentRequest.update({ where: { id: reqInv.id }, data: { decisionNote: 'confirmado con el fiscal del caso', decidedById: w.users.cae.id } });
+      expect(pick(await hc.listAdjustments({} as any, w.users.manager), reqInv.id).decisionNote).toBeNull();
       const asCae: any[] = await hc.listAdjustments({} as any, w.users.cae);
       expect(pick(asCae, reqInv.id).payload.description).toBe('texto reservado nuevo');
+      expect(pick(asCae, reqInv.id)).toMatchObject({ reason: 'corrección', decisionNote: 'confirmado con el fiscal del caso' });
       const asLead: any[] = await hc.listAdjustments({ mine: 'true' } as any, w.users.lead);
       expect(pick(asLead, reqInv.id).entry.description).toBe('entrevista con el gerente de compras');
+      expect(pick(asLead, reqInv.id).reason).toBe('corrección');
     });
 
     it('al aprobar un ajuste se revalida que QUIEN LO PIDIÓ todavía vea el encargo', async () => {

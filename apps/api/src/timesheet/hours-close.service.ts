@@ -9,7 +9,7 @@ import { EmailService, escHtml } from '../email/email.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { hiddenAuditIds, RESTRICTED_AUDIT_TITLE } from '../common/utils/investigation-scope.util';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
-import { assertDailyHoursCap, assertTimeAnchorsInOrg, assertValidHours } from './daily-hours-cap.util';
+import { assertDailyHoursCap, assertTimeAnchorsInOrg, assertValidHours, completeTimeAnchors } from './daily-hours-cap.util';
 import {
   ClosePeriodDto, CreateAdjustmentDto, DecideAdjustmentDto, HoursCloseSettingsDto, QueryAdjustmentsDto, RemindPeriodDto,
   ReopenPeriodDto,
@@ -432,6 +432,7 @@ export class HoursCloseService {
       if (!dto.entry) throw new BadRequestException('Para agregar horas indica la hora completa en "entry".');
       this.assertEntryFields(dto.entry);
       await assertTimeAnchorsInOrg(this.prisma, user, [dto.entry]);
+      await completeTimeAnchors(this.prisma, dto.entry); // un ítem de plan de otro encargo se rechaza ahora, no al aprobar
       period = periodKeyOf(dto.entry.workDate);
       payload = { ...dto.entry } as Prisma.InputJsonObject;
     } else {
@@ -449,6 +450,7 @@ export class HoursCloseService {
         const merged = mergeEntryChanges(entry, dto.changes);
         this.assertEntryFields(merged);
         await assertTimeAnchorsInOrg(this.prisma, user, [merged]);
+        await completeTimeAnchors(this.prisma, merged);
         payload = { ...dto.changes } as Prisma.InputJsonObject;
       }
     }
@@ -533,6 +535,8 @@ export class HoursCloseService {
         ...r,
         payload: redact && r.payload && typeof r.payload === 'object' ? { ...(r.payload as object), description: null } : r.payload,
         entry: redact && entry ? { ...entry, description: null } : entry,
+        // El motivo del pedido y la nota de quien lo resolvió también cuentan lo que se hizo en la investigación.
+        ...(redact ? { reason: null, decisionNote: r.decidedById === user.id ? r.decisionNote : null } : {}),
       };
     });
   }
@@ -575,15 +579,18 @@ export class HoursCloseService {
         if (periodLabel(periodKeyOf(e.workDate)) !== periodLabel(period)) throw new ConflictException('La fecha del pedido no está en ese mes.');
         assertValidHours(e.hours);
         await assertDailyHoursCap(tx, req.userId, new Map([[e.workDate, e.hours]]));
-        const snapshots = await this.loadSnapshots(tx, req.organizationId, req.userId, period.year, [e.auditId ?? null]);
+        // Una sola definición de encargo/ítem de plan (ver completeTimeAnchors): una hora que trae solo el ítem recibe su encargo, y
+        // la que trae solo el encargo recibe su ítem; si no, el plan y el encargo contaban horas distintas.
+        const anchors = await completeTimeAnchors(tx, e);
+        const snapshots = await this.loadSnapshots(tx, req.organizationId, req.userId, period.year, [anchors.auditId ?? null]);
         const created = await tx.timeEntry.create({
           data: {
-            organizationId: req.organizationId, userId: req.userId, auditId: e.auditId, planItemId: e.planItemId,
+            organizationId: req.organizationId, userId: req.userId, auditId: anchors.auditId, planItemId: anchors.planItemId,
             workDate: new Date(e.workDate), hours: e.hours, description: e.description, category: e.category,
             nonBillableReason: e.nonBillableReason ?? null, afterClose: true, closedAt: now,
             // El costo es el que se congeló al cerrar el mes (no el perfil de hoy): todas las horas del mes valen igual.
             costRateSnapshot: closed.costRateSnapshot,
-            billRateSnapshot: e.auditId && CLIENT_CATEGORIES.has(e.category) ? snapshots.billRateByAudit.get(e.auditId) ?? null : null,
+            billRateSnapshot: anchors.auditId && CLIENT_CATEGORIES.has(e.category) ? snapshots.billRateByAudit.get(anchors.auditId) ?? null : null,
           },
         });
         if (created.auditId) touchedAudits.add(created.auditId);
@@ -611,6 +618,9 @@ export class HoursCloseService {
           const merged = mergeEntryChanges(entry, (req.payload ?? {}) as Record<string, never>);
           if (periodLabel(periodKeyOf(merged.workDate)) !== periodLabel(period)) throw new ConflictException('El cambio mueve la hora a otro mes.');
           this.assertEntryFields(merged);
+          const anchors = await completeTimeAnchors(tx, merged);
+          merged.auditId = anchors.auditId ?? null;
+          merged.planItemId = anchors.planItemId ?? null;
           await assertDailyHoursCap(tx, req.userId, new Map([[merged.workDate, merged.hours]]), [entry.id]);
           // El costo del mes no se recalcula; la tarifa solo si cambió el encargo o dejó de ser una hora de cliente.
           const sameRate = merged.auditId === entry.auditId

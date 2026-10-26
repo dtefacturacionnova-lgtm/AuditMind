@@ -280,7 +280,8 @@ const AUDIT_TYPE_SHORT: Record<string, string> = {
   FORENSE: 'Forense', FRAUDE: 'Fraude', CALIDAD: 'Calidad', OTROS: 'Otros',
 };
 
-function coverageLabel(days: number | null | undefined): string | null {
+function coverageLabel(days: number | null | undefined, neverAudited?: boolean | null): string | null {
+  if (neverAudited) return 'Nunca auditada';
   if (!days || days <= 0) return null;
   if (days < 365) return `${days}d sin auditar`;
   const years = (days / 365).toFixed(1);
@@ -316,10 +317,16 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear, isSelec
   onToggleSelect: (id: string) => void;
 }) {
   const router = useRouter();
-  const rl = RISK_LEVEL_CONFIG[(u.riskLevel ?? 'MEDIUM') as keyof typeof RISK_LEVEL_CONFIG];
+  const unscored = u.scored === false;
+  const rl = unscored
+    ? { bg: 'bg-slate-100', color: 'text-slate-500', label: 'Sin evaluar' }
+    : RISK_LEVEL_CONFIG[(u.riskLevel ?? 'MEDIUM') as keyof typeof RISK_LEVEL_CONFIG];
   const { groupA, groupB } = computeBreakdown(u.assessment);
   const score = u.totalScore ?? 0;
-  const covLabel = coverageLabel(u.coverageGapDays);
+  const covLabel = coverageLabel(u.coverageGapDays, u.neverAudited);
+  const planMatchHint = u.planMatch === 'PROJECT' ? 'Hay un proyecto del Banco promovido desde esta unidad en el plan'
+    : u.planMatch === 'ENTITY' ? 'La entidad completa está en el plan'
+    : 'La unidad está en el plan';
   const rtBadge = u.riskType ? RISKTYPE_BADGE[u.riskType] : null;
   const planItems = (u as any).planItems as Array<{ plan: { year: number; status: string } }> | undefined;
   const lastPlanYear = planItems?.[0]?.plan?.year;
@@ -397,7 +404,7 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear, isSelec
               </span>
             )}
             {u.alreadyInCurrentPlan && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
+              <span title={planMatchHint} className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">
                 ✓ En plan {currentYear}
               </span>
             )}
@@ -434,6 +441,14 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear, isSelec
                 <Clock className="w-3 h-3" /> {covLabel}
               </span>
             )}
+            {u.neverAudited && u.entityLastClosedAt && (
+              <span className="text-[11px] text-slate-400" title="Tómala como «última auditoría» al evaluar la unidad si corresponde a este proceso">
+                La entidad tiene una auditoría cerrada el {new Date(u.entityLastClosedAt).toLocaleDateString('es-SV', { timeZone: 'UTC' })}
+              </span>
+            )}
+            {u.assessmentIsStale && (
+              <span className="text-[11px] text-slate-400">Evaluación de {u.assessment?.assessmentYear}: evalúa de nuevo para {currentYear}</span>
+            )}
             {yearsGap !== null && yearsGap > 0 ? (
               <span className="text-[11px] text-slate-400">
                 Último plan: {lastPlanYear} ({yearsGap} año{yearsGap !== 1 ? 's' : ''} atrás)
@@ -449,7 +464,7 @@ function CandidateCard({ rank, unit: u, expanded, onToggle, currentYear, isSelec
         {/* Score widget */}
         <div className="w-32 shrink-0 text-right space-y-1.5">
           <div className="flex items-center justify-end gap-1.5">
-            <span className={cn('text-xl font-bold leading-none', scoreColor)}>{score.toFixed(0)}</span>
+            <span className={cn('text-xl font-bold leading-none', unscored ? 'text-slate-300' : scoreColor)}>{unscored ? '—' : score.toFixed(0)}</span>
             <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-semibold', rl.bg, rl.color)}>{rl.label}</span>
           </div>
           {/* Total bar */}
@@ -595,7 +610,9 @@ function TierSection({ icon, title, count, headerCls, candidates, expandedId, on
 // ─── PlanCandidatesView ───────────────────────────────────────────────────────
 
 function PlanCandidatesView() {
-  const currentYear = new Date().getFullYear();
+  const thisYear = new Date().getFullYear();
+  // El año del plan que se está armando: por defecto el actual, pero en octubre-diciembre ya se planea el siguiente.
+  const [currentYear, setCurrentYear] = useState(thisYear);
   const { data, isLoading, isError } = usePlanCandidates(currentYear);
   const { data: objectives = [] }    = useStrategicObjectives();
   const [filterLevel, setFilterLevel] = useState<string>('ALL');
@@ -701,7 +718,8 @@ function PlanCandidatesView() {
 
   const filtered = all.filter(u => {
     if (hideInPlan && u.alreadyInCurrentPlan) return false;
-    if (filterLevel !== 'ALL' && (u.riskLevel ?? 'MEDIUM') !== filterLevel) return false;
+    if (filterLevel === 'UNSCORED') { if (u.scored !== false) return false; }
+    else if (filterLevel !== 'ALL' && u.riskLevel !== filterLevel) return false;
     if (filterRiskType !== 'ALL' && (u.riskType ?? '') !== filterRiskType) return false;
     return true;
   });
@@ -709,9 +727,9 @@ function PlanCandidatesView() {
   // Tier 1: obligatorias (law / regulatory)
   const obligatorias = filtered.filter(u => u.isMandatory);
   // Tier 2: not mandatory but high risk or overdue > 1 year
-  const altoRiesgo   = filtered.filter(u => !u.isMandatory && ((u.totalScore ?? 0) >= 55 || (u.coverageGapDays ?? 0) > 365));
+  const altoRiesgo   = filtered.filter(u => !u.isMandatory && ((u.totalScore ?? 0) >= 55 || (u.coverageGapDays ?? 0) > 365 || u.neverAudited === true));
   // Tier 3: rest
-  const otras        = filtered.filter(u => !u.isMandatory && (u.totalScore ?? 0) < 55 && (u.coverageGapDays ?? 0) <= 365);
+  const otras        = filtered.filter(u => !u.isMandatory && (u.totalScore ?? 0) < 55 && (u.coverageGapDays ?? 0) <= 365 && u.neverAudited !== true);
 
   const LEVEL_BTNS = [
     { id: 'ALL',      label: 'Todos',    cls: 'bg-slate-100 text-slate-700 border-slate-200' },
@@ -719,6 +737,7 @@ function PlanCandidatesView() {
     { id: 'HIGH',     label: 'Alto',     cls: 'bg-orange-50 text-orange-700 border-orange-200' },
     { id: 'MEDIUM',   label: 'Medio',    cls: 'bg-amber-50 text-amber-700 border-amber-200' },
     { id: 'LOW',      label: 'Bajo',     cls: 'bg-green-50 text-green-700 border-green-200' },
+    { id: 'UNSCORED', label: `Sin evaluar${data.unscored ? ` (${data.unscored})` : ''}`, cls: 'bg-slate-50 text-slate-600 border-slate-200' },
   ];
 
   const allFiltered = [...obligatorias, ...altoRiesgo, ...otras];
@@ -813,6 +832,11 @@ function PlanCandidatesView() {
       {/* ── Filters ── */}
       <div className="flex items-center gap-3 flex-wrap rounded-lg border border-slate-200 bg-white px-4 py-2.5">
         <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <select value={currentYear} onChange={e => { setCurrentYear(Number(e.target.value)); setSelectedIds(new Set()); }}
+          aria-label="Año del plan"
+          className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+          {[thisYear - 1, thisYear, thisYear + 1].map(y => <option key={y} value={y}>Plan {y}</option>)}
+        </select>
         <div className="flex items-center gap-1">
           {LEVEL_BTNS.map(btn => (
             <button key={btn.id}
@@ -2502,6 +2526,7 @@ function AuditableUnitsTab() {
                 const a = u.assessments?.[0];
                 const rl = a ? RISK_LEVEL_CONFIG[a.riskLevel as keyof typeof RISK_LEVEL_CONFIG] : null;
                 const overdue = (a?.coverageGapDays ?? 0) > 0;
+                const neverAudited = a?.neverAudited === true;
                 return (
                   <tr key={u.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3">
@@ -2552,7 +2577,9 @@ function AuditableUnitsTab() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {overdue
+                      {neverAudited
+                        ? <span className="text-xs text-orange-600 font-medium">⚠ Nunca auditada</span>
+                        : overdue
                         ? <span className="text-xs text-orange-600 font-medium">⚠ {a!.coverageGapDays}d vencida</span>
                         : a?.nextRecommendedDate
                           ? <span className="text-xs text-green-600">✓ Al día</span>

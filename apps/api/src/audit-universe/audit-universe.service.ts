@@ -2,7 +2,8 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInOrg } from '../common/utils/tenant.util';
-import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
+import { hiddenAuditIds, visibleAuditWhere } from '../common/utils/investigation-scope.util';
+import { computeCoverage, withLiveCoverage } from './coverage.util';
 import { CreateAuditableUnitDto as LegacyCreateDto } from './dto/create-auditable-unit.dto';
 import { UpdateAuditableUnitDto as LegacyUpdateDto } from './dto/update-auditable-unit.dto';
 import {
@@ -53,16 +54,6 @@ function computeScores(data: {
     total >= 35 ? 'MEDIUM' : 'LOW';
 
   return { inherentRiskScore: inherent, residualRiskScore: residual, totalScore: total, riskLevel };
-}
-
-function computeCoverageGap(lastAuditDate: Date | null, freqMonths: number) {
-  const nextDate = lastAuditDate
-    ? new Date(lastAuditDate.getTime() + freqMonths * 30.44 * 24 * 3600 * 1000)
-    : null;
-  const gapDays = nextDate
-    ? Math.round((Date.now() - nextDate.getTime()) / (24 * 3600 * 1000))
-    : 9999; // nunca auditada = máxima urgencia
-  return { nextRecommendedDate: nextDate, coverageGapDays: gapDays };
 }
 
 @Injectable()
@@ -313,7 +304,7 @@ export class AuditUniverseService {
 
   async findAllUnits(user: AuthUser, entityId?: string, year?: number) {
     const currentYear = year ?? new Date().getFullYear();
-    return this.prisma.auditableUnit.findMany({
+    const units = await this.prisma.auditableUnit.findMany({
       where: {
         organizationId: user.organizationId,
         active: true,
@@ -329,6 +320,9 @@ export class AuditUniverseService {
       },
       orderBy: [{ auditEntity: { name: 'asc' } }, { auditProcess: { sortOrder: 'asc' } }],
     });
+    // La brecha de cobertura se recalcula al leer (la guardada quedaba congelada al día de la evaluación).
+    const now = new Date();
+    return units.map((u) => ({ ...u, assessments: u.assessments.map((a) => withLiveCoverage(a, now)) }));
   }
 
   async updateUnit(id: string, dto: UpdateAuditableUnitDto, user: AuthUser) {
@@ -382,7 +376,8 @@ export class AuditUniverseService {
       ? new Date(dto.lastAuditDate)
       : existing?.lastAuditDate ?? null;
     const freqMonths = dto.recommendedFreqMonths ?? existing?.recommendedFreqMonths ?? 12;
-    const { nextRecommendedDate, coverageGapDays } = computeCoverageGap(lastAuditDate, freqMonths);
+    // Nunca auditada: la brecha queda null (antes 9999). La lectura la recalcula cada vez; esto solo mantiene las columnas al día.
+    const { nextRecommendedDate, coverageGapDays } = computeCoverage(lastAuditDate, freqMonths);
 
     return this.prisma.auditableUnitAssessment.upsert({
       where: { auditableUnitId_assessmentYear: { auditableUnitId: unitId, assessmentYear: year } },
@@ -424,6 +419,7 @@ export class AuditUniverseService {
   // Las mandatorias siempre aparecen primero. Las demás ordenadas por totalScore desc.
   async getPlanCandidates(user: AuthUser, year?: number) {
     const currentYear = year ?? new Date().getFullYear();
+    const now = new Date();
 
     const units = await this.prisma.auditableUnit.findMany({
       where: { organizationId: user.organizationId, active: true },
@@ -431,8 +427,11 @@ export class AuditUniverseService {
         auditEntity: { select: { id: true, name: true, entityType: true } },
         auditProcess: { select: { id: true, code: true, name: true, category: true } },
         strategicLine: { select: { id: true, code: true, name: true } },
+        // La evaluación del año pedido o, si ese año aún no se evalúa, la más reciente anterior (marcada como no vigente):
+        // al planear el año siguiente todas las unidades aparecían «sin evaluar».
         assessments: {
-          where: { assessmentYear: currentYear },
+          where: { assessmentYear: { lte: currentYear } },
+          orderBy: { assessmentYear: 'desc' },
           take: 1,
         },
         planItems: {
@@ -443,27 +442,64 @@ export class AuditUniverseService {
       },
     });
 
+    // Lo que ya está en el plan del año (no cerrado). Un ítem puede nombrar la unidad (`auditableUnitId`), venir de un proyecto del
+    // Banco promovido desde ella (mismo nombre y misma entidad responsable) o ser de la entidad completa (ítem manual). Los ítems
+    // ligados a una investigación ajena no cuentan: no se debe revelar por aquí que existe.
+    const planItems = await this.prisma.auditPlanItem.findMany({
+      where: { plan: { organizationId: user.organizationId, year: currentYear, status: { not: 'CLOSED' } } },
+      select: {
+        auditId: true, auditableUnitId: true, auditEntityId: true, auditProjectId: true,
+        auditProject: { select: { name: true, responsibleEntityId: true } },
+      },
+    });
+    const hidden = await hiddenAuditIds(this.prisma, planItems.map((i) => i.auditId), user);
+    const itemsInPlan = planItems.filter((i) => !i.auditId || !hidden.has(i.auditId));
+    const planMatchOf = (u: { id: string; name: string | null; auditEntityId: string; auditEntity?: { name: string } | null; auditProcess?: { name: string } | null }) => {
+      if (itemsInPlan.some((i) => i.auditableUnitId === u.id)) return 'UNIT' as const;
+      const unitName = (u.name ?? `${u.auditEntity?.name ?? ''} — ${u.auditProcess?.name ?? ''}`).trim().toLowerCase();
+      if (itemsInPlan.some((i) => i.auditProject?.responsibleEntityId === u.auditEntityId && i.auditProject.name.trim().toLowerCase() === unitName)) return 'PROJECT' as const;
+      if (itemsInPlan.some((i) => !i.auditableUnitId && !i.auditProjectId && i.auditEntityId === u.auditEntityId)) return 'ENTITY' as const;
+      return null;
+    };
+
+    // Última auditoría CERRADA de cada entidad (sugerencia para quien llena «última auditoría»). Sin investigaciones: su fecha no se muestra.
+    const closed = await this.prisma.audit.groupBy({
+      by: ['auditEntityId'],
+      where: { ...visibleAuditWhere(user), status: 'CLOSED', isInvestigationMode: false, auditEntityId: { not: null } },
+      _max: { endDate: true },
+    });
+    const closedByEntity = new Map(closed.map((c) => [c.auditEntityId as string, c._max.endDate]));
+
     const mapped = units.map((u) => {
-      const assessment = u.assessments[0] ?? null;
-      const alreadyInCurrentPlan = u.planItems.some(
-        (pi) => pi.plan.year === currentYear && pi.plan.status !== 'CLOSED',
-      );
+      const raw = u.assessments[0] ?? null;
+      const assessment = raw ? withLiveCoverage(raw, now) : null;
+      const planMatch = planMatchOf(u);
       return {
         ...u,
         assessment,
-        alreadyInCurrentPlan,
-        totalScore: assessment?.totalScore ?? 0,
-        riskLevel: assessment?.riskLevel ?? 'MEDIUM',
+        assessmentIsStale: !!assessment && assessment.assessmentYear < currentYear,
+        // «Sin evaluar»: antes aparecía como riesgo Medio con puntaje 0, mezclado con las unidades realmente medianas.
+        scored: !!assessment,
+        alreadyInCurrentPlan: planMatch !== null,
+        planMatch,
+        totalScore: assessment?.totalScore ?? null,
+        riskLevel: assessment?.riskLevel ?? null,
         coverageGapDays: assessment?.coverageGapDays ?? null,
-        isOverdue: (assessment?.coverageGapDays ?? 0) > 0,
+        neverAudited: assessment ? assessment.neverAudited : null,
+        isOverdue: assessment ? assessment.neverAudited || (assessment.coverageGapDays ?? 0) > 0 : false,
+        entityLastClosedAt: closedByEntity.get(u.auditEntityId) ?? null,
       };
     });
 
-    // Mandatorias primero, luego por score desc, luego por coverageGapDays desc
+    // Mandatorias primero; luego las evaluadas por puntaje; después la que más urge (nunca auditada, luego mayor brecha); las sin evaluar al final.
+    const urgency = (u: (typeof mapped)[number]) => (u.neverAudited ? Number.POSITIVE_INFINITY : u.coverageGapDays ?? Number.NEGATIVE_INFINITY);
     mapped.sort((a, b) => {
       if (a.isMandatory !== b.isMandatory) return a.isMandatory ? -1 : 1;
-      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-      return (b.coverageGapDays ?? 0) - (a.coverageGapDays ?? 0);
+      if (a.scored !== b.scored) return a.scored ? -1 : 1;
+      const sa = a.totalScore ?? 0; const sb = b.totalScore ?? 0;
+      if (sb !== sa) return sb - sa;
+      const ua = urgency(a); const ub = urgency(b);
+      return ua === ub ? 0 : ub > ua ? 1 : -1;
     });
 
     return {
@@ -471,6 +507,7 @@ export class AuditUniverseService {
       total: mapped.length,
       mandatory: mapped.filter((u) => u.isMandatory).length,
       overdue: mapped.filter((u) => u.isOverdue).length,
+      unscored: mapped.filter((u) => !u.scored).length,
       candidates: mapped,
     };
   }

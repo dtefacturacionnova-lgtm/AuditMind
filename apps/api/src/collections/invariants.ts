@@ -55,8 +55,29 @@ export async function checkCollectionInvariants(db: Db, organizationId?: string)
     SELECT f.id FROM engagement_fees f
     WHERE f."feeType" = 'FIXED' ${orgE}
       AND COALESCE((SELECT SUM("netAmount") FROM client_invoices i WHERE i."engagementId" = f."engagementId" AND i.status <> 'VOID'), 0)
+        - COALESCE((SELECT SUM("netAmount") FROM client_credit_notes n WHERE n."engagementId" = f."engagementId" AND n.status = 'ACTIVE'), 0)
         + COALESCE((SELECT SUM(amount) FROM billing_schedule_items s WHERE s."engagementId" = f."engagementId" AND s.status = 'PLANNED'), 0)
         > f."totalAmount"`);
+
+  await run('El acreditado de la factura no coincide con la suma de sus notas de crédito vigentes', Prisma.sql`
+    SELECT i.id FROM client_invoices i
+    LEFT JOIN (SELECT "invoiceId", SUM("totalAmount") AS s FROM client_credit_notes WHERE status = 'ACTIVE' GROUP BY "invoiceId") n ON n."invoiceId" = i.id
+    WHERE i."creditedAmount" <> COALESCE(n.s, 0) ${org}`);
+
+  await run('El castigado de la factura no coincide con la suma de sus castigos vigentes', Prisma.sql`
+    SELECT i.id FROM client_invoices i
+    LEFT JOIN (SELECT "invoiceId", SUM(amount) AS s FROM client_write_offs WHERE status = 'ACTIVE' GROUP BY "invoiceId") w ON w."invoiceId" = i.id
+    WHERE i."writtenOffAmount" <> COALESCE(w.s, 0) ${org}`);
+
+  await run('Una factura anulada conserva notas de crédito o castigos vigentes', Prisma.sql`
+    SELECT i.id FROM client_invoices i WHERE i.status = 'VOID' ${org}
+      AND (EXISTS (SELECT 1 FROM client_credit_notes n WHERE n."invoiceId" = i.id AND n.status = 'ACTIVE')
+        OR EXISTS (SELECT 1 FROM client_write_offs w WHERE w."invoiceId" = i.id AND w.status = 'ACTIVE'))`);
+
+  await run('Las notas de crédito vigentes de una factura acreditan más neto que el de la factura', Prisma.sql`
+    SELECT i.id FROM client_invoices i
+    JOIN (SELECT "invoiceId", SUM("netAmount") AS s FROM client_credit_notes WHERE status = 'ACTIVE' GROUP BY "invoiceId") n ON n."invoiceId" = i.id
+    WHERE n.s > i."netAmount" ${org}`);
 
   await run('Una cuota facturada no tiene exactamente una factura vigente', Prisma.sql`
     SELECT s.id FROM billing_schedule_items s WHERE s.status = 'INVOICED' ${orgS}

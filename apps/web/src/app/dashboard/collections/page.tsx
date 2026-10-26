@@ -12,8 +12,11 @@ import { formatDateUTC, formatMoney } from '@/lib/utils';
 import { InvoiceDetailModal, InvoiceFormModal } from '@/components/collections/InvoiceModals';
 import { PaymentDetailModal, PaymentFormModal } from '@/components/collections/PaymentModals';
 import { ErrorLine, Pill, ReasonModal, btnPrimary, btnSmall, btnSmallDanger, inputCls } from '@/components/collections/ui';
+import { AgingPanel } from '@/components/collections/AgingPanel';
+import { ManagementPanel } from '@/components/collections/ManagementPanel';
+import { useAlerts } from '@/hooks/useCollectionsReports';
 
-type Tab = 'invoices' | 'payments' | 'withholdings';
+type Tab = 'invoices' | 'payments' | 'withholdings' | 'aging' | 'management';
 const DIRECTION = ['CAE', 'ADMIN', 'SUPER_ADMIN'];
 
 /** Cobranza: facturas por cobrar, cobros recibidos y retenciones sufridas, con alta, detalle, edición y anulación. */
@@ -52,8 +55,12 @@ export default function CollectionsPage() {
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
 
-  const tabBtn = (t: Tab, label: string) => (
-    <button type="button" onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label}</button>
+  const alerts = useAlerts();
+  const alertCount = alerts.data ? alerts.data.counts.overduePromises + alerts.data.counts.followUps + alerts.data.counts.unattendedInvoices : 0;
+  const tabBtn = (t: Tab, label: string, badge = 0) => (
+    <button type="button" onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+      {label}{badge > 0 && <span className="ml-1.5 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">{badge}</span>}
+    </button>
   );
 
   const invTotals = invoices.data?.items.reduce((s, i) => s + (i.status === 'VOID' ? 0 : i.balance), 0) ?? 0;
@@ -82,7 +89,7 @@ export default function CollectionsPage() {
       </div>
 
       <div className="flex border-b border-gray-200">
-        {tabBtn('invoices', 'Por cobrar')}{tabBtn('payments', 'Cobros')}{tabBtn('withholdings', 'Retenciones')}
+        {tabBtn('invoices', 'Por cobrar')}{tabBtn('aging', 'Antigüedad')}{tabBtn('payments', 'Cobros')}{tabBtn('withholdings', 'Retenciones')}{tabBtn('management', 'Gestión de cobro', alertCount)}
       </div>
 
       {tab === 'invoices' && (
@@ -128,6 +135,9 @@ export default function CollectionsPage() {
           <Pager page={invPage} total={invoices.data?.total ?? 0} pageSize={50} onPage={setInvPage} />
         </section>
       )}
+
+      {tab === 'aging' && <AgingPanel clientId={clientId} onOpenInvoice={setInvoiceId} />}
+      {tab === 'management' && <ManagementPanel clientId={clientId} onOpenInvoice={setInvoiceId} />}
 
       {tab === 'payments' && (
         <section className="space-y-3">

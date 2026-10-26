@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
+import type { AccrualView, CreditNoteRow, WriteOffRow } from './useCollectionsReports';
 
 // Cobro de honorarios (docs/cobros-honorarios-diseno.md). Los tipos reflejan fees.service.ts, invoices.service.ts y payments.service.ts.
 // Todo monto llega como número con 2 decimales; la aritmética con dinero se hace SIEMPRE en el servidor.
@@ -59,6 +60,8 @@ export interface FeeView {
   amendments: { id: string; date: string; reason: string; amountDelta: number; createdAt: string }[];
   schedule: ScheduleItem[];
   summary: FeeSummary;
+  /** Avance, devengado y por facturar al día de hoy; null si el encargo aún no tiene honorario. */
+  accrual: AccrualView | null;
   permissions: { canEdit: boolean };
 }
 
@@ -83,8 +86,13 @@ export interface InvoiceDetail extends InvoiceRow {
     payment: { id: string; paymentDate: string; method: PaymentMethod; reference: string | null; status: PaymentStatus } | null;
   }[];
   withholdings: WithholdingRow[];
+  creditNotes: CreditNoteRow[];
+  writeOffs: WriteOffRow[];
   log: { id: string; action: string; actorId: string; note: string | null; createdAt: string }[];
-  permissions: { canEditAll: boolean; canEditBasics: boolean; canVoid: boolean; canReverseWithholding: boolean };
+  permissions: {
+    canEditAll: boolean; canEditBasics: boolean; canVoid: boolean; canReverseWithholding: boolean;
+    canCredit: boolean; canWriteOff: boolean; canVoidCreditNote: boolean; canReverseWriteOff: boolean;
+  };
 }
 
 export interface PaymentRow {

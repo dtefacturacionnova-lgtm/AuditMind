@@ -74,7 +74,7 @@ export function ProfitabilityPanel({ engagementId }: { engagementId: string }) {
     );
   }
 
-  const { totales, porPersona, ingreso, ingresoAviso, ingresoOrigen } = data;
+  const { totales, porPersona, ingreso, ingresoAviso, ingresoOrigen, devengado } = data;
   const tone = marginTone(totales.margenPct);
   // margenAbsoluto/margenPct null puede deberse a dos causas distintas — se distingue
   // el mensaje para no decir "sin costear" cuando en realidad falta el honorario.
@@ -123,6 +123,28 @@ export function ProfitabilityPanel({ engagementId }: { engagementId: string }) {
           muted={totales.margenPct === null}
         />
       </div>
+
+      {/* Sobre lo DEVENGADO (honorario × avance del trabajo): el margen que de verdad se ha ganado hasta hoy */}
+      {devengado && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Rentabilidad devengada (según el avance del trabajo)</p>
+          {devengado.progressPct === null && devengado.basis !== 'INVOICED' ? (
+            <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+              {devengado.missing === 'NO_BUDGET'
+                ? 'Sin presupuesto de horas completo: el avance, lo devengado y su margen no se pueden calcular. Asigna las horas presupuestadas de todo el equipo del encargo.'
+                : devengado.missing === 'NO_MANUAL_PROGRESS' ? 'El avance es manual y todavía no se fijó el porcentaje.' : 'El avance todavía no se puede calcular.'}
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard label={devengado.basis === 'INVOICED' ? 'Ingreso (lo facturado)' : 'Devengado'} value={formatMoney(devengado.accrued ?? 0)}
+                sub={devengado.progressPct !== null ? `${devengado.progressPct}% de avance` : undefined} />
+              <StatCard label="Por facturar" value={devengado.toInvoice === null ? '—' : formatMoney(devengado.toInvoice)} muted={devengado.toInvoice === null} />
+              <StatCard label="Margen devengado" value={totales.margenDevengadoAbsoluto != null ? formatMoney(totales.margenDevengadoAbsoluto) : '—'} muted={totales.margenDevengadoAbsoluto == null} />
+              <StatCard label="Margen devengado %" value={totales.margenDevengadoPct != null ? `${totales.margenDevengadoPct.toFixed(1)}%` : '—'} muted={totales.margenDevengadoPct == null} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Vista alternativa: horas reales × tarifa pactada por persona (Equipo del Encargo) */}
       <div>

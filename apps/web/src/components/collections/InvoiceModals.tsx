@@ -8,6 +8,9 @@ import {
   DOCUMENT_TYPE_LABEL, DocumentType, INVOICE_STATUS_CONFIG, InvoiceDetail, PAYMENT_METHOD_LABEL, ScheduleItem, TAX_TYPE_LABEL, TaxType, WithholdingInput,
 } from '@/hooks/useCollections';
 import { formatDateUTC, formatMoney } from '@/lib/utils';
+import { useCollectionNotes, useReverseWriteOff, useVoidCreditNote, CONTACT_METHOD_LABEL, PROMISE_STATUS_CONFIG } from '@/hooks/useCollectionsReports';
+import { CreditNoteModal, WriteOffModal } from './AdjustmentModals';
+import { CollectionNoteModal } from './CollectionNoteModal';
 import {
   ErrorLine, Field, Modal, Pill, ReasonModal, btnDanger, btnGhost, btnPrimary, btnSmall, btnSmallDanger, inputCls, todayIso,
 } from './ui';
@@ -181,8 +184,40 @@ export function InvoiceDetailModal({ invoiceId, canDirect, termDays, onRegisterP
   const [adding, setAdding] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [reversing, setReversing] = useState<string | null>(null);
+  const [crediting, setCrediting] = useState(false);
+  const [writingOff, setWritingOff] = useState(false);
+  const [voidingNote, setVoidingNote] = useState<string | null>(null);
+  const [reversingOff, setReversingOff] = useState<string | null>(null);
+  const [noting, setNoting] = useState(false);
   const voidInvoice = useVoidInvoice();
   const reverse = useReverseWithholding();
+  const voidNote = useVoidCreditNote();
+  const reverseOff = useReverseWriteOff();
+  const notesQ = useCollectionNotes({ invoiceId, pageSize: 20 });
+
+  if (crediting && inv) return <CreditNoteModal invoiceId={inv.id} invoiceNumber={inv.invoiceNumber} balance={inv.balance} netAmount={inv.netAmount} invoiceDate={inv.invoiceDate} onClose={() => setCrediting(false)} />;
+  if (writingOff && inv) return <WriteOffModal invoiceId={inv.id} invoiceNumber={inv.invoiceNumber} balance={inv.balance} invoiceDate={inv.invoiceDate} onClose={() => setWritingOff(false)} />;
+  if (noting && inv) return <CollectionNoteModal clientId={inv.clientId} invoiceId={inv.id} engagementId={inv.engagementId} onClose={() => setNoting(false)} />;
+  if (voidingNote && inv) {
+    return (
+      <ReasonModal
+        title="Anular nota de crédito" confirmLabel="Anular nota" pending={voidNote.isPending} error={voidNote.error}
+        description="La nota queda anulada (se conserva en el historial): el saldo de la factura sube y lo facturado del encargo también. Se rechaza si dejaría lo facturado más lo programado por encima del honorario."
+        onClose={() => setVoidingNote(null)}
+        onConfirm={async (reason) => { try { await voidNote.mutateAsync({ id: voidingNote, reason }); setVoidingNote(null); } catch { /* abajo */ } }}
+      />
+    );
+  }
+  if (reversingOff && inv) {
+    return (
+      <ReasonModal
+        title="Reversar castigo" confirmLabel="Reversar castigo" pending={reverseOff.isPending} error={reverseOff.error}
+        description="El castigo queda reversado (se conserva en el historial) y el saldo de la factura vuelve a ser cobrable y a verse en la antigüedad."
+        onClose={() => setReversingOff(null)}
+        onConfirm={async (reason) => { try { await reverseOff.mutateAsync({ id: reversingOff, reason }); setReversingOff(null); } catch { /* abajo */ } }}
+      />
+    );
+  }
 
   if (editing && inv) return <InvoiceFormModal invoice={inv} termDays={termDays} onClose={() => setEditing(false)} />;
   if (adding && inv) return <WithholdingModal invoiceId={inv.id} balance={inv.balance} onClose={() => setAdding(false)} />;
@@ -226,6 +261,7 @@ export function InvoiceDetailModal({ invoiceId, canDirect, termDays, onRegisterP
               ['Tipo', DOCUMENT_TYPE_LABEL[inv.documentType]], ['Cuota', inv.scheduleItem ? `#${inv.scheduleItem.sequence} ${inv.scheduleItem.label}` : 'Libre'],
               ['Neto', formatMoney(inv.netAmount)], ['IVA', formatMoney(inv.taxAmount)], ['Total', formatMoney(inv.totalAmount)], ['Saldo', formatMoney(inv.balance)],
               ['Cobrado', formatMoney(inv.paidAmount)], ['Retenido', formatMoney(inv.withheldAmount)],
+              ['Acreditado', formatMoney(inv.creditedAmount)], ['Castigado', formatMoney(inv.writtenOffAmount)],
             ].map(([k, v]) => <div key={k}><dt className="text-[11px] text-gray-400">{k}</dt><dd className="font-medium text-gray-800">{v}</dd></div>)}
           </dl>
           {inv.description && <p className="text-sm text-gray-600">{inv.description}</p>}
@@ -263,6 +299,61 @@ export function InvoiceDetailModal({ invoiceId, canDirect, termDays, onRegisterP
                   </tr>
                 ))}
               </tbody></table>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-xs font-semibold text-gray-600">Notas de crédito</h4>
+              {inv.permissions.canCredit && <button type="button" onClick={() => setCrediting(true)} className={btnSmall}>Nota de crédito</button>}
+            </div>
+            {inv.creditNotes.length === 0 ? <p className="text-xs text-gray-400">Sin notas de crédito.</p> : (
+              <table className="w-full text-xs"><tbody>
+                {inv.creditNotes.map((n) => (
+                  <tr key={n.id} className={`border-t border-gray-100 ${n.status === 'VOID' ? 'text-gray-400 line-through' : ''}`}>
+                    <td className="py-1">{formatDateUTC(n.issueDate)}</td>
+                    <td>{n.creditNoteNumber}<span className="block text-[11px] text-gray-400 no-underline">{n.reason}</span></td>
+                    <td className="text-right font-medium">{formatMoney(n.totalAmount)}</td>
+                    <td className="text-right">{n.status === 'ACTIVE' && inv.permissions.canVoidCreditNote && <button type="button" onClick={() => setVoidingNote(n.id)} className={btnSmallDanger}>Anular</button>}{n.status === 'VOID' && 'anulada'}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-xs font-semibold text-gray-600">Castigos</h4>
+              {inv.permissions.canWriteOff && <button type="button" onClick={() => setWritingOff(true)} className={btnSmallDanger}>Castigar saldo</button>}
+            </div>
+            {inv.writeOffs.length === 0 ? <p className="text-xs text-gray-400">Sin castigos.</p> : (
+              <table className="w-full text-xs"><tbody>
+                {inv.writeOffs.map((w) => (
+                  <tr key={w.id} className={`border-t border-gray-100 ${w.status === 'REVERSED' ? 'text-gray-400 line-through' : ''}`}>
+                    <td className="py-1">{formatDateUTC(w.writtenOffOn)}</td>
+                    <td>{w.reason}</td>
+                    <td className="text-right font-medium">{formatMoney(w.amount)}</td>
+                    <td className="text-right">{w.status === 'ACTIVE' && inv.permissions.canReverseWriteOff && <button type="button" onClick={() => setReversingOff(w.id)} className={btnSmallDanger}>Reversar</button>}{w.status === 'REVERSED' && 'reversado'}</td>
+                  </tr>
+                ))}
+              </tbody></table>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-xs font-semibold text-gray-600">Gestión de cobro</h4>
+              <button type="button" onClick={() => setNoting(true)} className={btnSmall}>Anotar contacto</button>
+            </div>
+            {(notesQ.data?.items.length ?? 0) === 0 ? <p className="text-xs text-gray-400">Sin contactos anotados sobre esta factura.</p> : (
+              <ul className="space-y-1 text-xs text-gray-600">
+                {notesQ.data!.items.map((n) => (
+                  <li key={n.id} className="border-t border-gray-100 pt-1">
+                    <strong>{formatDateUTC(n.contactedOn)}</strong> · {CONTACT_METHOD_LABEL[n.method]}{n.contactName ? ` con ${n.contactName}` : ''}: {n.note}
+                    {n.promiseDate && n.promiseStatus && <span className={`ml-1 ${PROMISE_STATUS_CONFIG[n.promiseStatus].color}`}>[promesa {PROMISE_STATUS_CONFIG[n.promiseStatus].label.toLowerCase()} para el {formatDateUTC(n.promiseDate)}]</span>}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 

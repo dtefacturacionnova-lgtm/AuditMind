@@ -3704,6 +3704,106 @@ enum CollectionLogAction {
   WRITE_OFF_REVERSED
   COLLECTION_NOTE_ADDED
   PROMISE_STATUS_CHANGED
+  COLLECTION_NOTE_UPDATED
+  COLLECTION_NOTE_DELETED
+}
+
+enum CreditNoteStatus {
+  ACTIVE
+  VOID
+}
+
+enum WriteOffStatus {
+  ACTIVE
+  REVERSED
+}
+
+enum CollectionContactMethod {
+  CALL
+  EMAIL
+  WHATSAPP
+  VISIT
+  MEETING
+  OTHER
+}
+
+enum PromiseStatus {
+  PENDING
+  KEPT
+  BROKEN
+  CANCELLED
+}
+
+/// Nota de crédito (DTE 05) ligada a UNA factura. Reduce lo facturado y el saldo de la factura (fase 3d; docs/cobros-honorarios-diseno.md §4.5).
+model ClientCreditNote {
+  id               String           @id @default(cuid())
+  organizationId   String
+  clientId         String
+  engagementId     String
+  invoiceId        String
+  creditNoteNumber String
+  generationCode   String?
+  issueDate        DateTime         @db.Date
+  netAmount        Decimal          @db.Decimal(12, 2)
+  taxAmount        Decimal          @default(0) @db.Decimal(12, 2)
+  totalAmount      Decimal          @db.Decimal(12, 2)
+  reason           String
+  status           CreditNoteStatus @default(ACTIVE)
+  voidedAt         DateTime?
+  voidedById       String?
+  voidReason       String?
+  createdById      String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([invoiceId])
+  @@index([engagementId])
+  @@index([organizationId, clientId])
+  @@map("client_credit_notes")
+}
+
+/// Castigo de un saldo incobrable: parcial real (baja el saldo de la factura sin tocar lo cobrado) y reversible (§4.6).
+model ClientWriteOff {
+  id             String         @id @default(cuid())
+  organizationId String
+  clientId       String
+  invoiceId      String
+  amount         Decimal        @db.Decimal(12, 2)
+  writtenOffOn   DateTime       @db.Date
+  reason         String
+  status         WriteOffStatus @default(ACTIVE)
+  reversedAt     DateTime?
+  reversedById   String?
+  reverseReason  String?
+  createdById    String
+  createdAt      DateTime       @default(now())
+
+  @@index([invoiceId])
+  @@index([organizationId, clientId])
+  @@map("client_write_offs")
+}
+
+/// Gestión de cobro: contactos, promesas de pago y seguimientos (§4.7).
+model CollectionNote {
+  id             String                  @id @default(cuid())
+  organizationId String
+  clientId       String
+  invoiceId      String?
+  engagementId   String?
+  contactedOn    DateTime                @db.Date
+  method         CollectionContactMethod
+  contactName    String?
+  note           String
+  promiseDate    DateTime?               @db.Date
+  promiseAmount  Decimal?                @db.Decimal(12, 2)
+  promiseStatus  PromiseStatus?
+  nextFollowUpOn DateTime?               @db.Date
+  createdById    String
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([organizationId, clientId, contactedOn])
+  @@map("collection_notes")
 }
 
 // Honorario de un encargo (1 a 1). Siempre en NETO y en USD.

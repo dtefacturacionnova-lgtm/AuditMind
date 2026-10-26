@@ -12,7 +12,8 @@ import { AmendmentModal, FeeModal } from './FeeModals';
 import { GenerateScheduleModal, ScheduleItemModal } from './ScheduleModals';
 import { InvoiceDetailModal, InvoiceFormModal } from './InvoiceModals';
 import { PaymentFormModal } from './PaymentModals';
-import { ConfirmModal, ErrorLine, Pill, btnSmall, btnSmallDanger } from './ui';
+import { ConfirmModal, ErrorLine, Pill, btnSmall, btnSmallDanger, todayIso } from './ui';
+import { useSetItemCompletion } from '@/hooks/useCollectionsReports';
 
 const DIRECTION = ['CAE', 'ADMIN', 'SUPER_ADMIN'];
 
@@ -36,6 +37,7 @@ export function EngagementBillingPanel({ engagementId }: { engagementId: string 
   const deleteFee = useDeleteFee();
   const cancelItem = useCancelScheduleItem();
   const deleteItem = useDeleteScheduleItem();
+  const completion = useSetItemCompletion();
 
   if (isLoading) return <p className="text-sm text-gray-400">Cargando cobros…</p>;
   if (error) return <ErrorLine error={error} />;
@@ -46,13 +48,15 @@ export function EngagementBillingPanel({ engagementId }: { engagementId: string 
   return (
     <div className="space-y-5">
       {/* Resumen */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         {[
           ['Honorario neto', fee ? (fixed ? formatMoney(summary.feeTotal) : 'Por tiempo') : '—'],
           ['Facturado (neto)', formatMoney(summary.invoicedNet)],
           ['Sin programar', summary.unscheduled === null ? '—' : formatMoney(Math.max(0, summary.unscheduled))],
           ['Cobrado', formatMoney(summary.collected)],
           ['Retenido', formatMoney(summary.withheld)],
+          ['Acreditado (notas)', formatMoney(summary.credited)],
+          ['Castigado', formatMoney(summary.writtenOff)],
           ['Por cobrar', formatMoney(summary.receivable)],
         ].map(([k, v]) => (
           <div key={k} className="rounded-xl bg-white border border-gray-200 px-3 py-2">
@@ -61,6 +65,29 @@ export function EngagementBillingPanel({ engagementId }: { engagementId: string 
           </div>
         ))}
       </div>
+
+      {/* Avance y devengado */}
+      {view.accrual && (
+        <section className="rounded-xl bg-white border border-gray-200 p-4 space-y-2">
+          <h4 className="text-sm font-semibold text-gray-700">Avance y devengado <span className="font-normal text-gray-400">(al {formatDateUTC(view.accrual.asOf)})</span></h4>
+          {view.accrual.progressPct === null && view.accrual.feeType === 'FIXED' ? (
+            <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+              {view.accrual.missing === 'NO_BUDGET'
+                ? 'Sin presupuesto de horas completo: el avance no se puede calcular. Asigna las horas presupuestadas de todo el equipo en la pestaña Equipo del encargo (quien registró horas facturables debe tener presupuesto).'
+                : view.accrual.missing === 'NO_MANUAL_PROGRESS'
+                  ? 'El método de avance es manual y la dirección aún no fijó el porcentaje.'
+                  : 'El avance todavía no se puede calcular.'}
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              {view.accrual.feeType === 'FIXED' && <div><p className="text-[11px] text-gray-400">Avance</p><p className="font-semibold text-gray-800">{view.accrual.progressPct}%{view.accrual.basis === 'COMPLETION' ? ' · informe final firmado' : ''}</p></div>}
+              <div><p className="text-[11px] text-gray-400">{view.accrual.feeType === 'FIXED' ? 'Devengado' : 'Ingreso (lo facturado)'}</p><p className="font-semibold text-gray-800">{formatMoney(view.accrual.accrued)}</p></div>
+              {view.accrual.toInvoice !== null && <div><p className="text-[11px] text-gray-400">Por facturar</p><p className="font-semibold text-gray-800">{formatMoney(view.accrual.toInvoice)}</p></div>}
+              {view.accrual.method === 'HOURS' && view.accrual.feeType === 'FIXED' && <div><p className="text-[11px] text-gray-400">Horas facturables / presupuesto</p><p className="font-semibold text-gray-800">{view.accrual.billableHours} / {view.accrual.budgetHours ?? '—'}</p></div>}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Honorario */}
       <section className="rounded-xl bg-white border border-gray-200 p-4 space-y-3">
@@ -123,6 +150,11 @@ export function EngagementBillingPanel({ engagementId }: { engagementId: string 
                         <td><Pill label={cfg.label} bg={cfg.bg} color={cfg.color} /></td>
                         <td>{it.invoice ? <button type="button" onClick={() => setDetailId(it.invoice!.id)} className="text-blue-600 hover:underline">{it.invoice.invoiceNumber}</button> : '—'}</td>
                         <td className="text-right whitespace-nowrap space-x-1">
+                          {fee.progressMethod === 'MILESTONES' && it.status !== 'CANCELLED' && (
+                            it.completedAt
+                              ? <button type="button" disabled={completion.isPending} onClick={() => completion.mutate({ itemId: it.id, completedOn: null })} className={btnSmall} title={`Cumplido el ${formatDateUTC(it.completedAt)}`}>Cumplido ✓</button>
+                              : <button type="button" disabled={completion.isPending} onClick={() => completion.mutate({ itemId: it.id, completedOn: todayIso() })} className={btnSmall}>Marcar cumplido</button>
+                          )}
                           {planned && <button type="button" onClick={() => setInvoiceModal({ item: it })} className={`${btnSmall} inline-flex items-center gap-1`}><FilePlus2 className="w-3 h-3" /> Facturar</button>}
                           {planned && canDirect && <button type="button" onClick={() => setItemModal({ item: it })} className={btnSmall} aria-label="Editar cuota"><Pencil className="w-3 h-3" /></button>}
                           {planned && canDirect && <button type="button" onClick={() => setConfirm({ kind: 'cancel', item: it })} className={btnSmallDanger} aria-label="Cancelar cuota"><XCircle className="w-3 h-3" /></button>}
@@ -135,6 +167,7 @@ export function EngagementBillingPanel({ engagementId }: { engagementId: string 
               </table>
             </div>
           )}
+          <ErrorLine error={completion.error} />
         </section>
       )}
 

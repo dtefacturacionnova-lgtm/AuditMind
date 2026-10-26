@@ -3,6 +3,7 @@ import { EngagementStatus, FeeType, TimeEntryCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { resolveBillRate, resolveCostRate } from '../timesheet/frozen-rates';
+import { AccrualView, computeAccruals } from '../collections/accrual.service';
 
 // Mismas categorías que TimesheetService considera "ligadas a un encargo" —
 // las únicas que representan horas del equipo trabajadas para el cliente
@@ -97,7 +98,12 @@ export class ProfitabilityService {
       throw new NotFoundException('Encargo no encontrado');
     }
 
-    const revenue = (await this.resolveRevenues(user.organizationId, [engagement])).get(engagement.id) ?? NO_REVENUE;
+    const [revenues, accruals] = await Promise.all([
+      this.resolveRevenues(user.organizationId, [engagement]),
+      computeAccruals(this.prisma, user.organizationId, [engagement.id]),
+    ]);
+    const revenue = revenues.get(engagement.id) ?? NO_REVENUE;
+    const accrual = accruals.get(engagement.id);
     const ingreso = revenue.feeAmount !== null
       ? { feeAmount: revenue.feeAmount, feeCurrency: revenue.feeCurrency as string }
       : null;
@@ -107,6 +113,7 @@ export class ProfitabilityService {
       ingreso,
       ingresoOrigen: revenue.source,
       ingresoAviso: revenue.note,
+      devengado: devengadoView(accrual),
       auditId: engagement.auditId,
     };
 
@@ -120,6 +127,7 @@ export class ProfitabilityService {
         totales: {
           horasTotales: 0, costoTotal: 0, horasSinCostear: 0, horasProvisionales: 0, margenAbsoluto: null, margenPct: null,
           ingresoPorTarifa: 0, horasSinTarifa: 0, margenPorTarifaAbsoluto: null, margenPorTarifaPct: null,
+          margenDevengadoAbsoluto: null, margenDevengadoPct: null,
         },
       };
     }
@@ -148,7 +156,7 @@ export class ProfitabilityService {
         tarifaPorHora: p.agreedRatePerHour,
         ingresoPorTarifa: p.revenueByRate,
       })),
-      totales: this.totalsOf(summary, margin, marginByRate),
+      totales: { ...this.totalsOf(summary, margin, marginByRate), ...this.accruedMarginOf(accrual, summary.totalCost) },
     };
   }
 
@@ -174,10 +182,11 @@ export class ProfitabilityService {
     });
 
     // Una consulta por tipo de dato para TODOS los encargos (antes eran ~5 consultas por encargo).
-    const [revenues, summaries] = await Promise.all([
+    const [revenues, summaries, accruals] = await Promise.all([
       this.resolveRevenues(user.organizationId, engagements),
       // auditId no puede ser null acá — filtrado arriba con { not: null }
       this.computeAuditCostSummaries(engagements.map((e) => e.auditId as string), user.organizationId),
+      computeAccruals(this.prisma, user.organizationId, engagements.map((e) => e.id)),
     ]);
 
     const rows = engagements.map((e) => {
@@ -196,8 +205,9 @@ export class ProfitabilityService {
           : null,
         ingresoOrigen: revenue.source,
         ingresoAviso: revenue.note,
+        devengado: devengadoView(accruals.get(e.id)),
         auditId: e.auditId,
-        totales: this.totalsOf(summary, margin, marginByRate),
+        totales: { ...this.totalsOf(summary, margin, marginByRate), ...this.accruedMarginOf(accruals.get(e.id), summary.totalCost) },
       };
     });
 
@@ -228,11 +238,14 @@ export class ProfitabilityService {
       where: { auditId, organizationId },
       select: { id: true, engagementLetter: { select: { proposalId: true } } },
     });
-    const [revenues, summaries] = await Promise.all([
+    const [revenues, summaries, accruals] = await Promise.all([
       this.resolveRevenues(organizationId, engagement ? [engagement] : []),
       this.computeAuditCostSummaries([auditId], organizationId, asOf),
+      computeAccruals(this.prisma, organizationId, engagement ? [engagement.id] : [], asOf ? asOf.toISOString().slice(0, 10) : undefined),
     ]);
-    return this.financialSummaryOf((engagement && revenues.get(engagement.id)) || NO_REVENUE, summaries.get(auditId) ?? emptySummary());
+    return this.financialSummaryOf(
+      (engagement && revenues.get(engagement.id)) || NO_REVENUE, summaries.get(auditId) ?? emptySummary(), engagement ? accruals.get(engagement.id) : undefined,
+    );
   }
 
   // ── Rentabilidad agregada de TODA la organización, para el dashboard de
@@ -247,13 +260,15 @@ export class ProfitabilityService {
       select: { id: true, auditId: true, engagementLetter: { select: { proposalId: true } } },
     });
 
-    const [revenues, costs] = await Promise.all([
+    const [revenues, costs, accruals] = await Promise.all([
       this.resolveRevenues(organizationId, engagements),
       this.computeAuditCostSummaries(engagements.map((e) => e.auditId as string), organizationId, asOf),
+      computeAccruals(this.prisma, organizationId, engagements.map((e) => e.id), asOf ? asOf.toISOString().slice(0, 10) : undefined),
     ]);
     const summaries = engagements.map((e) => this.financialSummaryOf(
       revenues.get(e.id) ?? NO_REVENUE,
       costs.get(e.auditId as string) ?? emptySummary(),
+      accruals.get(e.id),
     ));
 
     let totalIncome = 0;
@@ -262,8 +277,16 @@ export class ProfitabilityService {
     let provisionalHours = 0;
     let engagementsWithRevenue = 0;
     let engagementsWithMargin = 0;
+    let totalAccrued = 0;
+    let accruedMargin = 0;
+    let engagementsWithAccrual = 0;
 
     for (const s of summaries) {
+      if (s.accrued !== null) {
+        totalAccrued += s.accrued;
+        accruedMargin += s.accruedMargin ?? 0;
+        engagementsWithAccrual++;
+      }
       totalCost += s.cost;
       provisionalHours += s.provisionalHours;
       if (s.revenue !== null) {
@@ -284,6 +307,11 @@ export class ProfitabilityService {
       totalCost: round2(totalCost),
       totalMargin: round2(totalMargin),
       totalMarginPct: totalIncome !== 0 ? round2((totalMargin / totalIncome) * 100) : null,
+      // Devengado (fase 3c): lo ganado según el avance, solo de los encargos con avance calculable (sin presupuesto de horas, no entran).
+      engagementsWithAccrual,
+      totalAccrued: round2(totalAccrued),
+      totalAccruedMargin: round2(accruedMargin),
+      totalAccruedMarginPct: totalAccrued !== 0 ? round2((accruedMargin / totalAccrued) * 100) : null,
       provisionalHours: round2(provisionalHours),
     };
   }
@@ -305,8 +333,17 @@ export class ProfitabilityService {
     };
   }
 
-  private financialSummaryOf(revenue: Revenue, summary: AuditCostSummary): AuditFinancialSummary {
+  /** Margen sobre lo DEVENGADO (honorario × avance − costo). Nulo si el avance no se puede calcular (por ejemplo, sin presupuesto de horas). */
+  private accruedMarginOf(accrual: AccrualView | undefined, cost: number) {
+    const accrued = accrual?.accrued ?? null;
+    const m = this.computeMargin(accrued, cost);
+    return { margenDevengadoAbsoluto: m.marginAmount, margenDevengadoPct: m.marginPercent };
+  }
+
+  private financialSummaryOf(revenue: Revenue, summary: AuditCostSummary, accrual?: AccrualView): AuditFinancialSummary {
     const margin = this.computeMargin(revenue.feeAmount, summary.totalCost);
+    const accrued = accrual?.accrued ?? null;
+    const accruedMargin = this.computeMargin(accrued, summary.totalCost);
     return {
       hoursTotal: summary.totalHours,
       cost: summary.totalCost,
@@ -316,6 +353,9 @@ export class ProfitabilityService {
       feeCurrency: revenue.feeCurrency,
       margin: margin.marginAmount,
       marginPct: margin.marginPercent,
+      accrued,
+      accruedMargin: accruedMargin.marginAmount,
+      accruedMarginPct: accruedMargin.marginPercent,
     };
   }
 
@@ -541,6 +581,17 @@ export interface AuditFinancialSummary {
   hoursTotal: number; cost: number; uncostedHours: number; provisionalHours: number;
   revenue: number | null; feeCurrency: string | null;
   margin: number | null; marginPct: number | null;
+  /** Devengado (fase 3c): honorario × avance, y el margen sobre eso; nulos si el avance no se puede calcular. */
+  accrued: number | null; accruedMargin: number | null; accruedMarginPct: number | null;
+}
+
+/** Lo que se muestra del devengado de un encargo (null si no tiene honorario registrado en Cobranza). */
+function devengadoView(a: AccrualView | undefined) {
+  if (!a) return null;
+  return {
+    progressPct: a.progressPct, accrued: a.accrued, toInvoice: a.toInvoice, invoicedNet: a.invoicedNet,
+    basis: a.basis, missing: a.missing, billableHours: a.billableHours, budgetHours: a.budgetHours,
+  };
 }
 
 const NO_REVENUE: Revenue = { feeAmount: null, feeCurrency: null, source: null, note: null };

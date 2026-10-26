@@ -63,7 +63,8 @@ export async function lockInvoices(db: Db, invoiceIds: string[]): Promise<void> 
 
 // ── Bitácora (solo se agrega) ───────────────────────────────────────────────
 export type CollectionEntity =
-  | 'ENGAGEMENT_FEE' | 'FEE_AMENDMENT' | 'SCHEDULE_ITEM' | 'INVOICE' | 'PAYMENT' | 'APPLICATION' | 'WITHHOLDING';
+  | 'ENGAGEMENT_FEE' | 'FEE_AMENDMENT' | 'SCHEDULE_ITEM' | 'INVOICE' | 'PAYMENT' | 'APPLICATION' | 'WITHHOLDING'
+  | 'CREDIT_NOTE' | 'WRITE_OFF' | 'COLLECTION_NOTE';
 
 export async function logCollection(db: Db, entry: {
   organizationId: string; entityType: CollectionEntity; entityId: string; action: CollectionLogAction; actorId: string;

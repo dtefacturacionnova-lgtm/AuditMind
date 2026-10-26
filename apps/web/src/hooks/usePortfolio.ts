@@ -355,9 +355,20 @@ export interface ProfitabilityTotals {
   /** null = nadie del equipo tiene tarifa asignada todavía. */
   margenPorTarifaAbsoluto:   number | null;
   margenPorTarifaPct:        number | null;
+  /** Margen sobre lo devengado (honorario × avance − costo); null si el avance no se puede calcular. */
+  margenDevengadoAbsoluto?:  number | null;
+  margenDevengadoPct?:       number | null;
+}
+
+/** Devengado de un encargo (fase 3c): avance del trabajo y honorario ganado; null si el encargo no tiene honorario en Cobranza. */
+export interface Devengado {
+  progressPct: number | null; accrued: number | null; toInvoice: number | null; invoicedNet: number;
+  basis: 'HOURS' | 'COMPLETION' | 'MILESTONES' | 'MANUAL' | 'INVOICED' | 'NONE'; missing: 'NO_BUDGET' | 'NO_MANUAL_PROGRESS' | null;
+  billableHours: number; budgetHours: number | null;
 }
 
 export interface EngagementProfitability {
+  devengado?:  Devengado | null;
   clientName:  string;
   fiscalYear:  number;
   /** null = aún no hay honorario (de Cobranza o de la propuesta) — mostrar "Honorario no definido", nunca $0. */

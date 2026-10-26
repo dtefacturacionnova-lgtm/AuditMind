@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { ClientInvoiceStatus, EngagementStatus, FeeProgressMethod, FeeSource, FeeType, Prisma, ScheduleItemKind, ScheduleItemStatus } from '@prisma/client';
+import { ClientInvoiceStatus, CreditNoteStatus, EngagementStatus, FeeProgressMethod, FeeSource, FeeType, Prisma, ScheduleItemKind, ScheduleItemStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import {
@@ -7,6 +7,7 @@ import {
   todayInSalvador, toJson, ymd,
 } from './collections.common';
 import { formatMoney, fromCents, parseMoneyInput, parseSignedMoneyInput, toCents } from './money.util';
+import { computeAccruals } from './accrual.service';
 import { equalInstallments, milestoneItems, PlannedItem, singlePayment, assertValidYmd } from './schedule.util';
 import { AmendFeeDto, CreateScheduleItemDto, GenerateScheduleDto, SetFeeDto, UpdateScheduleItemDto } from './dto/collections.dto';
 
@@ -31,15 +32,17 @@ export interface EngagementCommitments {
  *   por cobrar = Σ saldos de las facturas vigentes           (nunca «facturado − cobrado»)
  */
 export async function computeCommitments(db: Db, engagementId: string, feeTotal: Prisma.Decimal | null): Promise<EngagementCommitments> {
-  const [inv, planned] = await Promise.all([
+  const [inv, planned, credits] = await Promise.all([
     db.clientInvoice.aggregate({
       where: { engagementId, status: { not: ClientInvoiceStatus.VOID } },
       _sum: { netAmount: true, totalAmount: true, paidAmount: true, withheldAmount: true, creditedAmount: true, writtenOffAmount: true },
     }),
     db.billingScheduleItem.aggregate({ where: { engagementId, status: ScheduleItemStatus.PLANNED }, _sum: { amount: true } }),
+    db.clientCreditNote.aggregate({ where: { engagementId, status: CreditNoteStatus.ACTIVE }, _sum: { netAmount: true } }),
   ]);
   const c = (d: Prisma.Decimal | null | undefined) => (d ? toCents(d) : 0);
-  const invoicedNetCents = c(inv._sum.netAmount);
+  // facturado neto = neto de las facturas vigentes − neto de las notas de crédito vigentes (una nota libera espacio del honorario)
+  const invoicedNetCents = c(inv._sum.netAmount) - c(credits._sum.netAmount);
   const plannedCents = c(planned._sum.amount);
   const invoicedTotalCents = c(inv._sum.totalAmount);
   const paidCents = c(inv._sum.paidAmount);
@@ -106,6 +109,17 @@ export class FeesService {
     return this.feeView(this.prisma, engagementId, user);
   }
 
+  /** Devengado del encargo a una fecha de corte (por defecto hoy); la fecha no puede ser futura. */
+  async accrualAt(engagementId: string, asOf: string | undefined, user: AuthUser) {
+    assertManager(user);
+    await assertBillingModule(this.prisma, user.organizationId);
+    await this.loadEngagement(this.prisma, engagementId, user);
+    const today = todayInSalvador();
+    const cutoff = asOf ? assertValidYmd(asOf, 'La fecha de corte') : today;
+    if (cutoff > today) throw new BadRequestException('La fecha de corte no puede ser futura.');
+    return (await computeAccruals(this.prisma, user.organizationId, [engagementId], cutoff)).get(engagementId) ?? null;
+  }
+
   private async feeView(db: Db, engagementId: string, user: AuthUser) {
     const eng = await this.loadEngagement(db, engagementId, user);
     const fee = await db.engagementFee.findUnique({ where: { engagementId } });
@@ -115,6 +129,8 @@ export class FeesService {
       computeCommitments(db, engagementId, fee?.totalAmount ?? null),
     ]);
     const amended = amendments.reduce((s, a) => s + toCents(a.amountDelta), 0);
+    // Devengado al día de hoy (avance, devengado y por facturar); null si aún no hay honorario.
+    const accrual = fee ? (await computeAccruals(db, user.organizationId, [engagementId])).get(engagementId) ?? null : null;
     return {
       engagement: { id: eng.id, kind: eng.kind, title: eng.title, status: eng.status, fiscalYear: eng.fiscalYear, clientId: eng.clientId, clientName: eng.client.legalName },
       fee: fee && {
@@ -126,6 +142,7 @@ export class FeesService {
       amendments: amendments.map((a) => ({ id: a.id, date: ymd(a.date), reason: a.reason, amountDelta: Number(a.amountDelta), createdAt: a.createdAt })),
       schedule,
       summary: commitmentsView(commitments),
+      accrual,
       permissions: { canEdit: isDirection(user) },
     };
   }
@@ -468,6 +485,32 @@ export class FeesService {
       await logCollection(tx, {
         organizationId: user.organizationId, entityType: 'SCHEDULE_ITEM', entityId: itemId, action: 'SCHEDULE_ITEM_UPDATED', actorId: user.id,
         before: toJson(item), after: toJson(updated),
+      });
+      return updated;
+    }, TX_OPTIONS);
+  }
+
+  /**
+   * Marcar (o desmarcar) una cuota como CUMPLIDA: el devengado por hitos suma las cuotas cumplidas (§4.8). Hasta ahora ningún camino
+   * llenaba `completedAt`, así que ese método de avance nunca habría devengado nada. Lo puede hacer un gerente; queda en la bitácora.
+   */
+  async setItemCompletion(itemId: string, completedOn: string | null | undefined, user: AuthUser) {
+    assertManager(user);
+    await assertBillingModule(this.prisma, user.organizationId);
+    return this.prisma.$transaction(async (tx) => {
+      const item = await this.lockedItem(tx, itemId, user);
+      if (item.status === ScheduleItemStatus.CANCELLED) throw new ConflictException('Una cuota cancelada no se marca como cumplida.');
+      await this.requireFixedFee(tx, item.engagementId);
+      let completedAt: Date | null = null;
+      if (completedOn) {
+        const day = assertValidYmd(completedOn, 'La fecha de cumplimiento');
+        if (day > todayInSalvador()) throw new BadRequestException('La fecha de cumplimiento no puede ser futura.');
+        completedAt = new Date(`${day}T12:00:00.000Z`); // mediodía UTC = el mismo día en El Salvador (UTC−6)
+      }
+      const updated = await tx.billingScheduleItem.update({ where: { id: itemId }, data: { completedAt } });
+      await logCollection(tx, {
+        organizationId: user.organizationId, entityType: 'SCHEDULE_ITEM', entityId: itemId, action: 'SCHEDULE_ITEM_UPDATED', actorId: user.id,
+        before: { completedAt: item.completedAt }, after: { completedAt: updated.completedAt }, note: completedAt ? 'Hito marcado como cumplido' : 'Hito marcado como no cumplido',
       });
       return updated;
     }, TX_OPTIONS);

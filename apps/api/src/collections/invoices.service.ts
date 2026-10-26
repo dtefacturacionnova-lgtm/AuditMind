@@ -12,6 +12,7 @@ import { assertValidYmd } from './schedule.util';
 import { LedgerInvoice, applyInvoiceDelta, moneyOf } from './invoice-ledger';
 import { assertWithinBalance } from './allocation.util';
 import { computeCommitments } from './fees.service';
+import { creditNoteRow, writeOffRow } from './collection-rows';
 import {
   AddWithholdingDto, ListInvoicesQueryDto, ListWithholdingsQueryDto, ReasonDto, RegisterInvoiceDto, UpdateInvoiceDto, WithholdingInputDto,
 } from './dto/collections.dto';
@@ -193,12 +194,14 @@ export class InvoicesService {
     await assertBillingModule(this.prisma, user.organizationId);
     const inv = await this.prisma.clientInvoice.findFirst({ where: { id, organizationId: user.organizationId } });
     if (!inv) throw new NotFoundException('Factura no encontrada');
-    const [client, engagement, item, applications, withholdings] = await Promise.all([
+    const [client, engagement, item, applications, withholdings, creditNotes, writeOffs] = await Promise.all([
       this.prisma.client.findUnique({ where: { id: inv.clientId }, select: { id: true, legalName: true, tradeName: true } }),
       this.prisma.engagement.findUnique({ where: { id: inv.engagementId }, select: { id: true, kind: true, title: true, fiscalYear: true, status: true } }),
       inv.scheduleItemId ? this.prisma.billingScheduleItem.findUnique({ where: { id: inv.scheduleItemId }, select: { id: true, label: true, sequence: true } }) : null,
       this.prisma.paymentApplication.findMany({ where: { invoiceId: id }, orderBy: { createdAt: 'asc' } }),
       this.prisma.invoiceWithholding.findMany({ where: { invoiceId: id }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.clientCreditNote.findMany({ where: { invoiceId: id }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.clientWriteOff.findMany({ where: { invoiceId: id }, orderBy: { createdAt: 'asc' } }),
     ]);
     const log = await this.prisma.collectionLog.findMany({
       where: {
@@ -207,6 +210,8 @@ export class InvoicesService {
           { entityType: 'INVOICE', entityId: id },
           { entityType: 'APPLICATION', entityId: { in: applications.map((a) => a.id) } },
           { entityType: 'WITHHOLDING', entityId: { in: withholdings.map((w) => w.id) } },
+          { entityType: 'CREDIT_NOTE', entityId: { in: creditNotes.map((n) => n.id) } },
+          { entityType: 'WRITE_OFF', entityId: { in: writeOffs.map((w) => w.id) } },
           ...(inv.scheduleItemId ? [{ entityType: 'SCHEDULE_ITEM', entityId: inv.scheduleItemId }] : []),
         ],
       },
@@ -228,12 +233,18 @@ export class InvoicesService {
         id: w.id, taxType: w.taxType, amount: Number(w.amount), appliedOn: ymd(w.appliedOn), certificateNumber: w.certificateNumber, paymentId: w.paymentId,
         reversedAt: w.reversedAt, reverseReason: w.reverseReason,
       })),
+      creditNotes: creditNotes.map(creditNoteRow),
+      writeOffs: writeOffs.map(writeOffRow),
       log: log.map((l) => ({ id: l.id, action: l.action, actorId: l.actorId, note: l.note, createdAt: l.createdAt })),
       permissions: {
         canEditAll: !moves && inv.status !== 'VOID',
         canEditBasics: inv.status !== 'VOID',
         canVoid: isDirection(user) && inv.status !== 'VOID',
         canReverseWithholding: isDirection(user),
+        canCredit: isDirection(user) && (inv.status === 'OPEN' || inv.status === 'PARTIAL'),
+        canWriteOff: isDirection(user) && (inv.status === 'OPEN' || inv.status === 'PARTIAL'),
+        canVoidCreditNote: isDirection(user),
+        canReverseWriteOff: isDirection(user),
       },
     };
   }

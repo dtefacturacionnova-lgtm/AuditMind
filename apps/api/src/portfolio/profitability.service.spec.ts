@@ -14,6 +14,7 @@ import { ProfitabilityService } from './profitability.service';
 type Row = Record<string, any>;
 interface Data {
   engagements?: Row[]; proposals?: Row[]; entries?: Row[]; users?: Row[]; costProfiles?: Row[]; team?: Row[]; fees?: Row[];
+  amendments?: Row[]; invoices?: Row[]; creditNotes?: Row[]; scheduleItems?: Row[]; triggers?: Row[];
 }
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -43,10 +44,29 @@ function makeDb(data: Data) {
     engagementFee: {
       findMany: async ({ where }: any) => { hit('engagementFee'); return (data.fees ?? []).filter((f) => inSet(where.engagementId.in, f.engagementId)); },
     },
+    // Devengado (fase 3c): estas consultas solo importan en las pruebas de «Devengado»; aquí devuelven lo que `data` traiga (o nada).
+    engagementFeeAmendment: { findMany: async () => { hit('engagementFeeAmendment'); return data.amendments ?? []; } },
+    clientInvoice: { findMany: async () => { hit('clientInvoice'); return data.invoices ?? []; } },
+    clientCreditNote: { findMany: async () => { hit('clientCreditNote'); return data.creditNotes ?? []; } },
+    billingScheduleItem: { findMany: async () => { hit('billingScheduleItem'); return data.scheduleItems ?? []; } },
+    workingPaper: { findMany: async () => { hit('workingPaper'); return data.triggers ?? []; } },
     proposal: {
       findMany: async ({ where }: any) => { hit('proposal'); return (data.proposals ?? []).filter((p) => inSet(where.id.in, p.id)); },
     },
     timeEntry: {
+      groupBy: async ({ where }: any) => {
+        hit('timeEntry');
+        const rows = (data.entries ?? []).filter((e) => e.organizationId === where.organizationId && inSet(where.auditId.in, e.auditId) && e.category === where.category
+          && (!where.workDate?.lte || e.workDate <= where.workDate.lte));
+        const by = new Map<string, any>();
+        for (const e of rows) {
+          const k = `${e.auditId}:${e.userId}`;
+          const cur = by.get(k) ?? { auditId: e.auditId, userId: e.userId, _sum: { hours: 0 } };
+          cur._sum.hours += e.hours;
+          by.set(k, cur);
+        }
+        return [...by.values()];
+      },
       findMany: async ({ where }: any) => {
         hit('timeEntry');
         return (data.entries ?? []).filter((e) =>
@@ -64,7 +84,7 @@ function makeDb(data: Data) {
     auditTeam: {
       findMany: async ({ where }: any) => {
         hit('auditTeam');
-        return (data.team ?? []).filter((t) => inSet(where.auditId.in, t.auditId) && inSet(where.userId.in, t.userId));
+        return (data.team ?? []).filter((t) => inSet(where.auditId.in, t.auditId) && inSet(where.userId?.in, t.userId));
       },
     },
   };
@@ -272,7 +292,7 @@ describe('Lista por año', () => {
     const muchos = makeDb(varios());
     await new ProfitabilityService(muchos.prisma).listProfitability(2026, user());
     expect(muchos.total()).toBe(uno.total());
-    expect(muchos.total()).toBeLessThanOrEqual(8);
+    expect(muchos.total()).toBeLessThanOrEqual(20);
     expect(muchos.counts.timeEntry).toBe(1);
     expect(muchos.counts.userCostProfile).toBe(1);
     expect(muchos.counts.auditTeam).toBe(1);
@@ -357,7 +377,7 @@ describe('Rentabilidad de toda la organización', () => {
       provisionalHours: 19 + 10 + 2,
     });
     expect(r.totalMarginPct).toBeCloseTo(75.5, 1);
-    expect(db.total()).toBeLessThanOrEqual(8); // encargos, honorarios, propuestas (+ cuántos encargos respalda cada una), horas, personas, perfiles y tarifas
+    expect(db.total()).toBeLessThanOrEqual(20); // + las consultas del devengado (adendas, facturas, notas de crédito, hitos, horas, equipo, papel disparador)
   });
   it('sin ingresos no hay porcentaje', async () => {
     const data: Data = { engagements: [engagement('e1', 'a1', null)] };

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { safeAfterLoginPath } from '@/lib/safe-redirect';
+import { consumePasswordReset } from '@/lib/password-reset-flag';
 
 /**
  * Reemplaza el antiguo route.ts (servidor, solo sabía leer `?code=` — flujo
@@ -40,7 +41,9 @@ export default function AuthCallbackPage() {
     const hashType = hashParams.get('type');
     const accessToken = hashParams.get('access_token');
     const refreshToken = hashParams.get('refresh_token');
-    const isFirstTimeSetup = hashType === 'invite' || hashType === 'recovery';
+    // «¿Olvidaste tu contraseña?» deja una marca en este navegador; el enlace llega con ?code= (PKCE), sin tipo en el fragmento.
+    const recovering = code ? consumePasswordReset() : false;
+    const isFirstTimeSetup = hashType === 'invite' || hashType === 'recovery' || recovering;
 
     const finish = (session: unknown) => {
       if (!session) {

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient } from '../../../lib/supabase/client';
+import { markPasswordReset } from '@/lib/password-reset-flag';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
@@ -10,9 +11,17 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
-  const [tab, setTab] = useState<'password' | 'magic'>('password');
+  const [tab, setTab] = useState<'password' | 'magic' | 'forgot'>('password');
+  const [sentKind, setSentKind] = useState<'magic' | 'reset'>('magic');
   const router = useRouter();
   const supabase = createClient();
+
+  // El callback manda aquí cuando el enlace venció, ya se usó o se abrió en otro navegador.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('error') === 'auth_callback_failed') {
+      setError('El enlace venció, ya se usó o lo abriste en otro navegador distinto al que lo pidió. Pide uno nuevo.');
+    }
+  }, []);
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +55,23 @@ export default function LoginPage() {
     setLoading(false);
   };
 
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    // La marca le avisa al callback que la visita que viene es una recuperación (ver lib/password-reset-flag.ts).
+    markPasswordReset();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth/callback` });
+    if (error) {
+      setError(/rate limit|too many/i.test(error.message) ? 'Demasiados intentos seguidos. Espera unos minutos e inténtalo de nuevo.' : 'No se pudo enviar el enlace. Inténtalo de nuevo en unos minutos.');
+    } else {
+      setSentKind('reset');
+      setMagicLinkSent(true);
+    }
+    setLoading(false);
+  };
+
   if (magicLinkSent) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4">
@@ -57,13 +83,15 @@ export default function LoginPage() {
           </div>
           <h2 className="text-xl font-semibold text-[#0F172A] mb-2">Revisa tu correo</h2>
           <p className="text-[#64748B] text-sm">
-            Enviamos un enlace de acceso a <strong>{email}</strong>. Úsalo para ingresar al sistema.
+            {sentKind === 'reset'
+              ? <>Si <strong>{email}</strong> está registrado, te enviamos un enlace para crear una nueva contraseña. Ábrelo en este mismo navegador; vale por una hora.</>
+              : <>Enviamos un enlace de acceso a <strong>{email}</strong>. Úsalo para ingresar al sistema.</>}
           </p>
           <button
-            onClick={() => setMagicLinkSent(false)}
+            onClick={() => { setMagicLinkSent(false); setTab('password'); }}
             className="mt-6 text-sm text-[#2563EB] hover:underline"
           >
-            Usar otro método
+            {sentKind === 'reset' ? 'Volver a iniciar sesión' : 'Usar otro método'}
           </button>
         </div>
       </div>
@@ -88,7 +116,7 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-[#E2E8F0] p-8">
-          <h1 className="text-xl font-semibold text-[#0F172A] mb-6">Iniciar sesión</h1>
+          <h1 className="text-xl font-semibold text-[#0F172A] mb-6">{tab === 'forgot' ? 'Recuperar contraseña' : 'Iniciar sesión'}</h1>
 
           {/* Tabs */}
           <div className="flex gap-1 bg-[#F8FAFC] rounded-lg p-1 mb-6">
@@ -163,6 +191,42 @@ export default function LoginPage() {
                   </>
                 ) : 'Ingresar'}
               </button>
+              <div className="text-center">
+                <button type="button" onClick={() => { setError(null); setTab('forgot'); }} className="text-sm text-[#2563EB] hover:underline">
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+            </form>
+          ) : tab === 'forgot' ? (
+            <form onSubmit={handleForgot} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#0F172A] mb-1.5">
+                  Correo electrónico
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="tu@empresa.com"
+                  required
+                  className="w-full px-3.5 py-2.5 border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-transparent"
+                />
+              </div>
+              <p className="text-xs text-[#64748B]">
+                Te enviaremos un enlace para crear una nueva contraseña. Ábrelo en este mismo navegador.
+              </p>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-[#0F2D4A] text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-[#1A4A7A] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Enviando...' : 'Enviar enlace para crear contraseña'}
+              </button>
+              <div className="text-center">
+                <button type="button" onClick={() => { setError(null); setTab('password'); }} className="text-sm text-[#2563EB] hover:underline">
+                  Volver a iniciar sesión
+                </button>
+              </div>
             </form>
           ) : (
             <form onSubmit={handleMagicLink} className="space-y-4">

@@ -104,7 +104,7 @@ export default function SetPasswordPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-[#E2E8F0] p-8">
           <h1 className="text-xl font-semibold text-[#0F172A] mb-1">Crea tu contraseña</h1>
           <p className="text-[#64748B] text-sm mb-6">
-            Este es tu primer ingreso — define una contraseña para las próximas veces.
+            Define tu contraseña para las próximas veces.
           </p>
 
           {error && (

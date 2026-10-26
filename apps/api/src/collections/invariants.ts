@@ -74,6 +74,11 @@ export async function checkCollectionInvariants(db: Db, organizationId?: string)
       AND (EXISTS (SELECT 1 FROM client_credit_notes n WHERE n."invoiceId" = i.id AND n.status = 'ACTIVE')
         OR EXISTS (SELECT 1 FROM client_write_offs w WHERE w."invoiceId" = i.id AND w.status = 'ACTIVE'))`);
 
+  await run('Las notas de crédito vigentes de una factura acreditan más IVA que el de la factura', Prisma.sql`
+    SELECT i.id FROM client_invoices i
+    JOIN (SELECT "invoiceId", SUM("taxAmount") AS s FROM client_credit_notes WHERE status = 'ACTIVE' GROUP BY "invoiceId") n ON n."invoiceId" = i.id
+    WHERE n.s > i."taxAmount" ${org}`);
+
   await run('Las notas de crédito vigentes de una factura acreditan más neto que el de la factura', Prisma.sql`
     SELECT i.id FROM client_invoices i
     JOIN (SELECT "invoiceId", SUM("netAmount") AS s FROM client_credit_notes WHERE status = 'ACTIVE' GROUP BY "invoiceId") n ON n."invoiceId" = i.id

@@ -14,6 +14,7 @@ import {
   ApplicationInput, allocateOldestFirst, assertWithinBalance, checkApplications, parseApplications,
 } from './allocation.util';
 import { LedgerDelta, applyInvoiceDelta, moneyOf } from './invoice-ledger';
+import { assertNoNegativePast } from './retro.util';
 import { ApplyPaymentDto, ListPaymentsQueryDto, PaymentWithholdingDto, ReasonDto, RegisterPaymentDto, UpdatePaymentDto } from './dto/collections.dto';
 
 type PaymentRow = Prisma.ClientPaymentGetPayload<object>;
@@ -169,9 +170,15 @@ export class PaymentsService {
       cur.wh += w.cents;
       perInvoice.set(w.invoiceId, cur);
     }
+    // Un cobro no surte efecto sobre una factura antes de que la factura exista: la fecha de la aplicación es la mayor entre la del cobro y la de la factura.
+    const effOf = (invoiceId: string) => { const d = ymd(byId.get(invoiceId)!.invoiceDate); return appliedOn < d ? d : appliedOn; };
     for (const [invoiceId, v] of perInvoice) {
       const inv = byId.get(invoiceId)!;
       assertWithinBalance({ invoiceNumber: inv.invoiceNumber, balanceCents: balanceCents(moneyOf(inv)), moneyCents: v.money, withholdingCents: v.wh });
+      await assertNoNegativePast(tx, inv, [
+        ...(v.money > 0 ? [{ invoiceId, kind: 'APPLICATION' as const, cents: v.money, effectiveOn: effOf(invoiceId), undoneOn: null }] : []),
+        ...(v.wh > 0 ? [{ invoiceId, kind: 'WITHHOLDING' as const, cents: v.wh, effectiveOn: effOf(invoiceId), undoneOn: null }] : []),
+      ]);
     }
 
     // ── escrituras ──
@@ -184,7 +191,7 @@ export class PaymentsService {
       const row = await tx.paymentApplication.create({
         data: {
           organizationId: user.organizationId, clientId: payment.clientId, paymentId: payment.id, invoiceId: a.invoiceId,
-          amount: fromCents(a.amountCents), appliedOn: dateFromYmd(appliedOn), createdById: user.id,
+          amount: fromCents(a.amountCents), appliedOn: dateFromYmd(effOf(a.invoiceId)), createdById: user.id,
         },
       });
       await logCollection(tx, { organizationId: user.organizationId, entityType: 'APPLICATION', entityId: row.id, action: 'PAYMENT_APPLIED', actorId: user.id, before: null, after: toJson(row) });
@@ -193,7 +200,7 @@ export class PaymentsService {
       const row = await tx.invoiceWithholding.create({
         data: {
           organizationId: user.organizationId, clientId: payment.clientId, invoiceId: w.invoiceId, paymentId: payment.id, taxType: w.taxType,
-          amount: fromCents(w.cents), appliedOn: dateFromYmd(appliedOn), certificateNumber: w.certificateNumber, createdById: user.id,
+          amount: fromCents(w.cents), appliedOn: dateFromYmd(effOf(w.invoiceId)), certificateNumber: w.certificateNumber, createdById: user.id,
         },
       });
       await logCollection(tx, { organizationId: user.organizationId, entityType: 'WITHHOLDING', entityId: row.id, action: 'WITHHOLDING_ADDED', actorId: user.id, before: null, after: toJson(row), note: 'Retención practicada en el pago' });
@@ -310,6 +317,16 @@ export class PaymentsService {
       if (dto.paymentDate !== undefined) {
         const d = assertValidYmd(dto.paymentDate, 'La fecha del cobro');
         if (d > todayInSalvador()) throw new BadRequestException('La fecha del cobro no puede ser futura.');
+        if (d !== ymd(payment.paymentDate)) {
+          // Las aplicaciones y retenciones del cobro llevan la fecha del cobro: moverla reescribiría los saldos pasados (antigüedad y estado de cuenta).
+          const moved = await Promise.all([
+            tx.paymentApplication.count({ where: { paymentId } }),
+            tx.invoiceWithholding.count({ where: { paymentId } }),
+          ]);
+          if (moved[0] + moved[1] > 0) {
+            throw new ConflictException('El cobro ya tiene (o tuvo) aplicaciones o retenciones: su fecha no se cambia porque movería los saldos pasados. Si la fecha está mal, anula el cobro y regístralo de nuevo.');
+          }
+        }
         data.paymentDate = dateFromYmd(d);
       }
       if (dto.method !== undefined) data.method = dto.method;

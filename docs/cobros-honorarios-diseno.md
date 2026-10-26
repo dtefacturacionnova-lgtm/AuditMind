@@ -263,3 +263,15 @@ Un revisor independiente (Opus) encontró 13 defectos, todos reproducidos y corr
 
 **Sigue abierto:** el PDF del estado de cuenta se genera con la impresión del navegador (no hay servicio de PDF en el servidor); las dudas fiscales de la sección 9; facturar horas de consultoría (Fase 4).
 
+
+## 14. Correcciones de la revisión independiente de 3c y 3d (2026-10-25)
+Un revisor independiente (Opus) examinó 3c y 3d ya desplegados. Defectos reales, todos reproducidos con una prueba que falla con el código anterior (`collections-review-fix.integration.spec.ts`, 15 pruebas):
+1. **IVA de notas de crédito sin tope.** Una nota de neto 1 e IVA 112 saldaba una factura de 100 + 13 y casi no liberaba honorario. Ahora el IVA acreditado (acumulado) no puede pasar del IVA de la factura, y la comprobación de invariantes lo vigila.
+2. **Movimientos con fecha en el pasado que dejaban un saldo negativo escondido.** La antigüedad recortaba a cero y el estado de cuenta no cuadraba. Ahora notas de crédito, castigos, retenciones y aplicaciones se rechazan (422) si con su fecha la factura habría quedado en negativo en algún día hasta hoy (`retro.util.ts`); si de todos modos aparece un saldo negativo, la antigüedad lo reporta en `anomalies` y la pantalla lo avisa.
+3. **Fechas que reescribían el pasado.** Un cobro anterior a su factura se aplica con la fecha de la factura; la retención no puede ser anterior a la factura; la fecha de la factura no se mueve más allá de su primer movimiento; la fecha de un cobro con (o que tuvo) aplicaciones o retenciones no se edita; la adenda no puede tener fecha futura.
+4. **Hitos cumplidos y calendario.** Regenerar el calendario borraba hitos ya marcados como cumplidos y movía el devengado pasado: ahora responde 409 hasta que se facturen o se desmarquen.
+5. **Devengado.** Un presupuesto de horas de 0 para quien ya tiene horas facturables ya no cuenta como presupuesto completo; un encargo cancelado no devenga.
+6. **Gestión de cobro.** Las alertas de seguimiento tomaban las 500 notas más viejas y filtraban después (con muchas notas, el seguimiento de hoy nunca salía) y los conteos se truncaban: ahora se resuelven en SQL con conteo exacto (la lista llega a 200). Una nota ligada a una factura toma el encargo de la factura (400 si se indica otro). Editar una nota toma `FOR UPDATE`.
+7. **SQL.** `2026-10-cobros-3d-fix1.sql` agrega dos claves foráneas compuestas a `collection_notes` (el encargo es de la misma organización; la factura es del encargo). Es aditivo e idempotente. La reversa de 3d ahora aborta si quedan notas de crédito o castigos vigentes (sus acumulados quedarían sin respaldo).
+
+**Supuestos que se mantienen** (a confirmar con el despacho): el avance por horas se topa en 100 % aunque las horas pasen del presupuesto; reabrir el papel disparador reescribe el pasado del devengado (solo se conoce su firma actual); el avance MANUAL no tiene historia; los totales de toda la organización siguen incluyendo costos de encargos cancelados (solo se les quitó el devengado).

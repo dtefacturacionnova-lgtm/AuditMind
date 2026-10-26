@@ -13,6 +13,7 @@ import { LedgerInvoice, applyInvoiceDelta, moneyOf } from './invoice-ledger';
 import { assertWithinBalance } from './allocation.util';
 import { computeCommitments } from './fees.service';
 import { creditNoteRow, writeOffRow } from './collection-rows';
+import { assertNoNegativePast, firstMovementDate } from './retro.util';
 import {
   AddWithholdingDto, ListInvoicesQueryDto, ListWithholdingsQueryDto, ReasonDto, RegisterInvoiceDto, UpdateInvoiceDto, WithholdingInputDto,
 } from './dto/collections.dto';
@@ -284,6 +285,11 @@ export class InvoicesService {
         if (dto.documentType !== undefined) data.documentType = dto.documentType;
       }
       const invoiceDate = dto.invoiceDate ? assertValidYmd(dto.invoiceDate, 'La fecha de la factura') : ymd(inv.invoiceDate);
+      if (dto.invoiceDate) {
+        // La factura no puede quedar fechada después de su primer cobro, retención, nota o castigo: el pasado se reconstruye con esas fechas.
+        const first = await firstMovementDate(tx, id);
+        if (first && invoiceDate > first) throw new ConflictException(`La fecha de la factura no puede ser posterior a su primer movimiento (${first}).`);
+      }
       const dueDate = dto.dueDate ? assertValidYmd(dto.dueDate, 'La fecha de vencimiento') : ymd(inv.dueDate);
       if (invoiceDate > todayInSalvador()) throw new BadRequestException('La fecha de la factura no puede ser futura.');
       if (dueDate < invoiceDate) throw new BadRequestException('El vencimiento no puede ser anterior a la fecha de la factura.');
@@ -406,7 +412,9 @@ export class InvoicesService {
       await lockInvoices(tx, [invoiceId]);
       const inv = await tx.clientInvoice.findFirst({ where: { id: invoiceId, organizationId: user.organizationId } });
       if (!inv) throw new NotFoundException('Factura no encontrada');
+      if (appliedOn < ymd(inv.invoiceDate)) throw new BadRequestException('La retención no puede ser anterior a la factura.');
       assertWithinBalance({ invoiceNumber: inv.invoiceNumber, balanceCents: balanceCents(moneyOf(inv)), moneyCents: 0, withholdingCents: cents });
+      await assertNoNegativePast(tx, inv, [{ invoiceId, kind: 'WITHHOLDING', cents, effectiveOn: appliedOn, undoneOn: null }]);
       await applyInvoiceDelta(tx, inv, { withheldCents: cents });
       const row = await tx.invoiceWithholding.create({
         data: {

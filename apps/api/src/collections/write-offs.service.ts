@@ -8,6 +8,7 @@ import {
 import { balanceCents } from './balance.util';
 import { formatMoney, fromCents, parseMoneyInput, toCents } from './money.util';
 import { assertValidYmd } from './schedule.util';
+import { assertNoNegativePast } from './retro.util';
 import { writeOffRow } from './collection-rows';
 import { applyInvoiceDelta, moneyOf } from './invoice-ledger';
 import { ListWriteOffsQueryDto, RegisterWriteOffDto } from './dto/collections-3d.dto';
@@ -42,6 +43,7 @@ export class WriteOffsService {
       if (cents > balance) {
         throw new UnprocessableEntityException(`El castigo (${formatMoney(cents)}) supera el saldo de la factura ${inv.invoiceNumber} (${formatMoney(balance)}).`);
       }
+      await assertNoNegativePast(tx, inv, [{ invoiceId, kind: 'WRITE_OFF', cents, effectiveOn: writtenOffOn, undoneOn: null }]);
       await applyInvoiceDelta(tx, inv, { writtenOffCents: cents });
       const row = await tx.clientWriteOff.create({
         data: { organizationId: user.organizationId, clientId: inv.clientId, invoiceId, amount: fromCents(cents), writtenOffOn: dateFromYmd(writtenOffOn), reason, createdById: user.id },

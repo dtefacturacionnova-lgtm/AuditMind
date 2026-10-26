@@ -41,7 +41,10 @@ export const movementActiveAt = (m: CutoffMovement, asOf: string): boolean => m.
 export const invoiceExistsAt = (inv: CutoffInvoice, asOf: string): boolean => inv.invoiceDate <= asOf && (inv.voidedOn === null || inv.voidedOn > asOf);
 
 export interface BalanceAtCutoff {
+  /** Saldo recortado en 0 (lo que se muestra). */
   balanceCents: number;
+  /** Saldo SIN recortar: negativo solo si los datos son incoherentes (un movimiento con fecha retroactiva que no cabía en esa fecha). */
+  rawBalanceCents: number;
   paidCents: number;
   withheldCents: number;
   creditedCents: number;
@@ -56,7 +59,30 @@ export function balanceAt(inv: CutoffInvoice, moves: CutoffMovement[], asOf: str
   const withheldCents = sum('WITHHOLDING');
   const creditedCents = sum('CREDIT_NOTE');
   const writtenOffCents = sum('WRITE_OFF');
-  return { balanceCents: Math.max(0, inv.totalCents - paidCents - withheldCents - creditedCents - writtenOffCents), paidCents, withheldCents, creditedCents, writtenOffCents };
+  const raw = inv.totalCents - paidCents - withheldCents - creditedCents - writtenOffCents;
+  return { balanceCents: Math.max(0, raw), rawBalanceCents: raw, paidCents, withheldCents, creditedCents, writtenOffCents };
+}
+
+/**
+ * Un movimiento NUEVO con fecha de efecto en el pasado (una nota de crédito emitida hace días y registrada hoy, un cobro con fecha
+ * anterior…) no debe dejar el saldo de la factura negativo en NINGUNA fecha desde la suya hasta hoy: si lo hiciera, la antigüedad a esa
+ * fecha mostraría saldo 0 y el estado de cuenta no cuadraría. Devuelve la primera fecha en que quedaría negativo, o null si cabe.
+ * Las fechas a revisar son la del movimiento nuevo, cada fecha de efecto o de reversa de los movimientos existentes desde entonces y hoy.
+ */
+export function firstNegativeDate(inv: CutoffInvoice, moves: CutoffMovement[], added: CutoffMovement[], today: string): { date: string; balanceCents: number } | null {
+  if (added.length === 0) return null;
+  const from = added.map((m) => m.effectiveOn).sort()[0];
+  const all = [...moves, ...added];
+  const dates = new Set<string>([today]);
+  for (const m of all) {
+    if (m.effectiveOn >= from) dates.add(m.effectiveOn);
+    if (m.undoneOn && m.undoneOn >= from) dates.add(m.undoneOn);
+  }
+  for (const date of [...dates].filter((d) => d >= from && d <= today).sort()) {
+    const b = balanceAt(inv, all, date);
+    if (b && b.rawBalanceCents < 0) return { date, balanceCents: b.rawBalanceCents };
+  }
+  return null;
 }
 
 export interface AgingInvoiceRow {
@@ -79,10 +105,15 @@ export interface AgingClientRow {
 const emptyBuckets = (): Record<AgingBucket, number> => ({ CURRENT: 0, D1_30: 0, D31_60: 0, D61_90: 0, D90_PLUS: 0 });
 
 /** Antigüedad por cliente al corte: solo facturas con saldo > 0; «vencida» es saldo > 0 y vencimiento anterior al corte. */
-export function agingAt(invoices: CutoffInvoice[], moves: CutoffMovement[], asOf: string): { clients: AgingClientRow[]; totals: Record<AgingBucket, number>; totalCents: number } {
+export function agingAt(invoices: CutoffInvoice[], moves: CutoffMovement[], asOf: string): {
+  clients: AgingClientRow[]; totals: Record<AgingBucket, number>; totalCents: number; anomalies: Array<{ invoiceId: string; invoiceNumber: string; balanceCents: number }>;
+} {
   const byClient = new Map<string, AgingClientRow>();
+  const anomalies: Array<{ invoiceId: string; invoiceNumber: string; balanceCents: number }> = [];
   for (const inv of invoices) {
     const b = balanceAt(inv, moves, asOf);
+    // Un saldo negativo no se esconde: se reporta como anomalía de datos (la antigüedad solo lista saldos positivos).
+    if (b && b.rawBalanceCents < 0) anomalies.push({ invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, balanceCents: b.rawBalanceCents });
     if (!b || b.balanceCents <= 0) continue;
     const row = byClient.get(inv.clientId) ?? { clientId: inv.clientId, totals: emptyBuckets(), totalCents: 0, invoices: [] };
     const bucket = agingBucket(inv.dueDate, asOf);
@@ -100,7 +131,7 @@ export function agingAt(invoices: CutoffInvoice[], moves: CutoffMovement[], asOf
     totalCents += c.totalCents;
     c.invoices.sort((a, b) => b.overdueDays - a.overdueDays || a.invoiceNumber.localeCompare(b.invoiceNumber));
   }
-  return { clients, totals, totalCents };
+  return { clients, totals, totalCents, anomalies };
 }
 
 // ── Estado de cuenta ────────────────────────────────────────────────────────

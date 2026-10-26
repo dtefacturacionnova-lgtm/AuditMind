@@ -76,9 +76,12 @@ export class CollectionNotesService {
 
     const client = await this.prisma.client.findFirst({ where: { id: dto.clientId, organizationId: user.organizationId }, select: { id: true } });
     if (!client) throw new NotFoundException('Cliente no encontrado');
+    let engagementId = dto.engagementId ?? null;
     if (dto.invoiceId) {
-      const inv = await this.prisma.clientInvoice.findFirst({ where: { id: dto.invoiceId, organizationId: user.organizationId, clientId: dto.clientId }, select: { id: true } });
+      const inv = await this.prisma.clientInvoice.findFirst({ where: { id: dto.invoiceId, organizationId: user.organizationId, clientId: dto.clientId }, select: { id: true, engagementId: true } });
       if (!inv) throw new NotFoundException('Esa factura no es de este cliente.');
+      if (engagementId && engagementId !== inv.engagementId) throw new BadRequestException('Esa factura no pertenece al encargo indicado.');
+      engagementId = inv.engagementId; // la nota queda ligada al encargo de su factura
     }
     if (dto.engagementId) {
       const eng = await this.prisma.engagement.findFirst({ where: { id: dto.engagementId, organizationId: user.organizationId, clientId: dto.clientId }, select: { id: true } });
@@ -88,7 +91,7 @@ export class CollectionNotesService {
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.collectionNote.create({
         data: {
-          organizationId: user.organizationId, clientId: dto.clientId, invoiceId: dto.invoiceId ?? null, engagementId: dto.engagementId ?? null,
+          organizationId: user.organizationId, clientId: dto.clientId, invoiceId: dto.invoiceId ?? null, engagementId,
           contactedOn: dateFromYmd(contactedOn), method: dto.method, contactName: dto.contactName?.trim() || null, note: dto.note.trim(),
           promiseDate: promiseDate ? dateFromYmd(promiseDate) : null, promiseAmount: promiseCents === null ? null : fromCents(promiseCents),
           promiseStatus: promiseDate ? PromiseStatus.PENDING : null, nextFollowUpOn: nextFollowUpOn ? dateFromYmd(nextFollowUpOn) : null,
@@ -106,6 +109,7 @@ export class CollectionNotesService {
     await assertBillingModule(this.prisma, user.organizationId);
     const today = todayInSalvador();
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM collection_notes WHERE id = ${id} AND "organizationId" = ${user.organizationId} FOR UPDATE`;
       const row = await tx.collectionNote.findFirst({ where: { id, organizationId: user.organizationId } });
       if (!row) throw new NotFoundException('Nota de gestión no encontrada');
       if (row.createdById !== user.id && !isDirection(user)) throw new ForbiddenException('Solo su autor o la dirección pueden editar esta nota.');
@@ -209,37 +213,38 @@ export class CollectionNotesService {
     const staleDays = q.staleDays ?? 15;
     const org = user.organizationId;
 
-    // 1. Promesas pendientes cuya fecha ya pasó.
-    const overdueRows = await this.prisma.collectionNote.findMany({
-      where: { organizationId: org, promiseStatus: PromiseStatus.PENDING, promiseDate: { lt: dateFromYmd(today) } },
-      orderBy: { promiseDate: 'asc' }, take: 200,
-    });
+    // 1. Promesas pendientes cuya fecha ya pasó (el conteo es exacto; la lista trae las 200 más antiguas).
+    const promiseWhere = { organizationId: org, promiseStatus: PromiseStatus.PENDING, promiseDate: { lt: dateFromYmd(today) } };
+    const [overdueRows, overdueCount] = await Promise.all([
+      this.prisma.collectionNote.findMany({ where: promiseWhere, orderBy: [{ promiseDate: 'asc' }, { id: 'asc' }], take: 200 }),
+      this.prisma.collectionNote.count({ where: promiseWhere }),
+    ]);
 
-    // 2. Seguimientos de hoy o atrasados: la última nota del cliente (la más reciente) pide volver a contactarlo.
-    const followCandidates = await this.prisma.collectionNote.findMany({
-      where: { organizationId: org, nextFollowUpOn: { lte: dateFromYmd(today) } }, orderBy: { nextFollowUpOn: 'asc' }, take: 500,
-    });
-    const latestPerClient = followCandidates.length
-      ? await this.prisma.collectionNote.groupBy({ by: ['clientId'], where: { organizationId: org, clientId: { in: [...new Set(followCandidates.map((n) => n.clientId))] } }, _max: { createdAt: true } })
-      : [];
-    const latestBy = new Map(latestPerClient.map((g) => [g.clientId, g._max.createdAt as Date]));
-    const followRows = followCandidates.filter((n) => (latestBy.get(n.clientId)?.getTime() ?? 0) <= n.createdAt.getTime()).slice(0, 200);
+    // 2. Seguimientos de hoy o atrasados: manda la nota MÁS RECIENTE del cliente; si pide volver a contactar hoy o antes, avisa. Se resuelve
+    //    en SQL (antes se tomaban las 500 notas más viejas y se filtraba después: con muchas notas viejas los seguimientos de hoy nunca salían).
+    const followFrom = Prisma.sql`FROM collection_notes n WHERE n."organizationId" = ${org} AND n."nextFollowUpOn" <= ${today}::date
+      AND NOT EXISTS (SELECT 1 FROM collection_notes m WHERE m."organizationId" = n."organizationId" AND m."clientId" = n."clientId"
+        AND (m."createdAt" > n."createdAt" OR (m."createdAt" = n."createdAt" AND m.id > n.id)))`;
+    const [followIds, followCount] = await Promise.all([
+      this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT n.id ${followFrom} ORDER BY n."nextFollowUpOn" ASC, n.id ASC LIMIT 200`),
+      this.prisma.$queryRaw<{ c: bigint }[]>(Prisma.sql`SELECT COUNT(*) AS c ${followFrom}`),
+    ]);
+    const followRaw = followIds.length ? await this.prisma.collectionNote.findMany({ where: { id: { in: followIds.map((r) => r.id) }, organizationId: org } }) : [];
+    const followOrder = new Map(followIds.map((r, idx) => [r.id, idx]));
+    const followRows = followRaw.sort((a, b) => (followOrder.get(a.id) ?? 0) - (followOrder.get(b.id) ?? 0));
 
     // 3. Facturas vencidas con saldo y sin gestión registrada en los últimos `staleDays` días (por la factura o por el cliente en general).
-    const overdueInvoices = await this.prisma.clientInvoice.findMany({
-      where: { organizationId: org, status: { in: [ClientInvoiceStatus.OPEN, ClientInvoiceStatus.PARTIAL] }, dueDate: { lt: dateFromYmd(today) } },
-      orderBy: { dueDate: 'asc' }, take: 500,
-    });
-    const since = dateFromYmd(addDays(today, -staleDays));
-    const recent = overdueInvoices.length
-      ? await this.prisma.collectionNote.findMany({
-          where: { organizationId: org, clientId: { in: [...new Set(overdueInvoices.map((i) => i.clientId))] }, contactedOn: { gte: since } },
-          select: { clientId: true, invoiceId: true },
-        })
-      : [];
-    const touchedInvoice = new Set(recent.filter((n) => n.invoiceId).map((n) => n.invoiceId as string));
-    const touchedClientWide = new Set(recent.filter((n) => !n.invoiceId).map((n) => n.clientId));
-    const unattended = overdueInvoices.filter((i) => !touchedInvoice.has(i.id) && !touchedClientWide.has(i.clientId)).slice(0, 200);
+    const sinceYmd = addDays(today, -staleDays);
+    const unattendedFrom = Prisma.sql`FROM client_invoices i WHERE i."organizationId" = ${org} AND i.status IN ('OPEN', 'PARTIAL') AND i."dueDate" < ${today}::date
+      AND NOT EXISTS (SELECT 1 FROM collection_notes n WHERE n."organizationId" = i."organizationId" AND n."clientId" = i."clientId"
+        AND n."contactedOn" >= ${sinceYmd}::date AND (n."invoiceId" = i.id OR n."invoiceId" IS NULL))`;
+    const [unattendedIds, unattendedCount] = await Promise.all([
+      this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT i.id ${unattendedFrom} ORDER BY i."dueDate" ASC, i.id ASC LIMIT 200`),
+      this.prisma.$queryRaw<{ c: bigint }[]>(Prisma.sql`SELECT COUNT(*) AS c ${unattendedFrom}`),
+    ]);
+    const unattendedRaw = unattendedIds.length ? await this.prisma.clientInvoice.findMany({ where: { id: { in: unattendedIds.map((r) => r.id) }, organizationId: org } }) : [];
+    const unattendedOrder = new Map(unattendedIds.map((r, idx) => [r.id, idx]));
+    const unattended = unattendedRaw.sort((a, b) => (unattendedOrder.get(a.id) ?? 0) - (unattendedOrder.get(b.id) ?? 0));
 
     const clientIds = [...new Set([...overdueRows, ...followRows].map((n) => n.clientId).concat(unattended.map((i) => i.clientId)))];
     const clients = await this.prisma.client.findMany({ where: { id: { in: clientIds } }, select: { id: true, legalName: true, tradeName: true } });
@@ -253,7 +258,8 @@ export class CollectionNotesService {
         id: i.id, invoiceNumber: i.invoiceNumber, clientId: i.clientId, client: clientBy.get(i.clientId) ?? null,
         dueDate: ymd(i.dueDate), overdueDays: daysOverdue(ymd(i.dueDate), today), balance: balanceCents(moneyOf(i)) / 100,
       })),
-      counts: { overduePromises: overdueRows.length, followUps: followRows.length, unattendedInvoices: unattended.length },
+      // Conteos exactos (las listas traen como máximo 200 filas, las más antiguas primero).
+      counts: { overduePromises: overdueCount, followUps: Number(followCount[0]?.c ?? 0), unattendedInvoices: Number(unattendedCount[0]?.c ?? 0) },
     };
   }
 }

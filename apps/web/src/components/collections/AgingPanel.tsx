@@ -133,6 +133,12 @@ export function AgingPanel({ clientId, onOpenInvoice }: { clientId: string; onOp
       {data?.creditOnly && data.creditOnly.length > 0 && (
         <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">Clientes sin saldo pero con saldo a favor: {data.creditOnly.map((c) => `${c.client?.legalName ?? c.clientId} (${formatMoney(c.unappliedCredit)})`).join(', ')}.</p>
       )}
+      {data?.anomalies && data.anomalies.length > 0 && (
+        <p className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">
+          A esta fecha {data.anomalies.length === 1 ? 'una factura salió' : `${data.anomalies.length} facturas salieron`} con saldo negativo y no se cuenta{data.anomalies.length === 1 ? '' : 'n'} en la antigüedad:{' '}
+          {data.anomalies.map((a) => `${a.invoiceNumber} (${formatMoney(a.balance)})`).join(', ')}. Revisa sus cobros, notas de crédito y castigos.
+        </p>
+      )}
       {statementFor && <StatementModal clientId={statementFor} asOf={asOf} onClose={() => setStatementFor(null)} />}
     </section>
   );

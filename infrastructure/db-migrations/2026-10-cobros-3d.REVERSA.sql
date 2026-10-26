@@ -6,6 +6,17 @@
 --    enumerado de Postgres; quedan sin uso y no estorban.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
+-- Aborta si quedan notas de crédito o castigos vigentes: borrarlos dejaría los acumulados de las facturas sin respaldo.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "client_credit_notes" WHERE "status" = 'ACTIVE') THEN
+    RAISE EXCEPTION 'Hay notas de crédito vigentes: anúlalas antes de revertir 3d';
+  END IF;
+  IF EXISTS (SELECT 1 FROM "client_write_offs" WHERE "status" = 'ACTIVE') THEN
+    RAISE EXCEPTION 'Hay castigos vigentes: reviértelos antes de revertir 3d';
+  END IF;
+END
+$$;
 DROP TABLE IF EXISTS "collection_notes";
 DROP TABLE IF EXISTS "client_write_offs";
 DROP TABLE IF EXISTS "client_credit_notes";

@@ -258,6 +258,8 @@ export class FeesService {
     assertDirection(user);
     await assertBillingModule(this.prisma, user.organizationId);
     const date = assertValidYmd(dto.date, 'La fecha de la adenda');
+    // El honorario vigente de hoy incluye la adenda, pero el devengado de hoy descuenta las adendas con fecha posterior: una futura los descuadraría.
+    if (date > todayInSalvador()) throw new BadRequestException('La fecha de la adenda no puede ser futura.');
     const reason = assertReason(dto.reason, 'El motivo de la adenda', 5);
     const deltaCents = parseSignedMoneyInput(dto.amountDelta, 'El cambio de honorario');
     await this.prisma.$transaction(async (tx) => {
@@ -366,6 +368,13 @@ export class FeesService {
       let removed: { id: string; sequence: number; label: string; amount: string }[] = [];
       if (replace) {
         const planned = await tx.billingScheduleItem.findMany({ where: { engagementId, status: ScheduleItemStatus.PLANNED } });
+        // Un hito ya marcado como cumplido alimenta el devengado: regenerar el calendario lo borraría y movería el devengado pasado.
+        const done = planned.filter((p) => p.completedAt);
+        if (done.length > 0) {
+          throw new ConflictException(
+            `Hay ${done.length} hito(s) cumplido(s) sin facturar (${done.map((p) => `«${p.label}»`).join(', ')}): factúralos o desmárcalos antes de regenerar el calendario.`,
+          );
+        }
         if (planned.length) {
           const referenced = new Set((await tx.clientInvoice.findMany({
             where: { scheduleItemId: { in: planned.map((p) => p.id) } }, select: { scheduleItemId: true },

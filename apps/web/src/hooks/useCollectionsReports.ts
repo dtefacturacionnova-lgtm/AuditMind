@@ -74,6 +74,8 @@ export interface AgingClient {
 export interface AgingReport {
   asOf: string; buckets: Record<AgingBucketKey, number>; total: number; unappliedCredit: number; clients: AgingClient[];
   creditOnly: { clientId: string; client: { id: string; legalName: string; tradeName: string | null } | null; unappliedCredit: number }[];
+  /** Facturas cuyo saldo, reconstruido a esa fecha, salió negativo (datos incoherentes): no entran en la antigüedad, pero se avisan. */
+  anomalies?: { invoiceId: string; invoiceNumber: string; balance: number }[];
 }
 export interface Statement {
   asOf: string; from: string | null; client: { id: string; legalName: string; tradeName: string | null; taxId: string | null };

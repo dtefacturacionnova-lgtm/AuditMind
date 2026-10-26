@@ -41,10 +41,13 @@ export async function computeAccruals(db: Db | PrismaService, organizationId: st
   if (ids.length === 0) return out;
   const cutoff = dateFromYmd(asOf);
 
-  const [engagements, fees] = await Promise.all([
-    db.engagement.findMany({ where: { id: { in: ids }, organizationId }, select: { id: true, auditId: true } }),
+  const [engagements, allFees] = await Promise.all([
+    db.engagement.findMany({ where: { id: { in: ids }, organizationId, status: { not: 'CANCELLED' } }, select: { id: true, auditId: true } }),
     db.engagementFee.findMany({ where: { engagementId: { in: ids }, organizationId } }),
   ]);
+  // Un encargo cancelado no devenga (no se le factura): sin entrada, como uno sin honorario.
+  const live = new Set(engagements.map((e) => e.id));
+  const fees = allFees.filter((f) => live.has(f.engagementId));
   if (fees.length === 0) return out;
   const feeIds = fees.map((f) => f.id);
   const engIds = fees.map((f) => f.engagementId);
@@ -112,7 +115,8 @@ export async function computeAccruals(db: Db | PrismaService, organizationId: st
       billable = [...perUser.values()].reduce((s, v) => s + v, 0);
       const members = teamByAudit.get(auditId) ?? [];
       const budgetOf = new Map(members.map((m) => [m.userId, m.budgetedHours]));
-      const complete = [...perUser.keys()].every((u) => budgetOf.get(u) !== null && budgetOf.get(u) !== undefined);
+      // toda persona con horas facturables necesita un presupuesto MAYOR que cero (con 0 sus horas ya se pasarían del presupuesto)
+      const complete = [...perUser.keys()].every((u) => (budgetOf.get(u) ?? 0) > 0);
       const total = members.reduce((s, m) => s + (m.budgetedHours ?? 0), 0);
       budget = complete && total > 0 ? total : null;
     }

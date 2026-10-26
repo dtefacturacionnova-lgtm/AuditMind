@@ -9,6 +9,7 @@ import {
 import { balanceCents } from './balance.util';
 import { formatMoney, fromCents, parseMoneyInput, parseNonNegativeMoneyInput, toCents } from './money.util';
 import { assertValidYmd } from './schedule.util';
+import { assertNoNegativePast } from './retro.util';
 import { creditNoteRow } from './collection-rows';
 import { applyInvoiceDelta, moneyOf } from './invoice-ledger';
 import { computeCommitments } from './fees.service';
@@ -58,13 +59,22 @@ export class CreditNotesService {
           'Si el cliente ya pagó, quita primero la aplicación del cobro: queda como saldo a favor y luego se registra la nota.',
         );
       }
-      const prior = await tx.clientCreditNote.aggregate({ where: { invoiceId, status: CreditNoteStatus.ACTIVE }, _sum: { netAmount: true } });
+      const prior = await tx.clientCreditNote.aggregate({ where: { invoiceId, status: CreditNoteStatus.ACTIVE }, _sum: { netAmount: true, taxAmount: true } });
       const priorNet = prior._sum.netAmount ? toCents(prior._sum.netAmount) : 0;
+      const priorTax = prior._sum.taxAmount ? toCents(prior._sum.taxAmount) : 0;
       if (priorNet + netCents > toCents(inv.netAmount)) {
         throw new UnprocessableEntityException(
           `Las notas de crédito de la factura ${inv.invoiceNumber} acreditarían ${formatMoney(priorNet + netCents)} netos y la factura es por ${formatMoney(toCents(inv.netAmount))}.`,
         );
       }
+      // El IVA tampoco puede pasarse del de la factura: sin este tope una nota de neto 1 e IVA 112 saldaba una factura de 100 + 13
+      // liberando casi nada del honorario (lo facturado neto quedaba casi igual aunque la factura ya estuviera acreditada).
+      if (priorTax + taxCents > toCents(inv.taxAmount)) {
+        throw new UnprocessableEntityException(
+          `El IVA de las notas de crédito de la factura ${inv.invoiceNumber} sumaría ${formatMoney(priorTax + taxCents)} y la factura solo tiene ${formatMoney(toCents(inv.taxAmount))} de IVA.`,
+        );
+      }
+      await assertNoNegativePast(tx, inv, [{ invoiceId, kind: 'CREDIT_NOTE', cents: totalCents, effectiveOn: issueDate, undoneOn: null }]);
 
       let note: Prisma.ClientCreditNoteGetPayload<object>;
       try {

@@ -130,6 +130,11 @@ ALTER TABLE "collection_notes" ADD CONSTRAINT "collection_notes_invoice_fkey"
   FOREIGN KEY ("organizationId", "clientId", "invoiceId") REFERENCES "client_invoices"("organizationId", "clientId", "id") ON DELETE RESTRICT ON UPDATE RESTRICT;
 ALTER TABLE "collection_notes" ADD CONSTRAINT "collection_notes_engagement_fkey"
   FOREIGN KEY ("engagementId", "clientId") REFERENCES "engagements"("id", "clientId") ON DELETE RESTRICT ON UPDATE RESTRICT;
+-- (arreglo 1 de la revisión independiente; quien ya aplicó la versión anterior corre 2026-10-cobros-3d-fix1.sql)
+ALTER TABLE "collection_notes" ADD CONSTRAINT "collection_notes_engagement_org_fkey"
+  FOREIGN KEY ("organizationId", "engagementId") REFERENCES "engagements"("organizationId", "id") ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "collection_notes" ADD CONSTRAINT "collection_notes_invoice_engagement_fkey"
+  FOREIGN KEY ("invoiceId", "engagementId") REFERENCES "client_invoices"("id", "engagementId") ON DELETE RESTRICT ON UPDATE RESTRICT;
 ALTER TABLE "collection_notes" ADD CONSTRAINT "collection_notes_createdById_fkey"
   FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE RESTRICT;
 

@@ -90,6 +90,8 @@ export class CollectionReportsService {
       asOf,
       buckets: toRow(aging.totals), total: cents(aging.totalCents),
       unappliedCredit: cents([...credit.values()].reduce((s, v) => s + v, 0)),
+      // facturas cuyo saldo a esa fecha sale negativo (datos incoherentes): se avisan, no se esconden
+      anomalies: aging.anomalies.map((a) => ({ invoiceId: a.invoiceId, invoiceNumber: a.invoiceNumber, balance: cents(a.balanceCents) })),
       clients: aging.clients.map((c) => ({
         clientId: c.clientId, client: nameBy.get(c.clientId) ?? null, buckets: toRow(c.totals), total: cents(c.totalCents),
         unappliedCredit: cents(credit.get(c.clientId) ?? 0), invoiceCount: c.invoices.length,

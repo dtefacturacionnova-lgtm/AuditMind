@@ -13,6 +13,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { WorkingPaperStatus, UserRole, TickMark, WpKind, SyncStatus, Prisma, SignatureDocumentType } from '@prisma/client';
 import { PaperGraphService } from './paper-graph.service';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { removeStoragePrefixes } from '../common/storage/storage-prefix.util';
 import { PAPER_CATALOGUE, ALLOWED_CODES_BY_AUDIT_TYPE } from './paper-catalogue';
 import { PaperVersionsService } from './paper-versions.service';
 import { PdfService } from '../pdf/pdf.service';
@@ -870,6 +871,9 @@ export class WorkingPapersService {
     // All child records (PaperSection, WorkingPaperVersion, WorkingPaperComment,
     // TickMarkEntry, PaperLink) have onDelete: Cascade — one delete suffices.
     await this.prisma.workingPaper.delete({ where: { id } });
+    // Borrar las filas no borra los archivos de Storage del papel (secciones, evidencia, cédulas contables y procedimientos): quedaban
+    // carpetas sin dueño. Best-effort: si falla, el barrido de huérfanos (scripts/storage-orphans.ts) lo encuentra.
+    await removeStoragePrefixes(this.supabaseAdmin, [`sections/${id}`, `docevidence/${id}`, `acct-schedule/${id}`, `procedures/${id}`]);
     return { deleted: true };
   }
 

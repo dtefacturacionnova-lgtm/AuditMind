@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInvestigationAccess, AUDIT_ACCESS_SELECT } from '../common/utils/investigation-scope.util';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { removeStoragePrefixes } from '../common/storage/storage-prefix.util';
 import {
   ProcStatus, StepStatus, StepConclusion, TestType, AuditNature, AuditTiming,
 } from '@prisma/client';
@@ -205,8 +206,12 @@ export class AuditProceduresService {
   }
 
   async deleteProcedure(id: string, user: AuthUser) {
-    await this.assertProcedureAccess(id, user);
-    return this.prisma.auditProcedure.delete({ where: { id } });
+    const proc = await this.assertProcedureAccess(id, user);
+    // Los archivos de cada paso (y los del procedimiento en el papel) viven en Storage y no se van con la fila: se recogen antes de borrar.
+    const steps = await this.prisma.auditStep.findMany({ where: { procedureId: id }, select: { id: true } });
+    const deleted = await this.prisma.auditProcedure.delete({ where: { id } });
+    await removeStoragePrefixes(this.supabase, [...steps.map((s) => `procedures/steps/${s.id}`), `procedures/${proc.section.paper.id}/${id}`]);
+    return deleted;
   }
 
   // ─── Cross-reference pickers (wpRef / rmmRiskRef) ─────────────────────────
@@ -358,6 +363,7 @@ export class AuditProceduresService {
   async deleteStep(id: string, user: AuthUser) {
     const step = await this.assertStepAccess(id, user);
     await this.prisma.auditStep.delete({ where: { id } });
+    await removeStoragePrefixes(this.supabase, [`procedures/steps/${id}`]); // la evidencia del paso no se va sola con la fila
     await this.syncProcStatus(step.procedureId);
   }
 

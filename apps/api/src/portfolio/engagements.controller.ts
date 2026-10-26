@@ -4,7 +4,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { EngagementsService } from './engagements.service';
-import { CreateEngagementDto, ListEngagementsQueryDto, UpdateEngagementDto } from './dto/engagement.dto';
+import { EngagementProgramService } from './engagement-program.service';
+import { CreateEngagementDto, ListEngagementsQueryDto, ProgramQueryDto, UpdateEngagementDto } from './dto/engagement.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/jwt.strategy';
@@ -13,13 +14,20 @@ import { AuthUser } from '../auth/jwt.strategy';
 @ApiBearerAuth()
 @Controller('portfolio/engagements')
 export class EngagementsController {
-  constructor(private readonly service: EngagementsService) {}
+  constructor(private readonly service: EngagementsService, private readonly programService: EngagementProgramService) {}
 
   @Post()
   @Roles(UserRole.AUDIT_MANAGER)
   @ApiOperation({ summary: 'Crear encargo (exige Client.status = ACTIVE)' })
   create(@Body() dto: CreateEngagementDto, @CurrentUser() user: AuthUser) {
     return this.service.create(dto, user);
+  }
+
+  @Get('program')
+  @Roles(UserRole.AUDIT_MANAGER)
+  @ApiOperation({ summary: 'Programa anual de encargos: horas comprometidas por encargo y por persona contra la capacidad neta del equipo' })
+  program(@Query() query: ProgramQueryDto, @CurrentUser() user: AuthUser) {
+    return this.programService.program(query.year, user);
   }
 
   @Get()

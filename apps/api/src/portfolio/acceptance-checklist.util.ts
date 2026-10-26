@@ -7,8 +7,15 @@
  *  - «Hecho»: qué se hizo y qué se encontró (la comunicación con el auditor predecesor además lleva la fecha de la solicitud).
  *  - «No aplica»: el motivo (por ejemplo, un cliente de continuidad no tiene auditor predecesor).
  * Decidir el Radar en Verde o Amarillo exige que los tres estén resueltos; declinar al cliente (Rojo) no.
+ *
+ * La comunicación con el auditor predecesor «Hecha» lleva además su REGISTRO estructurado (NIA 300 y Código IESBA 320): a quién se le
+ * escribió, que el cliente autorizó la comunicación, la fecha de la solicitud, el resultado y la fecha de la respuesta.
  */
 export type ChecklistStatus = 'PENDING' | 'DONE' | 'NOT_APPLICABLE';
+
+/** Resultado de la comunicación con el auditor predecesor. */
+export type PredecessorOutcome = 'NO_MATTERS' | 'MATTERS_NOTED' | 'NO_RESPONSE';
+export const PREDECESSOR_OUTCOMES: PredecessorOutcome[] = ['NO_MATTERS', 'MATTERS_NOTED', 'NO_RESPONSE'];
 
 export interface ChecklistItem {
   key?: string;
@@ -18,6 +25,14 @@ export interface ChecklistItem {
   date?: string;
   answer?: string;
   comment?: string;
+  /** Solo PREDECESSOR «Hecho»: auditor o firma predecesora a quien se le escribió. */
+  predecessorFirm?: string;
+  /** Solo PREDECESSOR «Hecho»: el cliente autorizó la comunicación con su auditor anterior. */
+  clientAuthorized?: boolean;
+  /** Solo PREDECESSOR «Hecho»: cómo terminó la comunicación. */
+  outcome?: PredecessorOutcome;
+  /** Solo PREDECESSOR «Hecho» con respuesta: fecha en que respondió (YYYY-MM-DD). */
+  responseDate?: string;
 }
 
 export const MIN_CHECKLIST_COMMENT = 10;
@@ -63,7 +78,16 @@ export function mergeChecklist(stored: unknown, incoming?: unknown, opts: { cont
     const base = byKey.get(t.key);
     if (base) {
       const status = STATUSES.includes(base.status as ChecklistStatus) ? (base.status as ChecklistStatus) : 'PENDING';
-      return clean({ key: t.key, item: t.item, status, date: base.date, answer: base.answer, comment: base.comment });
+      // El registro del auditor predecesor solo se conserva cuando la comunicación está «Hecha».
+      const record = t.key === 'PREDECESSOR' && status === 'DONE'
+        ? {
+          predecessorFirm: typeof base.predecessorFirm === 'string' ? base.predecessorFirm.trim() : undefined,
+          clientAuthorized: typeof base.clientAuthorized === 'boolean' ? base.clientAuthorized : undefined,
+          outcome: PREDECESSOR_OUTCOMES.includes(base.outcome as PredecessorOutcome) ? base.outcome : undefined,
+          responseDate: base.outcome === 'NO_RESPONSE' ? undefined : base.responseDate,
+        }
+        : {};
+      return clean({ key: t.key, item: t.item, status, date: base.date, answer: base.answer, comment: base.comment, ...record });
     }
     if (t.key === 'PREDECESSOR' && opts.continuityYear) {
       return clean({
@@ -102,6 +126,22 @@ export function reviewChecklist(list: ChecklistItem[], today: Date = new Date())
         invalid.push(`«${t.short}»: indica la fecha de la solicitud.`);
       } else if (Date.parse(it.date) > today.getTime() + 24 * 3600 * 1000) {
         invalid.push(`«${t.short}»: la fecha de la solicitud no puede ser futura.`);
+      }
+    }
+    if (t.key === 'PREDECESSOR' && status === 'DONE') {
+      if ((it?.predecessorFirm ?? '').trim().length < 3) invalid.push(`«${t.short}»: indica el auditor o la firma predecesora a quien se le escribió.`);
+      if (it?.clientAuthorized !== true) invalid.push(`«${t.short}»: confirma que el cliente autorizó la comunicación con su auditor anterior (Código IESBA 320).`);
+      if (!it?.outcome || !PREDECESSOR_OUTCOMES.includes(it.outcome)) {
+        invalid.push(`«${t.short}»: indica el resultado (sin asuntos, con asuntos señalados o sin respuesta).`);
+      } else if (it.outcome !== 'NO_RESPONSE') {
+        const reqOk = !!it.date && ISO_DATE.test(it.date) && !Number.isNaN(Date.parse(it.date));
+        if (!it.responseDate || !ISO_DATE.test(it.responseDate) || Number.isNaN(Date.parse(it.responseDate))) {
+          invalid.push(`«${t.short}»: indica la fecha de la respuesta del auditor predecesor.`);
+        } else if (Date.parse(it.responseDate) > today.getTime() + 24 * 3600 * 1000) {
+          invalid.push(`«${t.short}»: la fecha de la respuesta no puede ser futura.`);
+        } else if (reqOk && Date.parse(it.responseDate) < Date.parse(it.date as string)) {
+          invalid.push(`«${t.short}»: la respuesta no puede ser anterior a la solicitud.`);
+        }
       }
     }
   }

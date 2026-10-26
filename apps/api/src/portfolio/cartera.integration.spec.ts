@@ -71,6 +71,8 @@ suite('Cartera · de prospecto a auditoría (Postgres real)', () => {
     { key: 'CONFLICTS', item: 'x', status: 'DONE', comment: 'Se revisaron el socio, el equipo y sus familiares: sin conflictos.' },
     { key: 'PRIOR_SERVICES', item: 'x', status: 'DONE', comment: 'El despacho no presta otros servicios al cliente.' },
   ];
+  /** Registro estructurado de la comunicación con el auditor predecesor (NIA 300 / IESBA 320). */
+  const predecessorRecord = (y: number, o: any = {}) => ({ predecessorFirm: 'Pérez & Asociados', clientAuthorized: true, outcome: 'NO_MATTERS', responseDate: `${y}-01-12`, ...o });
   const greens = {
     independenceStatus: 'GREEN', competenceStatus: 'GREEN', integrityStatus: 'GREEN', riskStatus: 'GREEN', sanctionsStatus: 'GREEN',
     sanctionsNotes: 'El despacho no es sujeto obligado para este cliente.', checklist: resolvedChecklist,
@@ -327,9 +329,9 @@ suite('Cartera · de prospecto a auditoría (Postgres real)', () => {
     await expect(acceptance.update(check.id, { checklist: [{ key: 'CONFLICTS', item: 'x', status: 'NOT_APPLICABLE', comment: 'no' }] } as any, manager)).rejects.toThrow(/por qué no aplica/);
 
     // se guarda de a poco; el texto de los ítems fijos lo pone el servidor
-    const saved: any = await acceptance.update(check.id, { checklist: [{ key: 'PREDECESSOR', item: 'texto del cliente', status: 'DONE', date: `${year}-01-05`, comment: done }] } as any, manager);
+    const saved: any = await acceptance.update(check.id, { checklist: [{ key: 'PREDECESSOR', item: 'texto del cliente', status: 'DONE', date: `${year}-01-05`, comment: done, ...predecessorRecord(year) }] } as any, manager);
     expect(saved.checklist).toHaveLength(3);
-    expect(saved.checklist[0]).toMatchObject({ status: 'DONE', date: `${year}-01-05` });
+    expect(saved.checklist[0]).toMatchObject({ status: 'DONE', date: `${year}-01-05`, predecessorFirm: 'Pérez & Asociados', clientAuthorized: true, outcome: 'NO_MATTERS', responseDate: `${year}-01-12` });
     expect(saved.checklist[0].item).toMatch(/NIA 300/);
     expect(saved.checklist[1].status).toBe('PENDING');
     await expect(acceptance.decide(check.id, { ...base, ...just } as any, manager)).rejects.toThrow(/Conflictos de interés del socio y el equipo; Servicios previos al cliente/);
@@ -344,6 +346,46 @@ suite('Cartera · de prospecto a auditoría (Postgres real)', () => {
     for (const bad of [{ item: 'x', key: 'OTRA' }, { item: 'x', status: 'QUIZAS' }, { item: 'x', key: 'CONFLICTS', date: '5/1/2026' }]) {
       expect((await validate(plainToInstance(AcceptanceChecklistItemDto, bad))).length).toBeGreaterThan(0);
     }
+  });
+
+  it('el auditor predecesor «Hecho» exige su registro: firma, autorización del cliente, resultado y fecha de la respuesta', async () => {
+    const c = await newClient();
+    const check = await acceptance.startAcceptance(c.id, manager);
+    const done = 'Se solicitó por correo al Lic. Pérez y respondió que no hay asuntos pendientes.';
+    const put = (extra: any) => acceptance.update(check.id, { checklist: [{ key: 'PREDECESSOR', item: 'x', status: 'DONE', date: `${year}-01-05`, comment: done, ...extra }] } as any, manager) as Promise<any>;
+
+    await expect(put({})).rejects.toThrow(/auditor o la firma predecesora/);
+    await expect(put({ predecessorFirm: 'Pérez & Asociados', outcome: 'NO_MATTERS', responseDate: `${year}-01-12` })).rejects.toThrow(/autorizó la comunicación/);
+    await expect(put({ predecessorFirm: 'Pérez & Asociados', clientAuthorized: false, outcome: 'NO_MATTERS', responseDate: `${year}-01-12` })).rejects.toThrow(/autorizó la comunicación/);
+    await expect(put({ predecessorFirm: 'Pérez & Asociados', clientAuthorized: true })).rejects.toThrow(/indica el resultado/);
+    await expect(put({ predecessorFirm: 'Pérez & Asociados', clientAuthorized: true, outcome: 'NO_MATTERS' })).rejects.toThrow(/fecha de la respuesta/);
+    await expect(put(predecessorRecord(year, { responseDate: `${year}-01-02` }))).rejects.toThrow(/anterior a la solicitud/);
+    await expect(put(predecessorRecord(year, { responseDate: '2999-01-01' }))).rejects.toThrow(/respuesta no puede ser futura/);
+    await expect(put(predecessorRecord(year, { predecessorFirm: 'ab' }))).rejects.toThrow(/auditor o la firma predecesora/);
+
+    // sin respuesta no hay fecha de respuesta; si se manda, no se conserva
+    const noReply = await put(predecessorRecord(year, { outcome: 'NO_RESPONSE' }));
+    expect(noReply.checklist[0]).toMatchObject({ status: 'DONE', outcome: 'NO_RESPONSE', predecessorFirm: 'Pérez & Asociados' });
+    expect(noReply.checklist[0].responseDate).toBeUndefined();
+    // con asuntos señalados: se guarda tal cual
+    const noted = await put(predecessorRecord(year, { outcome: 'MATTERS_NOTED' }));
+    expect(noted.checklist[0]).toMatchObject({ outcome: 'MATTERS_NOTED', responseDate: `${year}-01-12`, clientAuthorized: true });
+
+    // pasar a «No aplica» suelta el registro: ya no hay comunicación que documentar
+    const na: any = await acceptance.update(check.id, { checklist: [{ key: 'PREDECESSOR', item: 'x', status: 'NOT_APPLICABLE', comment: 'Cliente nuevo sin auditor predecesor.' }] } as any, manager);
+    expect(na.checklist[0].status).toBe('NOT_APPLICABLE');
+    for (const k of ['predecessorFirm', 'clientAuthorized', 'outcome', 'responseDate']) expect(na.checklist[0][k]).toBeUndefined();
+    // los otros ítems no llevan el registro aunque lo manden
+    const other: any = await acceptance.update(check.id, { checklist: [{ key: 'CONFLICTS', item: 'x', status: 'DONE', comment: 'Se revisaron el socio y el equipo.', predecessorFirm: 'Intruso', outcome: 'NO_MATTERS' }] } as any, manager);
+    expect(other.checklist[1].predecessorFirm).toBeUndefined();
+    expect(other.checklist[1].outcome).toBeUndefined();
+
+    // el DTO rechaza un resultado inventado, una autorización que no es booleana y una fecha mal escrita
+    const { AcceptanceChecklistItemDto } = await import('./dto/acceptance.dto');
+    for (const bad of [{ item: 'x', key: 'PREDECESSOR', outcome: 'TAL_VEZ' }, { item: 'x', key: 'PREDECESSOR', clientAuthorized: 'sí' }, { item: 'x', key: 'PREDECESSOR', responseDate: '12/1/2026' }]) {
+      expect((await validate(plainToInstance(AcceptanceChecklistItemDto, bad))).length).toBeGreaterThan(0);
+    }
+    expect((await validate(plainToInstance(AcceptanceChecklistItemDto, { item: 'x', key: 'PREDECESSOR', clientAuthorized: false, outcome: 'NO_RESPONSE', predecessorFirm: 'Pérez' }))).length).toBe(0);
   });
 
   it('screening: cada coincidencia se revisa (falso positivo o confirmada, con motivo); una confirmada obliga a Rojo; volver a correrlo conserva lo revisado', async () => {

@@ -180,10 +180,42 @@ function ChecklistBlock({ items, decided, onChange }: {
               ))}
             </div>
             {status === 'DONE' && it.key === 'PREDECESSOR' && (
-              <label className="block text-xs font-medium text-gray-600">Fecha de la solicitud al auditor predecesor
-                <input type="date" disabled={decided} value={it.date ?? ''} onChange={e => onChange('PREDECESSOR', { date: e.target.value })}
-                  className={`${inputCls} mt-1 max-w-[220px]`} />
-              </label>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Registro de la comunicación (NIA 300 · Código IESBA 320)</p>
+                <label className="block text-xs font-medium text-gray-600">Auditor o firma predecesora
+                  <input type="text" disabled={decided} maxLength={200} value={it.predecessorFirm ?? ''} onChange={e => onChange('PREDECESSOR', { predecessorFirm: e.target.value })}
+                    placeholder="Nombre del auditor o de la firma" className={`${inputCls} mt-1`} />
+                </label>
+                <label className="flex items-start gap-2 text-xs text-gray-600">
+                  <input type="checkbox" disabled={decided} checked={it.clientAuthorized === true} onChange={e => onChange('PREDECESSOR', { clientAuthorized: e.target.checked })} className="mt-0.5" />
+                  <span>El cliente autorizó por escrito que nos comuniquemos con su auditor anterior.</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="block text-xs font-medium text-gray-600">Fecha de la solicitud
+                    <input type="date" disabled={decided} value={it.date ?? ''} onChange={e => onChange('PREDECESSOR', { date: e.target.value })} className={`${inputCls} mt-1`} />
+                  </label>
+                  <label className="block text-xs font-medium text-gray-600">Resultado
+                    <select disabled={decided} value={it.outcome ?? ''} onChange={e => onChange('PREDECESSOR', { outcome: (e.target.value || undefined) as AcceptanceChecklistItem['outcome'] })} className={`${inputCls} mt-1`}>
+                      <option value="">Elige…</option>
+                      <option value="NO_MATTERS">Respondió: sin asuntos que señalar</option>
+                      <option value="MATTERS_NOTED">Respondió: señaló asuntos</option>
+                      <option value="NO_RESPONSE">Sin respuesta tras darle seguimiento</option>
+                    </select>
+                  </label>
+                </div>
+                {it.outcome && it.outcome !== 'NO_RESPONSE' && (
+                  <label className="block text-xs font-medium text-gray-600">Fecha de la respuesta
+                    <input type="date" disabled={decided} value={it.responseDate ?? ''} min={it.date || undefined} onChange={e => onChange('PREDECESSOR', { responseDate: e.target.value })}
+                      className={`${inputCls} mt-1 max-w-[220px]`} />
+                  </label>
+                )}
+                {it.outcome === 'MATTERS_NOTED' && (
+                  <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">Si el auditor anterior señaló asuntos (integridad de la administración, desacuerdos con la gerencia, razones del cambio), valora si el riesgo de aceptación debe quedar en Amarillo o Rojo y deja la constancia abajo.</p>
+                )}
+                {it.outcome === 'NO_RESPONSE' && (
+                  <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">Sin respuesta: en la constancia describe los seguimientos que hiciste y qué otros procedimientos usaste para conocer el historial del cliente.</p>
+                )}
+              </div>
             )}
             {status !== 'PENDING' && (
               <textarea rows={2} disabled={decided} value={it.comment ?? ''}

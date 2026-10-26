@@ -14,6 +14,7 @@ import { EngagementLetterSignatureAdapter } from './engagement-letter-signature.
 import { EngagementLettersService } from './engagement-letters.service';
 import { EngagementsController } from './engagements.controller';
 import { EngagementsService } from './engagements.service';
+import { EngagementProgramService } from './engagement-program.service';
 import { ProfitabilityController } from './profitability.controller';
 import { ProfitabilityService } from './profitability.service';
 
@@ -47,6 +48,7 @@ import { ProfitabilityService } from './profitability.service';
     EngagementLettersService,
     EngagementLetterSignatureAdapter,
     EngagementsService,
+    EngagementProgramService,
     ProfitabilityService,
   ],
   exports: [ClientsService, EngagementsService, ProfitabilityService],

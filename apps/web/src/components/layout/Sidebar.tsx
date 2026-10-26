@@ -110,6 +110,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Dashboard de la Firma',  href: '/dashboard/firm-hours',             icon: Wallet },
       { label: 'Rentabilidad',           href: '/dashboard/portfolio/profitability', icon: LineChart },
       { label: 'Capacidad del Equipo',   href: '/dashboard/portfolio/capacity',      icon: CalendarClock },
+      { label: 'Programa de Encargos',   href: '/dashboard/portfolio/program',       icon: ClipboardCheck, minRole: 'AUDIT_MANAGER', hint: 'Horas comprometidas por encargo y por persona contra la capacidad del año' },
       { label: 'Calendario y Capacidad', href: '/dashboard/admin/firm-calendar',     icon: CalendarClock },
       { label: 'Costeo y Tarifas',       href: '/dashboard/admin/cost-profiles',     icon: DollarSign },
       { label: 'Tareas Administrativas', href: '/dashboard/admin-tasks',             icon: CheckSquare },

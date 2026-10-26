@@ -111,6 +111,16 @@ export class UpdateEngagementDto {
   notes?: string;
 }
 
+export class ProgramQueryDto {
+  @ApiPropertyOptional({ example: 2027, description: 'Año en que se trabaja (el de la capacidad del equipo). Por defecto, el año en curso.' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  year?: number;
+}
+
 export class ListEngagementsQueryDto {
   @ApiPropertyOptional()
   @IsOptional()

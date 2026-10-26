@@ -4,7 +4,8 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AcceptanceRating } from '@prisma/client';
-import { CHECKLIST_KEYS, ChecklistStatus } from '../acceptance-checklist.util';
+import { StrictBoolean } from '../../common/validators/strict-boolean.decorator';
+import { CHECKLIST_KEYS, ChecklistStatus, PREDECESSOR_OUTCOMES, PredecessorOutcome } from '../acceptance-checklist.util';
 
 export class AcceptanceChecklistItemDto {
   @ApiPropertyOptional({ enum: CHECKLIST_KEYS, description: 'Ítem fijo del Radar (auditor predecesor, conflictos, servicios previos). Sin clave = ítem libre.' })
@@ -38,6 +39,27 @@ export class AcceptanceChecklistItemDto {
   @IsString()
   @MaxLength(4000)
   comment?: string;
+
+  @ApiPropertyOptional({ example: 'Pérez & Asociados', description: 'Auditor o firma predecesora a quien se le escribió (solo PREDECESSOR).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  predecessorFirm?: string;
+
+  @ApiPropertyOptional({ description: 'El cliente autorizó la comunicación con su auditor anterior (solo PREDECESSOR).' })
+  @IsOptional()
+  @StrictBoolean()
+  clientAuthorized?: boolean;
+
+  @ApiPropertyOptional({ enum: PREDECESSOR_OUTCOMES, description: 'Resultado de la comunicación (solo PREDECESSOR).' })
+  @IsOptional()
+  @IsIn(PREDECESSOR_OUTCOMES)
+  outcome?: PredecessorOutcome;
+
+  @ApiPropertyOptional({ example: '2026-10-25', description: 'Fecha de la respuesta del auditor predecesor (solo PREDECESSOR).' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'La fecha debe tener el formato AAAA-MM-DD.' })
+  responseDate?: string;
 }
 
 /**

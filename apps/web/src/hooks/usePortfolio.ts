@@ -64,6 +64,11 @@ export interface AcceptanceChecklistItem {
   date?:    string;
   answer?:  string;
   comment?: string;
+  /** Solo PREDECESSOR «Hecho» (registro NIA 300 / IESBA 320). */
+  predecessorFirm?: string;
+  clientAuthorized?: boolean;
+  outcome?: 'NO_MATTERS' | 'MATTERS_NOTED' | 'NO_RESPONSE';
+  responseDate?: string;
 }
 
 export type ScreeningDecision = 'FALSE_POSITIVE' | 'CONFIRMED';
@@ -658,6 +663,40 @@ export function useSignEngagementLetter() {
 // ═══════════════════════════════════════════════════════════════════════════
 // Encargos
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Programa anual de encargos (horas comprometidas vs. capacidad del equipo) ───
+export type ProgramHoursSource = 'TEAM_BUDGET' | 'ESTIMATE' | 'PROPOSAL' | 'NONE';
+
+export interface ProgramEngagementLine {
+  id: string; kind: 'AUDIT' | 'CONSULTING'; title: string | null; clientName: string; fiscalYear: number; status: 'DRAFT' | 'APPROVED';
+  partnerName: string | null; plannedStartDate: string | null; plannedEndDate: string | null; basis: 'PLANNED_DATES' | 'ASSUMED_YEAR';
+  yearShare: number; source: ProgramHoursSource; hours: number; assignedHours: number; unassignedHours: number;
+  byPerson: { userId: string; userName: string; hours: number }[];
+}
+
+export interface ProgramPersonLine {
+  userId: string; name: string; capacity: number | null; committed: number; actual: number;
+  utilizationPct: number | null; free: number | null; overbooked: boolean;
+}
+
+export interface EngagementProgram {
+  year: number;
+  engagements: ProgramEngagementLine[];
+  withoutHours: ProgramEngagementLine[];
+  people: ProgramPersonLine[];
+  totals: {
+    capacity: number; committed: number; unassigned: number; free: number; utilizationPct: number | null;
+    overbookedPeople: number; peopleWithoutProfile: number; engagementsWithoutHours: number;
+  };
+}
+
+export function useEngagementProgram(year: number) {
+  return useQuery<EngagementProgram>({
+    queryKey: [ENGAGEMENTS_KEY, 'program', year],
+    queryFn:  () => apiClient.get(`/portfolio/engagements/program?year=${year}`),
+    staleTime: 30_000,
+  });
+}
 
 export function useEngagements(clientId?: string, status?: EngagementStatus) {
   const params = new URLSearchParams();

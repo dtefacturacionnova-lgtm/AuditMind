@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { redirectTo } from '@/lib/relative-redirect';
 
 const ROLE_HOME: Record<string, string> = {
   SUPER_ADMIN: '/dashboard',
@@ -53,7 +54,7 @@ export async function middleware(request: NextRequest) {
     if (user) {
       const role = (user.app_metadata?.role as string) ?? 'AUDITOR';
       const home = ROLE_HOME[role] ?? '/dashboard';
-      return NextResponse.redirect(new URL(home, request.url));
+      return redirectTo(request, home);
     }
     return response;
   }
@@ -61,13 +62,13 @@ export async function middleware(request: NextRequest) {
   // Rutas protegidas /dashboard/*
   if (pathname.startsWith('/dashboard')) {
     if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url));
+      return redirectTo(request, '/login');
     }
 
     // AUDITEE no tiene acceso al dashboard principal
     const role = (user.app_metadata?.role as string) ?? '';
     if (role === 'AUDITEE') {
-      return NextResponse.redirect(new URL('/login', request.url));
+      return redirectTo(request, '/login');
     }
   }
 

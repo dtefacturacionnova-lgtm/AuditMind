@@ -3,6 +3,7 @@ import { FeeType, Prisma, EngagementStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { loadCloseSettings } from '../timesheet/hours-close.util';
+import { hiddenAuditIds } from '../common/utils/investigation-scope.util';
 import { Db, assertBillingModule, assertManager, isUniqueViolation, ymd } from './collections.common';
 import { fromCents, toCents } from './money.util';
 import { HourLine, MAX_HOURS_PER_INVOICE, buildHourLine, monthOf, unitsToDecimal } from './billable-hours.util';
@@ -26,7 +27,7 @@ interface EntryRow { id: string; userId: string; auditId: string | null; categor
 /** Valida y arma las líneas de una factura de horas. Se llama DENTRO de la transacción, con el candado del encargo ya tomado. */
 export async function prepareHourLines(
   tx: Db, args: { organizationId: string; engagementId: string; auditId: string | null; timeEntryIds: string[] },
-): Promise<HourLine[]> {
+): Promise<{ lines: HourLine[]; lastWorkDate: string }> {
   const ids = [...new Set(args.timeEntryIds)];
   if (ids.length === 0) throw new BadRequestException('Indica las horas que se facturan.');
   if (ids.length > MAX_HOURS_PER_INVOICE) {
@@ -42,6 +43,7 @@ export async function prepareHourLines(
   if (rows.length !== ids.length) throw new NotFoundException('Alguna de las horas no existe en esta organización.');
 
   const lines: HourLine[] = [];
+  let lastWorkDate = '';
   for (const r of rows) {
     if (r.auditId !== args.auditId) throw new UnprocessableEntityException('Alguna de las horas no es de este encargo.');
     if (r.category !== 'CLIENT_BILLABLE') throw new UnprocessableEntityException('Solo se facturan horas de cliente facturables.');
@@ -49,10 +51,11 @@ export async function prepareHourLines(
     const line = buildHourLine(r.id, r.hours, asRateCents(r.billRateSnapshot));
     if (!line) throw new UnprocessableEntityException('Alguna de las horas no tiene tarifa pactada: fíjala en el equipo del encargo y reabre y vuelve a cerrar ese mes.');
     lines.push(line);
+    if (ymd(r.workDate) > lastWorkDate) lastWorkDate = ymd(r.workDate);
   }
   const taken = await tx.clientInvoiceHour.findFirst({ where: { timeEntryId: { in: ids }, releasedAt: null }, select: { id: true } });
   if (taken) throw new ConflictException('Alguna de las horas ya está en una factura vigente; vuelve a cargar la lista.');
-  return lines.sort((a, b) => (a.timeEntryId < b.timeEntryId ? -1 : 1));
+  return { lines: lines.sort((a, b) => (a.timeEntryId < b.timeEntryId ? -1 : 1)), lastWorkDate };
 }
 
 /** Guarda las líneas de una factura de horas (la factura ya existe). */
@@ -90,6 +93,8 @@ export class BillableHoursService {
       select: { id: true, clientId: true, kind: true, title: true, status: true, auditId: true, fiscalYear: true },
     });
     if (!eng) throw new NotFoundException('Encargo no encontrado');
+    // Modo investigación: quien no puede ver la auditoría no ve sus horas ni sus descripciones; responde igual que si no existiera.
+    if (eng.auditId && (await hiddenAuditIds(db, [eng.auditId], user)).has(eng.auditId)) throw new NotFoundException('Encargo no encontrado');
     const [fee, settings] = await Promise.all([
       db.engagementFee.findUnique({ where: { engagementId }, select: { feeType: true } }),
       loadCloseSettings(db, user.organizationId),
@@ -177,8 +182,8 @@ export class BillableHoursService {
     await assertBillingModule(this.prisma, user.organizationId);
     const org = user.organizationId;
     const settings = await loadCloseSettings(this.prisma, org);
-    const rows = await this.prisma.$queryRaw<{ engagementId: string; title: string | null; clientName: string; hours: number; rate: Prisma.Decimal }[]>(Prisma.sql`
-      SELECT e.id AS "engagementId", e.title, c."legalName" AS "clientName", t.hours, t."billRateSnapshot" AS rate
+    const rawRows = await this.prisma.$queryRaw<{ engagementId: string; auditId: string; title: string | null; clientName: string; hours: number; rate: Prisma.Decimal }[]>(Prisma.sql`
+      SELECT e.id AS "engagementId", e."auditId" AS "auditId", e.title, c."legalName" AS "clientName", t.hours, t."billRateSnapshot" AS rate
       FROM engagements e
       JOIN engagement_fees f ON f."engagementId" = e.id AND f."feeType" = 'TIME_BASED'
       JOIN clients c ON c.id = e."clientId"
@@ -186,6 +191,9 @@ export class BillableHoursService {
       WHERE e."organizationId" = ${org} AND e.status <> 'CANCELLED' AND e."auditId" IS NOT NULL
         AND t.category = 'CLIENT_BILLABLE' AND t."closedAt" IS NOT NULL AND t."billRateSnapshot" > 0
         AND NOT EXISTS (SELECT 1 FROM client_invoice_hours h WHERE h."timeEntryId" = t.id AND h."releasedAt" IS NULL)`);
+    // Una investigación ajena al equipo de quien consulta no se nombra ni se cuenta (mismo criterio que el listado de encargos).
+    const hidden = await hiddenAuditIds(this.prisma, rawRows.map((r) => r.auditId), user);
+    const rows = rawRows.filter((r) => !hidden.has(r.auditId));
     const byEng = new Map<string, { engagementId: string; title: string | null; clientName: string; count: number; hours: number; cents: number }>();
     for (const r of rows) {
       const line = buildHourLine('x', r.hours, toCents(r.rate.toString()));

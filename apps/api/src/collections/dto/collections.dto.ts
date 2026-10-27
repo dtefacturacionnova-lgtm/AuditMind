@@ -1,5 +1,5 @@
 import {
-  IsString, IsOptional, IsEnum, IsNumber, IsArray, ValidateNested, IsInt, Min, Max, MinLength, MaxLength, ArrayMaxSize, IsIn, Matches,
+  IsString, IsOptional, IsEnum, IsNumber, IsArray, ValidateNested, IsInt, Min, Max, MinLength, MaxLength, ArrayMaxSize, ArrayMinSize, IsIn, Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -193,7 +193,7 @@ export class RegisterInvoiceDto {
   taxAmount?: number;
 
   @ApiPropertyOptional({ type: [String], description: 'Factura de HORAS (consultoría por tiempo): ids de las horas cerradas que se facturan. El neto debe ser la suma exacta de esas horas.' })
-  @IsOptional() @IsArray() @ArrayMaxSize(500) @IsString({ each: true }) @MinLength(8, { each: true }) @MaxLength(64, { each: true })
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(500) @IsString({ each: true }) @MinLength(8, { each: true }) @MaxLength(64, { each: true })
   timeEntryIds?: string[];
 
   @ApiPropertyOptional({ type: [WithholdingInputDto], description: 'Retenciones que ya trae el DTE.' })

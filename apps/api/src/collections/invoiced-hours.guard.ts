@@ -34,13 +34,38 @@ export async function invoiceOfHours(db: Db, entryIds: string[]): Promise<string
 
 /** Una hora facturada no se edita ni se borra: hay que anular la factura (o emitir una nota de crédito si es una rebaja de precio). */
 export async function assertEntryNotInvoiced(db: Db, entryId: string, opts: { showInvoice: boolean }): Promise<void> {
-  const invoiceNumber = await invoiceOfHours(db, [entryId]);
+  await assertNoneInvoiced(db, [entryId], opts.showInvoice);
+}
+
+/** Alguna de estas horas está en una factura vigente: no se puede editar ni borrar. */
+async function assertNoneInvoiced(db: Db, entryIds: string[], showInvoice: boolean): Promise<void> {
+  const invoiceNumber = await invoiceOfHours(db, entryIds);
   if (!invoiceNumber) return;
   throw new ConflictException(
-    opts.showInvoice
+    showInvoice
       ? `Esa hora ya se facturó en la factura ${invoiceNumber}: no se puede cambiar ni borrar. Anula la factura para liberarla (si solo es una rebaja de precio, emite una nota de crédito).`
       : 'Esa hora ya se facturó al cliente: no se puede cambiar ni borrar. Habla con tu gerente.',
   );
+}
+
+/**
+ * Una hora que se va a EDITAR por el camino normal (captura de horas): se bloquea su fila y se rechaza si está en una factura vigente.
+ * Con el cierre de horas encendido el mes cerrado ya lo impide; esto cubre el cierre apagado o reabierto a mano (Fase 4, revisión 2026-10-27).
+ */
+export async function assertEntryEditable(db: Db, organizationId: string, entryId: string, opts: { showInvoice: boolean }): Promise<void> {
+  await lockTimeEntryRows(db, organizationId, [entryId]);
+  await assertNoneInvoiced(db, [entryId], opts.showInvoice);
+}
+
+/**
+ * Horas que se van a BORRAR: igual que editar, y además se quitan sus líneas liberadas (la historia de facturas anuladas), porque la clave
+ * foránea las dejaría para siempre como obstáculo del borrado (error 500). La historia de la factura anulada sigue en su bitácora.
+ */
+export async function prepareEntryDeletion(db: Db, organizationId: string, entryIds: string[], opts: { showInvoice: boolean }): Promise<void> {
+  if (entryIds.length === 0) return;
+  await lockTimeEntryRows(db, organizationId, entryIds);
+  await assertNoneInvoiced(db, entryIds, opts.showInvoice);
+  await db.clientInvoiceHour.deleteMany({ where: { timeEntryId: { in: entryIds }, releasedAt: { not: null } } });
 }
 
 /** Reabrir el mes de una persona soltaría el costo y la tarifa congelados de horas que ya se cobraron: se rechaza mientras haya una. */

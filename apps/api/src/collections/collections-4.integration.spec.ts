@@ -9,6 +9,8 @@ import { BillableHoursService } from './billable-hours.service';
 import { checkCollectionInvariants } from './invariants';
 import { todayInSalvador, addDays } from './collections.common';
 import { HoursCloseService } from '../timesheet/hours-close.service';
+import { TimesheetService } from '../timesheet/timesheet.service';
+import { NotFoundException } from '@nestjs/common';
 
 /**
  * Cobranza fase 4 — facturar las horas cerradas de una consultoría por tiempo — contra un Postgres REAL (el mismo SQL de
@@ -22,14 +24,14 @@ jest.setTimeout(120_000);
 
 suite('cobranza fase 4 (horas por facturar) contra Postgres real', () => {
   let prisma: PrismaClient;
-  let fees: FeesService; let invoices: InvoicesService; let credits: CreditNotesService; let billable: BillableHoursService; let hoursClose: HoursCloseService;
+  let fees: FeesService; let invoices: InvoicesService; let credits: CreditNotesService; let billable: BillableHoursService; let hoursClose: HoursCloseService; let timesheet: TimesheetService;
 
   beforeAll(async () => {
     const sep = (URL as string).includes('?') ? '&' : '?';
     prisma = new PrismaClient({ datasourceUrl: `${URL}${sep}connection_limit=12&pool_timeout=30` });
     await prisma.$connect();
     fees = new FeesService(prisma as any); invoices = new InvoicesService(prisma as any); credits = new CreditNotesService(prisma as any);
-    billable = new BillableHoursService(prisma as any); hoursClose = new HoursCloseService(prisma as any, {} as any);
+    billable = new BillableHoursService(prisma as any); hoursClose = new HoursCloseService(prisma as any, {} as any); timesheet = new TimesheetService(prisma as any);
   });
   afterAll(async () => { await prisma?.$disconnect(); });
 
@@ -171,7 +173,7 @@ suite('cobranza fase 4 (horas por facturar) contra Postgres real', () => {
       await closeMonth(fixed, fixed.auditor.id);
       await expect(invoiceHours(fixed, [fe.id], 100)).rejects.toThrow(/honorario por tiempo/);
       const tooMany = Array.from({ length: 501 }, (_, i) => `x${String(i).padStart(10, '0')}`);
-      await expect(invoiceHours(c, tooMany, 1)).rejects.toThrow();   // lo frena el DTO en la API; el servicio también lo acota
+      await expect(invoiceHours(c, tooMany, 1)).rejects.toThrow(/hasta 500 horas/);   // lo frena el DTO en la API; el servicio también lo acota
       await expectClean(c);
     });
 
@@ -301,7 +303,7 @@ suite('cobranza fase 4 (horas por facturar) contra Postgres real', () => {
       const total = 3.52 + 3.52 + 15.83;
       const inv = await invoiceHours(c, [e1.id, e2.id, e3.id], Math.round(total * 100) / 100);
       expect(inv.netAmount).toBe(22.87);
-      await expect(invoiceHours(c, [e1.id], 3.51)).rejects.toThrow();    // ya facturada (y además el neto no cuadra)
+      await expect(invoiceHours(c, [e1.id], 3.51)).rejects.toThrow(/ya está en una factura vigente/);    // ya facturada (y además el neto no cuadra)
       await expectClean(c);
     });
 
@@ -341,4 +343,77 @@ suite('cobranza fase 4 (horas por facturar) contra Postgres real', () => {
       await expectClean(c);
     });
   });
+
+  // ═══ Correcciones de la revisión independiente (2026-10-27) ═════════════════════════════════════
+  describe('correcciones de la revisión independiente', () => {
+    it('una selección vacía NO se vuelve una factura libre', async () => {
+      const c = await seed();
+      await standard(c);
+      await expect(invoiceHours(c, [], 600)).rejects.toThrow(/Indica las horas/);
+      expect(await prisma.clientInvoice.count({ where: { engagementId: c.eng.id } })).toBe(0);
+      // el DTO también la rechaza
+      const { RegisterInvoiceDto } = await import('./dto/collections.dto');
+      const { validate } = await import('class-validator');
+      const { plainToInstance } = await import('class-transformer');
+      const base = { engagementId: 'eng-12345678', invoiceNumber: 'DTE-03-M001P001-000000000000001', documentType: '03', invoiceDate: '2026-10-01', netAmount: 10 };
+      expect((await validate(plainToInstance(RegisterInvoiceDto, { ...base, timeEntryIds: [] }))).length).toBeGreaterThan(0);
+      expect((await validate(plainToInstance(RegisterInvoiceDto, { ...base, timeEntryIds: ['hora-12345678'] }))).length).toBe(0);
+    });
+
+    it('la factura no se fecha antes del trabajo que cobra (el mismo día sí)', async () => {
+      const c = await seed();
+      const { a1, a2, s1 } = await standard(c);   // horas del día 1, 2 y 3 del mes anterior
+      await expect(invoiceHours(c, [a1.id, s1.id], 800, { invoiceDate: day(2) })).rejects.toThrow(/antes del trabajo que cobra/);
+      await expect(invoiceHours(c, [a1.id, a2.id], 600, { invoiceDate: day(2) })).resolves.toBeDefined();   // la última hora es del día 2
+      await expectClean(c);
+    });
+
+    it('con el cierre apagado a mano, la captura normal tampoco edita ni borra una hora facturada; y no se apaga el cierre con horas facturadas', async () => {
+      const c = await seed();
+      const { a1, a2 } = await standard(c);
+      const inv = await invoiceHours(c, [a1.id, a2.id], 600);
+
+      const off = { enabled: false, entryDeadlineDay: 5, closeDeadlineDay: 10 } as any;
+      await expect(hoursClose.updateSettings(off, c.cae)).rejects.toThrow(/anula esas facturas antes de apagar el cierre/);
+      // alguien lo apaga por fuera del servicio (base de datos): las guardas de la captura siguen protegiendo la hora
+      await prisma.hoursCloseSettings.update({ where: { organizationId: c.org.id }, data: { enabled: false } });
+      await expect(timesheet.updateEntry(a1.id, { hours: 1 } as any, c.auditor)).rejects.toThrow(/ya se facturó al cliente/);
+      await expect(timesheet.deleteEntry(a1.id, c.auditor)).rejects.toThrow(/ya se facturó al cliente/);
+      expect(await prisma.timeEntry.findUniqueOrThrow({ where: { id: a1.id } })).toMatchObject({ hours: 8 });
+
+      // anulada la factura, la hora se puede borrar: sus líneas liberadas no frenan el borrado
+      await invoices.void(inv.id, { reason: 'Se emitió con horas equivocadas' } as any, c.cae);
+      await expect(timesheet.deleteEntry(a1.id, c.auditor)).resolves.toEqual({ deleted: true });
+      expect(await prisma.clientInvoiceHour.count({ where: { timeEntryId: a1.id } })).toBe(0);
+      expect(await prisma.clientInvoiceHour.count({ where: { timeEntryId: a2.id } })).toBe(1);   // la liberada de la otra hora sigue como historia
+    });
+
+    it('una hora de una factura anulada se borra con un ajuste aprobado sin error', async () => {
+      const c = await seed();
+      const { a1, a2 } = await standard(c);
+      const inv = await invoiceHours(c, [a1.id, a2.id], 600);
+      await invoices.void(inv.id, { reason: 'Se emitió con horas equivocadas' } as any, c.cae);
+      const del: any = await hoursClose.createAdjustment({ action: 'DELETE', timeEntryId: a2.id, reason: 'Esa hora estaba duplicada' } as any, c.auditor);
+      await expect(hoursClose.decideAdjustment(del.id, { approve: true } as any, c.manager)).resolves.toBeDefined();
+      expect(await prisma.timeEntry.findUnique({ where: { id: a2.id } })).toBeNull();
+      expect(await prisma.clientInvoiceHour.count({ where: { timeEntryId: a2.id } })).toBe(0);
+      await expectClean(c);
+    });
+
+    it('modo investigación: quien no puede ver la auditoría no lee las horas, sus descripciones ni la nombra en «Cobranza»', async () => {
+      const c = await seed();
+      const { a1, a2 } = await standard(c);
+      const inv = await invoiceHours(c, [a1.id, a2.id], 600);
+      expect(((await invoices.get(inv.id, c.manager)) as any).hours[0].description).toBe('trabajo');   // hoy lo ve
+
+      await prisma.audit.update({ where: { id: c.audit.id }, data: { isInvestigationMode: true } });   // el gerente no está en el equipo
+      await expect(billable.list(c.eng.id, c.manager)).rejects.toBeInstanceOf(NotFoundException);
+      expect(((await invoices.get(inv.id, c.manager)) as any).hours.every((h: any) => h.description === null)).toBe(true);
+      expect(((await billable.readyToInvoice(c.manager)) as any).items).toEqual([]);
+      // la dirección sí lo ve todo
+      expect(((await billable.list(c.eng.id, c.cae)) as any).invoiced.count).toBe(2);
+      expect(((await billable.readyToInvoice(c.cae)) as any).items).toHaveLength(1);
+    });
+  });
+
 });

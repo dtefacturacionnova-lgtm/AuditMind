@@ -15,6 +15,7 @@ import { computeCommitments } from './fees.service';
 import { creditNoteRow, writeOffRow } from './collection-rows';
 import { assertNoNegativePast, firstMovementDate } from './retro.util';
 import { insertHourLines, prepareHourLines, releaseInvoiceHours } from './billable-hours.service';
+import { hiddenAuditIds } from '../common/utils/investigation-scope.util';
 import { sumLines } from './billable-hours.util';
 import {
   AddWithholdingDto, ListInvoicesQueryDto, ListWithholdingsQueryDto, ReasonDto, RegisterInvoiceDto, UpdateInvoiceDto, WithholdingInputDto,
@@ -88,12 +89,17 @@ export class InvoicesService {
       if (!fee) throw new ConflictException('Primero define el honorario del encargo.');
 
       // Factura de HORAS (Fase 4): el neto es la suma exacta de las horas cerradas que se eligen.
-      const hoursMode = !!dto.timeEntryIds && dto.timeEntryIds.length > 0;
-      let hourLines: Awaited<ReturnType<typeof prepareHourLines>> = [];
+      // Una lista de horas presente pero vacía es una factura de horas SIN horas: se rechaza (no se vuelve una factura libre).
+      const hoursMode = dto.timeEntryIds !== undefined;
+      let hourLines: Awaited<ReturnType<typeof prepareHourLines>>['lines'] = [];
       if (hoursMode) {
         if (dto.scheduleItemId) throw new BadRequestException('Una factura de horas no se liga a una cuota del calendario.');
         if (fee.feeType !== FeeType.TIME_BASED) throw new ConflictException('Solo un honorario por tiempo se factura con horas.');
-        hourLines = await prepareHourLines(tx, { organizationId: user.organizationId, engagementId: eng.id, auditId: eng.auditId, timeEntryIds: dto.timeEntryIds as string[] });
+        const prepared = await prepareHourLines(tx, { organizationId: user.organizationId, engagementId: eng.id, auditId: eng.auditId, timeEntryIds: dto.timeEntryIds as string[] });
+        hourLines = prepared.lines;
+        if (invoiceDate < prepared.lastWorkDate) {
+          throw new UnprocessableEntityException(`La factura no puede fecharse antes del trabajo que cobra: la última hora es del ${prepared.lastWorkDate}.`);
+        }
         const linesCents = sumLines(hourLines);
         if (linesCents !== netCents) {
           throw new UnprocessableEntityException(
@@ -249,6 +255,9 @@ export class InvoicesService {
       ? await this.prisma.user.findMany({ where: { id: { in: [...new Set(hourEntries.map((e) => e.userId))] }, organizationId: user.organizationId }, select: { id: true, name: true } })
       : [];
     const entryBy = new Map(hourEntries.map((e) => [e.id, e]));
+    // Modo investigación: quien no puede ver la auditoría del encargo no lee la descripción de las horas.
+    const engAudit = await this.prisma.engagement.findUnique({ where: { id: inv.engagementId }, select: { auditId: true } });
+    const hoursHidden = !!engAudit?.auditId && (await hiddenAuditIds(this.prisma, [engAudit.auditId], user)).has(engAudit.auditId);
     const userNameBy = new Map(hourUsers.map((u) => [u.id, u.name]));
     const today = todayInSalvador();
     const moves = applications.some((a) => !a.reversedAt) || withholdings.some((w) => !w.reversedAt) || toCents(inv.creditedAmount) > 0 || toCents(inv.writtenOffAmount) > 0;
@@ -267,7 +276,7 @@ export class InvoicesService {
       hours: hourRows.map((h) => {
         const e = entryBy.get(h.timeEntryId);
         return {
-          id: h.id, timeEntryId: h.timeEntryId, workDate: e ? ymd(e.workDate) : null, userName: e ? userNameBy.get(e.userId) ?? '—' : '—', description: e?.description ?? null,
+          id: h.id, timeEntryId: h.timeEntryId, workDate: e ? ymd(e.workDate) : null, userName: e ? userNameBy.get(e.userId) ?? '—' : '—', description: hoursHidden ? null : e?.description ?? null,
           hours: Number(h.hours), rate: Number(h.rate), amount: Number(h.amount), releasedAt: h.releasedAt,
         };
       }),

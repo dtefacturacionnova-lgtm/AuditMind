@@ -64,6 +64,13 @@ export class HoursCloseService {
     if (dto.closeDeadlineDay < dto.entryDeadlineDay) {
       throw new BadRequestException('El plazo del gerente no puede ser anterior al plazo del auditor.');
     }
+    // Apagar el cierre soltaría la protección de las horas ya facturadas (se podrían editar por la captura normal).
+    if (!dto.enabled) {
+      const invoiced = await this.prisma.clientInvoiceHour.count({ where: { organizationId: user.organizationId, releasedAt: null } });
+      if (invoiced > 0) {
+        throw new ConflictException(`Hay ${invoiced} hora(s) en facturas vigentes: anula esas facturas antes de apagar el cierre de horas.`);
+      }
+    }
     const row = await this.prisma.hoursCloseSettings.upsert({
       where: { organizationId: user.organizationId },
       create: { organizationId: user.organizationId, enabled: dto.enabled, entryDeadlineDay: dto.entryDeadlineDay, closeDeadlineDay: dto.closeDeadlineDay, updatedById: user.id },
@@ -617,6 +624,8 @@ export class HoursCloseService {
         await assertEntryNotInvoiced(tx, entry.id, { showInvoice: true });
         if (entry.auditId) touchedAudits.add(entry.auditId);
         if (req.action === TimeAdjustmentAction.DELETE) {
+          // Las líneas liberadas de una factura anulada dejarían la clave foránea como obstáculo del borrado.
+          await tx.clientInvoiceHour.deleteMany({ where: { timeEntryId: entry.id, releasedAt: { not: null } } });
           await tx.timeEntry.delete({ where: { id: entry.id } });
           await logEntryChange(tx, {
             organizationId: req.organizationId, userId: req.userId, actorId: user.id, action: TimeEntryLogAction.ADJUSTMENT_APPROVED,

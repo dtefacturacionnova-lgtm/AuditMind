@@ -10,6 +10,7 @@ import {
   assertAuditVisible, assertInvestigationAccess, AUDIT_ACCESS_SELECT, canSeeAudit, RESTRICTED_AUDIT_TITLE, visibleAuditWhere,
 } from '../common/utils/investigation-scope.util';
 import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg, completeTimeAnchors } from '../timesheet/daily-hours-cap.util';
+import { prepareEntryDeletion } from '../collections/invoiced-hours.guard';
 import {
   assertPeriodsOpen, validateEntryRules, validateCategoryLinkage, entrySnapshot, logEntryChange, TX_OPTIONS, ENTRY_PUBLIC_SELECT,
 } from '../timesheet/hours-close.util';
@@ -543,6 +544,7 @@ export class PlansService {
     if (entry.userId !== user.id) throw new ForbiddenException('Solo puedes eliminar tus propias entradas');
     await this.prisma.$transaction(async (tx) => {
       await assertPeriodsOpen(tx, user.organizationId, user.id, [entry.workDate]);
+      await prepareEntryDeletion(tx, user.organizationId, [id], { showInvoice: false });
       await tx.timeEntry.delete({ where: { id } });
       await logEntryChange(tx, {
         organizationId: user.organizationId, userId: user.id, actorId: user.id,

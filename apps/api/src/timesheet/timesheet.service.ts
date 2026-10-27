@@ -10,6 +10,7 @@ import {
 } from './dto/timesheet.dto';
 import { recalculateAuditActualHours } from '../audits/audit-hours.util';
 import { assertDailyHoursCap, assertValidHours, assertTimeAnchorsInOrg, completeTimeAnchors } from './daily-hours-cap.util';
+import { assertEntryEditable, prepareEntryDeletion } from '../collections/invoiced-hours.guard';
 import { hiddenAuditIds, RESTRICTED_AUDIT_TITLE } from '../common/utils/investigation-scope.util';
 import {
   assertPeriodsOpen, validateEntryRules, validateCategoryLinkage, mergeEntryChanges, entrySnapshot, logEntryChange, logEntryChanges, TX_OPTIONS,
@@ -203,6 +204,8 @@ export class TimesheetService {
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const settings = await assertPeriodsOpen(tx, user.organizationId, user.id, [entry.workDate, merged.workDate]);
+      // Una hora ya facturada no se edita aunque el cierre de horas esté apagado (Fase 4).
+      await assertEntryEditable(tx, user.organizationId, id, { showInvoice: false });
       // Una hora no facturable de antes de este cambio no tiene motivo: editarle solo las horas o la fecha no debe exigirle uno.
       const legacyNoReason = entry.category === TimeEntryCategory.CLIENT_NON_BILLABLE && !entry.nonBillableReason
         && dto.category === undefined && dto.nonBillableReason === undefined;
@@ -235,6 +238,7 @@ export class TimesheetService {
     if (entry.userId !== user.id) throw new ForbiddenException('Solo puedes eliminar tus propias entradas');
     await this.prisma.$transaction(async (tx) => {
       await assertPeriodsOpen(tx, user.organizationId, user.id, [entry.workDate]);
+      await prepareEntryDeletion(tx, user.organizationId, [id], { showInvoice: false });
       await tx.timeEntry.delete({ where: { id } });
       await logEntryChange(tx, {
         organizationId: user.organizationId, userId: user.id, actorId: user.id,

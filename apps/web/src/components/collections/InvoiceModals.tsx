@@ -19,12 +19,15 @@ interface WhRow { taxType: TaxType; amount: string; certificateNumber: string }
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Registrar (o corregir) una factura que ya se emitió como DTE. No se factura en línea: aquí solo se anota. */
-export function InvoiceFormModal({ engagementId, scheduleItem, invoice, hours, termDays = 30, onClose }: {
+export function InvoiceFormModal({ engagementId, scheduleItem, invoice, hours: hoursLive, termDays = 30, onClose }: {
   engagementId?: string; scheduleItem?: ScheduleItem; invoice?: InvoiceDetail; termDays?: number; onClose: () => void;
   /** Factura de horas (Fase 4): las horas cerradas elegidas; el neto es su suma y no se edita. */
   hours?: { ids: string[]; net: number; hoursTotal: number };
 }) {
   const editing = !!invoice;
+  // Las horas elegidas se congelan al abrir el formulario: si la lista se recarga con el formulario abierto (reconexión, otro gerente que
+  // factura), lo que se envía sigue siendo lo que se vio, y el servidor rechaza con un aviso claro lo que ya no esté disponible.
+  const [hours] = useState(hoursLive);
   const coreLocked = editing && !invoice.permissions.canEditAll;
   const hoursInvoice = !!hours || (editing && invoice.hours.some((h) => !h.releasedAt));
   const netLocked = coreLocked || hoursInvoice;
@@ -137,7 +140,7 @@ export function InvoiceFormModal({ engagementId, scheduleItem, invoice, hours, t
         <ErrorLine error={mutation.error} />
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className={`flex-1 ${btnGhost}`}>Cancelar</button>
-          <button type="submit" disabled={mutation.isPending || (!editing && !engId)} className={`flex-1 ${btnPrimary}`}>{mutation.isPending ? 'Guardando…' : editing ? 'Guardar cambios' : hours ? 'Registrar factura de horas' : 'Registrar factura'}</button>
+          <button type="submit" disabled={mutation.isPending || (!editing && !engId) || (!!hours && hours.ids.length === 0)} className={`flex-1 ${btnPrimary}`}>{mutation.isPending ? 'Guardando…' : editing ? 'Guardar cambios' : hours ? 'Registrar factura de horas' : 'Registrar factura'}</button>
         </div>
       </form>
     </Modal>

@@ -186,6 +186,8 @@ export class FakeHoursDb {
   userAvailabilityProfile = this.tables.userAvailabilityProfile;
   userCostProfile = this.tables.userCostProfile;
   auditTeam = this.tables.auditTeam;
+  /** Horas facturadas (Fase 4): en estas pruebas nunca hay líneas. */
+  clientInvoiceHour = { count: async () => 0, deleteMany: async () => ({ count: 0 }) };
 
   /**
    * Candado de transacción: no hay concurrencia real en las pruebas, solo se anota la llave. Las consultas armadas con `Prisma.sql`

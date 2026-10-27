@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertNoClosedHours } from '../../timesheet/hours-close.util';
+import { prepareEntryDeletion } from '../../collections/invoiced-hours.guard';
 import { AuthUser } from '../../auth/jwt.strategy';
 import { AuditBackupPackageService } from './audit-backup-package.service';
 import { AuditBackupFilesService } from './audit-backup-files.service';
@@ -503,9 +504,13 @@ export class AuditBackupRestoreService {
    */
   async eliminarDatosExistentes(auditId: string, advertencias: AuditBackupAdvertencia[]): Promise<void> {
     // Las horas del encargo pueden estar en meses ya cerrados: borrarlas cambiaría un mes cerrado sin pasar por un ajuste.
-    const horas = await this.prisma.timeEntry.findMany({ where: { auditId }, select: { organizationId: true, userId: true, workDate: true } });
+    const horas = await this.prisma.timeEntry.findMany({ where: { auditId }, select: { id: true, organizationId: true, userId: true, workDate: true } });
     for (const orgId of new Set(horas.map(h => h.organizationId))) {
       await assertNoClosedHours(this.prisma, orgId, horas.filter(h => h.organizationId === orgId), 'Borrar o reemplazar este encargo');
+    }
+    // Horas en facturas vigentes (Fase 4): se rechaza ANTES de borrar nada; las líneas liberadas de facturas anuladas se quitan para que no frenen el borrado.
+    for (const orgId of new Set(horas.map(h => h.organizationId))) {
+      await this.prisma.$transaction((tx) => prepareEntryDeletion(tx, orgId, horas.filter(h => h.organizationId === orgId).map(h => h.id), { showInvoice: true }));
     }
     const idsPorModelo = await this.recolectarIdsExistentes(auditId);
     for (const modelo of [...AUDIT_SCOPED_MODELS].reverse()) {

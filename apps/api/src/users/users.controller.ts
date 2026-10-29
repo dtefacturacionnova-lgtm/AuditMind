@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Patch, Delete, Body, Param,
+  Controller, Get, Post, Patch, Delete, Body, Param,
   Query, ParseIntPipe, DefaultValuePipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
@@ -48,6 +48,13 @@ export class UsersController {
   @ApiOperation({ summary: 'Obtener usuario por ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.service.findOne(id, user);
+  }
+
+  @Post(':id/resend-invite')
+  @Roles(UserRole.CAE)
+  @ApiOperation({ summary: 'Reenviar la invitación a un usuario que nunca la aceptó (CAE o superior)' })
+  resendInvite(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.resendInvite(id, user);
   }
 
   @Patch(':id/role')

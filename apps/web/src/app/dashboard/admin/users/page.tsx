@@ -23,6 +23,10 @@ interface OrgUser {
   active: boolean;
   createdAt: string;
   avatarUrl?: string;
+  /** Nunca confirmó su correo ni entró: la invitación sigue pendiente (se puede reenviar). */
+  invitePending?: boolean;
+  /** Solo para el Super Admin, que ve usuarios de todas las organizaciones. */
+  organizationName?: string;
   _count?: { audits: number };
 }
 
@@ -116,6 +120,14 @@ function useInviteUser() {
   return useMutation({
     mutationFn: (dto: { email: string; name: string; role: string }) =>
       apiClient.post<OrgUser>('/auth/invite', dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+function useResendInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<{ resent: boolean; email: string }>(`/users/${id}/resend-invite`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   });
 }
@@ -325,6 +337,7 @@ function UsersPageInner() {
   const { data, isLoading, isError } = useUsers(debouncedSearch || undefined, page);
   const updateRole   = useUpdateUserRole();
   const deactivate   = useDeactivateUser();
+  const resend       = useResendInvite();
 
   const users       = data?.data ?? [];
   const meta        = data?.meta;
@@ -360,6 +373,18 @@ function UsersPageInner() {
       showToast('Rol actualizado correctamente');
     } catch {
       showToast('Error al actualizar el rol');
+    }
+  }
+
+  // Reenviar la invitación: CAE o superior (igual que invitar).
+  const canResend = !!currentUser && (ROLE_HIERARCHY[currentUser.role] ?? 0) >= ROLE_HIERARCHY.CAE;
+
+  async function handleResend(userId: string, email: string) {
+    try {
+      await resend.mutateAsync(userId);
+      showToast(`Invitación reenviada a ${email}`);
+    } catch (e) {
+      showToast((e as Error).message || 'No se pudo reenviar la invitación');
     }
   }
 
@@ -538,6 +563,9 @@ function UsersPageInner() {
                                   <p className="text-xs text-gray-400 truncate leading-tight mt-0.5">
                                     {u.email}
                                   </p>
+                                  {u.organizationName && (
+                                    <p className="text-[11px] text-indigo-500 truncate leading-tight mt-0.5">{u.organizationName}</p>
+                                  )}
                                 </div>
                               </div>
                             </td>
@@ -555,6 +583,11 @@ function UsersPageInner() {
                             {/* Status */}
                             <td className="px-4 py-3">
                               <StatusBadge isActive={u.active} />
+                              {u.invitePending && u.active && (
+                                <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700" title="Todavía no aceptó la invitación ni entró al sistema">
+                                  <Mail className="h-3 w-3" /> Invitación pendiente
+                                </p>
+                              )}
                             </td>
 
                             {/* Created date */}
@@ -582,8 +615,19 @@ function UsersPageInner() {
                               )}
                             </td>
 
-                            {/* Deactivate */}
+                            {/* Reenviar invitación + desactivar */}
                             <td className="px-4 py-3">
+                              {canResend && canManage && u.active && u.invitePending && (
+                                <button
+                                  onClick={() => handleResend(u.id, u.email)}
+                                  disabled={resend.isPending}
+                                  title="Reenviar la invitación por correo"
+                                  className="mb-1 inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-amber-200 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                                >
+                                  {resend.isPending && resend.variables === u.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+                                  Reenviar invitación
+                                </button>
+                              )}
                               {canManage && u.active ? (
                                 <button
                                   onClick={() => handleDeactivate(u.id, u.name)}

@@ -81,7 +81,7 @@ export class OrganizationsService {
 
   private async inviteAdminSafe(organizationId: string, email: string, name: string): Promise<AdminInviteResult> {
     try {
-      await this.authService.inviteUser({ email: email.trim(), name: name.trim(), role: 'ADMIN', organizationId });
+      await this.authService.inviteUser({ email: email.trim(), name: name.trim(), role: 'ADMIN', organizationId }, { role: 'SUPER_ADMIN' });
       return { email, status: 'sent' };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -100,7 +100,7 @@ export class OrganizationsService {
       name: dto.name.trim(),
       role: 'ADMIN',
       organizationId,
-    });
+    }, { role: 'SUPER_ADMIN' });
     return { organizationId, organizationName: org.name, email: dto.email.trim(), status: 'sent' as const };
   }
 

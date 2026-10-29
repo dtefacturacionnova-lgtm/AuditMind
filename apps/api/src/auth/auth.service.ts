@@ -1,9 +1,15 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable, Logger, UnauthorizedException, ConflictException, BadRequestException, NotFoundException, HttpException, HttpStatus,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertCanManageUser } from '../common/utils/tenant.util';
+import { inviteConflictMessage, isAlreadyRegistered, isEmailRateLimit } from './invite-messages.util';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private supabaseAdmin: SupabaseClient;
 
   constructor(private prisma: PrismaService) {
@@ -25,12 +31,19 @@ export class AuthService {
     name: string;
     role: string;
     organizationId: string;
-  }) {
+  }, requester?: { role: string }) {
     const email = params.email.trim().toLowerCase();
 
-    const existing = await this.prisma.user.findUnique({ where: { email } });
+    const existing = await this.prisma.user.findUnique({
+      where: { email }, select: { organizationId: true, organization: { select: { name: true } } },
+    });
     if (existing) {
-      throw new ConflictException(`El usuario ${email} ya existe`);
+      throw new ConflictException(inviteConflictMessage({
+        email,
+        sameOrganization: existing.organizationId === params.organizationId,
+        organizationName: existing.organization.name,
+        viewerIsSuperAdmin: requester?.role === 'SUPER_ADMIN',
+      }));
     }
 
     // Crea el usuario en Supabase Auth con el rol en app_metadata.
@@ -43,7 +56,7 @@ export class AuthService {
 
     if (error) {
       // No es un 401 (sesión inválida): el correo ya existe en Auth o es inválido.
-      if (/already|registered|exists/i.test(error.message)) {
+      if (isAlreadyRegistered(error.message)) {
         throw new ConflictException(`El correo ${email} ya está registrado en el sistema de autenticación`);
       }
       throw new BadRequestException(`No se pudo enviar la invitación: ${error.message}`);
@@ -82,6 +95,61 @@ export class AuthService {
       await rollbackAuthUser();
       throw err;
     }
+  }
+
+  /**
+   * De estos usuarios de la app (por su id de Supabase), cuáles tienen la invitación PENDIENTE: ya existen en la autenticación pero nunca confirmaron
+   * su correo ni entraron. Se lee del esquema `auth` en una sola consulta; si no se puede leer, devuelve vacío (la lista de usuarios no se rompe).
+   */
+  async pendingInvites(supabaseUserIds: string[]): Promise<Set<string>> {
+    const ids = [...new Set(supabaseUserIds.filter(Boolean))];
+    if (ids.length === 0) return new Set();
+    try {
+      const rows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+        SELECT id::text AS id FROM auth.users
+        WHERE id::text IN (${Prisma.join(ids)}) AND email_confirmed_at IS NULL AND last_sign_in_at IS NULL AND deleted_at IS NULL`);
+      return new Set(rows.map((r) => r.id));
+    } catch (e) {
+      this.logger.warn(`No se pudo leer el estado de las invitaciones: ${(e as Error).message}`);
+      return new Set();
+    }
+  }
+
+  /**
+   * Reenvía la invitación a quien nunca la aceptó (los enlaces vencen). Solo a un usuario de la misma organización (el Super Admin, de cualquiera),
+   * activo, de rol menor al de quien reenvía, y con la invitación realmente pendiente: quien ya entró usa «¿Olvidaste tu contraseña?».
+   */
+  async resendInvite(targetId: string, requester: { id: string; role: string; organizationId: string }) {
+    const target = await this.prisma.user.findFirst({
+      where: { id: targetId, ...(requester.role !== 'SUPER_ADMIN' && { organizationId: requester.organizationId }) },
+      select: { id: true, email: true, name: true, role: true, active: true, supabaseUserId: true },
+    });
+    if (!target) throw new NotFoundException('Usuario no encontrado');
+    assertCanManageUser(requester, target);
+    if (!target.active) throw new ConflictException('El usuario está desactivado: no se le reenvía la invitación.');
+
+    const pending = await this.pendingInvites([target.supabaseUserId]);
+    if (!pending.has(target.supabaseUserId)) {
+      throw new ConflictException(
+        'Esa persona ya aceptó su invitación o ya entró al sistema. Si olvidó su contraseña, que use «¿Olvidaste tu contraseña?» en el inicio de sesión.',
+      );
+    }
+
+    const { error } = await this.supabaseAdmin.auth.admin.inviteUserByEmail(target.email, {
+      data: { name: target.name },
+      redirectTo: `${this.appUrl}/auth/callback`,
+    });
+    if (error) {
+      if (isEmailRateLimit(error.message)) {
+        throw new HttpException('Ya se le envió un correo hace instantes: espera un minuto antes de reenviar.', HttpStatus.TOO_MANY_REQUESTS);
+      }
+      if (isAlreadyRegistered(error.message)) {
+        throw new ConflictException('Esa persona ya aceptó su invitación. Si olvidó su contraseña, que use «¿Olvidaste tu contraseña?».');
+      }
+      throw new BadRequestException(`No se pudo reenviar la invitación: ${error.message}`);
+    }
+    this.logger.log(`Invitación reenviada a ${target.email} por ${requester.id}`);
+    return { resent: true, email: target.email };
   }
 
   async updateUserRole(userId: string, newRole: string) {

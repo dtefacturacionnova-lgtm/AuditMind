@@ -54,6 +54,6 @@ export class AuthController {
       name: dto.name,
       role: dto.role,
       organizationId: currentUser.organizationId,
-    });
+    }, currentUser);
   }
 }

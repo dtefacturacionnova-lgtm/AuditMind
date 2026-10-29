@@ -34,13 +34,23 @@ export class UsersService {
         select: {
           id: true, name: true, email: true, role: true,
           avatarUrl: true, active: true, createdAt: true,
-          organizationId: true,
+          organizationId: true, supabaseUserId: true,
+          organization: { select: { name: true } },
         },
       }),
       this.prisma.user.count({ where }),
     ]);
+    // Invitaciones pendientes (nunca confirmaron su correo ni entraron): una sola consulta para toda la página.
+    const pending = await this.authService.pendingInvites(users.map((u) => u.supabaseUserId));
+    const isSuper = user.role === UserRole.SUPER_ADMIN;
+    const data = users.map(({ supabaseUserId, organization, ...rest }) => ({
+      ...rest,
+      invitePending: pending.has(supabaseUserId),
+      // El Super Admin ve usuarios de todas las organizaciones: se le dice a cuál pertenece cada uno.
+      ...(isSuper && { organizationName: organization.name }),
+    }));
     return {
-      data: users,
+      data,
       meta: {
         total, page, limit,
         totalPages: Math.ceil(total / limit),
@@ -48,6 +58,11 @@ export class UsersService {
         hasPrev: page > 1,
       },
     };
+  }
+
+  /** Reenvía la invitación a quien nunca la aceptó (ver AuthService.resendInvite). */
+  resendInvite(id: string, requester: AuthUser) {
+    return this.authService.resendInvite(id, requester);
   }
 
   async findOne(id: string, requester: AuthUser) {

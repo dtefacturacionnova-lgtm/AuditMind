@@ -19,7 +19,8 @@ interface OrgUser {
   name: string;
   email: string;
   role: string;
-  isActive: boolean;
+  /** La API devuelve `active` (campo de la tabla users); esta pantalla leía `isActive`, que no existe, y mostraba a todos como inactivos. */
+  active: boolean;
   createdAt: string;
   avatarUrl?: string;
   _count?: { audits: number };
@@ -331,7 +332,7 @@ function UsersPageInner() {
   const totalPages  = meta?.totalPages ?? 1;
 
   // Stats derived from current page data (best-effort; full stats need separate endpoint)
-  const activeCount  = users.filter(u => u.isActive).length;
+  const activeCount  = users.filter(u => u.active).length;
   const auditorCount = users.filter(u => u.role === 'AUDITOR' || u.role === 'SENIOR_AUDITOR').length;
   const managerCount = users.filter(u => u.role === 'AUDIT_MANAGER' || u.role === 'CAE').length;
 
@@ -521,7 +522,7 @@ function UsersPageInner() {
                         return (
                           <tr
                             key={u.id}
-                            className={`group transition-colors hover:bg-gray-50/60 ${!u.isActive ? 'opacity-60' : ''}`}
+                            className={`group transition-colors hover:bg-gray-50/60 ${!u.active ? 'opacity-60' : ''}`}
                           >
                             {/* Name + email */}
                             <td className="px-4 py-3">
@@ -553,7 +554,7 @@ function UsersPageInner() {
 
                             {/* Status */}
                             <td className="px-4 py-3">
-                              <StatusBadge isActive={u.isActive} />
+                              <StatusBadge isActive={u.active} />
                             </td>
 
                             {/* Created date */}
@@ -566,7 +567,7 @@ function UsersPageInner() {
                               {canManage ? (
                                 <select
                                   defaultValue={u.role}
-                                  disabled={isPending || !u.isActive}
+                                  disabled={isPending || !u.active}
                                   onChange={e => handleRoleChange(u.id, e.target.value)}
                                   className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#0F2D4A]/20 focus:border-[#0F2D4A] disabled:opacity-50 disabled:cursor-not-allowed max-w-[180px]"
                                 >
@@ -583,7 +584,7 @@ function UsersPageInner() {
 
                             {/* Deactivate */}
                             <td className="px-4 py-3">
-                              {canManage && u.isActive ? (
+                              {canManage && u.active ? (
                                 <button
                                   onClick={() => handleDeactivate(u.id, u.name)}
                                   disabled={isPending}

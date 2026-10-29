@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '../../../lib/supabase/client';
 import { markPasswordReset } from '@/lib/password-reset-flag';
+import { isUnknownUserError, magicLinkOptions } from '@/lib/magic-link';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
@@ -43,13 +44,12 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (error) {
-      setError('No se pudo enviar el enlace. Verifica el email.');
+    // Solo entra quien ya tiene cuenta: no se crean cuentas desde aquí. Un correo sin cuenta se trata igual que un envío normal (no se revela cuáles existen).
+    const { error } = await supabase.auth.signInWithOtp({ email, options: magicLinkOptions(window.location.origin) });
+    if (error && !isUnknownUserError(error)) {
+      setError(/rate limit|too many/i.test(error.message) ? 'Demasiados intentos seguidos. Espera unos minutos e inténtalo de nuevo.' : 'No se pudo enviar el enlace. Verifica el email.');
     } else {
+      setSentKind('magic');
       setMagicLinkSent(true);
     }
     setLoading(false);
@@ -85,7 +85,7 @@ export default function LoginPage() {
           <p className="text-[#64748B] text-sm">
             {sentKind === 'reset'
               ? <>Si <strong>{email}</strong> está registrado, te enviamos un enlace para crear una nueva contraseña. Ábrelo en este mismo navegador; vale por una hora.</>
-              : <>Enviamos un enlace de acceso a <strong>{email}</strong>. Úsalo para ingresar al sistema.</>}
+              : <>Si <strong>{email}</strong> tiene una cuenta, le enviamos un enlace de acceso. Úsalo para ingresar al sistema (ábrelo en este mismo navegador).</>}
           </p>
           <button
             onClick={() => { setMagicLinkSent(false); setTab('password'); }}

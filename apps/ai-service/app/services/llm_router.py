@@ -1,17 +1,22 @@
 """
-LLM Router — Dual provider: Gemini (primary/free) + Claude (fallback/premium).
+LLM Router — tres proveedores en cascada: OpenRouter (primario) → Gemini → Claude directo.
 
-Provider routing:
-  DEFAULT  → gemini-2.5-flash   (free tier, AI Studio key)
-  FALLBACK → claude-sonnet-4-5  (when Anthropic credits available)
+Cadena de respaldo (2026-11-21):
+  1. OPENROUTER → Claude por saldo de OpenRouter (Haiku / Sonnet / Opus según la complejidad)
+  2. GEMINI     → gemini-2.5-flash (capa gratuita de AI Studio; se agota con 429 bajo carga)
+  3. CLAUDE     → API directa de Anthropic (último recurso)
 
-To switch to Claude as primary, change DEFAULT_PROVIDER to LLMProvider.CLAUDE.
+Un proveedor sin clave configurada se salta (no cuenta como intento). Si TODOS fallan se lanza
+LLMUnavailableError con el motivo de cada uno — antes se propagaba la excepción cruda del último
+(un 401 de Anthropic) y nadie sabía que el problema real era la cuota de Gemini.
 """
 import asyncio
 import base64
+import json
 import logging
 from enum import Enum
 
+import httpx
 from anthropic import AsyncAnthropic
 from google import genai
 from google.genai import types as genai_types
@@ -32,8 +37,13 @@ class TaskComplexity(str, Enum):
 
 
 class LLMProvider(str, Enum):
-    GEMINI = "gemini"
-    CLAUDE = "claude"
+    OPENROUTER = "openrouter"
+    GEMINI     = "gemini"
+    CLAUDE     = "claude"
+
+
+class LLMUnavailableError(Exception):
+    """Ningún proveedor de IA configurado pudo responder (cuota agotada, saldo, red, clave inválida)."""
 
 
 # ─── Agent → complexity mapping ───────────────────────────────────────────────
@@ -71,8 +81,20 @@ CLAUDE_MODEL_MAP: dict[TaskComplexity, str] = {
     TaskComplexity.COMPLEX:  settings.ANTHROPIC_OPUS_MODEL,
 }
 
-# ─── Default provider (change to CLAUDE when credits are available) ───────────
-DEFAULT_PROVIDER = LLMProvider.GEMINI
+def _openrouter_model(complexity: TaskComplexity) -> str:
+    """Modelo de OpenRouter para la complejidad dada. Se lee de `settings` en cada llamada
+    (no se congela al importar) para que un cambio de .env + reinicio basta y las pruebas
+    puedan sustituirlo."""
+    return {
+        TaskComplexity.SIMPLE:   settings.OPENROUTER_MODEL_SIMPLE,
+        TaskComplexity.STANDARD: settings.OPENROUTER_MODEL_STANDARD,
+        TaskComplexity.COMPLEX:  settings.OPENROUTER_MODEL_COMPLEX,
+    }[complexity]
+
+
+# ─── Proveedor primario y orden de respaldo ───────────────────────────────────
+DEFAULT_PROVIDER = LLMProvider.OPENROUTER
+_FALLBACK_ORDER = [LLMProvider.OPENROUTER, LLMProvider.GEMINI, LLMProvider.CLAUDE]
 
 # ─── Clients ──────────────────────────────────────────────────────────────────
 _anthropic = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
@@ -160,6 +182,90 @@ async def _chat_claude(
     }
 
 
+# ─── OpenRouter (API compatible con OpenAI) ───────────────────────────────────
+
+class OpenRouterError(Exception):
+    """OpenRouter respondió con error (HTTP ≥ 400 o `error` en el cuerpo) o sin texto."""
+
+
+# 120 s de lectura: un Opus con 4096 tokens de salida y contexto RAG puede tardar. 10 s para conectar.
+_OPENROUTER_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
+
+
+async def _openrouter_request(payload: dict) -> dict:
+    """POST /chat/completions. Devuelve el JSON de la respuesta o lanza OpenRouterError con el
+    estado y el mensaje del proveedor (402 = sin saldo, 429 = límite, 401 = clave inválida).
+    Nunca incluye la clave en el mensaje."""
+    headers = {
+        "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+        "Content-Type":  "application/json",
+        "HTTP-Referer":  settings.OPENROUTER_REFERER,
+        "X-Title":       settings.OPENROUTER_TITLE,
+    }
+    url = f"{settings.OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
+    async with httpx.AsyncClient(timeout=_OPENROUTER_TIMEOUT) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+    try:
+        data = resp.json()
+    except ValueError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    err = data.get("error")
+    if resp.status_code >= 400 or err:
+        if isinstance(err, dict):
+            detail = str(err.get("message") or err)
+        else:
+            detail = str(err) if err else resp.text
+        raise OpenRouterError(f"HTTP {resp.status_code}: {detail[:300]}")
+    return data
+
+
+def _extract_openrouter_text(data: dict) -> str:
+    choices = data.get("choices") or []
+    if not choices or not isinstance(choices[0], dict):
+        return ""
+    content = (choices[0].get("message") or {}).get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):  # contenido en bloques [{type: "text", text: "..."}]
+        return "".join(p.get("text", "") for p in content if isinstance(p, dict))
+    return ""
+
+
+def _openrouter_result(data: dict, model: str) -> tuple[str, dict]:
+    """(texto, métricas). Un texto vacío cuenta como fallo para que el router pase al siguiente."""
+    text = _extract_openrouter_text(data)
+    if not text.strip():
+        raise OpenRouterError("respuesta vacía")
+    usage = data.get("usage") or {}
+    finish = ((data.get("choices") or [{}])[0] or {}).get("finish_reason")
+    return text, {
+        "model":         model,
+        "input_tokens":  int(usage.get("prompt_tokens") or 0),
+        "output_tokens": int(usage.get("completion_tokens") or 0),
+        "stop_reason":   {"stop": "end_turn", "length": "max_tokens"}.get(finish, finish or "end_turn"),
+    }
+
+
+async def _chat_openrouter(
+    model: str,
+    system_prompt: str,
+    messages: list[dict],
+    max_tokens: int,
+) -> dict:
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "temperature": 0.7,
+        "messages": [{"role": "system", "content": system_prompt}]
+        + [{"role": "assistant" if m["role"] == "assistant" else "user", "content": m.get("content", "")} for m in messages],
+    }
+    data = await _openrouter_request(payload)
+    text, meta = _openrouter_result(data, model)
+    return {"content": text, **meta}
+
+
 # ─── Public interface ─────────────────────────────────────────────────────────
 
 def get_model_for_agent(
@@ -170,9 +276,31 @@ def get_model_for_agent(
     complexity = override_complexity or TASK_COMPLEXITY_MAP.get(
         agent_type.upper(), TaskComplexity.STANDARD
     )
+    if provider == LLMProvider.OPENROUTER:
+        return _openrouter_model(complexity), LLMProvider.OPENROUTER
     if provider == LLMProvider.GEMINI:
         return GEMINI_MODEL_MAP[complexity], LLMProvider.GEMINI
     return CLAUDE_MODEL_MAP[complexity], LLMProvider.CLAUDE
+
+
+def _is_configured(provider: LLMProvider) -> bool:
+    """¿Tiene clave? Gemini siempre (su clave es obligatoria en Settings)."""
+    if provider == LLMProvider.OPENROUTER:
+        return bool(settings.OPENROUTER_API_KEY)
+    if provider == LLMProvider.CLAUDE:
+        return bool(settings.ANTHROPIC_API_KEY)
+    return True
+
+
+def provider_chain(first: LLMProvider | None = None) -> list[LLMProvider]:
+    """Orden de intento: el pedido primero y el resto de la cadena después, sin los que no tienen clave."""
+    start = first or DEFAULT_PROVIDER
+    order = [start] + [p for p in _FALLBACK_ORDER if p != start]
+    return [p for p in order if _is_configured(p)] or [LLMProvider.GEMINI]
+
+
+def _brief(err: Exception) -> str:
+    return " ".join(str(err).split())[:300]
 
 
 async def chat_with_agent(
@@ -183,25 +311,20 @@ async def chat_with_agent(
     override_complexity: TaskComplexity | None = None,
     provider: LLMProvider | None = None,
 ) -> dict:
-    use_provider = provider or DEFAULT_PROVIDER
-    model, resolved_provider = get_model_for_agent(
-        agent_type, override_complexity, use_provider
-    )
-
-    if resolved_provider == LLMProvider.GEMINI:
+    impl = {
+        LLMProvider.OPENROUTER: _chat_openrouter,
+        LLMProvider.GEMINI:     _chat_gemini,
+        LLMProvider.CLAUDE:     _chat_claude,
+    }
+    failures: list[str] = []
+    for p in provider_chain(provider):
+        model, _ = get_model_for_agent(agent_type, override_complexity, p)
         try:
-            return await _chat_gemini(model, system_prompt, messages, max_tokens)
-        except Exception as gemini_err:
-            logger.warning(
-                "Gemini failed (%s), retrying with Claude fallback", gemini_err
-            )
-            # Fallback to Claude
-            claude_model, _ = get_model_for_agent(
-                agent_type, override_complexity, LLMProvider.CLAUDE
-            )
-            return await _chat_claude(claude_model, system_prompt, messages, max_tokens)
-
-    return await _chat_claude(model, system_prompt, messages, max_tokens)
+            return await impl[p](model, system_prompt, messages, max_tokens)
+        except Exception as err:
+            failures.append(f"{p.value}: {_brief(err)}")
+            logger.warning("chat_with_agent: %s falló (%s) — probando el siguiente proveedor", p.value, _brief(err))
+    raise LLMUnavailableError("Ningún proveedor de IA respondió — " + " | ".join(failures))
 
 
 # ─── Salida estructurada (EVD-05) ──────────────────────────────────────────────
@@ -215,6 +338,120 @@ class StructuredGenerationError(Exception):
     ni siquiera tras el reintento con el error de validación anexado."""
 
 
+_JSON_ONLY = "Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni bloques markdown."
+
+
+async def _structured_openrouter(
+    model: str,
+    system_prompt: str,
+    user_content: str,
+    response_schema: type[BaseModel],
+    max_tokens: int,
+    temperature: float,
+    imagenes: list[tuple[bytes, str]] | None,
+) -> dict:
+    # A diferencia de Gemini, aquí no hay `response_schema` nativo: se le entrega el JSON Schema del
+    # modelo Pydantic en el prompt para que el formato coincida con lo que luego se valida.
+    instruction = (
+        f"{system_prompt}\n\n{_JSON_ONLY}\n"
+        f"El objeto debe cumplir este JSON Schema:\n{json.dumps(response_schema.model_json_schema(), ensure_ascii=False)}"
+    )
+    if imagenes:
+        # Formato de OpenAI: las imágenes van como data URI en bloques `image_url`.
+        user_message: list | str = [{"type": "text", "text": user_content}]
+        for image_bytes, mime_type in imagenes:
+            user_message.append({"type": "image_url", "image_url": {
+                "url": f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}",
+            }})
+    else:
+        user_message = user_content
+    data = await _openrouter_request({
+        "model": model,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "response_format": {"type": "json_object"},  # OpenRouter lo ignora si el modelo no lo soporta
+        "messages": [
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": user_message},
+        ],
+    })
+    text, meta = _openrouter_result(data, model)
+    return {"parsed": parse_json_response(text, {}), "model": meta["model"],
+            "input_tokens": meta["input_tokens"], "output_tokens": meta["output_tokens"]}
+
+
+async def _structured_gemini(
+    model: str,
+    system_prompt: str,
+    user_content: str,
+    response_schema: type[BaseModel],
+    max_tokens: int,
+    temperature: float,
+    imagenes: list[tuple[bytes, str]] | None,
+) -> dict:
+    if imagenes:
+        parts = [genai_types.Part.from_text(text=user_content)]
+        for image_bytes, mime_type in imagenes:
+            parts.append(genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
+        contents = [genai_types.Content(role="user", parts=parts)]
+    else:
+        contents = [{"role": "user", "parts": [{"text": user_content}]}]
+    response = await _gemini.aio.models.generate_content(
+        model=model,
+        contents=contents,
+        config=genai_types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+            response_mime_type="application/json",
+            response_schema=response_schema,
+            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+        ),
+    )
+    text = _extract_gemini_text(response)
+    usage = response.usage_metadata
+    return {
+        "parsed": parse_json_response(text, {}),
+        "model": model,
+        "input_tokens": getattr(usage, "prompt_token_count", 0) or 0,
+        "output_tokens": getattr(usage, "candidates_token_count", 0) or 0,
+    }
+
+
+async def _structured_claude(
+    model: str,
+    system_prompt: str,
+    user_content: str,
+    response_schema: type[BaseModel],
+    max_tokens: int,
+    temperature: float,
+    imagenes: list[tuple[bytes, str]] | None,
+) -> dict:
+    instruction = f"{system_prompt}\n\n{_JSON_ONLY}"
+    if imagenes:
+        claude_content: list | str = [{"type": "text", "text": user_content}]
+        for image_bytes, mime_type in imagenes:
+            claude_content.append({"type": "image", "source": {
+                "type": "base64", "media_type": mime_type,
+                "data": base64.b64encode(image_bytes).decode("ascii"),
+            }})
+    else:
+        claude_content = user_content
+    response = await _anthropic.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        system=instruction,
+        messages=[{"role": "user", "content": claude_content}],
+    )
+    return {
+        "parsed": parse_json_response(response.content[0].text, {}),
+        "model": model,
+        "input_tokens": response.usage.input_tokens,
+        "output_tokens": response.usage.output_tokens,
+    }
+
+
 async def _generate_structured_once(
     agent_type: str,
     system_prompt: str,
@@ -224,64 +461,20 @@ async def _generate_structured_once(
     temperature: float,
     imagenes: list[tuple[bytes, str]] | None = None,  # [(bytes, mime_type), ...] — EVD-14 (1 foto), EVD-15 (hasta 15 frames de video)
 ) -> dict:
-    model, _ = get_model_for_agent(agent_type, TaskComplexity.STANDARD, LLMProvider.GEMINI)
-    try:
-        if imagenes:
-            parts = [genai_types.Part.from_text(text=user_content)]
-            for image_bytes, mime_type in imagenes:
-                parts.append(genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
-            contents = [genai_types.Content(role="user", parts=parts)]
-        else:
-            contents = [{"role": "user", "parts": [{"text": user_content}]}]
-        response = await _gemini.aio.models.generate_content(
-            model=model,
-            contents=contents,
-            config=genai_types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                max_output_tokens=max_tokens,
-                temperature=temperature,
-                response_mime_type="application/json",
-                response_schema=response_schema,
-                thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        text = _extract_gemini_text(response)
-        usage = response.usage_metadata
-        return {
-            "parsed": parse_json_response(text, {}),
-            "model": model,
-            "input_tokens": getattr(usage, "prompt_token_count", 0) or 0,
-            "output_tokens": getattr(usage, "candidates_token_count", 0) or 0,
-        }
-    except Exception as gemini_err:
-        logger.warning("generate_structured: Gemini falló (%s) — fallback a Claude", gemini_err)
-        claude_model, _ = get_model_for_agent(agent_type, TaskComplexity.STANDARD, LLMProvider.CLAUDE)
-        instruction = (
-            system_prompt
-            + "\n\nResponde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni bloques markdown."
-        )
-        if imagenes:
-            claude_content: list | str = [{"type": "text", "text": user_content}]
-            for image_bytes, mime_type in imagenes:
-                claude_content.append({"type": "image", "source": {
-                    "type": "base64", "media_type": mime_type,
-                    "data": base64.b64encode(image_bytes).decode("ascii"),
-                }})
-        else:
-            claude_content = user_content
-        response = await _anthropic.messages.create(
-            model=claude_model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=instruction,
-            messages=[{"role": "user", "content": claude_content}],
-        )
-        return {
-            "parsed": parse_json_response(response.content[0].text, {}),
-            "model": claude_model,
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-        }
+    impl = {
+        LLMProvider.OPENROUTER: _structured_openrouter,
+        LLMProvider.GEMINI:     _structured_gemini,
+        LLMProvider.CLAUDE:     _structured_claude,
+    }
+    failures: list[str] = []
+    for p in provider_chain():
+        model, _ = get_model_for_agent(agent_type, TaskComplexity.STANDARD, p)
+        try:
+            return await impl[p](model, system_prompt, user_content, response_schema, max_tokens, temperature, imagenes)
+        except Exception as err:
+            failures.append(f"{p.value}: {_brief(err)}")
+            logger.warning("generate_structured: %s falló (%s) — probando el siguiente proveedor", p.value, _brief(err))
+    raise LLMUnavailableError("Ningún proveedor de IA respondió — " + " | ".join(failures))
 
 
 async def generate_structured(
@@ -295,19 +488,21 @@ async def generate_structured(
 ) -> dict:
     """Genera una respuesta JSON validada contra un schema Pydantic.
 
-    Gemini primero (JSON mode); si falla, cae a Claude con instrucción JSON
-    explícita — mismo patrón de fallback que chat_with_agent, reutilizado, no
-    reinventado. El texto de cualquiera de los dos proveedores se parsea con
+    OpenRouter primero (JSON mode + el JSON Schema en el prompt); si falla,
+    Gemini (JSON mode con `response_schema`) y por último Claude directo con
+    instrucción JSON explícita — la misma cadena que chat_with_agent
+    (`provider_chain`). El texto de cualquiera de los proveedores se parsea con
     el mismo parser compartido (json_utils.parse_json_response) y se valida
     con Pydantic. Si no valida, UN reintento con el error de validación
     anexado al prompt; si vuelve a fallar, error — nunca se devuelve un
     resultado sin validar.
 
-    `imagenes`, si se pasa, agrega cada imagen como parte multimodal en AMBOS
-    proveedores (Gemini `Part.from_bytes` / Claude content block `image`, una
-    por imagen, en el mismo orden) — el reintento de validación reenvía las
-    mismas imágenes, no solo el texto. Con una sola imagen es el caso de
-    EVD-14 (foto anotada); con varias, EVD-15 (frames muestreados de video).
+    `imagenes`, si se pasa, agrega cada imagen como parte multimodal en TODOS
+    los proveedores (OpenRouter bloque `image_url` con data URI / Gemini
+    `Part.from_bytes` / Claude bloque `image`, una por imagen, en el mismo
+    orden) — el reintento de validación reenvía las mismas imágenes, no solo
+    el texto. Con una sola imagen es el caso de EVD-14 (foto anotada); con
+    varias, EVD-15 (frames muestreados de video).
     """
     last_error: str | None = None
     content = user_content
@@ -316,17 +511,15 @@ async def generate_structured(
         try:
             result = await _generate_structured_once(agent_type, system_prompt, content, response_schema, max_tokens, temperature, imagenes)
         except Exception as e:
-            # Ambos proveedores fallaron (Gemini Y su fallback a Claude, ver
-            # _generate_structured_once) — sin esto, la excepción cruda del SDK
-            # (ej. anthropic.BadRequestError por créditos agotados) se propaga
-            # sin envolver y el llamador (ej. investigation.py, evidence.py) no
-            # puede distinguirla de un bug real; su `except StructuredGenerationError`
-            # nunca la atrapa y termina como 500 Internal Server Error sin mensaje
-            # útil. No se reintenta — un fallo de AMBOS proveedores no es el tipo
-            # de error que un segundo intento idéntico vaya a resolver (a
-            # diferencia del reintento de validación de abajo, que sí cambia el
-            # prompt entre intentos).
-            raise StructuredGenerationError(f"Ambos proveedores de LLM fallaron: {e}") from e
+            # Fallaron TODOS los proveedores de la cadena (ver _generate_structured_once)
+            # — sin esto, la excepción cruda del SDK se propaga sin envolver y el
+            # llamador (ej. investigation.py, evidence.py) no puede distinguirla de un
+            # bug real; su `except StructuredGenerationError` nunca la atrapa y termina
+            # como 500 Internal Server Error sin mensaje útil. No se reintenta — un
+            # fallo de TODOS los proveedores no es el tipo de error que un segundo
+            # intento idéntico vaya a resolver (a diferencia del reintento de
+            # validación de abajo, que sí cambia el prompt entre intentos).
+            raise StructuredGenerationError(f"Ningún proveedor de LLM respondió: {e}") from e
         try:
             validated = response_schema.model_validate(result["parsed"])
             return {

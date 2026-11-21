@@ -7,6 +7,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { assertInvestigationAccess, AUDIT_ACCESS_SELECT } from '../common/utils/investigation-scope.util';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { removeStoragePrefixes } from '../common/storage/storage-prefix.util';
+import { generateText, isLlmConfigured } from '../common/llm/llm-client';
 import {
   ProcStatus, StepStatus, StepConclusion, TestType, AuditNature, AuditTiming,
 } from '@prisma/client';
@@ -70,7 +71,6 @@ export interface UpdateStepDto extends Partial<CreateStepDto> {}
 export class AuditProceduresService {
   private readonly logger        = new Logger(AuditProceduresService.name);
   private readonly supabase:     SupabaseClient;
-  private readonly geminiUrl     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   constructor(
     private readonly prisma:  PrismaService,
@@ -416,10 +416,9 @@ export class AuditProceduresService {
 
   async suggestAndCreateProcedures(sectionId: string, user: AuthUser) {
     const section = await this.assertSectionAccess(sectionId, user);
-    const apiKey  = this.config.get<string>('GEMINI_API_KEY', '');
 
-    if (!apiKey) {
-      throw new BadRequestException('GEMINI_API_KEY no configurado. Configure la clave en las variables de entorno.');
+    if (!isLlmConfigured(this.config)) {
+      throw new BadRequestException('IA no configurada: falta OPENROUTER_API_KEY o GEMINI_API_KEY en las variables de entorno.');
     }
 
     // Load context: paper info + sibling papers of the same audit
@@ -520,7 +519,7 @@ timing values: INTERIM, YEAR_END, ROLLFORWARD
     }> };
 
     try {
-      const raw = await this.callGeminiText(apiKey, prompt);
+      const raw = await this.callLlmText(prompt);
       const cleaned = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
       parsed = JSON.parse(cleaned);
     } catch (e) {
@@ -599,30 +598,7 @@ timing values: INTERIM, YEAR_END, ROLLFORWARD
     });
   }
 
-  private async callGeminiText(apiKey: string, prompt: string): Promise<string> {
-    const res = await fetch(`${this.geminiUrl}?key=${apiKey}`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`Gemini HTTP ${res.status}: ${errBody.slice(0, 200)}`);
-    }
-
-    const data = await res.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      error?: { message: string };
-    };
-
-    if (data.error) throw new Error(`Gemini error: ${data.error.message}`);
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    if (!text.trim()) throw new Error('Gemini returned empty text');
-    return text.trim();
+  private callLlmText(prompt: string): Promise<string> {
+    return generateText(this.config, { messages: [{ role: 'user', content: prompt }], temperature: 0.3, maxTokens: 8192, timeoutMs: 60_000 });
   }
 }

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInvestigationAccess, visibleAuditWhere } from '../common/utils/investigation-scope.util';
+import { generateText, isLlmConfigured } from '../common/llm/llm-client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,9 +42,6 @@ interface GeminiSuggestion {
 @Injectable()
 export class CrossAuditLearningService {
   private readonly logger = new Logger(CrossAuditLearningService.name);
-
-  private readonly geminiEndpoint =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   constructor(
     private readonly prisma:  PrismaService,
@@ -148,21 +146,21 @@ export class CrossAuditLearningService {
     const recurringAreas = this.identifyRecurringAreas(pastFindings);
 
     // ─── 5. Generate AI suggestions ───────────────────────────────────────
-    const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
+    const llmReady = isLlmConfigured(this.config);
     let suggestions: AiProcedureSuggestion[];
     let aiGenerated = false;
 
     // Corre Gemini si hay historial, secciones, O contexto de papel (para que
     // un papel nuevo sin historial reciba sugerencias relevantes a su tipo).
-    if (apiKey && (pastFindings.length > 0 || smartSections.length > 0 || paperContext)) {
+    if (llmReady && (pastFindings.length > 0 || smartSections.length > 0 || paperContext)) {
       try {
-        suggestions = await this.callGemini(
-          apiKey, audit, entityName, sector,
+        suggestions = await this.callLlm(
+          audit, entityName, sector,
           pastFindings, smartSections, recurringAreas, paperContext,
         );
         aiGenerated = true;
       } catch (err) {
-        this.logger.warn('[CrossAudit] Gemini failed, using rule-based', String(err));
+        this.logger.warn('[CrossAudit] LLM failed, using rule-based', String(err));
         suggestions = this.ruleBased(pastFindings, audit.type, recurringAreas);
       }
     } else {
@@ -214,10 +212,9 @@ export class CrossAuditLearningService {
       .slice(0, 5);
   }
 
-  // ─── Gemini call ──────────────────────────────────────────────────────────
+  // ─── Llamada al LLM (OpenRouter → Gemini) ─────────────────────────────────
 
-  private async callGemini(
-    apiKey:         string,
+  private async callLlm(
     audit:          { title: string; type: string },
     entityName:     string,
     sector:         string,
@@ -282,25 +279,11 @@ INSTRUCCIONES:
 - Máximo 120 palabras por procedimiento
 - Solo el array JSON, sin texto extra`;
 
-    const res = await fetch(`${this.geminiEndpoint}?key=${apiKey}`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature:     0.4,
-          maxOutputTokens: 2000,
-          responseMimeType: 'application/json',
-        },
-      }),
-      signal: AbortSignal.timeout(35_000),
+    const raw = await generateText(this.config, {
+      messages: [{ role: 'user', content: prompt }], temperature: 0.4, maxTokens: 2000, json: true, timeoutMs: 35_000,
     });
-
-    if (!res.ok) throw new Error(`Gemini ${res.status}`);
-    const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) throw new Error('No JSON array in Gemini response');
+    if (!match) throw new Error('No JSON array in LLM response');
 
     const parsed = JSON.parse(match[0]) as GeminiSuggestion[];
 

@@ -3,8 +3,25 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    # Anthropic (Claude) — opcional; proveedor primario es Gemini.
-    # Sólo necesario si DEFAULT_PROVIDER se cambia a LLMProvider.CLAUDE.
+    # OpenRouter — proveedor PRIMARIO de los asistentes (2026-11-21). API compatible con
+    # OpenAI: un solo saldo para Claude, Gemini, etc. Vacío = se salta y el router sigue con
+    # Gemini → Claude como antes (ver app/services/llm_router.py). La clave va SOLO en el
+    # .env del servidor, nunca en el repo ni en el chat.
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    # Un modelo por complejidad de tarea (mismo esquema que los mapas de Claude): Haiku para lo
+    # simple, Sonnet para lo estándar y Opus solo para los agentes de razonamiento complejo
+    # (CICERO, CASSANDRA, SENADO, SHERLOCK). Ids verificados contra openrouter.ai/api/v1/models
+    # el 2026-11-21; se pueden cambiar desde el .env sin tocar código.
+    OPENROUTER_MODEL_SIMPLE: str = "anthropic/claude-haiku-4.5"
+    OPENROUTER_MODEL_STANDARD: str = "anthropic/claude-sonnet-5.5"
+    OPENROUTER_MODEL_COMPLEX: str = "anthropic/claude-opus-5.5"
+    # Cabeceras de atribución que OpenRouter pide (aparecen en su panel de uso). No son secretas.
+    OPENROUTER_REFERER: str = "https://auditoria.ianovatechsystems.com"
+    OPENROUTER_TITLE: str = "AuditMind"
+
+    # Anthropic (Claude) directo — último recurso de la cadena (OpenRouter → Gemini → Claude).
+    # Si está vacío se salta; una clave inválida solo agrega un intento fallido al final.
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_DEFAULT_MODEL: str = "claude-sonnet-4-5"
     ANTHROPIC_OPUS_MODEL: str = "claude-opus-4-5"

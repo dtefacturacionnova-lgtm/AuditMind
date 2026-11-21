@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { ClientsService } from './clients.service';
 import { CreateProposalDto, UpdateProposalDto } from './dto/proposal.dto';
+import { generateText, isLlmConfigured } from '../common/llm/llm-client';
 
 const PROPOSAL_INCLUDE = {
   client:          { select: { id: true, legalName: true, tradeName: true, status: true } },
@@ -23,10 +24,6 @@ const ACCEPTABLE_RATINGS: AcceptanceRating[] = [AcceptanceRating.GREEN, Acceptan
 @Injectable()
 export class ProposalsService {
   private readonly logger = new Logger(ProposalsService.name);
-
-  // Mismo endpoint que usa PaperSectionsService para las sugerencias de secciones.
-  private readonly geminiEndpoint =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   constructor(
     private readonly prisma:  PrismaService,
@@ -171,8 +168,8 @@ export class ProposalsService {
 
   // ── Borrador IA ───────────────────────────────────────────────────────────
   /**
-   * Genera `aiDraftContent` con Gemini. NUNCA lanza error por fallo de IA:
-   * si no hay GEMINI_API_KEY o la llamada falla, cae a una plantilla de texto
+   * Genera `aiDraftContent` con el cliente de IA compartido (OpenRouter → Gemini). NUNCA lanza error por fallo de IA:
+   * si no hay clave de IA o la llamada falla, cae a una plantilla de texto
    * razonable — mismo contrato que PaperSectionsService.assistSection().
    */
   async generateDraft(id: string, user: AuthUser) {
@@ -195,18 +192,16 @@ export class ProposalsService {
     proposal: Proposal,
     client: Client,
   ): Promise<{ content: string; usedAI: boolean }> {
-    const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
-
-    if (!apiKey) {
-      this.logger.warn('[ProposalDraft] GEMINI_API_KEY not set — returning template fallback');
+    if (!isLlmConfigured(this.config)) {
+      this.logger.warn('[ProposalDraft] sin OPENROUTER_API_KEY ni GEMINI_API_KEY — returning template fallback');
       return { content: this.fallbackDraft(proposal, client), usedAI: false };
     }
 
     try {
-      const text = await this.callGeminiText(apiKey, this.buildDraftPrompt(proposal, client));
+      const text = await this.callLlmText(this.buildDraftPrompt(proposal, client));
       return { content: text, usedAI: true };
     } catch (err) {
-      this.logger.error('[ProposalDraft] Gemini failed, using fallback', String(err));
+      this.logger.error('[ProposalDraft] LLM failed, using fallback', String(err));
       return { content: this.fallbackDraft(proposal, client), usedAI: false };
     }
   }
@@ -269,31 +264,8 @@ REGLAS
 - No incluyas comentarios sobre este prompt ni notas del asistente: devuelve únicamente el texto de la propuesta.`;
   }
 
-  private async callGeminiText(apiKey: string, prompt: string): Promise<string> {
-    const res = await fetch(`${this.geminiEndpoint}?key=${apiKey}`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.35, maxOutputTokens: 2400 },
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`Gemini HTTP ${res.status}: ${errBody.slice(0, 200)}`);
-    }
-
-    const data = await res.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      error?: { message: string };
-    };
-
-    if (data.error) throw new Error(`Gemini error: ${data.error.message}`);
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    if (!text.trim()) throw new Error('Gemini returned empty text');
-    return text.trim();
+  private callLlmText(prompt: string): Promise<string> {
+    return generateText(this.config, { messages: [{ role: 'user', content: prompt }], temperature: 0.35, maxTokens: 2400, timeoutMs: 60_000 });
   }
 
   private fallbackDraft(proposal: Proposal, client: Client): string {
@@ -333,6 +305,6 @@ Dictamen del auditor independiente, carta a la gerencia sobre control interno y 
 La presente propuesta tiene vigencia de 30 días calendario a partir de su fecha de emisión.
 
 —
-[Borrador de plantilla — asistente IA no disponible. Configure GEMINI_API_KEY para generar el borrador contextual, o edite este texto y guárdelo en finalContent.]`;
+[Borrador de plantilla — asistente IA no disponible. Configure OPENROUTER_API_KEY (o GEMINI_API_KEY) para generar el borrador contextual, o edite este texto y guárdelo en finalContent.]`;
   }
 }

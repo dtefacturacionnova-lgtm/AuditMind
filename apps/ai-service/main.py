@@ -1,18 +1,21 @@
 """AuditMind AI Service — FastAPI + Claude API + Gemini Embeddings + pgvector RAG"""
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import asyncpg
 
 from app.config import settings
 from app.routers import agents, rag, health, analytics, connectors, scriptorium, sampling, evidence, investigation, watchlists
+from app.services.llm_router import LLMUnavailableError
 from app.services.rag_pipeline import _ensure_pgvector_tables
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"🚀 AuditMind AI Service — model: {settings.ANTHROPIC_DEFAULT_MODEL}")
+    print(f"🚀 AuditMind AI Service — LLM primario: {'OpenRouter (' + settings.OPENROUTER_MODEL_STANDARD + ')' if settings.OPENROUTER_API_KEY else 'Gemini (OPENROUTER_API_KEY sin configurar)'}")
     print(f"   Embeddings: {settings.EMBEDDING_MODEL} ({settings.EMBEDDING_DIMENSIONS} dims)")
     # Migra el esquema de pgvector al arrancar (idempotente — ADD COLUMN IF NOT
     # EXISTS) en vez de esperar a la primera ingesta, para que /rag/documents y
@@ -36,6 +39,18 @@ app = FastAPI(
     description="Motor de Inteligencia Artificial — 14 Agentes, 9 RAG Bases, CAATs, Claude API",
     lifespan=lifespan,
 )
+
+@app.exception_handler(LLMUnavailableError)
+async def _llm_unavailable_handler(_request: Request, exc: LLMUnavailableError) -> JSONResponse:
+    """Todos los proveedores de IA fallaron: 503 con un mensaje neutro (el detalle por proveedor —
+    saldo, cuota, clave— queda en el log del servidor, no se filtra al navegador). Antes salía un
+    500 «Internal Server Error» sin pista de la causa."""
+    logging.getLogger("app.llm").error("%s", exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "El asistente de IA no está disponible en este momento. Intenta de nuevo en unos minutos."},
+    )
+
 
 app.add_middleware(
     CORSMiddleware,

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInvestigationAccess, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
+import { generateText, isLlmConfigured } from '../common/llm/llm-client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,9 +49,6 @@ interface GeminiQualityResponse {
 export class PaperQualityService {
   private readonly logger = new Logger(PaperQualityService.name);
 
-  private readonly geminiEndpoint =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-
   constructor(
     private readonly prisma:  PrismaService,
     private readonly config:  ConfigService,
@@ -84,15 +82,14 @@ export class PaperQualityService {
     const ruleIssues = [...this.computeRuleIssues(sections), ...auditLogicIssues];
 
     // Try AI enhancement
-    const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
-    if (apiKey) {
+    if (isLlmConfigured(this.config)) {
       try {
-        const aiResult = await this.callGemini(apiKey, sections, wp.audit.title, wp.paperCode);
+        const aiResult = await this.callLlm(sections, wp.audit.title, wp.paperCode);
         const merged = this.mergeResults(ruleScore, ruleIssues, aiResult, sections);
         await this.persistScore(paperId, merged.score, merged);
         return merged;
       } catch (err) {
-        this.logger.warn('[QualityCheck] Gemini unavailable, using rule-based only', String(err));
+        this.logger.warn('[QualityCheck] LLM unavailable, using rule-based only', String(err));
       }
     }
 
@@ -230,10 +227,9 @@ export class PaperQualityService {
     return issues;
   }
 
-  // ─── Gemini AI analysis ───────────────────────────────────────────────────
+  // ─── Análisis con IA (OpenRouter → Gemini) ────────────────────────────────
 
-  private async callGemini(
-    apiKey:    string,
+  private async callLlm(
     sections:  Array<{ sectionKey: string; label: string; value: unknown; isRequired: boolean; aiHint: string | null }>,
     auditTitle: string,
     paperCode:  string | null,
@@ -275,25 +271,11 @@ Responde EXCLUSIVAMENTE con un JSON:
 
 Solo el JSON, sin markdown.`;
 
-    const res = await fetch(`${this.geminiEndpoint}?key=${apiKey}`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature:     0.2,
-          maxOutputTokens: 1500,
-          responseMimeType: 'application/json',
-        },
-      }),
-      signal: AbortSignal.timeout(30_000),
+    const raw = await generateText(this.config, {
+      messages: [{ role: 'user', content: prompt }], temperature: 0.2, maxTokens: 1500, json: true, timeoutMs: 30_000,
     });
-
-    if (!res.ok) throw new Error(`Gemini ${res.status}`);
-    const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON in Gemini response');
+    if (!match) throw new Error('No JSON in LLM response');
 
     return JSON.parse(match[0]) as GeminiQualityResponse;
   }

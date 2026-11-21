@@ -84,6 +84,10 @@ module.exports = {
         // ai-service corre internamente en el mismo VPS
         AI_SERVICE_URL:          'http://127.0.0.1:8003',
         AI_SERVICE_INTERNAL_KEY: e.AI_SERVICE_INTERNAL_KEY,
+        // IA directa del API (papeles, calidad, propuestas, respaldo del chat): OpenRouter → Gemini
+        // (apps/api/src/common/llm/llm-client.ts). `|| ''` evita que una variable ausente llegue como «undefined».
+        OPENROUTER_API_KEY:        e.OPENROUTER_API_KEY || '',
+        OPENROUTER_MODEL_STANDARD: e.OPENROUTER_MODEL_STANDARD || '',
         // Stirling-PDF (OCR self-hosted) — contenedor Docker separado, mismo VPS
         STIRLING_PDF_URL:        'http://127.0.0.1:8090',
         // Firma electrónica simple por enlace (docs/firma-externa-por-enlace.md §17).
@@ -110,6 +114,13 @@ module.exports = {
       args: 'main:app --host 127.0.0.1 --port 8003 --workers 2',
       interpreter: 'none',
       env: {
+        // LLM primario (2026-11-21): OpenRouter → Gemini → Claude. Con `|| ''` una variable
+        // ausente del .env llega vacía (la config ignora los vacíos y usa su valor por defecto)
+        // en vez de la cadena literal «undefined», que se habría tomado por una clave real.
+        OPENROUTER_API_KEY:        e.OPENROUTER_API_KEY || '',
+        OPENROUTER_MODEL_SIMPLE:   e.OPENROUTER_MODEL_SIMPLE || '',
+        OPENROUTER_MODEL_STANDARD: e.OPENROUTER_MODEL_STANDARD || '',
+        OPENROUTER_MODEL_COMPLEX:  e.OPENROUTER_MODEL_COMPLEX || '',
         GEMINI_API_KEY:            e.GEMINI_API_KEY,
         ANTHROPIC_API_KEY:         e.ANTHROPIC_API_KEY,
         DATABASE_URL:              e.DATABASE_URL,

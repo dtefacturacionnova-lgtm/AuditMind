@@ -58,6 +58,7 @@ ENCRYPTION_KEY=
 PORTAL_TOKEN_SECRET=
 
 # ── AI APIs ────────────────────────────────────────────────────────────────
+OPENROUTER_API_KEY=
 GEMINI_API_KEY=
 ANTHROPIC_API_KEY=
 

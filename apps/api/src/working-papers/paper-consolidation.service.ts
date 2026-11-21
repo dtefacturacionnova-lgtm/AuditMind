@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SyncStatus } from '@prisma/client';
+import { generateText, isLlmConfigured } from '../common/llm/llm-client';
 
 // ─── Event payload ────────────────────────────────────────────────────────────
 
@@ -35,16 +36,6 @@ interface SourceSection {
   aiHint?:      string | null;
   isAutoFilled: boolean;
   sortOrder:    number;
-}
-
-// ─── Gemini response shape ────────────────────────────────────────────────────
-
-interface GeminiResponse {
-  candidates?: Array<{
-    content?: { parts?: Array<{ text?: string }> };
-    finishReason?: string;
-  }>;
-  error?: { message: string };
 }
 
 // ─── Generated sections map ───────────────────────────────────────────────────
@@ -139,9 +130,6 @@ const LEAD_SCHEDULE_CONFIG: Record<string, LeadScheduleConfig> = {
 @Injectable()
 export class PaperConsolidationService {
   private readonly logger = new Logger(PaperConsolidationService.name);
-
-  private readonly geminiEndpoint =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   constructor(
     private readonly prisma:  PrismaService,
@@ -327,16 +315,15 @@ export class PaperConsolidationService {
     const totalActual   = groupAccounts.reduce((s, a) => s + (a.saldo_actual   ?? 0), 0);
     const totalAnterior = groupAccounts.reduce((s, a) => s + (a.saldo_anterior ?? 0), 0);
 
-    const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
     let aiSections: SectionMap = {};
 
-    if (apiKey && groupAccounts.length > 0) {
+    if (isLlmConfigured(this.config) && groupAccounts.length > 0) {
       try {
         const prompt = this.buildLeadSchedulePrompt(config, groupAccounts, totalActual, totalAnterior, auditTitle);
-        aiSections   = await this.callGeminiWithPrompt(apiKey, prompt);
+        aiSections   = await this.callLlmWithPrompt(prompt);
         this.logger.log(`[Consolidation] Lead schedule AI OK: ${config.groupName}`);
       } catch (err) {
-        this.logger.warn('[Consolidation] Lead schedule Gemini failed, using fallback', String(err));
+        this.logger.warn('[Consolidation] Lead schedule LLM failed, using fallback', String(err));
       }
     }
 
@@ -408,63 +395,40 @@ export class PaperConsolidationService {
     sourceData: SourcePaperData[],
     auditTitle: string,
   ): Promise<SectionMap> {
-    const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
-
-    if (apiKey) {
+    if (isLlmConfigured(this.config)) {
       try {
-        return await this.callGemini(apiKey, paperCode, sourceData, auditTitle);
+        return await this.callLlm(paperCode, sourceData, auditTitle);
       } catch (err) {
-        this.logger.warn('[Consolidation] Gemini failed, using template fallback', String(err));
+        this.logger.warn('[Consolidation] LLM failed, using template fallback', String(err));
       }
     } else {
-      this.logger.warn('[Consolidation] GEMINI_API_KEY not configured, using template fallback');
+      this.logger.warn('[Consolidation] sin OPENROUTER_API_KEY ni GEMINI_API_KEY, using template fallback');
     }
 
     return this.templateFallback(paperCode, sourceData, auditTitle);
   }
 
-  // ─── Gemini calls ─────────────────────────────────────────────────────────
+  // ─── Llamadas al LLM (OpenRouter → Gemini) ────────────────────────────────
 
-  private async callGeminiWithPrompt(apiKey: string, prompt: string): Promise<SectionMap> {
-    const res = await fetch(`${this.geminiEndpoint}?key=${apiKey}`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature:      0.3,
-          maxOutputTokens:  3500,
-          responseMimeType: 'application/json',
-        },
-      }),
-      signal: AbortSignal.timeout(60_000),
+  private async callLlmWithPrompt(prompt: string): Promise<SectionMap> {
+    const rawText = await generateText(this.config, {
+      messages: [{ role: 'user', content: prompt }], temperature: 0.3, maxTokens: 3500, json: true, timeoutMs: 60_000,
     });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`Gemini HTTP ${res.status}: ${errBody.slice(0, 200)}`);
-    }
-
-    const data = await res.json() as GeminiResponse;
-    if (data.error) throw new Error(`Gemini API error: ${data.error.message}`);
-
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Gemini returned no JSON object');
+    if (!jsonMatch) throw new Error('LLM returned no JSON object');
 
     const parsed = JSON.parse(jsonMatch[0]) as SectionMap;
-    this.logger.log(`[Consolidation] Gemini generated ${Object.keys(parsed).length} sections`);
+    this.logger.log(`[Consolidation] LLM generated ${Object.keys(parsed).length} sections`);
     return parsed;
   }
 
-  private async callGemini(
-    apiKey:     string,
+  private async callLlm(
     paperCode:  string | null,
     sourceData: SourcePaperData[],
     auditTitle: string,
   ): Promise<SectionMap> {
     const prompt = this.buildPrompt(paperCode, sourceData, auditTitle);
-    return this.callGeminiWithPrompt(apiKey, prompt);
+    return this.callLlmWithPrompt(prompt);
   }
 
   // ─── Prompt builder ───────────────────────────────────────────────────────

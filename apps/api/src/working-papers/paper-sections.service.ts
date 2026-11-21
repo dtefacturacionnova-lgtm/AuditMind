@@ -12,13 +12,11 @@ import { PAPER_TEMPLATES } from './paper-templates';
 import { AiService } from '../ai/ai.service';
 import { ContentLibraryService } from '../content-library/content-library.service';
 import { reliabilityFactor } from './reliability-factor';
+import { generateText, isLlmConfigured } from '../common/llm/llm-client';
 
 @Injectable()
 export class PaperSectionsService {
   private readonly logger = new Logger(PaperSectionsService.name);
-
-  private readonly geminiEndpoint =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   constructor(
     private readonly prisma:         PrismaService,
@@ -360,27 +358,27 @@ export class PaperSectionsService {
       ragDomain,
     };
 
-    const apiKey = this.config.get<string>('GEMINI_API_KEY', '');
+    const llmReady = isLlmConfigured(this.config);
 
     // MATRIX sections need structured JSON rows, not free-form prose.
     if (section.fieldType === 'MATRIX') {
-      if (!apiKey) {
-        this.logger.warn('[AssistSection] GEMINI_API_KEY not set — returning empty matrix fallback');
+      if (!llmReady) {
+        this.logger.warn('[AssistSection] sin OPENROUTER_API_KEY ni GEMINI_API_KEY — returning empty matrix fallback');
         return { suggestion: '[]', usedAI: false, isStructured: true };
       }
       try {
-        const rows = await this.callGeminiJson(apiKey, this.buildMatrixAssistPrompt(baseCtx));
+        const rows = await this.callLlmJson(this.buildMatrixAssistPrompt(baseCtx));
         return { suggestion: JSON.stringify(rows), usedAI: true, isStructured: true };
       } catch (err) {
-        this.logger.error('[AssistSection] Gemini matrix generation failed, using empty fallback', String(err));
+        this.logger.error('[AssistSection] LLM matrix generation failed, using empty fallback', String(err));
         return { suggestion: '[]', usedAI: false, isStructured: true };
       }
     }
 
     const prompt = this.buildSectionAssistPrompt(baseCtx);
 
-    if (!apiKey) {
-      this.logger.warn('[AssistSection] GEMINI_API_KEY not set — returning template fallback');
+    if (!llmReady) {
+      this.logger.warn('[AssistSection] sin OPENROUTER_API_KEY ni GEMINI_API_KEY — returning template fallback');
       return {
         suggestion: this.fallbackSuggestion(section.label, section.description ?? '', section.aiHint ?? ''),
         usedAI:     false,
@@ -388,10 +386,10 @@ export class PaperSectionsService {
     }
 
     try {
-      const text = await this.callGeminiText(apiKey, prompt);
+      const text = await this.callLlmText(prompt);
       return { suggestion: text, usedAI: true };
     } catch (err) {
-      this.logger.error('[AssistSection] Gemini failed, using fallback', String(err));
+      this.logger.error('[AssistSection] LLM failed, using fallback', String(err));
       return {
         suggestion: this.fallbackSuggestion(section.label, section.description ?? '', section.aiHint ?? ''),
         usedAI:     false,
@@ -708,69 +706,21 @@ INSTRUCCIONES DE SALIDA:
 ${hasRag ? `- En columnas de tipo "Base Normativa" o similar, cita artículo/norma/sección ÚNICAMENTE si aparece textualmente en la ${ctx.ragDomain === 'FISCAL' ? 'NORMATIVA FISCAL' : ctx.ragDomain === 'AML' ? 'NORMATIVA PLD/FT' : ctx.ragDomain === 'EXTERNAL_FINANCIAL' ? 'GUÍA CVPCPA' : ctx.ragDomain === 'INTERNAL_GOVERNMENTAL' ? 'NAIG' : 'NORMAS DE AUDITORÍA INTERNA'} REAL RECUPERADA arriba — si no la tienes ahí, deja la celda genérica ("Ver normativa aplicable") en vez de inventar un número de artículo o norma.` : ''}`;
   }
 
-  private async callGeminiJson(apiKey: string, prompt: string): Promise<unknown[]> {
-    const res = await fetch(`${this.geminiEndpoint}?key=${apiKey}`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.25,
-          maxOutputTokens: 6000,
-          responseMimeType: 'application/json',
-        },
-      }),
-      signal: AbortSignal.timeout(45_000),
+  private async callLlmJson(prompt: string): Promise<unknown[]> {
+    const text = await generateText(this.config, {
+      messages: [{ role: 'user', content: prompt }], temperature: 0.25, maxTokens: 6000, json: true, timeoutMs: 45_000,
     });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`Gemini HTTP ${res.status}: ${errBody.slice(0, 200)}`);
-    }
-
-    const data = await res.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      error?: { message: string };
-    };
-
-    if (data.error) throw new Error(`Gemini error: ${data.error.message}`);
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    if (!text.trim()) throw new Error('Gemini returned empty text');
-
     const parsed: unknown = JSON.parse(text);
-    if (!Array.isArray(parsed)) throw new Error('Gemini matrix response is not a JSON array');
+    if (!Array.isArray(parsed)) throw new Error('LLM matrix response is not a JSON array');
     return parsed;
   }
 
-  private async callGeminiText(apiKey: string, prompt: string): Promise<string> {
-    const res = await fetch(`${this.geminiEndpoint}?key=${apiKey}`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.35, maxOutputTokens: 1200 },
-      }),
-      signal: AbortSignal.timeout(45_000),
-    });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`Gemini HTTP ${res.status}: ${errBody.slice(0, 200)}`);
-    }
-
-    const data = await res.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      error?: { message: string };
-    };
-
-    if (data.error) throw new Error(`Gemini error: ${data.error.message}`);
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    if (!text.trim()) throw new Error('Gemini returned empty text');
-    return text.trim();
+  private callLlmText(prompt: string): Promise<string> {
+    return generateText(this.config, { messages: [{ role: 'user', content: prompt }], temperature: 0.35, maxTokens: 1200, timeoutMs: 45_000 });
   }
 
   private fallbackSuggestion(label: string, description: string, aiHint: string): string {
-    return `[Sugerencia de plantilla — IA no disponible]\n\n${label}\n\n${description || aiHint || 'Documente esta sección con base en las normas NIA aplicables, evidencia obtenida y juicio profesional del auditor.'}\n\nNota: configure GEMINI_API_KEY para activar el asistente IA contextual.`;
+    return `[Sugerencia de plantilla — IA no disponible]\n\n${label}\n\n${description || aiHint || 'Documente esta sección con base en las normas NIA aplicables, evidencia obtenida y juicio profesional del auditor.'}\n\nNota: configure OPENROUTER_API_KEY (o GEMINI_API_KEY) para activar el asistente IA contextual.`;
   }
 
   /**

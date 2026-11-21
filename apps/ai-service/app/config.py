@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL_SIMPLE: str = "anthropic/claude-haiku-4.5"
     OPENROUTER_MODEL_STANDARD: str = "anthropic/claude-sonnet-5.5"
     OPENROUTER_MODEL_COMPLEX: str = "anthropic/claude-opus-5.5"
+    # Esfuerzo de razonamiento. Sonnet 5.5 y Opus 5.5 RAZONAN SIEMPRE (OpenRouter responde 400 si se intenta apagarlo) y ese
+    # razonamiento cuenta contra `max_tokens`: sin límite explícito, con max_tokens=120 el modelo gastó los 120 pensando y devolvió
+    # contenido vacío (detectado en producción 2026-11-21). «low» lo reduce al mínimo — equivale al thinking_budget=0 que se usaba
+    # con Gemini. Subir a «medium»/«high» solo si se prioriza calidad sobre costo y latencia; «off» no envía el parámetro.
+    OPENROUTER_REASONING_EFFORT: str = "low"
     # Cabeceras de atribución que OpenRouter pide (aparecen en su panel de uso). No son secretas.
     OPENROUTER_REFERER: str = "https://auditoria.ianovatechsystems.com"
     OPENROUTER_TITLE: str = "AuditMind"

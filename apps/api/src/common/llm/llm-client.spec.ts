@@ -58,6 +58,26 @@ describe('generateText — OpenRouter primero', () => {
     expect(llamada(0).body.model).toBe('google/gemini-2.5-flash');
   });
 
+  it('pide razonamiento mínimo (Sonnet/Opus razonan siempre y se comen max_tokens); se cambia con OPENROUTER_REASONING_EFFORT y «off» lo omite', async () => {
+    fetchMock.mockImplementation(() => orOk('ok'));
+    await generateText(cfg({ OPENROUTER_API_KEY: CLAVE_OR }), REQ);
+    expect(llamada(0).body.reasoning).toEqual({ effort: 'low' });
+    await generateText(cfg({ OPENROUTER_API_KEY: CLAVE_OR, OPENROUTER_REASONING_EFFORT: 'High' }), REQ);
+    expect(llamada(1).body.reasoning).toEqual({ effort: 'high' });
+    await generateText(cfg({ OPENROUTER_API_KEY: CLAVE_OR, OPENROUTER_REASONING_EFFORT: 'off' }), REQ);
+    expect(llamada(2).body).not.toHaveProperty('reasoning');
+  });
+
+  it('contenido nulo porque el razonamiento agotó max_tokens (caso real de producción) → pasa a Gemini y el motivo queda claro', async () => {
+    const vacio = () => json(200, { choices: [{ message: { content: null, reasoning: 'pensando...' }, finish_reason: 'length' }] });
+    fetchMock.mockImplementationOnce(vacio).mockImplementationOnce(() => gemOk('desde Gemini'));
+    expect(await generateText(cfg({ OPENROUTER_API_KEY: CLAVE_OR, GEMINI_API_KEY: CLAVE_GEM }), REQ)).toBe('desde Gemini');
+    fetchMock.mockReset();
+    fetchMock.mockImplementationOnce(vacio).mockImplementationOnce(() => json(429, {}));
+    const err: any = await generateText(cfg({ OPENROUTER_API_KEY: CLAVE_OR, GEMINI_API_KEY: CLAVE_GEM }), REQ).catch(e => e);
+    expect(err.message).toContain('respuesta vacía (finish_reason=length');
+  });
+
   it('con json pide solo JSON en el system y entrega el texto sin vallas', async () => {
     fetchMock.mockImplementation(() => orOk('```json\n[{"a":1}]\n```'));
     const out = await generateText(cfg({ OPENROUTER_API_KEY: CLAVE_OR }), { ...REQ, json: true });

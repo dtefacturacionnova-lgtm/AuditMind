@@ -127,6 +127,28 @@ class Chat(Base):
         self.assertEqual([(m["role"], m["content"]) for m in b["messages"]],
                          [("system", "SISTEMA"), ("user", "uno"), ("assistant", "dos"), ("user", "tres")])
 
+    def test_pide_razonamiento_minimo_porque_Sonnet_y_Opus_razonan_siempre_y_se_comen_max_tokens(self):
+        correr(lr.chat_with_agent("MINERVA", "s", [{"role": "user", "content": "x"}]))
+        self.assertEqual(self.cuerpo()["reasoning"], {"effort": "low"})
+
+    def test_el_esfuerzo_de_razonamiento_se_cambia_o_se_apaga_desde_la_configuracion(self):
+        with patch.object(lr.settings, "OPENROUTER_REASONING_EFFORT", "high"):
+            correr(lr.chat_with_agent("MINERVA", "s", [{"role": "user", "content": "x"}]))
+        self.assertEqual(self.cuerpo(0)["reasoning"], {"effort": "high"})
+        for apagado in ("off", "OFF", ""):
+            self.peticiones.clear()
+            with patch.object(lr.settings, "OPENROUTER_REASONING_EFFORT", apagado):
+                correr(lr.chat_with_agent("MINERVA", "s", [{"role": "user", "content": "x"}]))
+            self.assertNotIn("reasoning", self.cuerpo())
+
+    def test_contenido_nulo_por_razonamiento_agotado_cae_a_gemini_y_el_motivo_queda_claro(self):
+        # Caso real de producción (2026-11-21): max_tokens=120, el modelo gastó los 120 razonando y devolvió content=null, finish_reason=length.
+        self.respuestas = [httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": None, "reasoning": "pensando..."}, "finish_reason": "length"}], "usage": {}})]
+        with patch.object(lr, "_chat_gemini", AsyncMock(side_effect=RuntimeError("cuota"))):
+            with self.assertRaises(lr.LLMUnavailableError) as cm:
+                correr(lr.chat_with_agent("ATLAS", "s", [{"role": "user", "content": "x"}], max_tokens=120))
+        self.assertIn("respuesta vacía (finish_reason=length", str(cm.exception))
+
     def test_cortado_por_longitud_se_informa_como_max_tokens(self):
         self.respuestas = [ok("texto cortado", finish="length")]
         r = correr(lr.chat_with_agent("MINERVA", "s", [{"role": "user", "content": "x"}]))
@@ -215,6 +237,11 @@ class Estructurada(Base):
         self.assertIn("JSON Schema", b["messages"][0]["content"])
         self.assertIn('"titulo"', b["messages"][0]["content"])
         self.assertEqual(b["messages"][1], {"role": "user", "content": "texto"})
+
+    def test_lo_estructurado_tambien_pide_razonamiento_minimo(self):
+        self.respuestas = [ok('{"titulo": "a", "n": 1}')]
+        correr(lr.generate_structured("SHERLOCK", "s", "u", Salida))
+        self.assertEqual(self.cuerpo()["reasoning"], {"effort": "low"})
 
     def test_siempre_usa_el_modelo_estandar_aunque_el_agente_sea_complejo(self):
         self.respuestas = [ok('{"titulo": "a", "n": 1}')]

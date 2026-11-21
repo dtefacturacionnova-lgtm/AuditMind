@@ -56,6 +56,9 @@ async function viaOpenRouter(config: ConfigReader, req: LlmRequest): Promise<str
   const model = readKey(config, 'OPENROUTER_MODEL_STANDARD') || OPENROUTER_DEFAULT_MODEL;
   const base = (readKey(config, 'OPENROUTER_BASE_URL') || OPENROUTER_DEFAULT_URL).replace(/\/+$/, '');
   const system = [req.system, req.json ? JSON_ONLY : ''].filter(Boolean).join('\n\n');
+  // Sonnet 5.5 y Opus 5.5 razonan siempre y ese razonamiento cuenta contra max_tokens: sin un esfuerzo explícito, un límite chico
+  // se gasta pensando y la respuesta llega vacía (visto en producción 2026-11-21). «low» lo reduce al mínimo; «off» no envía nada.
+  const effort = (readKey(config, 'OPENROUTER_REASONING_EFFORT') || 'low').toLowerCase();
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -69,11 +72,12 @@ async function viaOpenRouter(config: ConfigReader, req: LlmRequest): Promise<str
       max_tokens: req.maxTokens,
       temperature: req.temperature,
       messages: [...(system ? [{ role: 'system', content: system }] : []), ...req.messages],
+      ...(effort === 'off' ? {} : { reasoning: { effort } }),
     }),
     signal: AbortSignal.timeout(Math.max(req.timeoutMs ?? 45_000, 60_000)),
   });
   const data = (await res.json().catch(() => ({}))) as {
-    choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }>;
+    choices?: Array<{ finish_reason?: string; message?: { content?: string | Array<{ text?: string }> } }>;
     error?: { message?: string } | string;
   };
   if (!res.ok || data.error) {
@@ -82,7 +86,7 @@ async function viaOpenRouter(config: ConfigReader, req: LlmRequest): Promise<str
   }
   const content = data.choices?.[0]?.message?.content;
   const text = (Array.isArray(content) ? content.map(p => p.text ?? '').join('') : content ?? '').trim();
-  if (!text) throw new Error('respuesta vacía');
+  if (!text) throw new Error(`respuesta vacía (finish_reason=${data.choices?.[0]?.finish_reason}; con «length» el razonamiento agotó max_tokens)`);
   return text;
 }
 

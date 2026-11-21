@@ -221,6 +221,12 @@ async def _openrouter_request(payload: dict) -> dict:
     return data
 
 
+def _reasoning_param() -> dict | None:
+    """Parámetro `reasoning` de OpenRouter, o None si está en «off». Ver OPENROUTER_REASONING_EFFORT en config.py."""
+    effort = (settings.OPENROUTER_REASONING_EFFORT or "").strip().lower()
+    return None if effort in ("", "off") else {"effort": effort}
+
+
 def _extract_openrouter_text(data: dict) -> str:
     choices = data.get("choices") or []
     if not choices or not isinstance(choices[0], dict):
@@ -236,10 +242,10 @@ def _extract_openrouter_text(data: dict) -> str:
 def _openrouter_result(data: dict, model: str) -> tuple[str, dict]:
     """(texto, métricas). Un texto vacío cuenta como fallo para que el router pase al siguiente."""
     text = _extract_openrouter_text(data)
-    if not text.strip():
-        raise OpenRouterError("respuesta vacía")
-    usage = data.get("usage") or {}
     finish = ((data.get("choices") or [{}])[0] or {}).get("finish_reason")
+    if not text.strip():
+        raise OpenRouterError(f"respuesta vacía (finish_reason={finish}; con «length» el razonamiento agotó max_tokens)")
+    usage = data.get("usage") or {}
     return text, {
         "model":         model,
         "input_tokens":  int(usage.get("prompt_tokens") or 0),
@@ -261,6 +267,8 @@ async def _chat_openrouter(
         "messages": [{"role": "system", "content": system_prompt}]
         + [{"role": "assistant" if m["role"] == "assistant" else "user", "content": m.get("content", "")} for m in messages],
     }
+    if (reasoning := _reasoning_param()):
+        payload["reasoning"] = reasoning
     data = await _openrouter_request(payload)
     text, meta = _openrouter_result(data, model)
     return {"content": text, **meta}
@@ -365,7 +373,7 @@ async def _structured_openrouter(
             }})
     else:
         user_message = user_content
-    data = await _openrouter_request({
+    payload = {
         "model": model,
         "max_tokens": max_tokens,
         "temperature": temperature,
@@ -374,7 +382,10 @@ async def _structured_openrouter(
             {"role": "system", "content": instruction},
             {"role": "user", "content": user_message},
         ],
-    })
+    }
+    if (reasoning := _reasoning_param()):
+        payload["reasoning"] = reasoning
+    data = await _openrouter_request(payload)
     text, meta = _openrouter_result(data, model)
     return {"parsed": parse_json_response(text, {}), "model": meta["model"],
             "input_tokens": meta["input_tokens"], "output_tokens": meta["output_tokens"]}

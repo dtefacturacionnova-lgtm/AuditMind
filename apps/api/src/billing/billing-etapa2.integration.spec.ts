@@ -167,6 +167,23 @@ suite('etapa 2 de planes: IA en peticiones, espacio y pagos contra Postgres real
       } finally { await setMode('OFF'); }
     });
 
+    it('el límite es exacto: se puede pedir justo lo que queda (aunque sea la última); pedir una más, no', async () => {
+      const plan = await testPlan('IA5', { aiRequests: 10 });
+      const id = await orgOnPlan(plan);
+      await usage.record({ organizationId: id, agent: 'MINERVA', weight: 6 }); // quedan exactamente 4
+      expect((await usage.aiStatus(id)).available).toBe(4);
+      await setMode('ENFORCE');
+      try {
+        expect(await code(usage.assertCanUseAi(id, 5))).toBe('LIMITE_IA'); // una más de lo que queda
+        expect(await code(usage.assertCanUseAi(id, 4))).toBeNull(); // justo lo que queda
+        await usage.record({ organizationId: id, agent: 'MINERVA', weight: 3 }); // queda exactamente 1
+        expect(await code(usage.assertCanUseAi(id, 1))).toBeNull(); // la última petición sí pasa
+        await usage.record({ organizationId: id, agent: 'MINERVA', weight: 1 });
+        expect((await usage.aiStatus(id)).available).toBe(0);
+        expect(await code(usage.assertCanUseAi(id, 1))).toBe('LIMITE_IA'); // y la siguiente ya no
+      } finally { await setMode('OFF'); }
+    });
+
     it('al comprar más, vuelve a haber peticiones; OFF y OBSERVE no bloquean; las organizaciones exentas tampoco', async () => {
       const plan = await testPlan('IA2', { aiRequests: 2 });
       const id = await orgOnPlan(plan);

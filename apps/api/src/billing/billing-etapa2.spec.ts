@@ -60,6 +60,14 @@ describe('tipo de archivo para las cuotas', () => {
     ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'a.pptx', 'PPT'], ['application/vnd.ms-powerpoint', null, 'PPT'],
     ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'libro.xlsx', 'XLS'], ['text/csv', 'datos.csv', 'XLS'], [null, 'mayor.xlsm', 'XLS'],
     ['application/zip', 'todo.zip', 'OTROS'], [null, null, 'OTROS'], ['application/octet-stream', 'x.bin', 'OTROS'],
+    // Solo el tipo MIME decide (sin nombre o con un nombre sin extensión conocida): cada formato por su MIME.
+    ['video/x-flv', null, 'VIDEO'], ['video/webm', 'sin-extension', 'VIDEO'], ['audio/x-aiff', null, 'AUDIO'], ['audio/ogg', 'sin-extension', 'AUDIO'],
+    ['application/pdf', null, 'PDF'], ['application/pdf', 'x.bin', 'PDF'], ['image/svg+xml', null, 'FOTO'], ['image/x-icon', 'sin-extension', 'FOTO'],
+    ['application/vnd.oasis.opendocument.presentation', null, 'PPT'], ['application/vnd.ms-excel', null, 'XLS'],
+    ['application/vnd.oasis.opendocument.spreadsheet', null, 'XLS'], ['text/csv', null, 'XLS'], ['text/csv', 'sin-extension', 'XLS'],
+    // Solo el nombre decide (el navegador no mandó MIME o mandó uno genérico).
+    [null, 'informe.pptx', 'PPT'], ['application/octet-stream', 'datos.xlsx', 'XLS'], ['application/octet-stream', 'clip.mkv', 'VIDEO'],
+    ['application/octet-stream', 'voz.flac', 'AUDIO'], ['application/octet-stream', 'escaneo.tiff', 'FOTO'],
   ];
   it.each(casos)('%s / %s → %s', (mime, name, esperado) => expect(classifyFile(mime, name)).toBe(esperado));
 });

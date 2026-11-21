@@ -347,9 +347,11 @@ Se mantienen **Institucional** (a convenir), **Piloto/Fundador** (clientes actua
 - **Esfuerzo:** F1 sube de ~5–6 a **~7–8 días** (el decorador por módulo toca ~20 controladores y la pantalla de «no está en tu plan»); sin cambio en F2–F4. **Ejecutar con Sonnet; revisar con Opus 5.5** el cierre de acceso por API (es seguridad multi-tenant: un módulo mal protegido regala funciones de pago).
 - **Riesgo nuevo y real:** el hueco clásico «el menú lo oculta pero el API sigue abierto». Se cubre con una **prueba automática que recorre todos los controladores** y falla si alguno no declara su módulo (o `NUCLEO`/público).
 
+**Maqueta navegable (2026-11-21):** catálogo público, editor de plan, «Mi plan», módulo fuera del plan y suscripciones/pagos del superadmin, en un lienzo de Claude (artefacto privado del usuario). Los precios y datos son de ejemplo.
+
 ### 10.8 Preguntas nuevas (se suman a las de §9)
-9. ¿**Paquetes prearmados** + ajuste por cliente (recomendado), o **a la carta** completo?
-10. ¿Qué módulos van **siempre** (núcleo)? Propongo Dashboard, Proyectos, Papeles, Hallazgos y Administración básica; ¿te parece?
+9. ~~¿Paquetes prearmados o a la carta?~~ **DECIDIDO (2026-11-21): paquetes prearmados** + ajuste por cliente (sobrescrituras y paquetes adicionales).
+10. ~~¿Qué va siempre en el núcleo?~~ **DECIDIDO (2026-11-21): el núcleo propuesto** — Dashboard, Proyectos de auditoría, Papeles, Hallazgos y Administración básica.
 11. ¿**Persona** limita a una sola organización y a 1–2 usuarios? ¿Pueden pasar a Empresa sin perder datos? (propongo que sí: cambiar de plan conserva todo).
 12. ¿Las **bases RAG** (Fiscal, PLD…) como paquete aparte, o incluidas según el plan?
 13. ¿Quieres **limitar clientes en cartera / auditorías activas** en los planes baratos, o solo usuarios, espacio e IA?

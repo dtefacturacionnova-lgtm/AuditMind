@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Comprar más</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#2563EB}a:hover{color:#1D4ED8}
+button{font-family:inherit;cursor:pointer}
+button:disabled{cursor:not-allowed}
+input[type=radio]{width:18px;height:18px;accent-color:#2563EB;margin:0;flex:none}
+</style>
+</helmet>
+<div style="width: 100%; box-sizing: border-box; min-height: 1060px; background: #F1F5F9; font-family: Inter, system-ui, sans-serif; color: #0F172A;">
+  <div style="background: #0F2D4A; height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; box-sizing: border-box;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="width: 36px; height: 36px; border-radius: 10px; background: #2563EB; display: flex; align-items: center; justify-content: center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3 M6 8h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z M9 13h.01 M15 13h.01"/></svg>
+      </div>
+      <div style="color: #FFFFFF; font-weight: 700; font-size: 16px;">AuditMind</div>
+    </div>
+    <div style="color: #CBD5E1; font-size: 13px;">Despacho Rivas & Asociados · ADMIN</div>
+  </div>
+
+  <div style="max-width: 1180px; margin: 0 auto; padding: 28px 32px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;">
+    <div>
+      <a href="MiPlan.dc.html" style="font-size: 13px; color: #1D4ED8; text-decoration: none;">‹ Volver a Mi plan</a>
+      <h1 style="margin: 6px 0 0; font-size: 28px; font-weight: 700;">Comprar más</h1>
+    </div>
+
+    <div style="{{context.style}}">
+      <div style="flex: 1 1 380px; font-size: 14px; line-height: 1.5;"><strong>{{context.title}}</strong> {{context.text}}</div>
+      <div style="font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;">{{context.usage}}</div>
+    </div>
+
+    <div style="display: flex; gap: 4px; padding: 4px; background: #E2E8F0; border-radius: 12px; align-self: flex-start;">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="2">
+        <button type="button" aria-pressed="{{t.on}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}</button>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+      <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px;">
+
+        <sc-if value="{{stageChoose}}" hint-placeholder-val="{{ true }}">
+          <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+            <div>
+              <div style="font-size: 16px; font-weight: 600;">1 · Elige un paquete</div>
+              <div style="font-size: 13px; color: #4B5B73; margin-top: 4px; line-height: 1.5;">{{packNote}}</div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px;">
+              <sc-for list="{{packs}}" as="p" hint-placeholder-count="4">
+                <button type="button" aria-pressed="{{p.on}}" onClick="{{p.pick}}" style="{{p.style}}">
+                  <sc-if value="{{p.popular}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 700; background: #2563EB; color: #FFFFFF; padding: 3px 10px; border-radius: 999px;">Más elegido</span></sc-if>
+                  <span style="font-size: 20px; font-weight: 700;">{{p.name}}</span>
+                  <span style="font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums;">{{p.price}}<span style="font-size: 13px; font-weight: 500; color: #4B5B73;"> {{p.per}}</span></span>
+                  <span style="font-size: 12px; color: #4B5B73; font-variant-numeric: tabular-nums;">{{p.unit}}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+            <div style="font-size: 16px; font-weight: 600;">2 · Forma de pago</div>
+            <sc-for list="{{methods}}" as="m" hint-placeholder-count="3">
+              <label style="{{m.style}}">
+                <input type="radio" name="metodo" checked="{{m.on}}" disabled="{{m.disabled}}" onChange="{{m.pick}}">
+                <div style="flex: 1;"><div style="font-size: 14px; font-weight: 600;">{{m.label}}</div>
+                  <div style="font-size: 13px; color: #334155;">{{m.desc}}</div></div>
+                <sc-if value="{{m.soon}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 600; background: #E2E8F0; color: #334155; padding: 3px 10px; border-radius: 999px;">Próximamente</span></sc-if>
+              </label>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{stagePay}}" hint-placeholder-val="{{ false }}">
+          <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 28px; display: flex; flex-wrap: wrap; gap: 28px;">
+            <div style="flex: 1 1 280px; display: flex; flex-direction: column; gap: 14px;">
+              <div style="font-size: 16px; font-weight: 600;">3 · Realiza el pago</div>
+              <div style="font-size: 14px; color: #334155; line-height: 1.5;">Paga <strong style="font-variant-numeric: tabular-nums;">{{totalText}}</strong> por <strong>{{methodLabel}}</strong> e incluye tu referencia única para que podamos acreditarlo.</div>
+              <div style="background: #EFF6FF; border: 1px solid #93C5FD; border-radius: 12px; padding: 14px 18px;">
+                <div style="font-size: 12px; font-weight: 600; color: #1E3A8A;">Tu referencia</div>
+                <div style="font-size: 26px; font-weight: 700; letter-spacing: 0.04em; font-variant-numeric: tabular-nums;">{{ref}}</div>
+              </div>
+              <div style="font-size: 13px; color: #4B5B73; line-height: 1.5;">Cuando pagues, sube tu comprobante. Un administrador de la plataforma lo revisa y el paquete se suma a tu cuenta al aprobarlo.</div>
+            </div>
+            <div style="flex: 0 1 220px; min-width: 200px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+              <div style="width: 200px; height: 200px; border: 2px dashed #94A3B8; border-radius: 14px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 13px; color: #4B5B73; padding: 12px; box-sizing: border-box; background: #F8FAFC;">QR 365 o datos bancarios (ejemplo)</div>
+              <div style="font-size: 12px; color: #4B5B73; text-align: center;">Datos de cobro de ejemplo en esta maqueta</div>
+            </div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <button type="button" onClick="{{backToChoose}}" style="border: 1px solid #94A3B8; background: #FFFFFF; font-size: 14px; font-weight: 600; padding: 12px 20px; border-radius: 10px;">Cambiar paquete</button>
+            <button type="button" onClick="{{sendProof}}" style="border: 0; background: #2563EB; color: #FFFFFF; font-size: 14px; font-weight: 600; padding: 12px 22px; border-radius: 10px;">Ya pagué, subir comprobante</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{stageSent}}" hint-placeholder-val="{{ false }}">
+          <div style="background: #FFFFFF; border: 1px solid #86EFAC; border-radius: 14px; padding: 32px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 44px; height: 44px; border-radius: 999px; background: #DCFCE7; display: flex; align-items: center; justify-content: center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>
+              </div>
+              <div style="font-size: 20px; font-weight: 700;">Recibimos tu comprobante</div>
+            </div>
+            <div style="font-size: 14px; color: #334155; line-height: 1.6;">Referencia <strong style="font-variant-numeric: tabular-nums;">{{ref}}</strong> · {{summaryName}} · {{totalText}}.<br>Un administrador lo revisa y te avisamos por correo cuando se acredite. {{afterSent}}</div>
+            <div style="font-size: 13px; color: #4B5B73; line-height: 1.5;">Cuando esté disponible el pago en línea, el paquete se acreditará al instante.</div>
+            <div style="display: flex; gap: 12px; margin-top: 6px;">
+              <a href="MiPlan.dc.html" style="font-size: 14px; font-weight: 600; background: #0F2D4A; color: #FFFFFF; padding: 12px 20px; border-radius: 10px; text-decoration: none;">Volver a Mi plan</a>
+              <button type="button" onClick="{{backToChoose}}" style="border: 1px solid #94A3B8; background: #FFFFFF; font-size: 14px; font-weight: 600; padding: 12px 20px; border-radius: 10px;">Comprar otro paquete</button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="flex: 1 1 320px; min-width: 300px; max-width: 400px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 16px; font-weight: 600;">Resumen</div>
+        <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 14px;"><span style="color: #4B5B73;">Paquete</span><strong style="text-align: right;">{{summaryName}}</strong></div>
+        <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 14px;"><span style="color: #4B5B73;">Cobro</span><strong style="text-align: right;">{{billingText}}</strong></div>
+        <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 14px;"><span style="color: #4B5B73;">Forma de pago</span><strong style="text-align: right;">{{methodLabel}}</strong></div>
+        <div style="border-top: 1px solid #E2E8F0; padding-top: 14px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; justify-content: space-between; font-size: 14px;"><span style="color: #4B5B73;">Subtotal</span><span style="font-variant-numeric: tabular-nums;">{{totalText}}</span></div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px; color: #4B5B73;"><span>IVA</span><span>según tu facturación</span></div>
+          <div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: 700; margin-top: 4px;"><span>Total</span><span style="font-variant-numeric: tabular-nums;">{{totalText}}</span></div>
+        </div>
+        <div style="background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.5; color: #14532D;"><strong>Después de comprar:</strong> {{afterText}}</div>
+        <sc-if value="{{stageChoose}}" hint-placeholder-val="{{ true }}">
+          <button type="button" onClick="{{goPay}}" style="border: 0; background: #2563EB; color: #FFFFFF; font-size: 15px; font-weight: 600; padding: 13px 18px; border-radius: 10px;">Generar referencia de pago</button>
+        </sc-if>
+        <div style="font-size: 12px; color: #4B5B73; line-height: 1.5;">Precios en USD. Sin IVA. Los precios son un ejemplo de la maqueta.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1060}}'>
+class Component extends DCLogic {
+  state = { tab: 'IA', pick: { IA: 'ia5', ESP: 'esp50' }, method: 'QR', stage: 'choose' };
+
+  renderVals() {
+    const s = this.state;
+    const tab = s.tab;
+    const fmt = (n) => n.toLocaleString('en-US');
+
+    const segOn = 'border: 0; border-radius: 9px; padding: 10px 20px; font-size: 14px; font-weight: 600; background: #FFFFFF; color: #0F172A; box-shadow: 0 1px 2px rgba(15,23,42,0.18);';
+    const segOff = 'border: 0; border-radius: 9px; padding: 10px 20px; font-size: 14px; font-weight: 500; background: transparent; color: #334155;';
+    const tabs = [['IA', 'Peticiones de IA'], ['ESP', 'Espacio']].map(([id, label]) => ({
+      label, on: tab === id, style: tab === id ? segOn : segOff,
+      pick: () => this.setState({ tab: id, stage: 'choose' }),
+    }));
+
+    const PACKS = {
+      IA: [
+        { id: 'ia1', name: '+1,000', per: 'peticiones', value: 1000, price: 5, unit: '$5.00 por cada 1,000', popular: false },
+        { id: 'ia5', name: '+5,000', per: 'peticiones', value: 5000, price: 20, unit: '$4.00 por cada 1,000', popular: true },
+        { id: 'ia20', name: '+20,000', per: 'peticiones', value: 20000, price: 60, unit: '$3.00 por cada 1,000', popular: false },
+      ],
+      ESP: [
+        { id: 'esp10', name: '+10 GB', per: '', value: 10, price: 3, unit: '$3 al mes · $0.30 por GB', popular: false },
+        { id: 'esp50', name: '+50 GB', per: '', value: 50, price: 12, unit: '$12 al mes · $0.24 por GB', popular: true },
+        { id: 'esp200', name: '+200 GB', per: '', value: 200, price: 40, unit: '$40 al mes · $0.20 por GB', popular: false },
+        { id: 'esp1000', name: '+1 TB', per: '', value: 1000, price: 150, unit: '$150 al mes · $0.15 por GB', popular: false },
+      ],
+    };
+    const list = PACKS[tab];
+    const chosen = list.find((p) => p.id === s.pick[tab]) || list[0];
+    const cardOn = 'position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; padding: 18px; border-radius: 14px; background: #F0F7FF; border: 2px solid #2563EB; color: #0F172A;';
+    const cardOff = 'position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #CBD5E1; color: #0F172A;';
+    const packs = list.map((p) => ({
+      name: p.name, per: p.per, unit: p.unit, popular: p.popular, on: p.id === chosen.id,
+      price: '$' + fmt(p.price),
+      style: p.id === chosen.id ? cardOn : cardOff,
+      pick: () => this.setState({ pick: { ...this.state.pick, [tab]: p.id } }),
+    }));
+
+    const mOn = 'display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 2px solid #2563EB; border-radius: 12px; background: #F0F7FF; cursor: pointer;';
+    const mOff = 'display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid #CBD5E1; border-radius: 12px; background: #FFFFFF; cursor: pointer;';
+    const mDis = 'display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px dashed #94A3B8; border-radius: 12px; background: #F1F5F9; cursor: not-allowed; opacity: 0.85;';
+    const METHODS = [
+      ['QR', 'QR 365', 'Escanea el código con tu app bancaria. Sube el comprobante.', false],
+      ['TRANSFER', 'Transferencia bancaria', 'Transfiere a la cuenta de la plataforma con tu referencia.', false],
+      ['WOMPI', 'Tarjeta o pago en línea', 'Se acredita al instante.', true],
+    ];
+    const methods = METHODS.map(([id, label, desc, soon]) => ({
+      label, desc, soon, disabled: soon, on: s.method === id, style: soon ? mDis : (s.method === id ? mOn : mOff),
+      pick: () => this.setState({ method: id }),
+    }));
+    const methodLabel = s.method === 'QR' ? 'QR 365' : 'Transferencia bancaria';
+
+    const isIA = tab === 'IA';
+    const context = isIA
+      ? { style: 'display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; border-radius: 12px; padding: 14px 18px; background: #FEF2F2; border: 1px solid #EF4444; color: #7F1D1D;', title: 'Llegaste al límite de peticiones de IA.', text: 'Los asistentes están en pausa. Al aprobarse tu pago se reactivan.', usage: '5,000 de 5,000 peticiones usadas este mes' }
+      : { style: 'display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; border-radius: 12px; padding: 14px 18px; background: #FFFBEB; border: 1px solid #F59E0B; color: #451A03;', title: 'Tu espacio está al límite.', text: 'No puedes subir archivos nuevos hasta liberar espacio o comprar más.', usage: '100 de 100 GB usados' };
+
+    const summaryName = isIA ? chosen.name + ' peticiones de IA' : chosen.name + ' de espacio';
+    const billingText = isIA ? 'Pago único · no vencen en 12 meses' : 'Mensual, junto con tu licencia (prorrateado)';
+    const afterText = isIA
+      ? 'tendrás ' + fmt(chosen.value) + ' peticiones disponibles. Se usan después de las 5,000 mensuales de tu plan y no se pierden al cambiar de mes.'
+      : 'tu espacio pasa de 100 a ' + fmt(100 + chosen.value) + ' GB y podrás subir archivos de inmediato.';
+    const afterSent = isIA ? 'Mientras tanto los asistentes siguen en pausa.' : 'Mientras tanto no podrás subir archivos nuevos.';
+
+    return {
+      tabs, packs, methods, context, summaryName, billingText, afterText, afterSent, methodLabel,
+      packNote: isIA ? 'Las peticiones compradas se consumen después de las incluidas en tu plan y no vencen en 12 meses. Una petición es un mensaje a un asistente; analizar un documento largo cuenta 5 y audio o video, 10 por cada 10 minutos.' : 'El espacio extra se suma mientras tu licencia esté vigente y se factura junto con ella. Si dejas de pagarlo, tus archivos no se borran: solo se bloquea subir más.',
+      totalText: '$' + fmt(chosen.price) + '.00',
+      ref: 'AUD-' + (isIA ? '8M1QRZ' : '6D4NXE'),
+      stageChoose: s.stage === 'choose', stagePay: s.stage === 'pay', stageSent: s.stage === 'sent',
+      goPay: () => this.setState({ stage: 'pay' }),
+      sendProof: () => this.setState({ stage: 'sent' }),
+      backToChoose: () => this.setState({ stage: 'choose' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

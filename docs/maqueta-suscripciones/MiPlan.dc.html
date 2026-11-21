@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mi plan</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#2563EB}a:hover{color:#1D4ED8}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 100%; box-sizing: border-box; min-height: 1040px; display: flex; flex-wrap: wrap; font-family: Inter, system-ui, sans-serif; color: #0F172A; background: #F1F5F9;">
+  <div style="flex: 0 0 264px; background: #0F2D4A; padding: 16px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; min-height: 100%;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 6px;">
+      <div style="width: 36px; height: 36px; border-radius: 10px; background: #2563EB; display: flex; align-items: center; justify-content: center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3 M6 8h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z M9 13h.01 M15 13h.01"/></svg>
+      </div>
+      <div><div style="color: #FFFFFF; font-weight: 700; font-size: 15px; line-height: 1.1;">AuditMind</div><div style="color: #CBD5E1; font-size: 11px;">Intelligence Platform</div></div>
+    </div>
+    <div style="background: #1A3C5E; border-radius: 10px; padding: 10px 12px;">
+      <div style="color: #93C5FD; font-size: 12px; font-weight: 600;">Mi Organización</div>
+      <div style="color: #FFFFFF; font-size: 13px; font-weight: 500;">Despacho Rivas & Asociados</div>
+      <div style="color: #CBD5E1; font-size: 11px;">ADMIN</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <sc-for list="{{menu}}" as="g" hint-placeholder-count="12">
+        <div style="{{g.style}}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none;"><path d="{{g.icon}}"/></svg>
+          <span style="flex: 1; font-size: 13px;">{{g.label}}</span>
+          <sc-if value="{{g.locked}}" hint-placeholder-val="{{ false }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Bloqueado" style="flex: none;"><path d="M7 11V8a5 5 0 0 1 10 0v3 M5 11h14v10H5z"/></svg>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px;">
+      <div>
+        <div style="font-size: 13px; color: #4B5B73;">Administración › Mi plan</div>
+        <h1 style="margin: 2px 0 0; font-size: 26px; font-weight: 700;">Mi plan</h1>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <span style="font-size: 12px; color: #4B5B73;">Simular estado (solo en la maqueta):</span>
+        <div style="display: flex; gap: 4px; padding: 4px; background: #E2E8F0; border-radius: 10px; flex-wrap: wrap;">
+          <sc-for list="{{states}}" as="st" hint-placeholder-count="6">
+            <button type="button" aria-pressed="{{st.on}}" onClick="{{st.pick}}" style="{{st.style}}">{{st.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{hasBanner}}" hint-placeholder-val="{{ true }}">
+      <div style="{{banner.style}}">
+        <div style="flex: 1 1 360px; font-size: 14px; line-height: 1.5;"><strong>{{banner.title}}</strong> {{banner.text}}</div>
+        <a href="Comprar.dc.html" style="{{banner.btnStyle}}">{{banner.btn}}</a>
+      </div>
+    </sc-if>
+
+    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 20px; align-items: center;">
+      <div style="display: flex; flex-direction: column; gap: 8px; min-width: 280px;">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <span style="font-size: 22px; font-weight: 700;">Empresa Despacho</span>
+          <span style="{{plan.pillStyle}}">{{plan.pill}}</span>
+        </div>
+        <div style="font-size: 14px; color: #334155;">Licencia anual · USD 1,490 · incluye 5 usuarios, 100 GB, 5,000 peticiones de IA al mes y 12 asistentes</div>
+        <div style="font-size: 14px; font-variant-numeric: tabular-nums;">{{plan.dates}}</div>
+        <div style="font-size: 13px; color: #4B5B73;">{{plan.note}}</div>
+      </div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <span style="font-size: 14px; font-weight: 600; border: 1px solid #94A3B8; padding: 11px 18px; border-radius: 8px;">Cambiar de plan</span>
+        <span style="font-size: 14px; font-weight: 600; background: #2563EB; color: #FFFFFF; padding: 11px 20px; border-radius: 8px;">{{plan.cta}}</span>
+      </div>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 18px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+        <div style="font-size: 16px; font-weight: 600;">Uso de tu plan</div>
+        <div style="font-size: 12px; color: #4B5B73;">Se reinicia el 1 de cada mes (IA) · actualizado hoy 21 nov 2026</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px;">
+        <sc-for list="{{meters}}" as="m" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
+              <span style="font-size: 14px; font-weight: 600;">{{m.label}}</span>
+              <span style="font-size: 13px; font-variant-numeric: tabular-nums;">{{m.value}}</span>
+            </div>
+            <div style="height: 10px; border-radius: 999px; background: #E2E8F0; overflow: hidden;"><div style="{{m.barStyle}}"></div></div>
+            <div style="font-size: 12px; color: #4B5B73; line-height: 1.4;">{{m.note}}</div>
+            <sc-if value="{{m.buy}}" hint-placeholder-val="{{ false }}">
+              <a href="Comprar.dc.html" style="align-self: flex-start; font-size: 12px; font-weight: 600; color: #1D4ED8; border: 1px solid #93C5FD; background: #EFF6FF; padding: 5px 12px; border-radius: 999px; text-decoration: none;">{{m.buy}}</a>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start;">
+      <div style="flex: 3 1 480px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+          <div style="font-size: 16px; font-weight: 600;">Qué ocupa tu espacio</div>
+          <div style="font-size: 12px; color: #4B5B73;">Archivo máximo: {{spaceMax}} · carpetas de evidencia, papeles, portal y firmas</div>
+        </div>
+        <div style="display: flex; gap: 2px; height: 18px; border-radius: 999px; overflow: hidden; background: #E2E8F0;">
+          <sc-for list="{{typeBars}}" as="b" hint-placeholder-count="6"><div style="{{b.style}}"></div></sc-for>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 16px;">
+          <sc-for list="{{spaceLegend}}" as="l" hint-placeholder-count="6">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+              <span style="{{l.swatch}}"></span>
+              <span style="flex: 1;">{{l.label}}</span>
+              <span style="font-variant-numeric: tabular-nums; font-weight: 600;">{{l.value}}</span>
+              <span style="font-variant-numeric: tabular-nums; color: #4B5B73; width: 40px; text-align: right;">{{l.pct}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size: 13px; color: #334155; line-height: 1.5; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 14px;">{{spaceNote}}</div>
+      </div>
+      <div style="flex: 2 1 320px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="font-size: 16px; font-weight: 600;">Peticiones por asistente este mes</div>
+        <sc-for list="{{byAssistant}}" as="a" hint-placeholder-count="7">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="font-weight: 600;">{{a.name}}</span><span style="font-variant-numeric: tabular-nums; color: #334155;">{{a.n}}</span></div>
+            <div style="height: 6px; border-radius: 999px; background: #E2E8F0; overflow: hidden;"><div style="{{a.barStyle}}"></div></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+      <div style="flex: 1 1 320px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 16px; font-weight: 600;">Incluido en tu plan</div>
+        <sc-for list="{{included}}" as="i" hint-placeholder-count="5">
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 14px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>{{i}}
+          </div>
+        </sc-for>
+      </div>
+      <div style="flex: 1 1 320px; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 16px; font-weight: 600;">Puedes ampliar</div>
+        <sc-for list="{{locked}}" as="l" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #334155;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3 M5 11h14v10H5z"/></svg>
+            <span style="flex: 1;">{{l}}</span>
+            <span style="font-size: 12px; font-weight: 600; border: 1px solid #94A3B8; padding: 5px 12px; border-radius: 999px; color: #0F172A;">Ampliar</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="font-size: 16px; font-weight: 600;">Pagos y facturas</div>
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px;">
+          <thead>
+            <tr style="text-align: left; color: #4B5B73;">
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Referencia</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Fecha</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Concepto</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Método</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1; text-align: right;">Monto</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Estado</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Factura</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{payments}}" as="p" hint-placeholder-count="3">
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-variant-numeric: tabular-nums; font-weight: 600;">{{p.ref}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #E2E8F0;">{{p.date}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #E2E8F0;">{{p.concept}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #E2E8F0;">{{p.method}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-variant-numeric: tabular-nums;">{{p.amount}}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #E2E8F0;"><span style="{{p.pillStyle}}">{{p.status}}</span></td>
+                <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; color: #1D4ED8;">{{p.invoice}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="font-size: 12px; color: #4B5B73; line-height: 1.5;">Para renovar: paga con QR 365 o transferencia usando tu referencia única y sube el comprobante. Un administrador de la plataforma lo aprueba y tu licencia se renueva sola. Montos en USD, sin IVA.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1040}}'>
+class Component extends DCLogic {
+  state = { st: 'none' };
+
+  renderVals() {
+    const st = this.state.st;
+
+    const segOn = 'border: 0; border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 600; background: #FFFFFF; color: #0F172A; box-shadow: 0 1px 2px rgba(15,23,42,0.18);';
+    const segOff = 'border: 0; border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 500; background: transparent; color: #334155;';
+    const states = [
+      ['none', 'Todo normal'], ['ia', 'IA al 80 %'], ['ia100', 'IA al 100 %'], ['esp100', 'Espacio lleno'], ['vence', 'Vence en 7 días'], ['lectura', 'Solo lectura'],
+    ].map(([id, label]) => ({ label, on: st === id, style: st === id ? segOn : segOff, pick: () => this.setState({ st: id }) }));
+
+    const ICON = {
+      dash: 'M3 3h7v9H3z M14 3h7v5h-7z M14 12h7v9h-7z M3 16h7v5H3z',
+      cartera: 'M3 7h18v13H3z M9 7V4h6v3',
+      cal: 'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+      brief: 'M3 7h18v13H3z M9 7V4h6v3 M3 13h18',
+      trend: 'M3 17l6-6 4 4 8-8 M15 7h6v6',
+      clock: 'M12 7v5l3 2 M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+      shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+      bot: 'M12 3v3 M6 8h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z M9 13h.01 M15 13h.01',
+      users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.9',
+      gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19 12h2 M3 12h2 M12 3v2 M12 19v2 M5.6 5.6l1.4 1.4 M17 17l1.4 1.4 M18.4 5.6L17 7 M7 17l-1.4 1.4',
+      card: 'M3 6h18v12H3z M3 10h18 M7 15h4',
+    };
+    const base = 'display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px;';
+    const on = base + ' color: #E2E8F0;';
+    const off = base + ' color: #8FA3BB;';
+    const active = base + ' color: #FFFFFF; background: #1A4A7A; font-weight: 600;';
+    const menu = [
+      ['Dashboard', 'dash', true, on], ['Cartera', 'cartera', true, on], ['Planificación Anual', 'cal', false, off],
+      ['Ejecución del Plan Anual', 'brief', true, on], ['Seguimiento', 'trend', true, on], ['Horas y Rentabilidad', 'clock', true, on],
+      ['Riesgos y Controles', 'shield', true, on], ['Reportería e IA', 'bot', true, on], ['Gobierno', 'users', false, off],
+      ['Administración', 'gear', true, on], ['Mi plan', 'card', true, active],
+    ].map(([label, icon, ok, style]) => ({ label: label === 'Mi plan' ? '   ' + label : label, icon: ICON[icon], locked: !ok, style }));
+
+    const bannerBase = 'display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; border-radius: 12px; padding: 14px 18px; ';
+    const amber = bannerBase + 'background: #FFFBEB; border: 1px solid #F59E0B; color: #451A03;';
+    const red = bannerBase + 'background: #FEF2F2; border: 1px solid #EF4444; color: #7F1D1D;';
+    const btnAmber = 'font-size: 13px; font-weight: 600; background: #92400E; color: #FFFFFF; padding: 9px 16px; border-radius: 8px; text-decoration: none;';
+    const btnRed = 'font-size: 13px; font-weight: 600; background: #B91C1C; color: #FFFFFF; padding: 9px 16px; border-radius: 8px; text-decoration: none;';
+    const banners = {
+      ia: { style: amber, btnStyle: btnAmber, title: 'Usaste el 80 % de tus peticiones de IA de este mes (4,000 de 5,000).', text: 'Al llegar al 100 % los asistentes se pausan hasta que compres más o empiece el próximo mes.', btn: 'Comprar más peticiones' },
+      ia100: { style: red, btnStyle: btnRed, title: 'Llegaste al límite de peticiones de IA (5,000 de 5,000).', text: 'Los asistentes están en pausa. Compra más peticiones y se reactivan al aprobarse el pago, o espera al 1 del próximo mes.', btn: 'Comprar más peticiones' },
+      esp100: { style: red, btnStyle: btnRed, title: 'Tu espacio está lleno (100 de 100 GB).', text: 'No puedes subir archivos nuevos hasta liberar espacio o comprar más. Tus archivos actuales siguen disponibles.', btn: 'Comprar más espacio' },
+      vence: { style: amber, btnStyle: btnAmber, title: 'Tu licencia vence en 7 días (28 nov 2026).', text: 'Renueva para no pasar a solo lectura. Si ya pagaste, espera la aprobación del comprobante.', btn: 'Renovar ahora' },
+      lectura: { style: red, btnStyle: btnRed, title: 'Tu licencia venció: tu cuenta está en solo lectura.', text: 'Puedes consultar y exportar todo, pero no crear ni editar. No se borró nada; al renovar vuelve todo a la normalidad.', btn: 'Reactivar ahora' },
+    };
+    const banner = banners[st] || banners.ia;
+
+    const pillOk = 'font-size: 12px; font-weight: 600; background: #DCFCE7; color: #14532D; padding: 4px 12px; border-radius: 999px;';
+    const pillWarn = 'font-size: 12px; font-weight: 600; background: #FEF3C7; color: #78350F; padding: 4px 12px; border-radius: 999px;';
+    const pillBad = 'font-size: 12px; font-weight: 600; background: #FEE2E2; color: #7F1D1D; padding: 4px 12px; border-radius: 999px;';
+    const plans = {
+      none: { pill: 'Activa', pillStyle: pillOk, dates: 'Vigente hasta el 14 dic 2026 · quedan 23 días', note: 'Próxima renovación: 14 dic 2026. Te avisamos 7 y 1 día antes.', cta: 'Renovar licencia' },
+      ia: { pill: 'Activa', pillStyle: pillOk, dates: 'Vigente hasta el 14 dic 2026 · quedan 23 días', note: 'Próxima renovación: 14 dic 2026. Te avisamos 7 y 1 día antes.', cta: 'Renovar licencia' },
+      ia100: { pill: 'IA en pausa', pillStyle: pillWarn, dates: 'Vigente hasta el 14 dic 2026 · quedan 23 días', note: 'Tu licencia sigue activa; solo los asistentes de IA están en pausa por el límite del mes.', cta: 'Renovar licencia' },
+      esp100: { pill: 'Espacio lleno', pillStyle: pillWarn, dates: 'Vigente hasta el 14 dic 2026 · quedan 23 días', note: 'Tu licencia sigue activa; solo se bloquea la subida de archivos nuevos.', cta: 'Renovar licencia' },
+      vence: { pill: 'Vence pronto', pillStyle: pillWarn, dates: 'Vigente hasta el 28 nov 2026 · quedan 7 días', note: 'Tienes un pago pendiente de aprobación (ver abajo).', cta: 'Pagar renovación' },
+      lectura: { pill: 'Solo lectura', pillStyle: pillBad, dates: 'Venció el 14 nov 2026 · hace 7 días', note: 'Pasó el periodo de gracia. Tus datos están intactos y siguen disponibles para consulta y exportación.', cta: 'Reactivar licencia' },
+    };
+    const plan = plans[st];
+
+    const bar = (pct) => {
+      const color = pct >= 100 ? '#DC2626' : pct >= 80 ? '#D97706' : '#2563EB';
+      return 'height: 100%; border-radius: 999px; width: ' + Math.min(pct, 100) + '%; background: ' + color + ';';
+    };
+    const fmt = (n) => n.toLocaleString('en-US');
+    const aiUsed = st === 'ia' ? 4000 : st === 'ia100' ? 5000 : 1950;
+    const aiPct = Math.round((aiUsed / 5000) * 100);
+    const full = st === 'esp100';
+    const spaceScale = full ? 100 / 18.4 : 1;
+    const TYPES = [
+      ['Video', 9.1, '#1E3A8A'], ['Audio', 2.0, '#2563EB'], ['PDF y documentos', 3.8, '#60A5FA'],
+      ['Fotos', 1.6, '#0D9488'], ['Presentaciones', 0.9, '#F59E0B'], ['Excel y CSV', 1.0, '#94A3B8'],
+    ].map(([label, gb, color]) => ({ label, gb: Math.round(gb * spaceScale * 10) / 10, color }));
+    const spaceUsed = Math.round(TYPES.reduce((s, t) => s + t.gb, 0) * 10) / 10;
+    const spacePct = Math.round((spaceUsed / 100) * 100);
+    const typeBars = TYPES.map((t) => ({ style: 'height: 100%; background: ' + t.color + '; width: ' + ((t.gb / 100) * 100) + '%; min-width: 3px;' }));
+    const spaceLegend = TYPES.map((t) => ({ label: t.label, value: t.gb.toFixed(1) + ' GB', pct: Math.round((t.gb / spaceUsed) * 100) + ' %', swatch: 'width: 12px; height: 12px; border-radius: 3px; flex: none; background: ' + t.color + ';' }));
+    const spaceNote = full
+      ? 'Tu espacio está lleno: no puedes subir archivos nuevos. Lo que ya tienes sigue disponible. Libera espacio o compra más.'
+      : 'Los videos son el 49 % de tu espacio. Puedes descargar y archivar los de auditorías cerradas para liberar espacio.';
+    const BYA = [['MINERVA', 26], ['FISCUS', 21], ['SCRIPTORIUM', 18], ['THEMIS', 12], ['ARGUS', 10], ['CICERO', 8], ['Otros', 5]];
+    const byAssistant = BYA.map(([name, p]) => {
+      const n = Math.round((aiUsed * p) / 100);
+      return { name, n: fmt(n) + ' peticiones', barStyle: 'height: 100%; border-radius: 999px; background: #2563EB; width: ' + p * 3 + '%;' };
+    });
+    const meters = [
+      { label: 'Usuarios activos', value: '4 de 5', barStyle: bar(80), buy: '', note: 'Quedan 1 incluido y hasta 10 extras a $19/mes. Tus 7 invitados del portal no cuentan.' },
+      { label: 'Espacio', value: fmt(spaceUsed) + ' de 100 GB', barStyle: bar(spacePct), buy: 'Comprar más espacio', note: full ? 'Lleno: no se pueden subir archivos nuevos hasta liberar espacio o comprar más.' : 'Archivo máximo: 500 MB. Se comparte entre evidencia, papeles, portal de auditados y firmas.' },
+      { label: 'Peticiones de IA este mes', value: fmt(aiUsed) + ' de 5,000', barStyle: bar(aiPct), buy: 'Comprar más peticiones', note: aiUsed >= 5000 ? 'Límite alcanzado: los asistentes están en pausa hasta que compres más o empiece el próximo mes.' : aiPct >= 80 ? 'Estás en el 80 %: te avisamos por correo. Al 100 % los asistentes se pausan.' : 'Uso normal. Un mensaje a un asistente es 1 petición; analizar un documento largo, 5; analizar audio o video, 10 por cada 10 minutos.' },
+    ];
+
+    const included = [
+      'Núcleo: dashboard, proyectos, papeles y hallazgos', 'Cartera de Auditoría Externa', 'Horas y Rentabilidad', 'Riesgos y Controles',
+      'Portal PBC y Confirmaciones', 'Reportería e IA (12 de 15 asistentes)', 'Firma electrónica y marca propia',
+    ];
+    const locked = ['Planificación Anual (Auditoría Interna)', 'Gobierno Corporativo', 'Investigador forense y CAATs avanzados'];
+
+    const okPill = 'font-size: 12px; font-weight: 600; background: #DCFCE7; color: #14532D; padding: 3px 10px; border-radius: 999px;';
+    const pendPill = 'font-size: 12px; font-weight: 600; background: #FEF3C7; color: #78350F; padding: 3px 10px; border-radius: 999px;';
+    const payments = [
+      { ref: 'AUD-7H3QWN', date: '20 nov 2026', concept: 'Renovación anual', method: 'QR 365', amount: '$1,490.00', status: 'Pendiente de aprobación', pillStyle: pendPill, invoice: '—' },
+      { ref: 'AUD-4F7K2A', date: '14 dic 2025', concept: 'Licencia anual', method: 'Transferencia', amount: '$1,490.00', status: 'Aprobado', pillStyle: okPill, invoice: 'Factura (PDF)' },
+      { ref: 'AUD-2C9D6X', date: '29 nov 2025', concept: 'Prueba convertida a plan', method: 'Transferencia', amount: '$0.00', status: 'Aprobado', pillStyle: okPill, invoice: '—' },
+    ];
+
+    return { states, menu, hasBanner: st !== 'none', banner, plan, meters, included, locked, payments, typeBars, spaceLegend, spaceNote, byAssistant, spaceMax: '500 MB' };
+  }
+}
+</script>
+</body>
+</html>

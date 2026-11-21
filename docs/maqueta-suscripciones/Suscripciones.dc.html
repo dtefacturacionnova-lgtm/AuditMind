@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Suscripciones y pagos</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#2563EB}a:hover{color:#1D4ED8}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 100%; box-sizing: border-box; min-height: 1180px; background: #F1F5F9; font-family: Inter, system-ui, sans-serif; color: #0F172A;">
+  <div style="background: #FFFFFF; border-bottom: 1px solid #E2E8F0; padding: 16px 32px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+    <div>
+      <div style="font-size: 13px; color: #4B5B73;">Administración › Suscripciones <span style="margin-left: 8px; font-size: 11px; font-weight: 600; background: #FEE2E2; color: #7F1D1D; padding: 2px 8px; border-radius: 999px;">Solo SUPER_ADMIN</span></div>
+      <div style="font-size: 22px; font-weight: 700; margin-top: 2px;">Suscripciones y pagos</div>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <a href="Consumo.dc.html" style="font-size: 14px; font-weight: 600; border: 1px solid #2563EB; color: #1D4ED8; background: #EFF6FF; padding: 10px 16px; border-radius: 8px; text-decoration: none;">Consumo y costos</a>
+      <span style="font-size: 14px; font-weight: 600; border: 1px solid #94A3B8; padding: 10px 16px; border-radius: 8px;">Planes</span>
+      <span style="font-size: 14px; font-weight: 600; background: #0F2D4A; color: #FFFFFF; padding: 10px 18px; border-radius: 8px;">Asignar plan a una organización</span>
+    </div>
+  </div>
+
+  <div style="padding: 24px 32px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+      <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 18px 20px;">
+          <div style="font-size: 13px; color: #4B5B73;">{{k.label}}</div>
+          <div style="font-size: 30px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums;">{{k.value}}</div>
+          <div style="font-size: 12px; color: #4B5B73; margin-top: 2px;">{{k.note}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+        <div style="font-size: 16px; font-weight: 600;">Organizaciones</div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <sc-for list="{{chips}}" as="c" hint-placeholder-count="5">
+            <button type="button" aria-pressed="{{c.on}}" onClick="{{c.pick}}" style="{{c.style}}">{{c.label}} <span style="font-variant-numeric: tabular-nums;">{{c.count}}</span></button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; min-width: 980px;">
+          <thead>
+            <tr style="text-align: left; color: #4B5B73;">
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Organización</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Plan y licencia</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Estado</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Vence</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Usuarios</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Espacio</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Peticiones de IA</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+              <tr>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0;"><div style="font-weight: 600;">{{r.name}}</div><div style="font-size: 12px; color: #4B5B73;">{{r.aud}}</div></td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0;"><div>{{r.plan}}</div><div style="font-size: 12px; color: #4B5B73;">{{r.license}}</div></td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0;"><span style="{{r.pillStyle}}">{{r.estado}}</span></td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; font-variant-numeric: tabular-nums;">{{r.vence}}</td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; font-variant-numeric: tabular-nums;">{{r.users}}</td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; font-variant-numeric: tabular-nums;">{{r.space}}</td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; font-variant-numeric: tabular-nums;"><span style="{{r.iaStyle}}">{{r.ia}}</span></td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0;">
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <span style="font-size: 12px; font-weight: 600; border: 1px solid #94A3B8; padding: 4px 10px; border-radius: 999px;">Renovar</span>
+                    <span style="font-size: 12px; font-weight: 600; border: 1px solid #94A3B8; padding: 4px 10px; border-radius: 999px;">{{r.secondAction}}</span>
+                  </div>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <sc-if value="{{noRows}}" hint-placeholder-val="{{ false }}"><div style="font-size: 13px; color: #4B5B73; padding: 8px 4px;">Ninguna organización en este estado.</div></sc-if>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start;">
+      <div style="flex: 3 1 560px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+          <div style="font-size: 16px; font-weight: 600;">Pagos por aprobar <span style="font-weight: 500; color: #4B5B73;">({{pendingCount}})</span></div>
+          <div style="font-size: 12px; color: #4B5B73;">Aprobar renueva la licencia con una sola operación que no se puede repetir.</div>
+        </div>
+        <sc-for list="{{payments}}" as="p" hint-placeholder-count="3">
+          <div style="border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; background: #F8FAFC;">
+            <div style="flex: 1 1 240px; min-width: 0;">
+              <div style="font-size: 14px; font-weight: 600;">{{p.org}}</div>
+              <div style="font-size: 13px; color: #334155; margin-top: 2px;">{{p.concept}} · <span style="font-variant-numeric: tabular-nums; font-weight: 600;">{{p.amount}}</span> · {{p.method}}</div>
+              <div style="font-size: 12px; color: #4B5B73; margin-top: 2px;"><span style="font-variant-numeric: tabular-nums; font-weight: 600;">{{p.ref}}</span> · subido {{p.when}}</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; border: 1px solid #CBD5E1; background: #FFFFFF; padding: 8px 12px; border-radius: 8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z M14 3v6h6"/></svg>{{p.file}}
+            </div>
+            <sc-if value="{{p.pending}}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; gap: 8px;">
+                <button type="button" onClick="{{p.reject}}" style="border: 1px solid #B91C1C; background: #FFFFFF; color: #7F1D1D; font-size: 13px; font-weight: 600; padding: 9px 14px; border-radius: 8px;">Rechazar</button>
+                <button type="button" onClick="{{p.approve}}" style="border: 0; background: #166534; color: #FFFFFF; font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 8px;">Aprobar</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{p.done}}" hint-placeholder-val="{{ false }}">
+              <span style="{{p.doneStyle}}">{{p.doneText}}</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="flex: 2 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="font-size: 16px; font-weight: 600;">Registro de actividad</div>
+        <sc-for list="{{log}}" as="l" hint-placeholder-count="3">
+          <div style="display: flex; gap: 10px; font-size: 13px; line-height: 1.45;">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: #2563EB; margin-top: 6px; flex: none;"></span>
+            <div><div>{{l.text}}</div><div style="font-size: 12px; color: #4B5B73;">{{l.when}}</div></div>
+          </div>
+        </sc-for>
+        <div style="border-top: 1px solid #E2E8F0; padding-top: 12px; font-size: 12px; color: #4B5B73; line-height: 1.5;">Cada alta, renovación, cambio de plan, prueba extendida o precio pactado deja un registro: quién, cuándo y qué cambió.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  state = {
+    filter: 'todas',
+    patch: {},
+    pay: { p1: 'pending', p2: 'pending', p3: 'pending' },
+    log: [
+      { text: 'Se asignó el plan Empresa Plus a Firma Delta & Co (anual).', when: 'ayer 16:20 · por el superadmin' },
+      { text: 'Se extendió la prueba de Auditores del Norte por 7 días.', when: 'hace 3 días · por el superadmin' },
+      { text: 'Se aplicó el cambio de precio del plan Persona Profesional a 2 clientes.', when: 'hace 6 días · por el superadmin' },
+    ],
+  };
+
+  renderVals() {
+    const patch = this.state.patch;
+    const BASE = [
+      { id: 'rivas', name: 'Despacho Rivas & Asociados', aud: 'Empresa', plan: 'Empresa Despacho', license: 'Anual · $1,490', mrr: 124, estado: 'Activa', vence: '14 dic 2026', users: '4 / 5', space: '18.4 / 100 GB', req: 1950, reqMax: 5000, second: 'Precio pactado' },
+      { id: 'corp', name: 'Corporación Ejemplo (Auditoría Interna)', aud: 'Empresa', plan: 'Empresa Auditoría Interna', license: 'Semestral · $805', mrr: 134, estado: 'Activa', vence: '02 mar 2027', users: '5 / 5', space: '31.0 / 100 GB', req: 4100, reqMax: 5000, second: 'Precio pactado' },
+      { id: 'delta', name: 'Firma Delta & Co', aud: 'Empresa', plan: 'Empresa Plus', license: 'Anual · $2,990', mrr: 249, estado: 'Activa', vence: '12 ene 2027', users: '14 / 15', space: '96.2 / 500 GB', req: 11000, reqMax: 20000, second: 'Precio pactado' },
+      { id: 'linares', name: 'CPA Marta Linares', aud: 'Persona', plan: 'Persona Profesional', license: 'Mensual · $59', mrr: 59, estado: 'Gracia', vence: 'venció 18 nov · gracia hasta 25 nov', users: '2 / 2', space: '6.8 / 30 GB', req: 1220, reqMax: 2000, second: 'Precio pactado' },
+      { id: 'norte', name: 'Auditores del Norte', aud: 'Persona', plan: 'Persona Inicial', license: 'Prueba de 14 días', mrr: 0, estado: 'Prueba', vence: 'prueba hasta 30 nov (9 días)', users: '1 / 1', space: '0.4 / 10 GB', req: 60, reqMax: 500, second: 'Extender prueba' },
+      { id: 'perez', name: 'Consultora Pérez', aud: 'Persona', plan: 'Persona Profesional', license: 'Mensual · $59', mrr: 0, estado: 'Solo lectura', vence: 'venció 10 nov', users: '2 / 2', space: '14.9 / 30 GB', req: 2000, reqMax: 2000, second: 'Precio pactado' },
+      { id: 'demo', name: 'Empresa Demo S.A.', aud: 'Empresa', plan: 'Interno', license: 'Sin vencimiento', mrr: 0, estado: 'Activa', vence: 'sin vencimiento', users: '9 / sin tope', space: '2.1 GB', req: 800, reqMax: 0, second: 'Precio pactado' },
+    ];
+    const all = BASE.map((o) => ({ ...o, ...(patch[o.id] || {}) }));
+
+    const PILL = {
+      'Activa': 'background: #DCFCE7; color: #14532D;', 'Prueba': 'background: #DBEAFE; color: #1E3A8A;',
+      'Gracia': 'background: #FEF3C7; color: #78350F;', 'Solo lectura': 'background: #FEE2E2; color: #7F1D1D;',
+    };
+    const pillBase = 'font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; ';
+
+    const chipOn = 'border: 1px solid #0F2D4A; background: #0F2D4A; color: #FFFFFF; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px;';
+    const chipOff = 'border: 1px solid #94A3B8; background: #FFFFFF; color: #0F172A; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 999px;';
+    const f = this.state.filter;
+    const chips = [['todas', 'Todas', null], ['Prueba', 'Prueba', 'Prueba'], ['Activa', 'Activa', 'Activa'], ['Gracia', 'Gracia', 'Gracia'], ['Solo lectura', 'Solo lectura', 'Solo lectura']].map(([id, label, est]) => ({
+      label, count: est ? all.filter((o) => o.estado === est).length : all.length, on: f === id, style: f === id ? chipOn : chipOff,
+      pick: () => this.setState({ filter: id }),
+    }));
+
+    const shown = f === 'todas' ? all : all.filter((o) => o.estado === f);
+    const rows = shown.map((o) => ({
+      name: o.name, aud: o.aud, plan: o.plan, license: o.license, estado: o.estado, vence: o.vence, users: o.users, space: o.space,
+      pillStyle: pillBase + (PILL[o.estado] || ''),
+      ia: o.reqMax ? o.req.toLocaleString('en-US') + ' / ' + o.reqMax.toLocaleString('en-US') : o.req.toLocaleString('en-US') + ' / sin tope',
+      iaStyle: o.reqMax && o.req >= o.reqMax ? 'font-weight: 700; color: #991B1B;' : o.reqMax && o.req / o.reqMax >= 0.8 ? 'font-weight: 700; color: #92400E;' : '',
+      secondAction: o.second,
+    }));
+
+    const mrr = all.filter((o) => o.estado === 'Activa' || o.estado === 'Gracia').reduce((s, o) => s + o.mrr, 0);
+    const kpis = [
+      { label: 'Ingreso mensual estimado', value: '$' + mrr.toLocaleString('en-US'), note: 'Suma de licencias activas, llevadas a mes' },
+      { label: 'Suscripciones activas', value: String(all.filter((o) => o.estado === 'Activa').length), note: 'Incluye 1 plan Interno' },
+      { label: 'En prueba', value: String(all.filter((o) => o.estado === 'Prueba').length), note: 'La más próxima termina en 9 días' },
+      { label: 'En gracia o solo lectura', value: String(all.filter((o) => o.estado === 'Gracia' || o.estado === 'Solo lectura').length), note: 'Requieren seguimiento de cobro' },
+    ];
+
+    const PAYS = [
+      { id: 'p1', org: 'CPA Marta Linares', orgId: 'linares', concept: 'Renovación mensual', amount: '$59.00', method: 'Transferencia', ref: 'AUD-5K2M8P', when: 'hoy 09:42', file: 'transf_linares.pdf', patch: { estado: 'Activa', vence: '21 dic 2026' } },
+      { id: 'p2', org: 'Despacho Rivas & Asociados', orgId: 'rivas', concept: 'Renovación anual', amount: '$1,490.00', method: 'QR 365', ref: 'AUD-7H3QWN', when: 'ayer 18:05', file: 'qr_rivas.jpg', patch: { vence: '14 dic 2027' } },
+      { id: 'p3', org: 'Consultora Pérez', orgId: 'perez', concept: 'Reactivación + 1 mes', amount: '$59.00', method: 'Transferencia', ref: 'AUD-3T6VBC', when: 'hace 2 días', file: 'transf_perez.pdf', patch: { estado: 'Activa', vence: '21 dic 2026', req: 0 } },
+    ];
+    const payments = PAYS.map((p) => {
+      const st = this.state.pay[p.id];
+      return {
+        org: p.org, concept: p.concept, amount: p.amount, method: p.method, ref: p.ref, when: p.when, file: p.file,
+        pending: st === 'pending', done: st !== 'pending',
+        doneText: st === 'approved' ? 'Aprobado · licencia renovada' : 'Rechazado · se avisó al cliente',
+        doneStyle: 'font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 999px; ' + (st === 'approved' ? 'background: #DCFCE7; color: #14532D;' : 'background: #FEE2E2; color: #7F1D1D;'),
+        approve: () => this.setState({
+          pay: { ...this.state.pay, [p.id]: 'approved' },
+          patch: { ...this.state.patch, [p.orgId]: { ...(this.state.patch[p.orgId] || {}), ...p.patch } },
+          log: [{ text: 'Se aprobó el pago ' + p.ref + ' de ' + p.org + ': ' + p.concept + ' (' + p.amount + ').', when: 'ahora · por el superadmin' }, ...this.state.log],
+        }),
+        reject: () => this.setState({
+          pay: { ...this.state.pay, [p.id]: 'rejected' },
+          log: [{ text: 'Se rechazó el pago ' + p.ref + ' de ' + p.org + ' (comprobante ilegible).', when: 'ahora · por el superadmin' }, ...this.state.log],
+        }),
+      };
+    });
+    const pendingCount = PAYS.filter((p) => this.state.pay[p.id] === 'pending').length;
+
+    return { kpis, chips, rows, noRows: rows.length === 0, payments, pendingCount, log: this.state.log.slice(0, 6) };
+  }
+}
+</script>
+</body>
+</html>

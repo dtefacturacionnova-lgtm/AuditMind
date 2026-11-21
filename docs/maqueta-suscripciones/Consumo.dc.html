@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Consumo y costos</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0}
+a{color:#2563EB}a:hover{color:#1D4ED8}
+button,input{font-family:inherit}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="width: 100%; box-sizing: border-box; min-height: 1260px; background: #F1F5F9; font-family: Inter, system-ui, sans-serif; color: #0F172A;">
+  <div style="background: #FFFFFF; border-bottom: 1px solid #E2E8F0; padding: 16px 32px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+    <div>
+      <div style="font-size: 13px; color: #4B5B73;">Administración › Suscripciones › Consumo y costos <span style="margin-left: 8px; font-size: 11px; font-weight: 600; background: #FEE2E2; color: #7F1D1D; padding: 2px 8px; border-radius: 999px;">Solo SUPER_ADMIN</span></div>
+      <div style="font-size: 22px; font-weight: 700; margin-top: 2px;">Consumo y costos · noviembre 2026</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+      <span style="font-size: 12px; color: #4B5B73;">Almacenamiento en:</span>
+      <div style="display: flex; gap: 4px; padding: 4px; background: #E2E8F0; border-radius: 10px;">
+        <sc-for list="{{backends}}" as="b" hint-placeholder-count="2">
+          <button type="button" aria-pressed="{{b.on}}" onClick="{{b.pick}}" style="{{b.style}}">{{b.label}}</button>
+        </sc-for>
+      </div>
+      <a href="Suscripciones.dc.html" style="font-size: 14px; font-weight: 600; border: 1px solid #94A3B8; color: #0F172A; padding: 9px 14px; border-radius: 8px; text-decoration: none;">‹ Suscripciones</a>
+    </div>
+  </div>
+
+  <div style="padding: 24px 32px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+      <sc-for list="{{kpis}}" as="k" hint-placeholder-count="5">
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 18px 20px;">
+          <div style="font-size: 13px; color: #4B5B73;">{{k.label}}</div>
+          <div style="font-size: 28px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums;">{{k.value}}</div>
+          <div style="font-size: 13px; color: #334155; margin-top: 2px; font-variant-numeric: tabular-nums;">{{k.sub}}</div>
+          <div style="font-size: 12px; color: #4B5B73; margin-top: 2px;">{{k.note}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+        <div>
+          <div style="font-size: 16px; font-weight: 600;">Por organización: peticiones y dinero</div>
+          <div style="font-size: 12px; color: #4B5B73; margin-top: 2px;">Costo de IA = peticiones × costo medido por petición. Costo de espacio según el proveedor elegido arriba.</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 12px; color: #4B5B73;">Ordenar por:</span>
+          <div style="display: flex; gap: 4px; padding: 4px; background: #E2E8F0; border-radius: 10px;">
+            <sc-for list="{{sorts}}" as="o" hint-placeholder-count="2">
+              <button type="button" aria-pressed="{{o.on}}" onClick="{{o.pick}}" style="{{o.style}}">{{o.label}}</button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1060px;">
+          <thead>
+            <tr style="text-align: left; color: #4B5B73;">
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Organización</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Peticiones de IA</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1; text-align: right;">Costo IA</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1;">Espacio</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1; text-align: right;">Descargas</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1; text-align: right;">Costo espacio</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1; text-align: right;">Costo total</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1; text-align: right;">Ingreso al mes</th>
+              <th style="padding: 8px 10px; font-weight: 600; border-bottom: 1px solid #CBD5E1; text-align: right;">Margen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+              <tr>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0;"><div style="font-weight: 600;">{{r.name}}</div><div style="font-size: 12px; color: #4B5B73;">{{r.plan}}</div></td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; min-width: 190px;">
+                  <div style="display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums;"><span>{{r.req}}</span><span style="{{r.reqPctStyle}}">{{r.reqPct}}</span></div>
+                  <div style="height: 6px; border-radius: 999px; background: #E2E8F0; overflow: hidden; margin-top: 4px;"><div style="{{r.reqBar}}"></div></div>
+                </td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-variant-numeric: tabular-nums;">{{r.aiCost}}</td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; font-variant-numeric: tabular-nums;">{{r.space}}</td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-variant-numeric: tabular-nums;">{{r.egress}}</td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-variant-numeric: tabular-nums;">{{r.stCost}}</td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600;">{{r.total}}</td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-variant-numeric: tabular-nums;">{{r.income}}</td>
+                <td style="padding: 11px 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-variant-numeric: tabular-nums;"><span style="{{r.marginStyle}}">{{r.margin}}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="font-size: 12px; color: #4B5B73; line-height: 1.5;">No incluye costos fijos: servidor, base de datos Supabase Pro ($25 al mes), correo y dominio. «Sin ingreso» son pruebas, cuentas en solo lectura y el plan interno.</div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start;">
+      <div style="flex: 1 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 16px; font-weight: 600;">Equivalencia: peticiones a dinero</div>
+        <div style="font-size: 13px; color: #4B5B73; line-height: 1.5;">Modelo actual: <strong style="color: #0F172A;">openai/gpt-6-luna</strong> · costo medido por petición ligera: <strong style="color: #0F172A; font-variant-numeric: tabular-nums;">$0.0012</strong>. Se recalibra cada mes con el consumo real.</div>
+        <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600;">Si un plan da estas peticiones al mes
+          <input type="text" inputmode="numeric" value="{{calc}}" onChange="{{setCalc}}" style="border: 1px solid #94A3B8; border-radius: 8px; padding: 10px 12px; font-size: 16px; font-weight: 500; max-width: 200px; font-variant-numeric: tabular-nums;">
+        </label>
+        <div style="background: #FFFBEB; border: 1px solid #F59E0B; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px;">
+          <div style="font-size: 22px; font-weight: 700; color: #451A03; font-variant-numeric: tabular-nums;">{{calcCost}}</div>
+          <div style="font-size: 13px; color: #451A03;">costo esperado al mes · tope de seguridad {{calcCap}} (3 veces)</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
+          <sc-for list="{{weights}}" as="w" hint-placeholder-count="3">
+            <div style="display: flex; justify-content: space-between; gap: 12px;"><span style="color: #334155;">{{w.what}}</span><strong style="font-variant-numeric: tabular-nums; white-space: nowrap;">{{w.cost}}</strong></div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="flex: 1 1 340px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="font-size: 16px; font-weight: 600;">Por asistente (todos los clientes)</div>
+        <sc-for list="{{byAssistant}}" as="a" hint-placeholder-count="8">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; font-variant-numeric: tabular-nums;"><span style="font-weight: 600;">{{a.name}}</span><span style="color: #334155;">{{a.n}} · {{a.cost}}</span></div>
+            <div style="height: 6px; border-radius: 999px; background: #E2E8F0; overflow: hidden;"><div style="{{a.bar}}"></div></div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 20px;">
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="font-size: 16px; font-weight: 600;">Espacio por tipo de archivo</div>
+          <sc-for list="{{byType}}" as="t" hint-placeholder-count="6">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div style="display: flex; justify-content: space-between; font-size: 13px; font-variant-numeric: tabular-nums;"><span style="font-weight: 600;">{{t.name}}</span><span style="color: #334155;">{{t.gb}} · {{t.cost}}</span></div>
+              <div style="height: 6px; border-radius: 999px; background: #E2E8F0; overflow: hidden;"><div style="{{t.bar}}"></div></div>
+            </div>
+          </sc-for>
+          <div style="font-size: 12px; color: #4B5B73; line-height: 1.5;">{{r2Note}}</div>
+        </div>
+        <div style="background: #EFF6FF; border: 1px solid #93C5FD; border-radius: 14px; padding: 18px 22px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="font-size: 14px; font-weight: 700; color: #1E3A8A;">Oportunidades de venta este mes</div>
+          <sc-for list="{{leads}}" as="l" hint-placeholder-count="3">
+            <div style="font-size: 13px; line-height: 1.45; color: #1E293B;">{{l}}</div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1260}}'>
+class Component extends DCLogic {
+  state = { backend: 'SB', sort: 'costo', calc: '1000' };
+
+  renderVals() {
+    const s = this.state;
+    const COST_REQ = 0.0012;
+    const fmt = (n) => Math.round(n).toLocaleString('en-US');
+    const money = (n) => '$' + n.toFixed(2);
+    const sb = s.backend === 'SB';
+    const stCostOf = (gb, egress) => (sb ? gb * 0.0213 + egress * 0.09 : gb * 0.015);
+
+    const segOn = 'border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; background: #FFFFFF; color: #0F172A; box-shadow: 0 1px 2px rgba(15,23,42,0.18);';
+    const segOff = 'border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 500; background: transparent; color: #334155;';
+    const backends = [['SB', 'Supabase'], ['R2', 'Cloudflare R2']].map(([id, label]) => ({ label, on: s.backend === id, style: s.backend === id ? segOn : segOff, pick: () => this.setState({ backend: id }) }));
+    const sorts = [['costo', 'Costo total'], ['margen', 'Margen']].map(([id, label]) => ({ label, on: s.sort === id, style: s.sort === id ? segOn : segOff, pick: () => this.setState({ sort: id }) }));
+
+    const ORGS = [
+      { name: 'Despacho Rivas & Asociados', plan: 'Empresa Despacho', req: 1950, reqMax: 5000, gb: 18.4, gbMax: 100, egress: 6, income: 124 },
+      { name: 'Corporación Ejemplo (Auditoría Interna)', plan: 'Empresa Auditoría Interna', req: 4100, reqMax: 5000, gb: 31.0, gbMax: 100, egress: 4, income: 134 },
+      { name: 'Firma Delta & Co', plan: 'Empresa Plus', req: 11000, reqMax: 20000, gb: 96.2, gbMax: 500, egress: 38, income: 249 },
+      { name: 'CPA Marta Linares', plan: 'Persona Profesional', req: 1220, reqMax: 2000, gb: 6.8, gbMax: 30, egress: 1, income: 59 },
+      { name: 'Auditores del Norte', plan: 'Persona Inicial · prueba', req: 60, reqMax: 500, gb: 0.4, gbMax: 10, egress: 0, income: 0 },
+      { name: 'Consultora Pérez', plan: 'Persona Profesional · solo lectura', req: 2000, reqMax: 2000, gb: 14.9, gbMax: 30, egress: 2, income: 0 },
+      { name: 'Empresa Demo S.A.', plan: 'Interno', req: 800, reqMax: 0, gb: 2.1, gbMax: 0, egress: 0, income: 0 },
+    ];
+    const data = ORGS.map((o) => {
+      const aiCost = o.req * COST_REQ;
+      const stCost = stCostOf(o.gb, o.egress);
+      const total = aiCost + stCost;
+      const pct = o.reqMax ? o.req / o.reqMax : 0;
+      return { ...o, aiCost, stCost, total, pct, margin: o.income > 0 ? (o.income - total) / o.income : null };
+    });
+    const sorted = [...data].sort((a, b) => (s.sort === 'costo' ? b.total - a.total : (b.margin === null ? -1 : b.margin) - (a.margin === null ? -1 : a.margin)));
+    const rows = sorted.map((o) => ({
+      name: o.name, plan: o.plan,
+      req: o.reqMax ? fmt(o.req) + ' / ' + fmt(o.reqMax) : fmt(o.req) + ' / sin tope',
+      reqPct: o.reqMax ? Math.round(o.pct * 100) + ' %' : '',
+      reqPctStyle: o.pct >= 1 ? 'font-weight: 700; color: #991B1B;' : o.pct >= 0.8 ? 'font-weight: 700; color: #92400E;' : 'color: #334155;',
+      reqBar: 'height: 100%; border-radius: 999px; width: ' + Math.min(o.pct * 100, 100) + '%; background: ' + (o.pct >= 1 ? '#DC2626' : o.pct >= 0.8 ? '#D97706' : '#2563EB') + ';',
+      aiCost: money(o.aiCost),
+      space: o.gbMax ? o.gb.toFixed(1) + ' / ' + o.gbMax + ' GB' : o.gb.toFixed(1) + ' GB',
+      egress: o.egress.toFixed(0) + ' GB', stCost: money(o.stCost), total: money(o.total),
+      income: o.income > 0 ? money(o.income) : 'Sin ingreso',
+      margin: o.margin === null ? '—' : Math.round(o.margin * 100) + ' %',
+      marginStyle: o.margin === null ? 'color: #4B5B73;' : 'font-weight: 600; color: ' + (o.margin < 0.5 ? '#991B1B' : '#14532D') + ';',
+    }));
+
+    const sum = (f) => data.reduce((t, o) => t + f(o), 0);
+    const reqTotal = sum((o) => o.req);
+    const aiTotal = sum((o) => o.aiCost);
+    const gbTotal = sum((o) => o.gb);
+    const stTotal = sum((o) => o.stCost);
+    const income = sum((o) => o.income);
+    const kpis = [
+      { label: 'Peticiones de IA del mes', value: fmt(reqTotal), sub: 'en 7 organizaciones', note: 'Lo que ve el cliente' },
+      { label: 'Costo de IA del mes', value: money(aiTotal), sub: '≈ ' + money(COST_REQ * 1000) + ' por cada 1,000 peticiones', note: 'Lo que pagas por esas peticiones' },
+      { label: 'Espacio usado', value: gbTotal.toFixed(0) + ' GB', sub: 'costo ' + money(stTotal) + ' con ' + (sb ? 'Supabase' : 'Cloudflare R2'), note: sb ? 'Incluye descargas ($0.09 por GB sobre 250 GB)' : 'Las descargas no se cobran' },
+      { label: 'Ingreso mensual de licencias', value: money(income), sub: 'sin contar paquetes comprados', note: 'Licencias llevadas a mes' },
+      { label: 'Margen sobre costo variable', value: Math.round(((income - aiTotal - stTotal) / income) * 100) + ' %', sub: money(income - aiTotal - stTotal) + ' después de IA y espacio', note: 'Antes de costos fijos' },
+    ];
+
+    const calcN = Number((s.calc || '').replace(/[^0-9]/g, '')) || 0;
+    const weights = [
+      { what: '1 petición: mensaje a un asistente, mejorar un texto', cost: money(COST_REQ) },
+      { what: '5 peticiones: documento largo, informe, evidencia', cost: money(COST_REQ * 5) },
+      { what: '10 peticiones: audio o video (por 10 min), forense', cost: money(COST_REQ * 10) },
+    ];
+
+    const SH = [['MINERVA', 24], ['FISCUS', 18], ['SCRIPTORIUM', 15], ['THEMIS', 11], ['ARGUS', 9], ['CICERO', 8], ['SHERLOCK', 6], ['Otros', 9]];
+    const byAssistant = SH.map(([name, p]) => {
+      const n = (reqTotal * p) / 100;
+      return { name, n: fmt(n) + ' peticiones', cost: money(n * COST_REQ), bar: 'height: 100%; border-radius: 999px; background: #2563EB; width: ' + p * 3.5 + '%;' };
+    });
+
+    const TS = [['Video', 52], ['PDF y documentos', 17], ['Audio', 11], ['Fotos', 9], ['Excel y CSV', 7], ['Presentaciones', 4]];
+    const byType = TS.map(([name, p]) => {
+      const gb = (gbTotal * p) / 100;
+      return { name, gb: gb.toFixed(1) + ' GB', cost: money(stTotal * (p / 100)), bar: 'height: 100%; border-radius: 999px; background: #0D9488; width: ' + p * 1.8 + '%;' };
+    });
+    const sbAll = sum((o) => o.gb * 0.0213 + o.egress * 0.09);
+    const r2All = sum((o) => o.gb * 0.015);
+    const r2Note = sb
+      ? 'Con Cloudflare R2 este mes costaría ' + money(r2All) + ' en vez de ' + money(sbAll) + ' (ahorro de ' + money(sbAll - r2All) + '). La diferencia crece con los videos: R2 no cobra descargas.'
+      : 'Estás viendo Cloudflare R2: ' + money(r2All) + ' contra ' + money(sbAll) + ' en Supabase. Mover video y audio a R2 es el cambio que más reduce el costo.';
+
+    const leads = [
+      'Corporación Ejemplo usó el 82 % de sus peticiones de IA: ofrecerle +5,000 por $20.',
+      'Consultora Pérez agotó sus peticiones y está en solo lectura: recordar la renovación.',
+      'Firma Delta & Co descargó 38 GB este mes: vigilar la salida de datos si crece el video.',
+    ];
+
+    return {
+      backends, sorts, kpis, rows, byAssistant, byType, r2Note, leads, weights,
+      calc: s.calc, setCalc: (e) => this.setState({ calc: e.target.value }),
+      calcCost: money(calcN * COST_REQ), calcCap: money(calcN * COST_REQ * 3),
+    };
+  }
+}
+</script>
+</body>
+</html>

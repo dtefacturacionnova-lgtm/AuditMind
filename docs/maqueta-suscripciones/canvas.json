@@ -1,0 +1,25 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-11-21T20:00:00Z" },
+  "title": "Maqueta de Suscripciones AuditMind",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 300, "w": 1280, "h": 1240, "title": "1 · Catálogo público /precios", "expand": "fill", "is_interactive": true },
+    "Editor.dc.html": { "x": 1360, "y": 300, "w": 1280, "h": 2000, "title": "2 · Editor de plan (superadmin)", "expand": "fill", "is_interactive": true },
+    "MiPlan.dc.html": { "x": 0, "y": 2740, "w": 1280, "h": 1500, "title": "3 · Mi plan (cliente)", "expand": "fill", "is_interactive": true },
+    "Bloqueado.dc.html": { "x": 1360, "y": 2740, "w": 1280, "h": 940, "title": "4 · Módulo fuera del plan", "expand": "fill" },
+    "Suscripciones.dc.html": { "x": 2720, "y": 2740, "w": 1280, "h": 1180, "title": "5 · Suscripciones y pagos (superadmin)", "expand": "fill", "is_interactive": true },
+    "Comprar.dc.html": { "x": 0, "y": 4700, "w": 1280, "h": 1060, "title": "6 · Comprar más (cliente)", "expand": "fill", "is_interactive": true },
+    "Consumo.dc.html": { "x": 1360, "y": 4700, "w": 1280, "h": 1260, "title": "7 · Consumo y costos (superadmin)", "expand": "fill", "is_interactive": true }
+  },
+  "order": ["Main.dc.html", "Editor.dc.html", "MiPlan.dc.html", "Bloqueado.dc.html", "Suscripciones.dc.html", "Comprar.dc.html", "Consumo.dc.html"],
+  "notes": {
+    "t1": { "x": 0, "y": 0, "text": "Planes y suscripciones: cómo se vería", "kind": "title1", "maxW": 2640 },
+    "t2": { "x": 0, "y": 2440, "text": "Lo que ve el cliente y lo que ve el superadmin", "kind": "title1", "maxW": 4000 },
+    "t3": { "x": 0, "y": 4400, "text": "Comprar más y controlar los costos", "kind": "title1", "maxW": 2640 },
+    "n1": { "x": 2720, "y": 300, "w": 440, "fill": "blue", "text": "MAQUETA con datos de ejemplo. Los precios son hipótesis a validar.\n\nDecidido: paquetes prearmados (más ajustes por cliente) y núcleo siempre incluido: Dashboard, Proyectos de auditoría, Papeles, Hallazgos y administración básica.\n\nCambios de esta versión: el cliente ve la IA en PETICIONES (no en dinero) y el espacio por tipo de archivo; el superadmin ve dinero Y peticiones; al llegar al límite el cliente puede comprar más.\n\nPrueba las pantallas con el botón Play." },
+    "n2": { "x": 2720, "y": 1000, "w": 440, "fill": "orange", "text": "Cómo cuenta una petición de IA (peso):\n\n1 = un mensaje a un asistente, mejorar un texto, redactar un hallazgo.\n5 = analizar un documento largo, un informe completo, extraer datos de una evidencia.\n10 = analizar audio o video (por cada 10 minutos) o una investigación forense.\n\nEl peso mantiene estable el costo por petición, así «1,000 peticiones ≈ $1.20» siempre es una equivalencia confiable." }
+  },
+  "designSystems": []
+}

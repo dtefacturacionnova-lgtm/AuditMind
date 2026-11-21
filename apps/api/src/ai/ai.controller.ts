@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   UploadedFile,
   Headers,
+  Optional,
   ForbiddenException,
   BadRequestException,
   NotFoundException,
@@ -33,6 +34,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { AiService } from './ai.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
+import { EntitlementsService } from '../billing/entitlements.service';
 import { renderCaatsPdfBody } from '../pdf/caats-pdf';
 import { visibleAuditWhere } from '../common/utils/investigation-scope.util';
 
@@ -66,6 +68,7 @@ export class AiController {
     private readonly aiService: AiService,
     private readonly prisma: PrismaService,
     private readonly pdfService: PdfService,
+    @Optional() private readonly entitlements?: EntitlementsService,
   ) {}
 
   // ─── Chat ──────────────────────────────────────────────────────────────────
@@ -74,7 +77,10 @@ export class AiController {
   async chat(
     @Body() dto: ChatDto,
     @Headers('authorization') authorization: string,
+    @CurrentUser() user: AuthUser,
   ) {
+    // Plan: el asistente debe estar incluido (con el interruptor en OFF no hace nada).
+    await this.entitlements?.assertAssistantAllowed(user.organizationId, dto.agentType);
     return this.aiService.chat(
       dto.agentType,
       dto.message,

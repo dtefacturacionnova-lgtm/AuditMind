@@ -27,11 +27,13 @@ MIG = os.path.join(ROOT, "infrastructure", "db-migrations")
 TMP = tempfile.gettempdir()
 
 MODELS = ["EngagementFee", "EngagementFeeAmendment", "BillingScheduleItem", "ClientInvoice", "ClientPayment", "PaymentApplication",
-          "InvoiceWithholding", "CollectionLog", "ClientCreditNote", "ClientWriteOff", "CollectionNote", "ClientInvoiceHour"]
+          "InvoiceWithholding", "CollectionLog", "ClientCreditNote", "ClientWriteOff", "CollectionNote", "ClientInvoiceHour",
+          "BillingPlan", "BillingPlanPrice", "BillingSubscription", "BillingSettings", "BillingEvent"]
 ENUMS = ["FeeType", "FeeSource", "FeeProgressMethod", "ScheduleItemKind", "ScheduleItemStatus", "ClientInvoiceStatus", "ClientPaymentStatus",
-         "ClientPaymentMethod", "WithholdingTaxType", "CollectionLogAction", "CreditNoteStatus", "WriteOffStatus", "CollectionContactMethod", "PromiseStatus"]
+         "ClientPaymentMethod", "WithholdingTaxType", "CollectionLogAction", "CreditNoteStatus", "WriteOffStatus", "CollectionContactMethod", "PromiseStatus",
+         "BillingAudience", "SubscriptionStatus", "EnforcementMode"]
 MIGRATIONS = ["2026-10-cobros-3a.sql", "2026-10-cobros-3a-fix1.sql", "2026-10-cobros-3d.sql", "2026-10-cobros-3d-fix1.sql",
-              "2026-10-cobros-4.sql", "2026-10-pbc-portal-otp.sql"]
+              "2026-10-cobros-4.sql", "2026-10-pbc-portal-otp.sql", "2026-11-suscripciones-1-nucleo.sql"]
 
 src = open(os.path.join(API, "prisma", "schema.prisma"), encoding="utf-8").read().replace("\r\n", "\n")
 for name in MODELS:
@@ -40,6 +42,10 @@ for name in MODELS:
 for name in ENUMS:
     src, n = re.subn(r"(?://[^\n]*\n)*enum " + name + r" \{.*?\n\}\n", "", src, flags=re.S)
     assert n == 1, ("enum", name, n)
+# Los campos de relación de los modelos que se quedan (p. ej. Organization.billingSubscription) que apuntan a un modelo recortado
+# quedarían colgando: se quitan, porque la migración SQL crea esas tablas con sus propias claves foráneas.
+for name in MODELS:
+    src = re.sub(r"^[ \t]+\w+[ \t]+" + name + r"(\[\])?\??[^\n]*\n", "", src, flags=re.M)
 trimmed = os.path.join(TMP, "auditmind_schema_trimmed.prisma")
 open(trimmed, "w", encoding="utf-8").write(src)
 

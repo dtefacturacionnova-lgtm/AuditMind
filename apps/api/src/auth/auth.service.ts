@@ -1,18 +1,20 @@
 import {
-  Injectable, Logger, UnauthorizedException, ConflictException, BadRequestException, NotFoundException, HttpException, HttpStatus,
+  Optional, Injectable, Logger, UnauthorizedException, ConflictException, BadRequestException, NotFoundException, HttpException, HttpStatus,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCanManageUser } from '../common/utils/tenant.util';
 import { inviteConflictMessage, isAlreadyRegistered, isEmailRateLimit } from './invite-messages.util';
+import { EntitlementsService } from '../billing/entitlements.service';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private supabaseAdmin: SupabaseClient;
 
-  constructor(private prisma: PrismaService) {
+  // `entitlements` es opcional para que las pruebas que construyen el servicio a mano sigan funcionando; en la aplicación siempre llega.
+  constructor(private prisma: PrismaService, @Optional() private entitlements?: EntitlementsService) {
     this.supabaseAdmin = createClient(
       process.env.SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -45,6 +47,9 @@ export class AuthService {
         viewerIsSuperAdmin: requester?.role === 'SUPER_ADMIN',
       }));
     }
+
+    // Plan: ¿hay una plaza de usuario libre para este rol? (no cuentan invitados ni solo lectura)
+    await this.entitlements?.assertCanAddBillableUser(params.organizationId, params.role);
 
     // Crea el usuario en Supabase Auth con el rol en app_metadata.
     // `redirectTo` va a /auth/callback: ahí el token del correo se convierte en

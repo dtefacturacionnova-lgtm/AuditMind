@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
+import { EntitlementsService } from '../billing/entitlements.service';
+import { isBillableRole } from '../billing/billing.constants';
 import { assertCanGrantRole, assertCanManageUser } from '../common/utils/tenant.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserDto, UpdateUserRoleDto } from './dto/update-user.dto';
@@ -11,6 +13,7 @@ export class UsersService {
   constructor(
     private prisma: PrismaService,
     private authService: AuthService,
+    @Optional() private entitlements?: EntitlementsService,
   ) {}
 
   async findAll(user: AuthUser, page = 1, limit = 20, search?: string) {
@@ -106,6 +109,10 @@ export class UsersService {
     // Antes un ADMIN podía ascenderse (o ascender a otro) a SUPER_ADMIN, rol de plataforma.
     assertCanManageUser(requester, target);
     assertCanGrantRole(requester, dto.role);
+    // Plan: pasar de invitado/solo lectura a un rol de pago ocupa una plaza.
+    if (!isBillableRole(target.role) && isBillableRole(dto.role)) {
+      await this.entitlements?.assertCanAddBillableUser(target.organizationId, dto.role, target.id);
+    }
     await this.authService.updateUserRole(target.id, dto.role);
     return this.prisma.user.update({
       where: { id },

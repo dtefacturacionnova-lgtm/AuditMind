@@ -49,6 +49,8 @@ import { PortfolioModule } from './portfolio/portfolio.module';
 import { CollectionsModule } from './collections/collections.module';
 import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
 import { WatchlistsModule } from './watchlists/watchlists.module';
+import { BillingModule } from './billing/billing.module';
+import { SubscriptionGuard } from './billing/subscription.guard';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { SignaturesModule } from './signatures/signatures.module';
 import { InterviewSignatureModule } from './working-papers/interview-signature/interview-signature.module';
@@ -102,6 +104,7 @@ import { InterviewSignatureModule } from './working-papers/interview-signature/i
     CollectionsModule,
     AdminTasksModule,
     WatchlistsModule,
+    BillingModule,
     // Límite de intentos: ThrottlerModule es global, pero NO hay guard global — cada controlador
     // público aplica PublicThrottlerGuard con sus @Throttle (ver signatures/public-throttle.ts).
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
@@ -112,6 +115,8 @@ import { InterviewSignatureModule } from './working-papers/interview-signature/i
     // Guards globales — aplican a todos los endpoints excepto los @Public()
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Plan y vigencia: módulos incluidos y solo lectura al vencer (con el interruptor en OFF no hace nada).
+    { provide: APP_GUARD, useClass: SubscriptionGuard },
     // Bucket `audit-files` privado: firma las URLs de adjuntos al responder.
     StorageUrlService,
     { provide: APP_INTERCEPTOR, useClass: StorageUrlInterceptor },

@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, ForbiddenException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, Logger, Optional } from '@nestjs/common';
+import { SubscriptionsService } from '../billing/subscriptions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
@@ -19,6 +20,7 @@ export class OrganizationsService {
   constructor(
     private prisma: PrismaService,
     private authService: AuthService,
+    @Optional() private subscriptions?: SubscriptionsService,
   ) {}
 
   /** "FE & CE" → "fe-ce". Si queda vacío (nombre solo con símbolos) usa "org". */
@@ -67,6 +69,13 @@ export class OrganizationsService {
         ...(dto.auditModality !== undefined && { auditModality: dto.auditModality }),
       },
     });
+
+    // Suscripción: prueba del plan elegido (o del plan por defecto). Si las tablas de planes aún no existen NO se rompe el alta.
+    try {
+      await this.subscriptions?.createForNewOrganization(org.id, dto.subscriptionTier);
+    } catch (e) {
+      this.logger.warn(`No se pudo crear la suscripción de ${org.id}: ${(e as Error).message}`);
+    }
 
     // La organización ya quedó creada: si la invitación del primer administrador
     // falla (correo inválido, ya registrado...) NO se revierte ni se lanza error —

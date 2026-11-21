@@ -473,6 +473,7 @@ model Organization {
   adminTasks             AdminTask[]
   signatureRequests      SignatureRequest[]
   hoursCloseSettings     HoursCloseSettings?
+  billingSubscription    BillingSubscription?
   hoursPeriodCloses      HoursPeriodClose[]
   timeEntryLogs          TimeEntryLog[]
   timeAdjustmentRequests TimeAdjustmentRequest[]
@@ -3997,4 +3998,246 @@ model CollectionLog {
   @@index([organizationId, entityType, entityId])
   @@index([organizationId, createdAt])
   @@map("collection_logs")
+}
+
+
+// ─── PLANES Y SUSCRIPCIONES (2026-11 · docs/suscripciones-y-planes-propuesta.md §4, §10, §11) ─────────────────────────────────────────
+// Los planes son DATOS que edita el superadmin. Cada organización tiene UNA suscripción con la INSTANTÁNEA del plan al contratar.
+// `limits` (JSON): users, maxUsers, extraUserPriceUsd, storageGb, maxFileMb, aiRequests, fileTypes[], packsAi, packsStorage; -1 = sin tope.
+// Con billing_settings.enforcementMode = OFF nada se bloquea (así nacen). SQL: infrastructure/db-migrations/2026-11-suscripciones-1-nucleo.sql.
+
+enum BillingAudience {
+  PERSONA
+  EMPRESA
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  GRACE
+  READ_ONLY
+  SUSPENDED
+  CANCELLED
+}
+
+enum EnforcementMode {
+  OFF
+  OBSERVE
+  ENFORCE
+}
+
+model BillingPlan {
+  id          String          @id @default(cuid())
+  code        String          @unique
+  name        String
+  audience    BillingAudience
+  description String          @default("")
+  isPublic    Boolean         @default(true)
+  featured    Boolean         @default(false)
+  active      Boolean         @default(true)
+  sortOrder   Int             @default(0)
+  trialDays   Int             @default(14)
+  limits      Json            @default("{}")
+  modules     String[]        @default([])
+  functions   String[]        @default([])
+  assistants  String[]        @default([])
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  prices        BillingPlanPrice[]
+  subscriptions BillingSubscription[]
+
+  @@map("billing_plans")
+}
+
+model BillingPlanPrice {
+  id        String   @id @default(cuid())
+  planId    String
+  months    Int // 1, 3, 6, 12; 0 = sin vencimiento
+  priceUsd  Decimal  @db.Decimal(10, 2)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  plan BillingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, months])
+  @@map("billing_plan_prices")
+}
+
+model BillingSubscription {
+  id                 String             @id @default(cuid())
+  organizationId     String             @unique
+  planId             String
+  planSnapshot       Json
+  status             SubscriptionStatus @default(TRIAL)
+  months             Int                @default(0)
+  priceUsd           Decimal?           @db.Decimal(10, 2)
+  agreedPriceUsd     Decimal?           @db.Decimal(10, 2)
+  startedAt          DateTime           @default(now())
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime? // null = sin vencimiento
+  trialEndsAt        DateTime?
+  cancelRequestedAt  DateTime?
+  extraUsers         Int                @default(0)
+  overrides          Json               @default("{}") // { addModules[], removeModules[], addFunctions[], addAssistants[], removeAssistants[], limits{} }
+  exempt             Boolean            @default(false) // Interno / Piloto: no se bloquea nunca
+  notes              String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         BillingPlan  @relation(fields: [planId], references: [id])
+
+  @@index([status])
+  @@index([planId])
+  @@map("billing_subscriptions")
+}
+
+model BillingSettings {
+  id                String          @id
+  enforcementMode   EnforcementMode @default(OFF)
+  graceDays         Int             @default(7)
+  readOnlyDays      Int             @default(60)
+  reminderDays      Int[]           @default([7, 1])
+  costPerRequestUsd Decimal         @default(0.0012) @db.Decimal(10, 6)
+  safetyMultiplier  Decimal         @default(3) @db.Decimal(4, 2)
+  weights           Json            @default("{\"light\": 1, \"medium\": 5, \"heavy\": 10}")
+  ivaPercent        Decimal?        @db.Decimal(5, 2)
+  defaultPlanCode   String          @default("EMPRESA_DESPACHO")
+  paymentInstructions Json          @default("{}") // { QR: "…", TRANSFER: "…", CASH: "…" } — lo que ve el cliente al pagar
+  updatedById       String?
+  updatedAt         DateTime        @updatedAt
+
+  @@map("billing_settings")
+}
+
+model BillingEvent {
+  id             String   @id @default(cuid())
+  organizationId String?
+  actorId        String?
+  type           String
+  data           Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([createdAt])
+  @@map("billing_events")
+}
+
+// ─── Etapa 2: medición de IA, paquetes y pagos (SQL: infrastructure/db-migrations/2026-11-suscripciones-2-medicion-pagos.sql) ───
+// Los modelos de abajo llevan la clave foránea a Organization solo en el SQL (ON DELETE CASCADE); aquí son escalares a propósito.
+
+enum AddonKind {
+  AI
+  STORAGE
+}
+
+enum AddonPurchaseStatus {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  CANCELLED
+}
+
+enum BillingPaymentKind {
+  LICENSE
+  PACK
+}
+
+enum BillingPaymentMethod {
+  TRANSFER
+  QR
+  CASH
+  WOMPI
+}
+
+enum BillingPaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+// Libro de consumo de IA, solo agregar. weight = peticiones que cuenta la acción (1/5/10); packWeight = cuántas salieron de paquetes comprados.
+model UsageLedger {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  kind           String   @default("AI")
+  agent          String?
+  weight         Int
+  packWeight     Int      @default(0)
+  tokensIn       Int      @default(0)
+  tokensOut      Int      @default(0)
+  costUsd        Decimal  @default(0) @db.Decimal(12, 6)
+  model          String?
+  periodKey      String // 'AAAA-MM'
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, periodKey])
+  @@index([periodKey])
+  @@map("usage_ledger")
+}
+
+model AddonPack {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  kind      AddonKind
+  name      String
+  quantity  Int // peticiones (AI) o GB (STORAGE)
+  priceUsd  Decimal   @db.Decimal(10, 2) // AI: pago único; STORAGE: por mes
+  recurring Boolean   @default(false)
+  active    Boolean   @default(true)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("addon_packs")
+}
+
+model AddonPurchase {
+  id             String              @id @default(cuid())
+  organizationId String
+  packId         String
+  kind           AddonKind
+  quantity       Int
+  remaining      Int
+  priceUsd       Decimal             @db.Decimal(10, 2)
+  status         AddonPurchaseStatus @default(ACTIVE)
+  expiresAt      DateTime?
+  paymentId      String?             @unique // un pago aprobado acredita su paquete UNA sola vez
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([organizationId, status])
+  @@map("addon_purchases")
+}
+
+model BillingPayment {
+  id             String               @id @default(cuid())
+  organizationId String
+  kind           BillingPaymentKind
+  planCode       String?
+  months         Int?
+  packCode       String?
+  concept        String
+  amountUsd      Decimal              @db.Decimal(10, 2)
+  method         BillingPaymentMethod
+  status         BillingPaymentStatus @default(PENDING)
+  reference      String               @unique
+  proofPath      String?
+  proofName      String?
+  requestedById  String?
+  approvedById   String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  expiresAt      DateTime
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@index([status])
+  @@map("billing_payments")
 }

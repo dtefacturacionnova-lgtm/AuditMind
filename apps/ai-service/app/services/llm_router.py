@@ -192,6 +192,12 @@ class OpenRouterError(Exception):
 _OPENROUTER_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 
 
+def _provider_param() -> dict | None:
+    """Preferencia de privacidad de OpenRouter: solo proveedores que no guardan ni entrenan con los datos. Ver OPENROUTER_DATA_COLLECTION."""
+    value = (settings.OPENROUTER_DATA_COLLECTION or "").strip().lower()
+    return {"data_collection": "deny"} if value == "deny" else None
+
+
 async def _openrouter_request(payload: dict) -> dict:
     """POST /chat/completions. Devuelve el JSON de la respuesta o lanza OpenRouterError con el
     estado y el mensaje del proveedor (402 = sin saldo, 429 = límite, 401 = clave inválida).
@@ -203,6 +209,9 @@ async def _openrouter_request(payload: dict) -> dict:
         "X-Title":       settings.OPENROUTER_TITLE,
     }
     url = f"{settings.OPENROUTER_BASE_URL.rstrip('/')}/chat/completions"
+    if (provider_pref := _provider_param()):
+        payload = {**payload}
+        payload.setdefault("provider", provider_pref)  # un llamador puede fijar el suyo
     async with httpx.AsyncClient(timeout=_OPENROUTER_TIMEOUT) as client:
         resp = await client.post(url, headers=headers, json=payload)
     try:

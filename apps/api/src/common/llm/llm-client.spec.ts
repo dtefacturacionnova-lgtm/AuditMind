@@ -46,10 +46,23 @@ describe('generateText — OpenRouter primero', () => {
     const c = llamada(0);
     expect(c.url).toBe('https://openrouter.ai/api/v1/chat/completions');
     expect(c.headers.Authorization).toBe(`Bearer ${CLAVE_OR}`);
-    expect(c.body.model).toBe('anthropic/claude-sonnet-5.5');
+    expect(c.body.model).toBe('openai/gpt-6-luna'); // el modelo barato elegido por benchmark
     expect(c.body.max_tokens).toBe(500);
     expect(c.body.temperature).toBe(0.3);
     expect(c.body.messages.map((m: any) => [m.role, m.content])).toEqual([['system', 'SISTEMA'], ['user', 'uno'], ['assistant', 'dos'], ['user', 'tres']]);
+  });
+
+  it('pide solo proveedores que no guardan ni entrenan con los datos; «allow» u «off» no envían la preferencia', async () => {
+    fetchMock.mockImplementation(() => orOk('ok'));
+    await generateText(cfg({ OPENROUTER_API_KEY: CLAVE_OR }), REQ);
+    expect(llamada(0).body.provider).toEqual({ data_collection: 'deny' });
+    await generateText(cfg({ OPENROUTER_API_KEY: CLAVE_OR, OPENROUTER_DATA_COLLECTION: 'DENY' }), REQ);
+    expect(llamada(1).body.provider).toEqual({ data_collection: 'deny' });
+    for (const valor of ['allow', 'off']) {
+      fetchMock.mockClear();
+      await generateText(cfg({ OPENROUTER_API_KEY: CLAVE_OR, OPENROUTER_DATA_COLLECTION: valor }), REQ);
+      expect(llamada(0).body).not.toHaveProperty('provider');
+    }
   });
 
   it('el modelo se cambia con OPENROUTER_MODEL_STANDARD', async () => {

@@ -89,6 +89,7 @@ module.exports = {
         OPENROUTER_API_KEY:        e.OPENROUTER_API_KEY || '',
         OPENROUTER_MODEL_STANDARD: e.OPENROUTER_MODEL_STANDARD || '',
         OPENROUTER_REASONING_EFFORT: e.OPENROUTER_REASONING_EFFORT || '',
+        OPENROUTER_DATA_COLLECTION: e.OPENROUTER_DATA_COLLECTION || '',
         // Stirling-PDF (OCR self-hosted) — contenedor Docker separado, mismo VPS
         STIRLING_PDF_URL:        'http://127.0.0.1:8090',
         // Firma electrónica simple por enlace (docs/firma-externa-por-enlace.md §17).
@@ -123,6 +124,7 @@ module.exports = {
         OPENROUTER_MODEL_STANDARD: e.OPENROUTER_MODEL_STANDARD || '',
         OPENROUTER_MODEL_COMPLEX:  e.OPENROUTER_MODEL_COMPLEX || '',
         OPENROUTER_REASONING_EFFORT: e.OPENROUTER_REASONING_EFFORT || '',
+        OPENROUTER_DATA_COLLECTION: e.OPENROUTER_DATA_COLLECTION || '',
         GEMINI_API_KEY:            e.GEMINI_API_KEY,
         ANTHROPIC_API_KEY:         e.ANTHROPIC_API_KEY,
         DATABASE_URL:              e.DATABASE_URL,

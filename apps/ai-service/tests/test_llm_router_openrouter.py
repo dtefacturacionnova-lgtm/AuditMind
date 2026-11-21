@@ -89,6 +89,12 @@ class Cadena(Base):
             self.assertEqual(lr.provider_chain(P.GEMINI), [P.GEMINI, P.OPENROUTER, P.CLAUDE])
             self.assertEqual(lr.provider_chain(P.CLAUDE), [P.CLAUDE, P.OPENROUTER, P.GEMINI])
 
+    def test_los_modelos_por_defecto_son_el_barato_elegido_por_benchmark(self):
+        from app.config import Settings
+        for campo in ("OPENROUTER_MODEL_SIMPLE", "OPENROUTER_MODEL_STANDARD", "OPENROUTER_MODEL_COMPLEX"):
+            self.assertEqual(Settings.model_fields[campo].default, "openai/gpt-6-luna", campo)
+        self.assertEqual(Settings.model_fields["OPENROUTER_DATA_COLLECTION"].default, "deny")
+
     def test_el_proveedor_por_defecto_es_openrouter(self):
         self.assertEqual(lr.DEFAULT_PROVIDER, P.OPENROUTER)
 
@@ -126,6 +132,20 @@ class Chat(Base):
         self.assertEqual(b["max_tokens"], 321)
         self.assertEqual([(m["role"], m["content"]) for m in b["messages"]],
                          [("system", "SISTEMA"), ("user", "uno"), ("assistant", "dos"), ("user", "tres")])
+
+    def test_pide_solo_proveedores_que_no_guardan_ni_entrenan_con_los_datos(self):
+        correr(lr.chat_with_agent("MINERVA", "s", [{"role": "user", "content": "x"}]))
+        self.assertEqual(self.cuerpo()["provider"], {"data_collection": "deny"})
+
+    def test_la_preferencia_de_privacidad_tambien_viaja_en_lo_estructurado_y_se_puede_quitar(self):
+        self.respuestas = [ok('{"titulo": "a", "n": 1}')]
+        correr(lr.generate_structured("SHERLOCK", "s", "u", Salida))
+        self.assertEqual(self.cuerpo()["provider"], {"data_collection": "deny"})
+        for valor in ("allow", "", "off"):
+            self.peticiones.clear()
+            with patch.object(lr.settings, "OPENROUTER_DATA_COLLECTION", valor):
+                correr(lr.chat_with_agent("MINERVA", "s", [{"role": "user", "content": "x"}]))
+            self.assertNotIn("provider", self.cuerpo())
 
     def test_pide_razonamiento_minimo_porque_Sonnet_y_Opus_razonan_siempre_y_se_comen_max_tokens(self):
         correr(lr.chat_with_agent("MINERVA", "s", [{"role": "user", "content": "x"}]))

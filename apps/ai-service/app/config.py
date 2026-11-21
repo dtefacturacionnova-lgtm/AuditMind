@@ -9,13 +9,22 @@ class Settings(BaseSettings):
     # .env del servidor, nunca en el repo ni en el chat.
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    # Un modelo por complejidad de tarea (mismo esquema que los mapas de Claude): Haiku para lo
-    # simple, Sonnet para lo estándar y Opus solo para los agentes de razonamiento complejo
-    # (CICERO, CASSANDRA, SENADO, SHERLOCK). Ids verificados contra openrouter.ai/api/v1/models
-    # el 2026-11-21; se pueden cambiar desde el .env sin tocar código.
-    OPENROUTER_MODEL_SIMPLE: str = "anthropic/claude-haiku-4.5"
-    OPENROUTER_MODEL_STANDARD: str = "anthropic/claude-sonnet-5.5"
-    OPENROUTER_MODEL_COMPLEX: str = "anthropic/claude-opus-5.5"
+    # Un modelo por complejidad de tarea. Elegido el 2026-11-21 por BENCHMARK real con la clave (17 modelos, ids verificados contra
+    # openrouter.ai/api/v1/models): openai/gpt-6-luna ($0.10 entrada / $0.50 salida por millón) respondió bien en TODO — plazo
+    # fundamentado en el contexto RAG, no inventó la multa que el contexto no trae, JSON válido 3/3, hallazgo completo en 166 palabras,
+    # 5/5 anomalías sembradas en un libro de pagos con 0 falsos positivos, y lee imágenes + JSON — a ~$0.0004 por análisis frente a
+    # ~$0.011 de Sonnet 5.5 (30 veces más) que además marcó 2 falsos positivos. Descartados: Haiku 5.5 y Gemini 3.x flash (razonan de más y
+    # se quedan sin tokens), Qwen/Gemma/MiniMax (JSON inválido o vacío), Mistral Small y Gemini 3.1 flash-lite (inventan cifras), gpt-5-mini
+    # y gpt-5-nano (sirven, pero 4-5 veces más caros por análisis sin ganar nada), GLM/DeepSeek (baratos y buenos, pero de origen chino:
+    # preferible no mandar datos de clientes de auditoría). Si algún agente complejo (CICERO, CASSANDRA, SENADO, SHERLOCK) mostrara
+    # carencias, subir SOLO OPENROUTER_MODEL_COMPLEX desde el .env (p. ej. openai/gpt-5-mini o anthropic/claude-sonnet-5.5).
+    OPENROUTER_MODEL_SIMPLE: str = "openai/gpt-6-luna"
+    OPENROUTER_MODEL_STANDARD: str = "openai/gpt-6-luna"
+    OPENROUTER_MODEL_COMPLEX: str = "openai/gpt-6-luna"
+    # Privacidad: «deny» pide a OpenRouter enrutar SOLO a proveedores que no almacenan ni entrenan con los datos (los papeles de auditoría
+    # llevan información de clientes). Si un modelo no tuviera ningún proveedor así, la llamada falla (404) y el router pasa a Gemini.
+    # «allow» o cualquier otro valor no envía la preferencia.
+    OPENROUTER_DATA_COLLECTION: str = "deny"
     # Esfuerzo de razonamiento. Sonnet 5.5 y Opus 5.5 RAZONAN SIEMPRE (OpenRouter responde 400 si se intenta apagarlo) y ese
     # razonamiento cuenta contra `max_tokens`: sin límite explícito, con max_tokens=120 el modelo gastó los 120 pensando y devolvió
     # contenido vacío (detectado en producción 2026-11-21). «low» lo reduce al mínimo — equivale al thinking_budget=0 que se usaba

@@ -30,7 +30,8 @@ export class LlmUnavailableError extends Error {
 type ConfigReader = Pick<ConfigService, 'get'>;
 
 const OPENROUTER_DEFAULT_URL = 'https://openrouter.ai/api/v1';
-const OPENROUTER_DEFAULT_MODEL = 'anthropic/claude-sonnet-5.5';
+// Elegido por benchmark real el 2026-11-21 (ver los comentarios de OPENROUTER_MODEL_* en apps/ai-service/app/config.py): el más barato que respondió bien en todo.
+const OPENROUTER_DEFAULT_MODEL = 'openai/gpt-6-luna';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 const JSON_ONLY = 'Responde ÚNICAMENTE con JSON válido, sin texto adicional ni bloques markdown.';
 
@@ -59,6 +60,8 @@ async function viaOpenRouter(config: ConfigReader, req: LlmRequest): Promise<str
   // Sonnet 5.5 y Opus 5.5 razonan siempre y ese razonamiento cuenta contra max_tokens: sin un esfuerzo explícito, un límite chico
   // se gasta pensando y la respuesta llega vacía (visto en producción 2026-11-21). «low» lo reduce al mínimo; «off» no envía nada.
   const effort = (readKey(config, 'OPENROUTER_REASONING_EFFORT') || 'low').toLowerCase();
+  // Privacidad: solo proveedores que no guardan ni entrenan con los datos (papeles con información de clientes). «allow»/«off» no lo envía.
+  const dataCollection = (readKey(config, 'OPENROUTER_DATA_COLLECTION') || 'deny').toLowerCase();
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -73,6 +76,7 @@ async function viaOpenRouter(config: ConfigReader, req: LlmRequest): Promise<str
       temperature: req.temperature,
       messages: [...(system ? [{ role: 'system', content: system }] : []), ...req.messages],
       ...(effort === 'off' ? {} : { reasoning: { effort } }),
+      ...(dataCollection === 'deny' ? { provider: { data_collection: 'deny' } } : {}),
     }),
     signal: AbortSignal.timeout(Math.max(req.timeoutMs ?? 45_000, 60_000)),
   });

@@ -9,11 +9,13 @@ import {
   Building2, LogOut, Bell, Plug, BookOpen,
   Briefcase, TrendingUp, FolderOpen, ListTree, Target, Library,
   Clock, CalendarClock, DollarSign, Handshake, CheckSquare, Wallet, Gauge, CalendarCheck,
-  Stamp, ShieldBan, Landmark, ClipboardCheck,
+  Stamp, ShieldBan, Landmark, ClipboardCheck, Lock, CreditCard, BadgeDollarSign,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useUser } from '@/hooks/useUser';
 import { useOrganization, type AuditModality } from '@/contexts/OrganizationContext';
+import { useBilling } from '@/contexts/BillingContext';
+import { lockedHref, moduleOfGroup, moduleOfItem } from '@/lib/billing/menu';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -29,8 +31,10 @@ interface NavItem {
   module?: 'INTERNAL' | 'EXTERNAL';
   /** Solo visible para el rol SUPER_ADMIN (administración de la plataforma, no de una organización). */
   superAdminOnly?: boolean;
+  /** Solo se muestra cuando el plan aplica a la sesión (cumplimiento en OBSERVE/ENFORCE y suscripción no exenta): con el interruptor apagado el menú queda como siempre. */
+  planOnly?: boolean;
   /** Visible desde este rol hacia arriba (misma jerarquía que el RolesGuard del API). */
-  minRole?: 'AUDIT_MANAGER' | 'CAE';
+  minRole?: 'AUDIT_MANAGER' | 'CAE' | 'ADMIN';
   /** Explicación de una línea — se muestra como tooltip al pasar el mouse. */
   hint?: string;
 }
@@ -150,6 +154,8 @@ const NAV_ITEMS: NavItem[] = [
     children: [
       { label: 'Mi organización', href: '/dashboard/admin/organization', icon: Building2, hint: 'Perfil de TU organización: nombre, color, logo y módulos (Interna / Externa).' },
       { label: 'Organizaciones', href: '/dashboard/admin/organizations', icon: Landmark, superAdminOnly: true, hint: 'Todas las organizaciones de la plataforma (despachos o empresas). No es una por cliente.' },
+      { label: 'Mi plan', href: '/dashboard/billing', icon: CreditCard, minRole: 'ADMIN', planOnly: true, hint: 'Tu plan, su vigencia, tus usuarios, límites y módulos incluidos.' },
+      { label: 'Planes y suscripciones', href: '/dashboard/admin/billing', icon: BadgeDollarSign, superAdminOnly: true, hint: 'Planes y precios, suscripciones de cada organización y el interruptor de cumplimiento (solo plataforma).' },
       { label: 'Usuarios', href: '/dashboard/admin/users', icon: Users2, hint: 'Las personas de tu organización: invitar, cambiar rol, desactivar.' },
       { label: 'Catálogos Generales', href: '/dashboard/admin/catalogs', icon: ListTree, hint: 'Tipos de entidad y categorías de proceso propios de tu organización.' },
       { label: 'Plantillas de Índice', href: '/dashboard/admin/index-templates', icon: FolderOpen, hint: 'Estructura de fases y carpetas del expediente de cada auditoría.' },
@@ -188,10 +194,34 @@ function getVisibleNavItems(
 }
 
 function NavGroup({ item, depth = 0, pathname }: { item: NavItem; depth?: number; pathname: string }) {
+  const { isLocked, planActive } = useBilling();
   const [open, setOpen] = useState(() => {
     if (!item.children) return false;
     return item.children.some((c) => c.href && pathname.startsWith(c.href));
   });
+
+  // El plan se SUMA al filtro por modalidad y por rol (que ya se aplicó): un módulo fuera del plan se ve con candado y lleva a «no está en tu plan».
+  // Con el interruptor apagado, sin plan o si no se pudo leer, `isLocked` es siempre falso y el menú queda como siempre.
+  const planModule = depth === 0 ? moduleOfGroup(item.label) : moduleOfItem(item.label);
+  if (item.planOnly && !planActive) return null;
+
+  if (planModule && isLocked(planModule)) {
+    return (
+      <Link
+        href={lockedHref(planModule)}
+        title="No está incluido en tu plan: toca para ver qué incluye"
+        className={cn(
+          'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-400 transition-colors hover:bg-[#1a4a7a]/40 hover:text-slate-200',
+          depth === 1 && 'ml-4 text-[13px]',
+        )}
+      >
+        <item.icon className={cn('shrink-0', depth === 0 ? 'h-4 w-4' : 'h-3.5 w-3.5')} />
+        <span className="flex-1 truncate">{item.label}</span>
+        <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="sr-only">No incluido en tu plan</span>
+      </Link>
+    );
+  }
 
   if (!item.children && item.href) {
     const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));

@@ -1,6 +1,42 @@
 import { createClient } from './supabase/client';
+import { emitBillingError, parseBillingError, type BillingErrorCode } from './billing/errors';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+
+/**
+ * Error de la API. Sigue siendo un `Error` común (el `message` es el del servidor), pero conserva el estado HTTP y, si es un
+ * bloqueo del plan (licencia vencida, módulo o asistente fuera del plan, tope de usuarios), su código.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: BillingErrorCode;
+  constructor(message: string, status: number, code?: BillingErrorCode) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/** Lee el cuerpo de una respuesta fallida, avisa a la interfaz si es un bloqueo del plan y arma el error. */
+async function failFromResponse(res: Response): Promise<ApiError> {
+  const body = await res.json().catch(() => ({ message: res.statusText }));
+  const block = parseBillingError(res.status, body);
+  if (block) emitBillingError(res.status, body);
+  // Igual que antes: el `message` del servidor tal cual (si es una lista de errores de validación, `String()` los une con comas).
+  const raw = body && typeof body === 'object' ? (body as { message?: unknown }).message : undefined;
+  return new ApiError(String(raw ?? `API error ${res.status}`), res.status, block?.code);
+}
+
+/** Igual que `failFromResponse` para las descargas, que leen el cuerpo como texto. */
+async function failFromDownload(res: Response): Promise<Error> {
+  const text = await res.text().catch(() => 'Download failed');
+  let body: unknown = null;
+  try { body = JSON.parse(text); } catch { /* no era JSON */ }
+  const block = parseBillingError(res.status, body);
+  if (block) emitBillingError(res.status, body);
+  return new ApiError(`Download error ${res.status}: ${text.slice(0, 120)}`, res.status, block?.code);
+}
 
 async function getAuthHeaders(): Promise<HeadersInit> {
   const supabase = createClient();
@@ -28,10 +64,7 @@ async function request<T>(
     headers: { ...headers, ...options.headers },
   });
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(error.message ?? `API error ${res.status}`);
-  }
+  if (!res.ok) throw await failFromResponse(res);
 
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -54,10 +87,7 @@ export const apiClient = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(error.message ?? `API error ${res.status}`);
-    }
+    if (!res.ok) throw await failFromResponse(res);
     if (res.status === 204) return undefined as T;
     return res.json();
   },
@@ -75,10 +105,7 @@ export const apiClient = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(error.message ?? `API error ${res.status}`);
-    }
+    if (!res.ok) throw await failFromResponse(res);
     const contentType = res.headers.get('Content-Type') ?? 'application/octet-stream';
     const disposition = res.headers.get('Content-Disposition') ?? '';
     const match = /filename="?([^"]+)"?/.exec(disposition);
@@ -92,10 +119,7 @@ export const apiClient = {
     const res = await fetch(`${API_BASE}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) {
-      const err = await res.text().catch(() => 'Download failed');
-      throw new Error(`Download error ${res.status}: ${err.slice(0, 120)}`);
-    }
+    if (!res.ok) throw await failFromDownload(res);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -113,10 +137,7 @@ export const apiClient = {
     const res = await fetch(`${API_BASE}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) {
-      const err = await res.text().catch(() => 'Download failed');
-      throw new Error(`Download error ${res.status}: ${err.slice(0, 120)}`);
-    }
+    if (!res.ok) throw await failFromDownload(res);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -137,10 +158,7 @@ export const apiClient = {
       headers,
       body: JSON.stringify(body),
     });
-    if (!res.ok) {
-      const err = await res.text().catch(() => 'Download failed');
-      throw new Error(`Download error ${res.status}: ${err.slice(0, 120)}`);
-    }
+    if (!res.ok) throw await failFromDownload(res);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

@@ -1,10 +1,10 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger,
-} from '@nestjs/common';
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
 import { FieldEvidenceKind, Prisma, RefType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageUsageService } from '../../billing/storage-usage.service';
 import { AuthUser } from '../../auth/jwt.strategy';
 import { AiService } from '../../ai/ai.service';
 import { PaperReferencesService } from '../paper-references.service';
@@ -78,6 +78,8 @@ export class FieldEvidenceService {
     private readonly aiService: AiService,
     private readonly paperReferencesService: PaperReferencesService,
     private readonly investigationGraphService: InvestigationGraphService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) no se verifica la cuota del plan.
+    @Optional() private readonly storageQuota?: StorageUsageService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -162,6 +164,7 @@ export class FieldEvidenceService {
       }
     }
 
+    if (file) await this.storageQuota?.assertCanUpload(user.organizationId, { sizeBytes: file.size ?? file.buffer.length, mimeType: file.mimetype, filename: file.originalname });
     const sha256 = file
       ? createHash('sha256').update(file.buffer).digest('hex')
       : createHash('sha256').update(Buffer.from(dto.texto!, 'utf-8')).digest('hex');
@@ -1085,6 +1088,7 @@ export class FieldEvidenceService {
       throw new BadRequestException('Se requiere un archivo de audio.');
     }
 
+    if (file) await this.storageQuota?.assertCanUpload(user.organizationId, { sizeBytes: file.size ?? file.buffer.length, mimeType: file.mimetype, filename: file.originalname });
     const sha256 = file
       ? createHash('sha256').update(file.buffer).digest('hex')
       : createHash('sha256').update(Buffer.from(dto.texto!, 'utf-8')).digest('hex');

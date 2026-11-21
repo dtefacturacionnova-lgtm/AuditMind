@@ -2,7 +2,7 @@ import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BILLABLE_ROLES, isBillableRole } from './billing.constants';
 import { BillingSettingsService } from './billing-settings.service';
-import { Entitlements, computeEntitlements } from './entitlements';
+import { Entitlements, PackTotals, computeEntitlements } from './entitlements';
 
 const TTL_MS = 60_000;
 
@@ -30,8 +30,17 @@ export class EntitlementsService {
     const hit = this.cache.get(organizationId);
     if (hit && Date.now() - hit.at < TTL_MS) return hit.ent;
     let sub = null;
+    let packs: PackTotals = { storageGb: 0, aiPackRemaining: 0 };
     try {
       sub = await this.prisma.billingSubscription.findUnique({ where: { organizationId } });
+      if (sub) {
+        try {
+          packs = await this.packTotals(organizationId);
+        } catch (e) {
+          // La etapa 2 del SQL (paquetes) puede no estar aplicada todavía: se trabaja sin paquetes.
+          this.logger.warn(`No se pudieron leer los paquetes de ${organizationId}: ${(e as Error).message}`);
+        }
+      }
     } catch (e) {
       // Tablas aún sin crear (SQL sin aplicar) o base con problemas: se deja pasar, pero con ALARMA en el registro (nunca en silencio).
       this.logger.error(`No se pudo leer la suscripción de ${organizationId}: ${(e as Error).message}`);
@@ -43,6 +52,8 @@ export class EntitlementsService {
             planSnapshot: sub.planSnapshot, overrides: sub.overrides, extraUsers: sub.extraUsers, exempt: sub.exempt,
           },
           await this.settings.get(),
+          new Date(),
+          packs,
         )
       : null;
     if (!ent) this.logger.warn(`La organización ${organizationId} no tiene suscripción: se deja pasar sin restricciones.`);
@@ -60,6 +71,18 @@ export class EntitlementsService {
       return;
     }
     throw new HttpException({ statusCode: status, code, message, ...extra }, status);
+  }
+
+  /** Paquetes comprados que siguen vigentes (no vencidos ni agotados): espacio extra y peticiones de IA que quedan. */
+  async packTotals(organizationId: string): Promise<PackTotals> {
+    const rows = await this.prisma.addonPurchase.findMany({
+      where: { organizationId, status: 'ACTIVE', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      select: { kind: true, quantity: true, remaining: true },
+    });
+    return {
+      storageGb: rows.filter((r) => r.kind === 'STORAGE').reduce((s, r) => s + r.quantity, 0),
+      aiPackRemaining: rows.filter((r) => r.kind === 'AI').reduce((s, r) => s + r.remaining, 0),
+    };
   }
 
   async countBillableUsers(organizationId: string, excludeUserId?: string): Promise<number> {

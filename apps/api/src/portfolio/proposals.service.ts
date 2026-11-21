@@ -1,11 +1,11 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger,
-} from '@nestjs/common';
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AcceptanceRating, Client, ClientStatus, Prisma, Proposal, ProposalStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsageService } from '../billing/usage.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { ClientsService } from './clients.service';
 import { CreateProposalDto, UpdateProposalDto } from './dto/proposal.dto';
@@ -29,6 +29,8 @@ export class ProposalsService {
     private readonly prisma:  PrismaService,
     private readonly config:  ConfigService,
     private readonly clients: ClientsService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) las acciones de IA corren sin medirse.
+    @Optional() private readonly usage?: UsageService,
   ) {}
 
   private async getProposalOrThrow(id: string, user: AuthUser): Promise<Proposal> {
@@ -265,7 +267,7 @@ REGLAS
   }
 
   private callLlmText(prompt: string): Promise<string> {
-    return generateText(this.config, { messages: [{ role: 'user', content: prompt }], temperature: 0.35, maxTokens: 2400, timeoutMs: 60_000 });
+    return generateText(this.config, { messages: [{ role: 'user', content: prompt }], temperature: 0.35, maxTokens: 2400, timeoutMs: 60_000, meter: { usage: this.usage, agent: 'CICERO', weight: 5 } });
   }
 
   private fallbackDraft(proposal: Proposal, client: Client): string {

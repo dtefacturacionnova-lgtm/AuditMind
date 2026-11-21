@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsageService } from '../billing/usage.service';
 import { SyncStatus } from '@prisma/client';
 import { generateText, isLlmConfigured } from '../common/llm/llm-client';
 
@@ -134,6 +135,8 @@ export class PaperConsolidationService {
   constructor(
     private readonly prisma:  PrismaService,
     private readonly config:  ConfigService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) las acciones de IA corren sin medirse.
+    @Optional() private readonly usage?: UsageService,
   ) {}
 
   // ─── Event handler ────────────────────────────────────────────────────────
@@ -412,7 +415,7 @@ export class PaperConsolidationService {
 
   private async callLlmWithPrompt(prompt: string): Promise<SectionMap> {
     const rawText = await generateText(this.config, {
-      messages: [{ role: 'user', content: prompt }], temperature: 0.3, maxTokens: 3500, json: true, timeoutMs: 60_000,
+      messages: [{ role: 'user', content: prompt }], temperature: 0.3, maxTokens: 3500, json: true, timeoutMs: 60_000, meter: { usage: this.usage, agent: 'SCRIPTORIUM', weight: 5 },
     });
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('LLM returned no JSON object');

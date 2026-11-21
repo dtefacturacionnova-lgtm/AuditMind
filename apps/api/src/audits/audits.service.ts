@@ -1,6 +1,5 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger,
-} from '@nestjs/common';
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { assertInOrg, assertAllInOrg } from '../common/utils/tenant.util';
 import { cancelEngagementInTx } from '../portfolio/engagement-cancel.util';
 import { ROLE_HIERARCHY } from '../common/guards/roles.guard';
@@ -9,6 +8,7 @@ import {
   assertAuditVisible, assertInvestigationAccess, INVESTIGATION_SELECT, seesAllInvestigations, visibleAuditWhere,
 } from '../common/utils/investigation-scope.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageUsageService } from '../billing/storage-usage.service';
 import { CreateAuditDto } from './dto/create-audit.dto';
 import { UpdateAuditDto, UpdateAuditStatusDto } from './dto/update-audit.dto';
 import { UpdateTeamMemberRateDto } from './dto/team-rate.dto';
@@ -33,6 +33,8 @@ export class AuditsService {
     private readonly auditIndex: AuditIndexService,
     private readonly aiService: AiService,
     private readonly auditFolders: AuditFoldersService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) no se verifica la cuota del plan.
+    @Optional() private readonly storageQuota?: StorageUsageService,
   ) {
     this.supabaseAdmin = createClient(
       process.env.SUPABASE_URL!,
@@ -911,6 +913,7 @@ export class AuditsService {
     user: AuthUser,
   ) {
     await this.findOne(auditId, user); // verifica acceso
+    await this.storageQuota?.assertCanUpload(user.organizationId, { sizeBytes: file.size ?? file.buffer.length, mimeType: file.mimetype, filename: file.originalname });
 
     const safeName = file.originalname.replace(/[^\w.\-]/g, '_');
     const path = `request-docs/${auditId}/${Date.now()}_${safeName}`;

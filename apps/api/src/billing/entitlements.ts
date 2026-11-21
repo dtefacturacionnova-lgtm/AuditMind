@@ -50,6 +50,13 @@ export interface Entitlements {
   assistants: string[];
   limits: PlanLimits;
   seatsAllowed: number; // Infinity = sin tope
+  /** Lo comprado aparte (paquetes vigentes): GB de espacio extra y peticiones de IA que quedan en paquetes. */
+  extra: { storageGb: number; aiPackRemaining: number };
+}
+
+export interface PackTotals {
+  storageGb: number;
+  aiPackRemaining: number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -97,7 +104,7 @@ export function seatsAllowed(limits: PlanLimits, extraUsers: number): number {
   return limits.maxUsers < 0 ? withExtra : Math.min(withExtra, Math.max(limits.maxUsers, limits.users));
 }
 
-export function computeEntitlements(sub: SubscriptionInput, settings: LifecycleSettings, now: Date = new Date()): Entitlements {
+export function computeEntitlements(sub: SubscriptionInput, settings: LifecycleSettings, now: Date = new Date(), packs?: PackTotals): Entitlements {
   const snap = asRecord(sub.planSnapshot);
   const ov = asRecord(sub.overrides);
   const snapLimits = asRecord(snap.limits);
@@ -125,7 +132,13 @@ export function computeEntitlements(sub: SubscriptionInput, settings: LifecycleS
     assistants,
     limits,
     seatsAllowed: seatsAllowed(limits, sub.extraUsers),
+    extra: { storageGb: Math.max(0, packs?.storageGb ?? 0), aiPackRemaining: Math.max(0, packs?.aiPackRemaining ?? 0) },
   };
+}
+
+/** Espacio total en GB (plan + paquetes); null = sin tope. */
+export function totalStorageGb(ent: Pick<Entitlements, 'limits' | 'extra'>): number | null {
+  return ent.limits.storageGb < 0 ? null : ent.limits.storageGb + ent.extra.storageGb;
 }
 
 /** ¿Incluye este derecho? (módulo o función; 'CORE' siempre). */

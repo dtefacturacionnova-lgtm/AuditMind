@@ -1,10 +1,10 @@
 import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
-  Logger,
-} from '@nestjs/common';
+  Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, FindingSeverity, FindingStatus, ConfirmationStatus, ConfirmationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsageService } from '../billing/usage.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertAuditVisible, assertInvestigationAccess, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
 import { PaperGraphService } from './paper-graph.service';
@@ -24,6 +24,8 @@ export class PaperSectionsService {
     private readonly config:         ConfigService,
     private readonly aiService:      AiService,
     private readonly contentLibrary: ContentLibraryService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) las acciones de IA corren sin medirse.
+    @Optional() private readonly usage?: UsageService,
   ) {}
 
   // ─── Access guard ────────────────────────────────────────────────────────
@@ -708,7 +710,7 @@ ${hasRag ? `- En columnas de tipo "Base Normativa" o similar, cita artículo/nor
 
   private async callLlmJson(prompt: string): Promise<unknown[]> {
     const text = await generateText(this.config, {
-      messages: [{ role: 'user', content: prompt }], temperature: 0.25, maxTokens: 6000, json: true, timeoutMs: 45_000,
+      messages: [{ role: 'user', content: prompt }], temperature: 0.25, maxTokens: 6000, json: true, timeoutMs: 45_000, meter: { usage: this.usage, agent: 'SCRIPTORIUM', weight: 5 },
     });
     const parsed: unknown = JSON.parse(text);
     if (!Array.isArray(parsed)) throw new Error('LLM matrix response is not a JSON array');
@@ -716,7 +718,7 @@ ${hasRag ? `- En columnas de tipo "Base Normativa" o similar, cita artículo/nor
   }
 
   private callLlmText(prompt: string): Promise<string> {
-    return generateText(this.config, { messages: [{ role: 'user', content: prompt }], temperature: 0.35, maxTokens: 1200, timeoutMs: 45_000 });
+    return generateText(this.config, { messages: [{ role: 'user', content: prompt }], temperature: 0.35, maxTokens: 1200, timeoutMs: 45_000, meter: { usage: this.usage, agent: 'SCRIPTORIUM', weight: 1 } });
   }
 
   private fallbackSuggestion(label: string, description: string, aiHint: string): string {

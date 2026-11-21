@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsageService } from '../billing/usage.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInvestigationAccess, INVESTIGATION_SELECT } from '../common/utils/investigation-scope.util';
 import { generateText, isLlmConfigured } from '../common/llm/llm-client';
@@ -52,6 +53,8 @@ export class PaperQualityService {
   constructor(
     private readonly prisma:  PrismaService,
     private readonly config:  ConfigService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) las acciones de IA corren sin medirse.
+    @Optional() private readonly usage?: UsageService,
   ) {}
 
   // ─── Public API ───────────────────────────────────────────────────────────
@@ -272,7 +275,7 @@ Responde EXCLUSIVAMENTE con un JSON:
 Solo el JSON, sin markdown.`;
 
     const raw = await generateText(this.config, {
-      messages: [{ role: 'user', content: prompt }], temperature: 0.2, maxTokens: 1500, json: true, timeoutMs: 30_000,
+      messages: [{ role: 'user', content: prompt }], temperature: 0.2, maxTokens: 1500, json: true, timeoutMs: 30_000, meter: { usage: this.usage, agent: 'ARGUS', weight: 1 },
     });
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in LLM response');

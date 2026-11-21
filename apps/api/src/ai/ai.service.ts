@@ -1,8 +1,10 @@
-import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { getAgentSystemPrompt } from './agent-prompts';
 import { generateText, isLlmConfigured } from '../common/llm/llm-client';
+import { Metered, mediaWeight } from '../billing/metered.decorator';
+import { UsageService } from '../billing/usage.service';
 
 // Investigador Forense — SHERLOCK (Fase 2b)
 interface InvestigacionHallazgo {
@@ -23,12 +25,15 @@ export class AiService {
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) las acciones de IA corren sin medirse. Lo lee @Metered.
+    @Optional() private readonly usage?: UsageService,
   ) {
     this.aiServiceUrl = this.config.get<string>('AI_SERVICE_URL', 'http://localhost:3003');
     this.internalKey  = this.config.get<string>('AI_SERVICE_INTERNAL_KEY', 'auditmind-internal-2026-xK9mP3qR');
   }
 
   // ─── Chat con agente ─────────────────────────────────────────────────────────
+  @Metered({ agent: (a) => String(a[0] ?? 'ASISTENTE').toUpperCase(), weight: 1 })
   async chat(
     agentType: string,
     message: string,
@@ -155,6 +160,7 @@ export class AiService {
   }
 
   // ─── Scriptorium — Mejorar hallazgo ──────────────────────────────────────────
+  @Metered({ agent: 'SCRIPTORIUM', weight: 1 })
   async improveFinding(finding: Record<string, unknown>): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/scriptorium/improve-finding`, {
       method: 'POST',
@@ -172,6 +178,7 @@ export class AiService {
   }
 
   // ─── Scriptorium — Generar hallazgo desde descripción ────────────────────────
+  @Metered({ agent: 'SCRIPTORIUM', weight: 1 })
   async generateFinding(
     description: string,
     auditTitle?: string,
@@ -194,6 +201,7 @@ export class AiService {
   }
 
   // ─── Scriptorium — Generar programa de auditoría ──────────────────────────────
+  @Metered({ agent: 'SCRIPTORIUM', weight: 5 })
   async generateAuditProgram(payload: Record<string, unknown>): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/scriptorium/audit-program`, {
       method: 'POST',
@@ -211,6 +219,7 @@ export class AiService {
   }
 
   // ─── Procedimientos — mejorar redacción + generar desarrollo ──────────────────
+  @Metered({ agent: 'SCRIPTORIUM', weight: 1 })
   async improveProcedureText(payload: Record<string, unknown>): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/scriptorium/improve-procedure-text`, {
       method: 'POST',
@@ -224,6 +233,7 @@ export class AiService {
     return res.json();
   }
 
+  @Metered({ agent: 'SCRIPTORIUM', weight: 5 })
   async draftProcedure(payload: Record<string, unknown>): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/scriptorium/draft-procedure`, {
       method: 'POST',
@@ -238,6 +248,7 @@ export class AiService {
   }
 
   // ─── PI.7c — COSO 2013 Auto-assessment ───────────────────────────────────────
+  @Metered({ agent: 'ARGUS', weight: 5 })
   async cosoAssess(payload: Record<string, unknown>): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/scriptorium/coso-assess`, {
       method: 'POST',
@@ -255,6 +266,7 @@ export class AiService {
   }
 
   // ─── Scriptorium — Generar borrador de papel de trabajo ──────────────────────
+  @Metered({ agent: 'SCRIPTORIUM', weight: 5 })
   async generateWorkingPaper(payload: Record<string, unknown>): Promise<unknown> {
     const res = await fetch(`${this.aiServiceUrl}/scriptorium/working-paper`, {
       method: 'POST',
@@ -330,6 +342,7 @@ export class AiService {
   }
 
   // ─── Evidencia de campo — transcripción de audio (EVD-03/04) ────────────────
+  @Metered({ agent: 'EVIDENCIA', weight: (a) => mediaWeight((a[0] as Buffer).length, String(a[2] ?? ''), 'audio') })
   async transcribeAudio(
     fileBuffer: Buffer,
     filename: string,
@@ -370,6 +383,7 @@ export class AiService {
   // Shape de respuesta se deja en snake_case tal cual lo devuelve ai-service —
   // mismo criterio ya usado en transcribeAudio (§6.0.8 del diseño: la conversión
   // de convención vive donde cada dato se consume, no en este método puente).
+  @Metered({ agent: 'EVIDENCIA', weight: (a) => mediaWeight((a[0] as Buffer).length, String(a[2] ?? ''), 'video') })
   async processVideo(
     fileBuffer: Buffer,
     filename: string,
@@ -412,6 +426,7 @@ export class AiService {
   // ─── Evidencia de campo — PDF con OCR automático (Fase 2a Investigador Forense) ─
   // Mismo patrón que processVideo: una llamada a ai-service que aplica la
   // cascada de OCR ya construida (pdfplumber → Stirling → Gemini vision).
+  @Metered({ agent: 'EVIDENCIA', weight: 1 })
   async processPdf(fileBuffer: Buffer, filename: string): Promise<{
     texto: string;
     paginas: number;
@@ -441,6 +456,7 @@ export class AiService {
   }
 
   // ─── Evidencia de campo — extracción estructurada de hallazgos (EVD-05) ─────
+  @Metered({ agent: 'EVIDENCIA', weight: 5 })
   async extractFieldEvidence(payload: {
     fuente_tipo: 'texto' | 'transcripcion_audio' | 'foto_anotada' | 'video_corto' | 'pdf_documento';
     contenido: string;
@@ -499,6 +515,7 @@ export class AiService {
   }
 
   // ─── Investigador Forense — SHERLOCK (Fase 2b, núcleo mínimo) ──────────────
+  @Metered({ agent: 'SHERLOCK', weight: 10 })
   async runInvestigationAnalysis(payload: {
     audit_title: string;
     objetivo: string;
@@ -552,6 +569,7 @@ export class AiService {
   // Fase 2c — clasifica una hoja de cálculo subida en el Investigador en 1 de
   // los 15 motores CAATs auto-ejecutables (o "ninguno"). Llamada corta, un
   // solo round-trip LLM — no confundir con runInvestigationAnalysis.
+  @Metered({ agent: 'HERMES', weight: 1 })
   async classifySpreadsheet(payload: {
     descripcion: string;
     columns: { name: string; sample_values: string[] }[];
@@ -747,6 +765,7 @@ export class AiService {
   }
 
   // ─── ATLAS — Análisis Multi-Año ───────────────────────────────────────────────
+  @Metered({ agent: 'ATLAS', weight: 5 })
   async multiYearAnalysis(payload: {
     audits: Array<{
       id: string;

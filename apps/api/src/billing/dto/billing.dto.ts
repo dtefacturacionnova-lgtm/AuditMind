@@ -89,4 +89,28 @@ export class UpdateBillingSettingsDto {
   @IsOptional() @IsNumber() @Min(1) @Max(20) safetyMultiplier?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) ivaPercent?: number;
   @IsOptional() @IsString() @MaxLength(40) defaultPlanCode?: string;
+  @IsOptional() @IsObject() paymentInstructions?: Record<string, string>;
+}
+
+export class CreatePaymentDto {
+  @IsIn(['LICENSE', 'PACK']) kind!: 'LICENSE' | 'PACK';
+  @IsOptional() @IsString() @MaxLength(40) planCode?: string;
+  @IsOptional() @IsInt() @IsIn([1, 3, 6, 12]) months?: number;
+  @IsOptional() @IsString() @MaxLength(40) packCode?: string;
+  @IsIn(['TRANSFER', 'QR', 'CASH']) method!: 'TRANSFER' | 'QR' | 'CASH';
+}
+
+export class RejectPaymentDto {
+  @IsString() @MaxLength(500) reason!: string;
+}
+
+export class SavePackDto {
+  @IsOptional() @IsString() @MaxLength(40) code?: string;
+  @IsOptional() @IsIn(['AI', 'STORAGE']) kind?: 'AI' | 'STORAGE';
+  @IsOptional() @IsString() @MaxLength(120) name?: string;
+  @IsOptional() @IsInt() @Min(1) quantity?: number;
+  @IsOptional() @IsNumber() @Min(0) priceUsd?: number;
+  @IsOptional() @StrictBoolean() recurring?: boolean;
+  @IsOptional() @StrictBoolean() active?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(1000) sortOrder?: number;
 }

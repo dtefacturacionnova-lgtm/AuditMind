@@ -50,6 +50,7 @@ import { CollectionsModule } from './collections/collections.module';
 import { AdminTasksModule } from './admin-tasks/admin-tasks.module';
 import { WatchlistsModule } from './watchlists/watchlists.module';
 import { BillingModule } from './billing/billing.module';
+import { RequestContextInterceptor } from './common/request-context';
 import { SubscriptionGuard } from './billing/subscription.guard';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { SignaturesModule } from './signatures/signatures.module';
@@ -120,6 +121,8 @@ import { InterviewSignatureModule } from './working-papers/interview-signature/i
     // Bucket `audit-files` privado: firma las URLs de adjuntos al responder.
     StorageUrlService,
     { provide: APP_INTERCEPTOR, useClass: StorageUrlInterceptor },
+    // Quién hace la petición (organización y usuario), disponible para medir la IA sin pasarlo por parámetro.
+    { provide: APP_INTERCEPTOR, useClass: RequestContextInterceptor },
   ],
 })
 export class AppModule {

@@ -5,9 +5,11 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { BillingSettingsService } from './billing-settings.service';
+import { BillingUsageService } from './billing-usage.service';
 import {
-  AssignPlanDto, CreatePlanDto, ExtendTrialDto, RenewDto, UpdateBillingSettingsDto, UpdatePlanDto, UpdateSubscriptionDto,
+  AssignPlanDto, CreatePlanDto, ExtendTrialDto, RejectPaymentDto, RenewDto, SavePackDto, UpdateBillingSettingsDto, UpdatePlanDto, UpdateSubscriptionDto,
 } from './dto/billing.dto';
+import { PaymentsService } from './payments.service';
 import { PlansService } from './plans.service';
 import { SubscriptionsService } from './subscriptions.service';
 
@@ -21,6 +23,8 @@ export class BillingAdminController {
     private readonly plans: PlansService,
     private readonly subscriptions: SubscriptionsService,
     private readonly settings: BillingSettingsService,
+    private readonly payments: PaymentsService,
+    private readonly usage: BillingUsageService,
   ) {}
 
   // ── Planes ──
@@ -83,6 +87,53 @@ export class BillingAdminController {
   @ApiOperation({ summary: 'Registro de actividad (quién, cuándo y qué cambió)' })
   events(@Query('organizationId') organizationId?: string, @Query('limit') limit?: string) {
     return this.subscriptions.events(organizationId, limit ? Number(limit) : 50);
+  }
+
+  // ── Pagos (aprobación manual) ──
+  @Get('payments')
+  @ApiOperation({ summary: 'Pagos de todas las organizaciones (filtro por estado)' })
+  listPayments(@Query('status') status?: string, @Query('organizationId') organizationId?: string) {
+    return this.payments.listAll({ status, organizationId });
+  }
+
+  @Get('payments/:id/proof-url')
+  @ApiOperation({ summary: 'Enlace temporal (5 min) al comprobante de un pago' })
+  proofUrl(@Param('id') id: string) {
+    return this.payments.proofUrl(id);
+  }
+
+  @Post('payments/:id/approve')
+  @ApiOperation({ summary: 'Aprobar el pago: acredita la licencia o el paquete, una sola vez' })
+  approve(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.payments.approve(id, user.id);
+  }
+
+  @Post('payments/:id/reject')
+  reject(@Param('id') id: string, @Body() dto: RejectPaymentDto, @CurrentUser() user: AuthUser) {
+    return this.payments.reject(id, user.id, dto.reason);
+  }
+
+  // ── Paquetes ──
+  @Get('packs')
+  listPacks() {
+    return this.payments.listPacks();
+  }
+
+  @Post('packs')
+  createPack(@Body() dto: SavePackDto, @CurrentUser() user: AuthUser) {
+    return this.payments.createPack(dto, user.id);
+  }
+
+  @Patch('packs/:id')
+  updatePack(@Param('id') id: string, @Body() dto: SavePackDto, @CurrentUser() user: AuthUser) {
+    return this.payments.updatePack(id, dto, user.id);
+  }
+
+  // ── Consumo y costos (dinero Y peticiones) ──
+  @Get('consumption')
+  @ApiOperation({ summary: 'Consumo del mes por organización, asistente y tipo de archivo: peticiones, dinero y margen' })
+  consumption(@Query('period') period?: string) {
+    return this.usage.adminConsumption(period && /^\d{4}-(0[1-9]|1[0-2])$/.test(period) ? period : undefined);
   }
 
   // ── Parámetros de la plataforma ──

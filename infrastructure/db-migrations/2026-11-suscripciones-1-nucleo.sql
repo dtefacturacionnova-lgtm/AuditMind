@@ -98,6 +98,7 @@ CREATE TABLE "billing_settings" (
   "weights"          JSONB NOT NULL DEFAULT '{"light": 1, "medium": 5, "heavy": 10}',
   "ivaPercent"       DECIMAL(5,2),
   "defaultPlanCode"  TEXT NOT NULL DEFAULT 'EMPRESA_DESPACHO',
+  "paymentInstructions" JSONB NOT NULL DEFAULT '{}', -- QR 365, datos bancarios… lo que ve el cliente al pagar (etapa 2)
   "updatedById"      TEXT,
   "updatedAt"        TIMESTAMP(3) NOT NULL,
   CONSTRAINT "billing_settings_pkey" PRIMARY KEY ("id"),

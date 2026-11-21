@@ -16,12 +16,14 @@ jest.setTimeout(120_000);
 suite('planes y suscripciones contra Postgres real', () => {
   let prisma: PrismaClient;
   let settings: any; let entitlements: any; let plans: any; let subs: any;
+  let releaseLock: () => Promise<void>;
   const orgs: string[] = [];
   const DAY = 24 * 60 * 60 * 1000;
 
   beforeAll(async () => {
     prisma = new PrismaClient({ datasourceUrl: URL });
     await prisma.$connect();
+    releaseLock = await (await import('./billing-test-lock')).acquireBillingTestLock(prisma);
     const { BillingSettingsService } = await import('./billing-settings.service');
     const { EntitlementsService } = await import('./entitlements.service');
     const { PlansService } = await import('./plans.service');
@@ -36,7 +38,8 @@ suite('planes y suscripciones contra Postgres real', () => {
     await prisma.billingSettings.update({ where: { id: 'default' }, data: { enforcementMode: 'OFF' } });
     await prisma.billingEvent.deleteMany({ where: { OR: [{ organizationId: { in: orgs } }, { type: { startsWith: 'PLAN_' }, actorId: 'test-actor' }] } });
     await prisma.organization.deleteMany({ where: { id: { in: orgs } } }); // las suscripciones y los usuarios caen en cascada
-    await prisma.billingPlan.deleteMany({ where: { code: { startsWith: 'TEST_' } } });
+    await prisma.billingPlan.deleteMany({ where: { code: { startsWith: 'T1_' } } });
+    await releaseLock();
     await prisma.$disconnect();
   });
 
@@ -284,24 +287,24 @@ suite('planes y suscripciones contra Postgres real', () => {
     const base = { name: 'Plan de prueba', audience: 'EMPRESA' as const, modules: ['CARTERA'], functions: [], assistants: ['MINERVA'], limits: { users: 2, maxUsers: 4, storageGb: 10, maxFileMb: 50, aiRequests: 100 }, prices: [{ months: 1, priceUsd: 10 }, { months: 12, priceUsd: 100 }] };
 
     it('crea un plan con precios y valida códigos, claves y límites', async () => {
-      const p = await plans.create({ ...base, code: 'test_uno' }, 'test-actor');
-      expect(p.code).toBe('TEST_UNO');
+      const p = await plans.create({ ...base, code: 't1_uno' }, 'test-actor');
+      expect(p.code).toBe('T1_UNO');
       expect(p.prices).toHaveLength(2);
       expect(p.limits).toMatchObject({ users: 2, maxUsers: 4, storageGb: 10, packsAi: true, packsStorage: true }); // lo no indicado toma el valor por defecto
-      expect(await code(plans.create({ ...base, code: 'TEST_UNO' }, 'a'))).toMatch(/Ya existe/);
+      expect(await code(plans.create({ ...base, code: 'T1_UNO' }, 'a'))).toMatch(/Ya existe/);
       expect(await code(plans.create({ ...base, code: 'x' }, 'a'))).toMatch(/código del plan/);
-      expect(await code(plans.create({ ...base, code: 'TEST_DOS', modules: ['NO_EXISTE'] }, 'a'))).toMatch(/Módulos desconocidos/);
-      expect(await code(plans.create({ ...base, code: 'TEST_DOS', assistants: ['ROBOT'] }, 'a'))).toMatch(/Asistentes desconocidos/);
-      expect(await code(plans.create({ ...base, code: 'TEST_DOS', limits: { users: 5, maxUsers: 2 } }, 'a'))).toMatch(/máximo de usuarios/);
-      expect(await code(plans.create({ ...base, code: 'TEST_DOS', prices: [{ months: 7, priceUsd: 1 }] }, 'a'))).toMatch(/Duración de licencia/);
-      expect(await code(plans.create({ ...base, code: 'TEST_DOS', prices: [{ months: 1, priceUsd: 1 }, { months: 1, priceUsd: 2 }] }, 'a'))).toMatch(/repetida/);
+      expect(await code(plans.create({ ...base, code: 'T1_DOS', modules: ['NO_EXISTE'] }, 'a'))).toMatch(/Módulos desconocidos/);
+      expect(await code(plans.create({ ...base, code: 'T1_DOS', assistants: ['ROBOT'] }, 'a'))).toMatch(/Asistentes desconocidos/);
+      expect(await code(plans.create({ ...base, code: 'T1_DOS', limits: { users: 5, maxUsers: 2 } }, 'a'))).toMatch(/máximo de usuarios/);
+      expect(await code(plans.create({ ...base, code: 'T1_DOS', prices: [{ months: 7, priceUsd: 1 }] }, 'a'))).toMatch(/Duración de licencia/);
+      expect(await code(plans.create({ ...base, code: 'T1_DOS', prices: [{ months: 1, priceUsd: 1 }, { months: 1, priceUsd: 2 }] }, 'a'))).toMatch(/repetida/);
     });
 
     it('cambiar un plan NO toca lo ya contratado; «aplicar a clientes» refresca la copia y respeta los ajustes por cliente', async () => {
-      const plan = await plans.create({ ...base, code: 'TEST_TRES' }, 'test-actor');
+      const plan = await plans.create({ ...base, code: 'T1_TRES' }, 'test-actor');
       const id = await newOrg();
       await subs.createForNewOrganization(id);
-      await subs.assign(id, { planCode: 'TEST_TRES', months: 1 }, 'a');
+      await subs.assign(id, { planCode: 'T1_TRES', months: 1 }, 'a');
       await subs.update(id, { overrides: { addModules: ['HORAS'] } }, 'a');
 
       await plans.update(plan.id, { modules: ['CARTERA', 'RIESGOS'], limits: { aiRequests: 999 } }, 'test-actor');
@@ -315,7 +318,7 @@ suite('planes y suscripciones contra Postgres real', () => {
     });
 
     it('el código no se puede cambiar y los precios se actualizan por duración', async () => {
-      const plan = await plans.create({ ...base, code: 'TEST_CUATRO' }, 'test-actor');
+      const plan = await plans.create({ ...base, code: 'T1_CUATRO' }, 'test-actor');
       expect(await code(plans.update(plan.id, { code: 'OTRO_CODIGO' }, 'a'))).toMatch(/no se puede cambiar/);
       const up = await plans.update(plan.id, { prices: [{ months: 1, priceUsd: 12 }, { months: 3, priceUsd: 33 }] }, 'a');
       expect(up.prices.map((p: any) => [p.months, Number(p.priceUsd)])).toEqual([[1, 12], [3, 33], [12, 100]]);

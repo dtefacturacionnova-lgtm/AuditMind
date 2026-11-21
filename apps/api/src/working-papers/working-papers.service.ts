@@ -1,10 +1,10 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException,
-} from '@nestjs/common';
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException, Optional } from '@nestjs/common';
 import { assertInOrg, assertCanSelfReview } from '../common/utils/tenant.util';
 import { assertInvestigationAccess, AUDIT_ACCESS_SELECT, INVESTIGATION_SELECT, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageUsageService } from '../billing/storage-usage.service';
 import {
   CreateWorkingPaperDto, AddCommentDto, AddTickMarkEntryDto,
 } from './dto/create-working-paper.dto';
@@ -88,6 +88,8 @@ export class WorkingPapersService {
     private readonly pdfService:    PdfService,
     private readonly pdfTools:      PdfToolsService,
     private readonly signingIdentity: SigningIdentityService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) no se verifica la cuota del plan.
+    @Optional() private readonly storageQuota?: StorageUsageService,
   ) {
     this.supabaseAdmin = createClient(
       process.env.SUPABASE_URL!,
@@ -392,6 +394,7 @@ export class WorkingPapersService {
   ) {
     await this.findOne(paperId, user); // access guard
     file = await this.preprocessUploadedFile(file);
+    await this.storageQuota?.assertCanUpload(user.organizationId, { sizeBytes: file.size ?? file.buffer.length, mimeType: file.mimetype, filename: file.originalname });
 
     const section = await this.prisma.paperSection.findFirst({
       where: { paperId, sectionKey },
@@ -455,6 +458,7 @@ export class WorkingPapersService {
   ) {
     const wp = await this.findOne(id, user);
     file = await this.preprocessUploadedFile(file);
+    await this.storageQuota?.assertCanUpload(user.organizationId, { sizeBytes: file.size ?? file.buffer.length, mimeType: file.mimetype, filename: file.originalname });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const content = (wp.content ?? {}) as Record<string, any>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -523,6 +527,7 @@ export class WorkingPapersService {
   ) {
     const wp = await this.findOne(paperId, user);
     file = await this.preprocessUploadedFile(file);
+    await this.storageQuota?.assertCanUpload(user.organizationId, { sizeBytes: file.size ?? file.buffer.length, mimeType: file.mimetype, filename: file.originalname });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const content = (wp.content ?? {}) as Record<string, any>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -597,6 +602,7 @@ export class WorkingPapersService {
   ) {
     const wp = await this.findOne(paperId, user);
     file = await this.preprocessUploadedFile(file);
+    await this.storageQuota?.assertCanUpload(user.organizationId, { sizeBytes: file.size ?? file.buffer.length, mimeType: file.mimetype, filename: file.originalname });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const content = (wp.content ?? {}) as Record<string, any>;
 

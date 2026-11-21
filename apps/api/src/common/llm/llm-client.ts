@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
+import type { UsageService } from '../../billing/usage.service';
 
 /**
  * Cliente de IA compartido por los servicios del API que generan texto (2026-11-21): OpenRouter primero, Gemini de respaldo.
@@ -19,6 +20,8 @@ export interface LlmRequest {
   maxTokens: number;
   /** La respuesta debe ser JSON. Se pide en el prompt y se quitan las vallas ```json que algunos modelos agregan. */
   json?: boolean;
+  /** Medición: si se pasa, la llamada cuenta `weight` peticiones del asistente `agent` (y respeta el límite del plan). Sin `usage` no mide. */
+  meter?: { usage?: UsageService; agent: string; weight: number };
   /** Tiempo máximo por intento (ms). OpenRouter usa como mínimo 60 s: un modelo de Claude con salidas largas tarda más que Gemini Flash. */
   timeoutMs?: number;
 }
@@ -126,6 +129,12 @@ async function viaGemini(config: ConfigReader, req: LlmRequest): Promise<string>
  * Lanza LlmUnavailableError si ninguno está configurado o todos fallan.
  */
 export async function generateText(config: ConfigReader, req: LlmRequest): Promise<string> {
+  const meter = req.meter;
+  if (meter?.usage) return meter.usage.meter({ agent: meter.agent, weight: meter.weight }, () => generateTextCore(config, req));
+  return generateTextCore(config, req);
+}
+
+async function generateTextCore(config: ConfigReader, req: LlmRequest): Promise<string> {
   const attempts: Array<[string, boolean, (c: ConfigReader, r: LlmRequest) => Promise<string>]> = [
     ['openrouter', !!readKey(config, 'OPENROUTER_API_KEY'), viaOpenRouter],
     ['gemini', !!readKey(config, 'GEMINI_API_KEY'), viaGemini],

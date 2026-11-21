@@ -21,6 +21,9 @@ export interface SubscriptionPatch {
 
 export type NoticeLevel = 'info' | 'warning' | 'critical';
 
+/** Cliente de base de datos: el normal o el de una transacción (para que un pago aprobado y su efecto sean todo-o-nada). */
+export type Db = PrismaService | Prisma.TransactionClient;
+
 @Injectable()
 export class SubscriptionsService {
   constructor(
@@ -29,12 +32,12 @@ export class SubscriptionsService {
     private readonly entitlements: EntitlementsService,
   ) {}
 
-  private async log(organizationId: string | null, actorId: string | null, type: string, data: Record<string, unknown> = {}) {
-    await this.prisma.billingEvent.create({ data: { organizationId, actorId, type, data: data as Prisma.InputJsonValue } });
+  private async log(organizationId: string | null, actorId: string | null, type: string, data: Record<string, unknown> = {}, db: Db = this.prisma) {
+    await db.billingEvent.create({ data: { organizationId, actorId, type, data: data as Prisma.InputJsonValue } });
   }
 
-  private async activePlan(code: string) {
-    const plan = await this.prisma.billingPlan.findUnique({ where: { code }, include: { prices: true } });
+  private async activePlan(code: string, db: Db = this.prisma) {
+    const plan = await db.billingPlan.findUnique({ where: { code }, include: { prices: true } });
     if (!plan || !plan.active) throw new NotFoundException(`El plan ${code} no existe o está inactivo.`);
     return plan;
   }
@@ -64,34 +67,34 @@ export class SubscriptionsService {
   }
 
   /** Contrata o cambia el plan: queda ACTIVA con la instantánea nueva y el periodo que corresponde a la duración elegida. */
-  async assign(organizationId: string, input: { planCode: string; months: number; agreedPriceUsd?: number | null }, actorId: string) {
+  async assign(organizationId: string, input: { planCode: string; months: number; agreedPriceUsd?: number | null }, actorId: string, db: Db = this.prisma) {
     if (!(LICENSE_MONTHS as readonly number[]).includes(input.months)) throw new BadRequestException('Duración no válida (usa 0, 1, 3, 6 o 12 meses).');
-    const org = await this.prisma.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
+    const org = await db.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
     if (!org) throw new NotFoundException('Organización no encontrada');
-    const plan = await this.activePlan(input.planCode.trim().toUpperCase());
+    const plan = await this.activePlan(input.planCode.trim().toUpperCase(), db);
     const price = plan.prices.find((p) => p.months === input.months && p.active);
     const exempt = EXEMPT_PLAN_CODES.includes(plan.code);
     if (!price && !(exempt && input.months === 0)) {
       throw new BadRequestException(`El plan ${plan.code} no tiene precio activo para ${input.months === 0 ? 'licencia sin vencimiento' : input.months + ' mes(es)'}.`);
     }
     const now = new Date();
-    const existing = await this.prisma.billingSubscription.findUnique({ where: { organizationId } });
+    const existing = await db.billingSubscription.findUnique({ where: { organizationId } });
     const data = {
       planId: plan.id, planSnapshot: planSnapshotOf(plan) as unknown as Prisma.InputJsonValue, status: 'ACTIVE' as const, months: input.months,
       priceUsd: price ? price.priceUsd : null, agreedPriceUsd: input.agreedPriceUsd ?? null, currentPeriodStart: now,
       currentPeriodEnd: input.months > 0 ? addMonths(now, input.months) : null, trialEndsAt: null, cancelRequestedAt: null, exempt,
       extraUsers: existing && existing.planId === plan.id ? existing.extraUsers : 0,
     };
-    const sub = await this.prisma.billingSubscription.upsert({ where: { organizationId }, update: data, create: { organizationId, ...data } });
-    await this.prisma.organization.update({ where: { id: organizationId }, data: { plan: plan.code.toLowerCase(), trialEndsAt: null } });
-    await this.log(organizationId, actorId, 'PLAN_ASSIGNED', { plan: plan.code, months: input.months, agreedPriceUsd: input.agreedPriceUsd ?? null, previousPlanId: existing?.planId ?? null });
+    const sub = await db.billingSubscription.upsert({ where: { organizationId }, update: data, create: { organizationId, ...data } });
+    await db.organization.update({ where: { id: organizationId }, data: { plan: plan.code.toLowerCase(), trialEndsAt: null } });
+    await this.log(organizationId, actorId, 'PLAN_ASSIGNED', { plan: plan.code, months: input.months, agreedPriceUsd: input.agreedPriceUsd ?? null, previousPlanId: existing?.planId ?? null }, db);
     this.entitlements.invalidate(organizationId);
     return sub;
   }
 
   /** Renueva sumando meses a partir del fin vigente (o de hoy si ya venció). Reactiva una cuenta en gracia o solo lectura. */
-  async renew(organizationId: string, months: number | undefined, actorId: string, extra: Record<string, unknown> = {}) {
-    const sub = await this.prisma.billingSubscription.findUnique({ where: { organizationId } });
+  async renew(organizationId: string, months: number | undefined, actorId: string, extra: Record<string, unknown> = {}, db: Db = this.prisma) {
+    const sub = await db.billingSubscription.findUnique({ where: { organizationId } });
     if (!sub) throw new NotFoundException('La organización no tiene suscripción.');
     const m = months ?? sub.months;
     if (!m || !(LICENSE_MONTHS as readonly number[]).includes(m) || m === 0) {
@@ -99,14 +102,14 @@ export class SubscriptionsService {
     }
     const now = new Date();
     const base = sub.status === 'TRIAL' ? now : sub.currentPeriodEnd && sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now;
-    const updated = await this.prisma.billingSubscription.update({
+    const updated = await db.billingSubscription.update({
       where: { organizationId },
       data: {
         status: 'ACTIVE', months: m, currentPeriodStart: base === now ? now : sub.currentPeriodStart ?? now, currentPeriodEnd: addMonths(base, m),
         trialEndsAt: null, cancelRequestedAt: null,
       },
     });
-    await this.log(organizationId, actorId, 'RENEWED', { months: m, until: updated.currentPeriodEnd, ...extra });
+    await this.log(organizationId, actorId, 'RENEWED', { months: m, until: updated.currentPeriodEnd, ...extra }, db);
     this.entitlements.invalidate(organizationId);
     return updated;
   }

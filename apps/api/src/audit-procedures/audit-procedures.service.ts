@@ -1,8 +1,9 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger,
-} from '@nestjs/common';
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageUsageService } from '../billing/storage-usage.service';
+import { UsageService } from '../billing/usage.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInvestigationAccess, AUDIT_ACCESS_SELECT } from '../common/utils/investigation-scope.util';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -75,6 +76,10 @@ export class AuditProceduresService {
   constructor(
     private readonly prisma:  PrismaService,
     private readonly config:  ConfigService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) las acciones de IA corren sin medirse.
+    @Optional() private readonly usage?: UsageService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) no se verifica la cuota del plan.
+    @Optional() private readonly storageQuota?: StorageUsageService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -375,6 +380,7 @@ export class AuditProceduresService {
     user: AuthUser,
   ) {
     await this.assertStepAccess(stepId, user);
+    await this.storageQuota?.assertCanUpload(user.organizationId, { sizeBytes: file.size ?? file.buffer.length, mimeType: file.mimetype, filename: file.originalname });
 
     const safeName   = file.originalname.replace(/[^\w.\-]/g, '_');
     const path       = `procedures/steps/${stepId}/${Date.now()}_${safeName}`;
@@ -599,6 +605,6 @@ timing values: INTERIM, YEAR_END, ROLLFORWARD
   }
 
   private callLlmText(prompt: string): Promise<string> {
-    return generateText(this.config, { messages: [{ role: 'user', content: prompt }], temperature: 0.3, maxTokens: 8192, timeoutMs: 60_000 });
+    return generateText(this.config, { messages: [{ role: 'user', content: prompt }], temperature: 0.3, maxTokens: 8192, timeoutMs: 60_000, meter: { usage: this.usage, agent: 'SCRIPTORIUM', weight: 5 } });
   }
 }

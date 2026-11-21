@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsageService } from '../billing/usage.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInvestigationAccess, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 import { generateText, isLlmConfigured } from '../common/llm/llm-client';
@@ -46,6 +47,8 @@ export class CrossAuditLearningService {
   constructor(
     private readonly prisma:  PrismaService,
     private readonly config:  ConfigService,
+    // Opcional: sin él (pruebas que construyen el servicio a mano) las acciones de IA corren sin medirse.
+    @Optional() private readonly usage?: UsageService,
   ) {}
 
   // ─── Public API ───────────────────────────────────────────────────────────
@@ -280,7 +283,7 @@ INSTRUCCIONES:
 - Solo el array JSON, sin texto extra`;
 
     const raw = await generateText(this.config, {
-      messages: [{ role: 'user', content: prompt }], temperature: 0.4, maxTokens: 2000, json: true, timeoutMs: 35_000,
+      messages: [{ role: 'user', content: prompt }], temperature: 0.4, maxTokens: 2000, json: true, timeoutMs: 35_000, meter: { usage: this.usage, agent: 'MINERVA', weight: 1 },
     });
     const match = raw.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('No JSON array in LLM response');

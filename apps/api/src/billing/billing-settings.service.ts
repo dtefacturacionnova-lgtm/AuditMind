@@ -12,12 +12,13 @@ export interface BillingSettingsValue {
   weights: { light: number; medium: number; heavy: number };
   ivaPercent: number | null;
   defaultPlanCode: string;
+  paymentInstructions: Record<string, string>;
 }
 
 /** Valores si la tabla aún no existe o no tiene fila: el sistema se comporta como antes (nada se bloquea). */
 export const DEFAULT_SETTINGS: BillingSettingsValue = {
   enforcementMode: 'OFF', graceDays: 7, readOnlyDays: 60, reminderDays: [7, 1], costPerRequestUsd: 0.0012, safetyMultiplier: 3,
-  weights: { light: 1, medium: 5, heavy: 10 }, ivaPercent: null, defaultPlanCode: 'EMPRESA_DESPACHO',
+  weights: { light: 1, medium: 5, heavy: 10 }, ivaPercent: null, defaultPlanCode: 'EMPRESA_DESPACHO', paymentInstructions: {},
 };
 
 const TTL_MS = 30_000;
@@ -45,6 +46,7 @@ export class BillingSettingsService {
           costPerRequestUsd: Number(row.costPerRequestUsd), safetyMultiplier: Number(row.safetyMultiplier),
           weights: { light: w.light ?? 1, medium: w.medium ?? 5, heavy: w.heavy ?? 10 },
           ivaPercent: row.ivaPercent === null ? null : Number(row.ivaPercent), defaultPlanCode: row.defaultPlanCode,
+          paymentInstructions: Object.fromEntries(Object.entries((row.paymentInstructions ?? {}) as Record<string, unknown>).filter(([, v]) => typeof v === 'string')) as Record<string, string>,
         };
       }
     } catch {
@@ -66,6 +68,7 @@ export class BillingSettingsService {
     if (patch.weights !== undefined) data.weights = patch.weights;
     if (patch.ivaPercent !== undefined) data.ivaPercent = patch.ivaPercent;
     if (patch.defaultPlanCode !== undefined) data.defaultPlanCode = patch.defaultPlanCode;
+    if (patch.paymentInstructions !== undefined) data.paymentInstructions = patch.paymentInstructions;
     await this.prisma.billingSettings.upsert({ where: { id: 'default' }, update: data, create: { id: 'default', ...data } });
     this.invalidate();
     return this.get();

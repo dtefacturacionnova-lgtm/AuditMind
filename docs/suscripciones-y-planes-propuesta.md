@@ -1,7 +1,7 @@
 # AuditMind — Propuesta de planes y suscripciones
 
 **Fecha:** 2026-11-21 · **Estado:** PROPUESTA — nada de esto está implementado ni aprobado. Se espera tu decisión antes de construir.
-**Versión:** v2 — el §10 (Personas/Empresas, módulos y asistentes seleccionables, pedido del usuario) **reemplaza al catálogo de §4.2** donde difieran.
+**Versión:** v3 — el §10 (Personas/Empresas, módulos y asistentes seleccionables) **reemplaza al catálogo de §4.2** donde difieran, y el §11 (almacenamiento y **peticiones de IA**, pedido del usuario) **reemplaza los límites de espacio e IA** de §4.2 y §10.5: la IA se limita en peticiones, no en dólares.
 **Origen:** revisión de código (solo lectura) de `dtes-y-analítica-sv`, `Nexus Finance` y `validador-de-expedientes-inteligente` (AFEXIA) + estado actual de AuditMind.
 **Alcance de la verificación:** se leyó código y documentos; **no se consultaron las bases de producción** de las otras apps. Los datos «en vivo» (qué interruptor está encendido, qué precios reales hay cargados) salen de sus documentos y pueden diferir. Los precios de esta propuesta son **hipótesis a validar**, no datos de mercado.
 
@@ -355,3 +355,113 @@ Se mantienen **Institucional** (a convenir), **Piloto/Fundador** (clientes actua
 11. ¿**Persona** limita a una sola organización y a 1–2 usuarios? ¿Pueden pasar a Empresa sin perder datos? (propongo que sí: cambiar de plan conserva todo).
 12. ¿Las **bases RAG** (Fiscal, PLD…) como paquete aparte, o incluidas según el plan?
 13. ¿Quieres **limitar clientes en cartera / auditorías activas** en los planes baratos, o solo usuarios, espacio e IA?
+
+---
+
+## 11. Ajuste v3 (2026-11-21): almacenamiento y peticiones de IA
+
+*Pedido del usuario tras ver la maqueta: (1) el **almacenamiento** y la **IA** son lo más caro del sistema (suben evidencia en video, audio, PDF, fotos, presentaciones, bases en Excel…), así que hay que asignar **espacio según la suscripción**; (2) el límite de IA se expresa en **cantidad de peticiones** (no en dinero) para que el cliente lo entienda; (3) el **editor de planes** debe mostrar la **equivalencia aproximada en dinero** (por ejemplo, 1,000 peticiones al mes ≈ cuánto cuestan); (4) debe haber un **visor para el cliente** (en peticiones) y un **visor para el administrador del sistema** (en **dinero y en peticiones**); (5) al llegar al límite, el cliente debe poder **comprar más**. **Este apartado reemplaza los límites de espacio y de IA de §4.2 y §10.5** (que estaban en GB sueltos y en dólares).*
+
+### 11.1 Qué cambia, en una tabla
+
+| Tema | Antes (v2) | Ahora (v3) |
+|---|---|---|
+| Límite de IA | Créditos en USD de costo real | **Peticiones al mes**; el dinero equivalente lo ve solo el superadmin |
+| Visor del cliente | Barra de créditos en dinero | Peticiones usadas / incluidas, por asistente; **sin dinero** |
+| Visor del superadmin | Costo y margen estimado en el editor | Editor con **equivalencia peticiones → dinero**, y pantalla **«Consumo y costos»** con peticiones **y** dinero por organización, asistente y tipo de archivo |
+| Almacenamiento | Un número de GB por plan | GB **+ tamaño máximo por archivo + tipos permitidos** (video, audio, PDF, fotos, presentaciones, Excel/CSV, otros), desglose **por tipo** para el cliente, costo por proveedor para el superadmin |
+| Al llegar al límite | Aviso | **Pausa** (IA) o **bloqueo de subidas** (espacio) y botón **«Comprar más»** con paquetes y pago por referencia |
+
+### 11.2 Almacenamiento
+
+**Costos reales verificados (2026-11-21; confirma en las páginas oficiales antes de decidir):**
+
+| Proveedor | Almacenamiento | Descargas (egress) |
+|---|---|---|
+| **Supabase Free** | 1 GB incluido | 5 GB incluidos |
+| **Supabase Pro** (≈ $25/mes por proyecto) | 100 GB incluidos, luego **$0.0213 por GB-mes** | 250 GB incluidos, luego **$0.09 por GB** |
+| **Cloudflare R2** | **$0.015 por GB-mes** (10 GB gratis) | **gratis** |
+| **Backblaze B2** | $6.95 por TB-mes (≈ $0.007/GB) | gratis hasta 3 veces lo almacenado; luego $0.01/GB |
+
+Fuentes: [Supabase: tamaño de Storage](https://supabase.com/docs/guides/platform/manage-your-usage/storage-size), [Supabase: egress](https://supabase.com/docs/guides/platform/manage-your-usage/egress), [Supabase: precios](https://supabase.com/docs/pricing), [Cloudflare R2](https://cloudflare.com/en-ca/products/r2), [Backblaze B2](https://www.backblaze.com/cloud-storage/pricing).
+
+**Lo que dicen los números (conviene decirlo claro):**
+- El GB almacenado es barato: un plan «Plus» con **500 GB llenos** cuesta ≈ **$10.65 al mes** en Supabase (o $7.50 en R2). Un plan «Despacho» de 100 GB, ≈ $2.13.
+- **Lo que sí puede dispararse es la salida de datos (descargas y reproducción de video):** cada GB que se descarga sobre los 250 GB incluidos cuesta $0.09 en Supabase. Un cliente que reproduce o descarga 500 GB de video en el mes sumaría ≈ $22 solo en egress. En R2 sería $0.
+- **Prerrequisito:** según la revisión de octubre la base está en el plan gratuito (1 GB de Storage): con evidencia en video **no alcanza ni para el primer cliente**. Hay que pasar a Pro (≈ $25/mes) antes de vender.
+- El procesamiento de audio y video (transcripción, extracción de cuadros, antivirus) corre en tu servidor: es un costo **fijo con límite de capacidad**, no por GB; se controla con el peso de las peticiones (11.3) y con el tamaño máximo por archivo.
+
+**Cómo se controla (propuesta):**
+1. **GB por plan** compartido por toda la organización (evidencia, papeles, portal de auditados, firmas).
+2. **Tamaño máximo por archivo** por plan (100 MB, 250 MB, 500 MB, 500 MB, 2 GB).
+3. **Tipos de archivo permitidos** por plan: p. ej. un plan de entrada puede **no admitir video**, que es lo que más pesa.
+4. **Desglose por tipo para el cliente** (video, audio, PDF, fotos, presentaciones, Excel/CSV): ve qué le ocupa y puede **descargar y archivar** lo de auditorías cerradas.
+5. **Al 80 %** aviso por correo; **al 100 %** se bloquean las subidas nuevas (lo ya guardado sigue disponible; **nunca se borra nada**), con botón «Comprar más espacio». Bajar de plan no recorta archivos: solo impide subir más.
+6. **Paquetes de espacio** (mensuales, junto con la licencia): +10 GB $3 · +50 GB $12 · +200 GB $40 · +1 TB $150 (≈ $0.30 a $0.15 por GB, frente a un costo de ≈ $0.02).
+7. **Más adelante, según el uso real:** mover **video y audio** a un almacenamiento sin cobro de descargas (R2) detrás de las URL firmadas que ya existen en la aplicación; archivar en frío las auditorías cerradas; compresión de video al subir. **Recomiendo decidirlo con datos de los primeros clientes**, no antes: la maqueta (pantalla 7) ya compara ambos proveedores con el consumo real.
+
+### 11.3 Inteligencia artificial en peticiones
+
+**Qué es una «petición» (peso):** una unidad que el cliente entiende, con un peso que mantiene estable su costo.
+
+| Peso | Qué es | Costo aproximado* |
+|---|---|---|
+| **1** | Un mensaje a un asistente, mejorar un texto, redactar un hallazgo, sugerir una sección de papel | $0.0012 |
+| **5** | Analizar un documento largo, un informe o propuesta completa, extraer datos de una evidencia | $0.006 |
+| **10** | Analizar **audio o video (por cada 10 minutos)** o una investigación forense con varias fuentes | $0.012 |
+
+\* Medido con el modelo actual (`gpt-6-luna`, $0.10 / $0.50 por millón de tokens) en el benchmark del 2026-11-21; se **recalibra cada mes con el consumo real**. Como los pesos están calculados para igualar el costo, **«1,000 peticiones ≈ $1.20»** es una equivalencia estable aunque cambie la mezcla de acciones; si se cambia de modelo, solo cambia el costo por petición, no lo que ve el cliente.
+
+**Cuotas por plan (ejemplo) y su costo esperado:**
+
+| Plan | Peticiones al mes | Costo esperado | Tope de seguridad (3 veces) |
+|---|---|---|---|
+| Persona Inicial | 500 | $0.60 | $1.80 |
+| Persona Profesional | 2,000 | $2.40 | $7.20 |
+| Empresa Despacho / Auditoría Interna | 5,000 | $6.00 | $18.00 |
+| Empresa Plus | 20,000 | $24.00 | $72.00 |
+
+**Tope de seguridad:** si el gasto real de una organización en el mes supera 3 veces lo esperado, la IA se pausa aunque queden peticiones (protege contra un peso mal calculado o un uso anómalo). El superadmin lo ve y puede levantarlo.
+
+**Al llegar al límite:** los asistentes se pausan, el cliente ve un aviso con el botón **«Comprar más peticiones»** y el pago se hace por referencia (QR 365 o transferencia, sube comprobante; con Wompi será inmediato). Paquetes de ejemplo: **+1,000 por $5 · +5,000 por $20 · +20,000 por $60** (margen de ≈ 60 % a 76 % sobre el costo medido). Las peticiones compradas **se consumen después de las del plan y no vencen en 12 meses**.
+
+**Los dos visores:**
+- **Cliente («Mi plan»):** peticiones usadas / incluidas, desglose **por asistente**, explicación de qué cuenta como 1, 5 o 10 y botón para comprar. **Nunca ve dinero ni costos.**
+- **Superadmin:**
+  - *Editor de plan:* al escribir las peticiones muestra la **equivalencia en dinero** (costo esperado y tope), y a la derecha el **costo y margen del plan lleno**.
+  - *Consumo y costos:* por organización peticiones **y** dinero, por asistente, por tipo de archivo, margen, oportunidades de venta (clientes cerca del límite) y la calculadora «si un plan da N peticiones».
+
+**Medición (lo que hay que construir):** hoy **nadie escribe** en `AIInteraction` ni en `LLMRouterLog`. Se crea un `UsageLedger` solo-agregar con, por cada llamada: organización, usuario, asistente, peso, tokens, **costo real en USD** (OpenRouter lo devuelve en `usage.cost`), modelo y fecha; los contadores mensuales salen de ahí. La pausa se aplica en un único punto (`AiService.chat` y los endpoints de Scriptorium/papeles), con el mismo modo `observar` → `enforce` de §4.3.
+
+### 11.4 Catálogo de ejemplo actualizado (reemplaza límites de §10.5)
+
+| | Persona Inicial | Persona Profesional | Empresa Despacho | Empresa Auditoría Interna | Empresa Plus |
+|---|---|---|---|---|---|
+| Precio mensual | $29 | $59 | $149 | $149 | $299 |
+| Espacio | 10 GB | 30 GB | 100 GB | 100 GB | 500 GB |
+| Archivo máximo | 100 MB | 250 MB | 500 MB | 500 MB | 2 GB |
+| Peticiones de IA al mes | 500 | 2,000 | 5,000 | 5,000 | 20,000 |
+| **Costo variable máximo** (IA agotada + espacio lleno, Supabase) | $0.81 | $3.04 | $8.13 | $8.13 | $34.65 |
+| **Margen sobre el precio mensual** | 97 % | 95 % | 95 % | 95 % | 88 % |
+
+Sin costos fijos ni descargas. **Prueba de estrés del plan Plus** con 500 GB descargados en el mes: ≈ $22 extra de egress en Supabase (margen ≈ 81 %), $0 en R2.
+
+### 11.5 Qué se ve en la maqueta (pantallas nuevas y cambiadas)
+- **2 · Editor de plan:** secciones **Almacenamiento** (GB, tamaño máximo, tipos) e **Inteligencia artificial** (peticiones, equivalencia en dinero, tabla de pesos, paquetes), cada una con su vista del **cliente** y su vista del **superadmin**; resumen con **costo y margen**.
+- **3 · Mi plan:** peticiones de IA, espacio **por tipo de archivo**, peticiones por asistente, botones «Comprar más» y estados nuevos (IA al 100 %, espacio lleno).
+- **6 · Comprar más** *(nueva)*: paquetes de peticiones y de espacio, forma de pago, referencia única, comprobante.
+- **7 · Consumo y costos** *(nueva, superadmin)*: dinero y peticiones por organización, asistente y tipo de archivo; comparador Supabase / Cloudflare R2.
+- **1 · Precios** y **5 · Suscripciones** ya muestran peticiones y espacio nuevos.
+
+### 11.6 Impacto en fases y esfuerzo
+- **F2 Medición** sube de ~3–4 a **~5–6 días** (libro de consumo con peso y costo real, medición de espacio por tipo, pausa/bloqueo, pantalla de consumo). **Sonnet** ejecuta; **Opus 5.5** revisa el punto único de cobro de IA y la **atomicidad de la cuota de espacio** (subidas simultáneas no deben pasarse del límite).
+- **F3 Pagos manuales** suma ~1 día (compra de paquetes con la misma función idempotente de activación). **Sonnet**; Opus revisa la idempotencia.
+- Sin cambios en F1 y F4.
+
+### 11.7 Preguntas nuevas
+14. ¿Te sirven los **pesos 1 / 5 / 10** para contar peticiones (en especial «10 por cada 10 minutos de audio o video»)?
+15. Peticiones compradas: ¿**no vencen en 12 meses** (propuesto) o vencen a fin de mes?
+16. Espacio extra: ¿**mensual recurrente** con la licencia (propuesto) o compra única?
+17. ¿Los planes baratos **no admiten video**, o lo admiten con menos espacio?
+18. ¿Mover video y audio a **Cloudflare R2** desde el inicio o **después de medir** el uso real? (recomiendo después).
+19. ¿Te parecen bien los **tamaños máximos por archivo** (100 MB a 2 GB)?

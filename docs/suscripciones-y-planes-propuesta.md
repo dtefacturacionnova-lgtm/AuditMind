@@ -1,6 +1,7 @@
 # AuditMind — Propuesta de planes y suscripciones
 
 **Fecha:** 2026-11-21 · **Estado:** PROPUESTA — nada de esto está implementado ni aprobado. Se espera tu decisión antes de construir.
+**Versión:** v2 — el §10 (Personas/Empresas, módulos y asistentes seleccionables, pedido del usuario) **reemplaza al catálogo de §4.2** donde difieran.
 **Origen:** revisión de código (solo lectura) de `dtes-y-analítica-sv`, `Nexus Finance` y `validador-de-expedientes-inteligente` (AFEXIA) + estado actual de AuditMind.
 **Alcance de la verificación:** se leyó código y documentos; **no se consultaron las bases de producción** de las otras apps. Los datos «en vivo» (qué interruptor está encendido, qué precios reales hay cargados) salen de sus documentos y pueden diferir. Los precios de esta propuesta son **hipótesis a validar**, no datos de mercado.
 
@@ -228,3 +229,127 @@ PRUEBA (14 d) ──paga──▶ ACTIVA ──vence──▶ GRACIA (7 d, aviso
 8. **Supabase Pro** antes de la primera factura: ¿lo activas tú o lo preparo (requiere tu aprobación de gasto)?
 
 *Con tus respuestas ajusto el catálogo y arranco F1. Hasta entonces no se construye nada.*
+
+---
+
+## 10. Ajuste v2 (2026-11-21): planes de Personas y de Empresas, módulos y asistentes seleccionables
+
+*Pedido del usuario tras leer la v1: planes para **Personas** y para **Empresas**; límites de IA, espacio y usuarios; **tiempo de licencia** (mensual/trimestral/semestral/anual/sin vencimiento); **días de prueba**; **módulos seleccionables** por plan (Plan Anual de Auditoría Interna, Cartera de Auditoría Externa, Riesgos y Controles, Gobierno Corporativo…); y **qué asistentes** puede usar cada plan. **Este apartado reemplaza al catálogo de §4.2 donde difieran**; el resto (medición, cumplimiento, ciclo de vida, cobro, fases) se mantiene.*
+
+### 10.1 ¿Se puede? Sí. Qué existe ya y qué falta
+
+| Pieza | Hoy en AuditMind | Qué falta |
+|---|---|---|
+| **Módulos por plan** | El menú (`Sidebar.tsx`) ya etiqueta cada grupo con `module` y filtra según `auditModality` (INTERNAL / EXTERNAL / BOTH). | Hoy **solo oculta cosas en pantalla** y solo distingue 2 valores. Hay que (a) generalizar a una **lista de módulos por plan**, y (b) **proteger el API y las rutas**: quien escriba la URL a mano o llame al API hoy entra igual. Es la parte importante (seguridad), no la cosmética. |
+| **Asistentes por plan** | 15 agentes; el chat pasa por `AiService.chat` y el servicio de IA recibe `agent_type`. | Una lista `asistentes` por plan y una verificación en `AiService.chat` y en los endpoints de Scriptorium (que usan agentes por dentro). |
+| **Límites de IA / espacio / usuarios** | No se miden ni se aplican (ver §3). | Lo de las etapas F1–F2. |
+| **Licencia por duración** | No existe. | Tabla de precios por duración (ver 10.3): permite ofrecer el mismo plan a 1, 3, 6 o 12 meses o «sin vencimiento». |
+| **Días de prueba** | `trialEndsAt` existe y nadie lo usa. | Aplicarlo al alta: la suscripción nace en `TRIAL` con los `diasPrueba` del plan. (En dtes-y-analítica-sv `trial_days` existe y **nada lo aplica**: aquí sí se aplica y se prueba.) |
+| **Personas vs Empresas** | No existe. | Campo `audiencia` del plan (`PERSONA` / `EMPRESA`). |
+
+**Una advertencia de diseño:** «módulos seleccionables» puede significar (a) **paquetes prearmados** (cada plan trae su combinación) o (b) **armar el plan a la carta**. Recomiendo **(a) como base + (b) solo como ajuste por cliente** (sobrescrituras y paquetes adicionales): vender a la carta multiplica las combinaciones, el soporte y los errores de cobro; los paquetes prearmados se explican en una frase. El superadmin sí marca los módulos con casillas al **crear/editar el plan** (tu idea), y puede darle a un cliente un módulo extra sin cambiar de plan.
+
+### 10.2 Catálogo de módulos (granularidad = grupo del menú, no página por página)
+
+Páginas sueltas como «módulo» serían ~60 interruptores inmanejables. El grupo del menú es la unidad natural; las funciones caras o delicadas (firma, forense, CAATs, sanciones) van como **funciones** aparte.
+
+| Clave | Módulo (grupo del menú) | Qué incluye | Se aplica en el API sobre | Depende de |
+|---|---|---|---|---|
+| `NUCLEO` | Dashboard · Ejecución · Seguimiento básico · Administración | Proyectos de auditoría, papeles de trabajo, hallazgos, usuarios, catálogos, configuración | siempre activo | — |
+| `PLAN_ANUAL` | **Planificación Anual (Interna)** | Plan estratégico, universo de auditoría, banco de proyectos, plan anual | `strategic`, `audit-universe`, `plans`, `audit-projects` | NUCLEO |
+| `CARTERA` | **Cartera de Auditoría Externa** | Cartera de clientes, aceptación, propuestas, cartas de compromiso, encargos, cobranza | `portfolio`, `collections` | NUCLEO |
+| `HORAS` | Horas y Rentabilidad | Captura y cierre de horas, utilización, rentabilidad, capacidad, costeo | `timesheet`, `capacity`, tarifas | NUCLEO (más útil con CARTERA) |
+| `RIESGOS` | **Riesgos y Controles** | Evaluación de riesgos y controles | `risks` | NUCLEO |
+| `GOBIERNO` | **Gobierno Corporativo** | Comité de Auditoría, QAIP y Calidad, ESG, BCP/DRP | `committee`, `qaip`, `bcp-drp` | NUCLEO |
+| `SEGUIMIENTO_EXT` | Portal PBC y Confirmaciones | Portal del auditado (PBC), confirmaciones externas NIA 505 | `pbc`, `confirmations` | NUCLEO |
+| `REPORTES_IA` | Reportería e IA | Reportes, analytics, Notario PDF, página de asistentes | `reports`, `pdf-tools`, `ai` | NUCLEO |
+| **Funciones** (casillas aparte) | | | | |
+| `FIRMA` | Firma electrónica por enlace | Cartas, confirmaciones, actas | `signatures` | NUCLEO |
+| `FORENSE` | Investigador forense | SHERLOCK, grafo e informe de investigación | `investigation-graph`, `investigation-report` | NUCLEO |
+| `CAATS_AVANZADOS` | CAATs avanzados y sanciones | Suite DTE, prueba GL horaria, screening OFAC/ONU/UK | `analytics`, `watchlists` | NUCLEO |
+| `MARCA` | Marca propia | Logo y colores en informes y portal | `organizations` | NUCLEO |
+
+Reglas: las **dependencias** se marcan solas en el editor (al activar `HORAS` sugiere `CARTERA`); **desactivar un módulo no borra datos**: se oculta y se bloquea, y reactivarlo lo restaura. Cada módulo se aplica con un decorador `@RequiresModule('CARTERA')` en el controlador (el menú se alimenta de la misma lista, así que **pantalla y API nunca discrepan**) y las rutas de la web muestran una pantalla «Este módulo no está en tu plan» con el botón de ampliar, en vez de un error.
+
+### 10.3 Cómo se configura un plan (editor del superadmin)
+
+Cada plan es una fila editable con:
+- **Identidad:** nombre, **audiencia (Persona / Empresa)**, descripción, visible al público, destacado, orden.
+- **Licencia y precio:** una tabla `PlanPrecio` (plan, **meses de licencia ∈ {1, 3, 6, 12, 0 = sin vencimiento}**, precio USD, activo). Es tu pantalla de «Cuánto dura cada licencia» llevada un paso más allá: el **mismo plan** se ofrece a varias duraciones, cada una con su precio (p. ej. anual = 10 meses), y «sin vencimiento» queda para el plan Interno y los pilotos. Al vencer: gracia → **solo lectura** (nunca se borra nada).
+- **Prueba:** `diasPrueba` (0–365).
+- **Límites:** usuarios incluidos (y máximo con extras), espacio (MB), **créditos de IA/mes**.
+- **Módulos y funciones:** casillas del catálogo de 10.2.
+- **Asistentes permitidos:** casillas de los 15 (ver 10.4).
+- **Aplicar a N clientes:** al cambiar un plan, botón para propagarlo a los suscriptores actuales (patrón de dtes-y-analítica-sv); por defecto **no** los toca (instantánea por cliente).
+
+### 10.4 Asistentes por plan
+
+Los 15 agentes agrupados por afinidad con los módulos (así la casilla del plan se entiende sin explicar nada):
+
+| Grupo | Asistentes | Natural en |
+|---|---|---|
+| Planificación y riesgos | MINERVA, CASSANDRA | `PLAN_ANUAL`, `RIESGOS` |
+| Ejecución y controles | ARGUS, SCRIPTORIUM, SOCRATES, VULCANO | `NUCLEO`, `RIESGOS` |
+| Reportería | CICERO | `REPORTES_IA` |
+| Cumplimiento, fiscal y PLD (bases FISCAL_SV, AML_SV…) | SENADO, FISCUS, THEMIS | `CARTERA` (externa), `GOBIERNO` |
+| Forense | HERMES, SHERLOCK | `FORENSE` |
+| Gobierno y calidad | ATLAS (ESG), FENIX (BCP/DRP), MINERVA_QAIP | `GOBIERNO` |
+
+Regla simple propuesta: **un asistente queda habilitado si el plan lo marca** (casilla propia), y el editor **pre-marca** los afines a los módulos elegidos. Así un plan sin `GOBIERNO` no ve ATLAS/FENIX/MINERVA_QAIP por defecto, pero el superadmin puede darle uno suelto a un cliente.
+
+### 10.5 Ejemplo de catálogo con Personas y Empresas (hipótesis de precio, USD/mes sin IVA)
+
+| | **Persona Inicial** | **Persona Profesional** | **Empresa Despacho** | **Empresa Auditoría Interna** | **Empresa Plus** |
+|---|---|---|---|---|---|
+| Audiencia | PERSONA | PERSONA | EMPRESA | EMPRESA | EMPRESA |
+| Para | CPA / auditor independiente que empieza | Independiente o consultor con cartera | Despacho pequeño–mediano | Departamento de auditoría interna | Firma con varios equipos / grupo |
+| **Mensual** | **$29** | **$59** | **$149** | **$149** | **$299** |
+| Usuarios (extra) | 1 | 2 | 5 (+$19, hasta 15) | 5 (+$19, hasta 15) | 15 (+$15, hasta 50) |
+| Espacio | 5 GB | 15 GB | 50 GB | 50 GB | 200 GB |
+| Créditos de IA/mes | $1 | $3 | $8 | $8 | $25 |
+| Prueba | 14 d | 14 d | 14 d | 14 d | 14 d |
+| `PLAN_ANUAL` | elegir **uno** de los dos | ✔ | — | ✔ | ✔ |
+| `CARTERA` | (Plan Anual **o** Cartera) | ✔ | ✔ | — | ✔ |
+| `HORAS` | — | ✔ | ✔ | ✔ | ✔ |
+| `RIESGOS` | ✔ | ✔ | ✔ | ✔ | ✔ |
+| `GOBIERNO` | — | — | — | ✔ | ✔ |
+| `SEGUIMIENTO_EXT` (PBC, confirmaciones) | — | ✔ | ✔ | ✔ | ✔ |
+| `REPORTES_IA` | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Firma · Marca propia | — | Marca | Firma + Marca | Firma + Marca | ambas |
+| Forense · CAATs avanzados | — | — | — | — | ✔ |
+| Asistentes | 6 básicos | 10 | 12 | 12 | los 15 |
+
+Se mantienen **Institucional** (a convenir), **Piloto/Fundador** (clientes actuales) e **Interno** (Empresa Demo, sin límites, sin vencimiento) de §4.2. **Todo precio es hipótesis a validar** con 3–5 despachos/auditores reales antes de publicarlo; al ser datos del editor, ajustarlos no requiere desplegar.
+
+### 10.6 Qué más agregaría (ordenado por valor / esfuerzo)
+
+**Alto valor, bajo esfuerzo (incluir desde el inicio):**
+1. **Bases de conocimiento (RAG) por plan** — FISCAL_SV, AML_SV (PLD), IIA, NAIG, CVPCPA: es lo que más se percibe como valor local y casi no cuesta; se puede vender como **paquete «Fiscal y PLD»**.
+2. **Paquetes adicionales** (+usuarios, +espacio, +créditos de IA, **+un módulo suelto**) para personalizar sin crear planes nuevos.
+3. **Sobrescrituras y precio pactado por cliente** (negociar sin tocar el catálogo) + «aplicar a N clientes».
+4. **Plan público / privado:** planes ocultos al catálogo para ofertas a medida.
+5. **Descuentos por duración** (trimestral −5 %, semestral −10 %, anual = 2 meses gratis) en la tabla de precios, y **cupones** simples.
+6. **Usuarios invitados gratis** (clientes del portal PBC, AUDITEE, READ_ONLY) — ya propuesto; es un argumento comercial: «invita a tus clientes sin costo».
+
+**Valor medio (etapa B/C):**
+7. **Cuotas de recursos caros:** minutos de **transcripción** de audio/video (evidencia de campo, corre en tu CPU), páginas de **OCR**, **firmas electrónicas enviadas/mes** (correo + sellado de tiempo), **correos salientes**, tamaño máximo por archivo.
+8. **Límites de volumen operativo** *(opcionales, para crear escalón)*: **clientes en cartera** (Externa), **auditorías activas**, entidades auditables. Ninguna de tus 3 apps los usa; solo si ves que un plan barato se queda con demasiado.
+9. **Nivel de soporte** por plan (correo / prioritario / con onboarding y capacitación incluidos) — para empresas e institucionales es parte de lo que compran.
+10. **Plan educativo / ONG / gobierno** con descuento (universidades y entes públicos compran distinto).
+11. **Datos de demostración** al iniciar la prueba (clon liviano de Empresa Demo) para que el cliente vea valor el primer día.
+
+**Para después:** retención/exportación de datos como diferenciador, API e integraciones (conectores de datos ya existen), dominio propio para el portal PBC, facturación consolidada para grupos de empresas.
+
+### 10.7 Lo que cambia en el diseño técnico (respecto a §4)
+- **Tablas:** `Plan` gana `audiencia`, `modulos[]`, `funciones[]`, `asistentes[]`, `diasPrueba`; nueva `PlanPrecio` (plan × meses de licencia); `Subscription` guarda los **meses de licencia elegidos** y la instantánea de módulos/asistentes. (Sigue siendo SQL aprobado uno por uno.)
+- **API:** `@RequiresModule()` y `@RequiresFeature()` leen de `EntitlementsService` (misma caché y mismo modo `observar` → `enforce`); el chat de IA verifica `asistentes`.
+- **Web:** el `Sidebar` deja de leer `auditModality` y lee la lista de módulos del plan (**un solo origen de verdad**); `auditModality` queda derivado para no romper lo existente.
+- **Esfuerzo:** F1 sube de ~5–6 a **~7–8 días** (el decorador por módulo toca ~20 controladores y la pantalla de «no está en tu plan»); sin cambio en F2–F4. **Ejecutar con Sonnet; revisar con Opus 5.5** el cierre de acceso por API (es seguridad multi-tenant: un módulo mal protegido regala funciones de pago).
+- **Riesgo nuevo y real:** el hueco clásico «el menú lo oculta pero el API sigue abierto». Se cubre con una **prueba automática que recorre todos los controladores** y falla si alguno no declara su módulo (o `NUCLEO`/público).
+
+### 10.8 Preguntas nuevas (se suman a las de §9)
+9. ¿**Paquetes prearmados** + ajuste por cliente (recomendado), o **a la carta** completo?
+10. ¿Qué módulos van **siempre** (núcleo)? Propongo Dashboard, Proyectos, Papeles, Hallazgos y Administración básica; ¿te parece?
+11. ¿**Persona** limita a una sola organización y a 1–2 usuarios? ¿Pueden pasar a Empresa sin perder datos? (propongo que sí: cambiar de plan conserva todo).
+12. ¿Las **bases RAG** (Fiscal, PLD…) como paquete aparte, o incluidas según el plan?
+13. ¿Quieres **limitar clientes en cartera / auditorías activas** en los planes baratos, o solo usuarios, espacio e IA?

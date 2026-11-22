@@ -292,6 +292,32 @@ export function describeEvent(ev: Pick<BillingEventRow, 'type' | 'data'>, orgNam
         : 'de su consumo';
       return `Se avisó a ${org} ${what}${reachedText(d)}.`;
     }
+    case 'PAYMENT_REQUESTED': {
+      const ref = text(d.reference);
+      const concept = text(d.concept, 80);
+      return `${org} pidió un pago${ref ? ` (${ref})` : ''}${concept ? `: ${concept}` : ''}.`;
+    }
+    case 'PAYMENT_APPROVED': {
+      const ref = text(d.reference);
+      const concept = text(d.concept, 80);
+      const amount = toNumber(d.amountUsd);
+      const money = amount !== null ? ` ($${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : '';
+      return `Se aprobó el pago${ref ? ` ${ref}` : ''} de ${org}${concept ? `: ${concept}` : ''}${money}.`;
+    }
+    case 'PAYMENT_REJECTED': {
+      const ref = text(d.reference);
+      const reason = text(d.reason, 80);
+      return `Se rechazó el pago${ref ? ` ${ref}` : ''} de ${org}${reason ? `. Motivo: ${reason}` : ''}.`;
+    }
+    case 'PACK_CREDITED': {
+      const pack = text(d.pack);
+      const ref = text(d.reference);
+      return `Se acreditó${pack ? ` el paquete ${pack}` : ' un paquete'} a ${org}${ref ? ` (pago ${ref})` : ''}.`;
+    }
+    case 'PACK_CREATED':
+      return `Se creó el paquete ${text(d.code) || '—'}.`;
+    case 'PACK_UPDATED':
+      return `Se editó el paquete ${text(d.code) || '—'}.`;
     case 'PLAN_CREATED':
       return `Se creó el plan ${text(d.code) || '—'}.`;
     case 'PLAN_UPDATED':

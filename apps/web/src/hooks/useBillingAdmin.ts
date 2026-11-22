@@ -3,8 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type {
-  BillingEventRow, BillingSettingsRow, OrganizationLite, PlanRow, SubscriptionOverrides, SubscriptionRow,
+  AdminConsumption, AdminPackRow, AdminPaymentRow, BillingEventRow, BillingSettingsRow, OrganizationLite, PlanRow, SubscriptionOverrides, SubscriptionRow,
 } from '@/lib/billing/admin-types';
+import { isPeriodKey } from '@/lib/billing/consumption';
 
 /**
  * Planes y suscripciones — administración de la plataforma (solo SUPER_ADMIN). Rutas de apps/api/src/billing/billing-admin.controller.ts.
@@ -18,6 +19,9 @@ const keys = {
   subscriptions: [...ROOT, 'subscriptions'] as const,
   events: (organizationId?: string) => [...ROOT, 'events', organizationId ?? 'all'] as const,
   settings: [...ROOT, 'settings'] as const,
+  payments: [...ROOT, 'payments'] as const,
+  packs: [...ROOT, 'packs'] as const,
+  consumption: (period: string) => [...ROOT, 'consumption', period] as const,
 };
 
 function useRefreshAll() {
@@ -155,6 +159,8 @@ export interface SettingsPatchBody {
   costPerRequestUsd?: number;
   safetyMultiplier?: number;
   defaultPlanCode?: string;
+  /** Reemplaza TODO el objeto de instrucciones de pago. */
+  paymentInstructions?: Record<string, string>;
 }
 
 export function useUpdateBillingSettings() {
@@ -162,5 +168,70 @@ export function useUpdateBillingSettings() {
   return useMutation({
     mutationFn: (patch: SettingsPatchBody) => apiClient.patch<BillingSettingsRow>('/billing-admin/settings', patch),
     onSuccess: () => refresh(),
+  });
+}
+
+// ── Pagos (cola de aprobación) ──
+
+/**
+ * Tras aprobar o rechazar un pago cambia casi todo: la cola, las suscripciones (vigencia y plan), el consumo (ingreso) y, del lado del cliente,
+ * «Mi plan», sus paquetes y sus pagos (`['billing', …]`, que incluye `['billing','me']`).
+ */
+function useRefreshAfterPayment() {
+  const qc = useQueryClient();
+  return () => Promise.all([
+    qc.invalidateQueries({ queryKey: ROOT }),
+    qc.invalidateQueries({ queryKey: ['billing'] }),
+  ]);
+}
+
+/** Pagos de todas las organizaciones (los 200 más recientes), sin filtrar: los filtros y contadores se calculan en pantalla. */
+export function useAdminPayments(enabled = true) {
+  return useQuery<AdminPaymentRow[]>({
+    queryKey: keys.payments, queryFn: () => apiClient.get<AdminPaymentRow[]>('/billing-admin/payments'),
+    enabled, staleTime: 10_000, refetchOnWindowFocus: true,
+  });
+}
+
+/** Catálogo de paquetes (para explicar qué acredita aprobar un paquete). */
+export function useAdminPacks(enabled = true) {
+  return useQuery<AdminPackRow[]>({
+    queryKey: keys.packs, queryFn: () => apiClient.get<AdminPackRow[]>('/billing-admin/packs'), enabled, staleTime: 60_000,
+  });
+}
+
+/** Aprueba el pago: el servidor acredita la licencia o el paquete UNA sola vez (si ya estaba procesado responde 409). */
+export function useApprovePayment() {
+  const refresh = useRefreshAfterPayment();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<AdminPaymentRow>(`/billing-admin/payments/${encodeURIComponent(id)}/approve`, {}),
+    // Con éxito o con 409 (ya procesado) la lista debe volver a leerse.
+    onSettled: () => refresh(),
+  });
+}
+
+export function useRejectPayment() {
+  const refresh = useRefreshAfterPayment();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      apiClient.post<AdminPaymentRow>(`/billing-admin/payments/${encodeURIComponent(id)}/reject`, { reason }),
+    onSettled: () => refresh(),
+  });
+}
+
+/** Enlace temporal (5 minutos) al comprobante de un pago. */
+export function fetchProofUrl(id: string): Promise<{ url: string }> {
+  return apiClient.get<{ url: string }>(`/billing-admin/payments/${encodeURIComponent(id)}/proof-url`);
+}
+
+// ── Consumo y costos ──
+
+/** Consumo del mes `period` («AAAA-MM»): peticiones y dinero por organización, asistente y tipo de archivo. */
+export function useAdminConsumption(period: string, enabled = true) {
+  const valid = isPeriodKey(period);
+  return useQuery<AdminConsumption>({
+    queryKey: keys.consumption(period),
+    queryFn: () => apiClient.get<AdminConsumption>(`/billing-admin/consumption?period=${encodeURIComponent(period)}`),
+    enabled: enabled && valid, staleTime: 30_000,
   });
 }

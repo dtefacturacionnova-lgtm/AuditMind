@@ -3,16 +3,20 @@
 import Link from 'next/link';
 import { AlertCircle, Check, Loader2, Lock } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
-import { BTN_SECONDARY, Callout, Card, Pill, StatusPill } from '@/components/billing/ui';
+import { ClientBillingNav } from '@/components/billing/ClientBillingNav';
+import { UsageDetails, UsageMeters } from '@/components/billing/UsagePanel';
+import { BTN_PRIMARY, BTN_SECONDARY, Callout, Card, Meter, Pill, StatusPill } from '@/components/billing/ui';
 import { useBilling } from '@/contexts/BillingContext';
+import { useBillingUsage } from '@/hooks/useBillingClient';
+import { useUser } from '@/hooks/useUser';
 import { fileSizeText, limitText, type BillingMe } from '@/lib/billing/access';
 import {
   ASSISTANT_INFO, ASSISTANT_KEYS, AUDIENCE_LABEL, FILE_TYPE_INFO, FILE_TYPE_KEYS, FUNCTION_INFO, FUNCTION_KEYS, LICENSE_LABEL,
   MODULE_INFO, MODULE_KEYS, isFileTypeKey,
 } from '@/lib/billing/catalog';
 import { lockedHref } from '@/lib/billing/menu';
+import { canManageBilling } from '@/lib/billing/payments';
 import { daysUntil, shortDate } from '@/lib/billing/subscription-tools';
-import { cn } from '@/lib/utils';
 
 /** Vigencia en una frase: «Vigente hasta 14-12-2026 · quedan 23 días». */
 function validityText(me: BillingMe): string {
@@ -30,27 +34,6 @@ function validityText(me: BillingMe): string {
   }
 }
 
-function Meter({ label, value, pct, note }: { label: string; value: string; pct: number | null; note?: string }) {
-  const bar = pct === null ? null : pct >= 100 ? 'bg-red-600' : pct >= 80 ? 'bg-amber-600' : 'bg-blue-600';
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm font-semibold text-gray-900">{label}</span>
-        <span className="text-sm tabular-nums text-gray-800">{value}</span>
-      </div>
-      {bar && pct !== null && (
-        <div
-          className="h-2.5 overflow-hidden rounded-full bg-gray-200"
-          role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round(pct))}
-        >
-          <div className={cn('h-full rounded-full', bar)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
-        </div>
-      )}
-      {note && <p className="text-xs leading-relaxed text-gray-600">{note}</p>}
-    </div>
-  );
-}
-
 function LimitRow({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="flex flex-col gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
@@ -63,6 +46,10 @@ function LimitRow({ label, value, note }: { label: string; value: string; note?:
 
 export default function MyPlanPage() {
   const { me, isLoading, isError, planActive, enforcing, refresh } = useBilling();
+  const { user, loading: userLoading } = useUser();
+  // Comprar, pagar y ver los pagos exige ser ADMIN de la organización (el API responde 403 a los demás).
+  const canBuy = canManageBilling(user?.role);
+  const usageQ = useBillingUsage();
 
   return (
     <div className="flex h-full flex-col">
@@ -72,6 +59,7 @@ export default function MyPlanPage() {
           <p className="text-sm text-gray-600">Administración › Mi plan</p>
           <h1 className="text-2xl font-bold text-gray-900">Mi plan</h1>
         </div>
+        {canBuy && <ClientBillingNav />}
 
         {isLoading ? (
           <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-gray-400" aria-label="Cargando" /></div>
@@ -121,9 +109,21 @@ export default function MyPlanPage() {
                   </p>
                   <p className="text-sm tabular-nums text-gray-800">{validityText(me)}</p>
                 </div>
-                <p className="max-w-xs text-xs leading-relaxed text-gray-600">
-                  Para renovar o cambiar de plan, contacta al administrador de la plataforma.
-                </p>
+                {canBuy ? (
+                  <div className="flex max-w-sm flex-col items-start gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Link href="/dashboard/billing/comprar" className={BTN_PRIMARY}>Comprar más</Link>
+                      <Link href="/dashboard/billing/pagos" className={BTN_SECONDARY}>Mis pagos</Link>
+                    </div>
+                    <p className="text-xs leading-relaxed text-gray-600">
+                      Compra peticiones de IA o espacio, o paga o renueva tu licencia con una referencia de pago. Para cambiar de plan, contacta a la plataforma.
+                    </p>
+                  </div>
+                ) : userLoading ? null : (
+                  <p className="max-w-xs text-xs leading-relaxed text-gray-600">
+                    Para renovar, comprar más peticiones de IA o espacio, o cambiar de plan, pídeselo a un administrador de tu organización.
+                  </p>
+                )}
               </div>
               {planActive && me.notice && (
                 <div className="mt-4">
@@ -135,7 +135,7 @@ export default function MyPlanPage() {
             {/* Uso y límites */}
             <Card
               title="Uso de tu plan"
-              subtitle="Las plazas de usuario ya se cuentan. El consumo de espacio y de peticiones de IA se mostrará aquí en una próxima etapa; por ahora ves lo que incluye tu plan."
+              subtitle="Tus usuarios, las peticiones de IA de este mes y el espacio que ocupan tus archivos."
             >
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 <Meter
@@ -146,6 +146,7 @@ export default function MyPlanPage() {
                     ? `Incluye ${limitText(me.limits.users)} y admite hasta ${limitText(me.limits.maxUsers)} con usuarios extra. Los invitados del portal y los usuarios de solo lectura no cuentan.`
                     : 'Los invitados del portal y los usuarios de solo lectura no cuentan.'}
                 />
+                <UsageMeters q={usageQ} canBuy={canBuy} limits={me.limits} />
               </div>
               {me.limits && (
                 <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -177,6 +178,8 @@ export default function MyPlanPage() {
                 </div>
               )}
             </Card>
+
+            <UsageDetails q={usageQ} canBuy={canBuy} enforcing={enforcing} limits={me.limits} />
 
             {/* Módulos */}
             <div className="grid gap-5 lg:grid-cols-2">
@@ -252,7 +255,7 @@ export default function MyPlanPage() {
             </Card>
 
             <p className="text-xs text-gray-600">
-              Los cobros y renovaciones de tu licencia los gestiona la plataforma. Si la licencia vence, la cuenta pasa a solo lectura (puedes consultar y exportar todo) y no se borra nada.
+              Los pagos se hacen por transferencia, QR o efectivo con una referencia única y los aprueba un administrador de la plataforma. Si la licencia vence, la cuenta pasa a solo lectura (puedes consultar y exportar todo) y no se borra nada.
             </p>
           </>
         )}

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { STATUS_LABEL, STATUS_PILL, isStatus } from '@/lib/billing/catalog';
+import { barWidth, meterLevel } from '@/lib/billing/consumption';
 
 /** Piezas de interfaz compartidas por las pantallas de planes y suscripciones. Mismo estilo que Organizaciones. */
 
@@ -167,6 +168,34 @@ export function QueryError({ error, onRetry, what }: { error: unknown; onRetry?:
         Si es la primera vez que entras aquí, verifica que el SQL de «Planes y suscripciones» ya esté aplicado en la base de datos.
       </p>
       {onRetry && <button type="button" onClick={onRetry} className={BTN_SECONDARY}>Reintentar</button>}
+    </div>
+  );
+}
+
+/** Color de la barra según el nivel: azul normal, ámbar desde 80 %, rojo al llegar al 100 %. */
+const BAR_COLOR = { none: 'bg-blue-600', ok: 'bg-blue-600', warn: 'bg-amber-600', full: 'bg-red-600' } as const;
+
+/**
+ * Barra de uso con etiqueta, cifra y nota. `pct` nulo = sin tope (no se dibuja barra); la barra nunca pasa de 100 % ni da NaN,
+ * aunque el uso supere el tope. Es de lectura (progressbar) y no depende solo del color: la cifra y la nota dicen lo mismo.
+ */
+export function Meter({ label, value, pct, note }: { label: string; value: string; pct: number | null; note?: ReactNode }) {
+  const level = meterLevel(pct);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-semibold text-gray-900">{label}</span>
+        <span className="text-right text-sm tabular-nums text-gray-800">{value}</span>
+      </div>
+      {level !== 'none' && (
+        <div
+          className="h-2.5 overflow-hidden rounded-full bg-gray-200"
+          role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(barWidth(pct))} aria-valuetext={value}
+        >
+          <div className={cn('h-full rounded-full', BAR_COLOR[level])} style={{ width: `${barWidth(pct)}%` }} />
+        </div>
+      )}
+      {note && <p className="text-xs leading-relaxed text-gray-600">{note}</p>}
     </div>
   );
 }

@@ -219,7 +219,7 @@ export default function SubscriptionsPage() {
               </div>
             )}
             <p className="mt-3 text-xs text-gray-600">
-              Espacio y peticiones de IA se muestran como lo que incluye el plan; el consumo real se verá aquí en una próxima etapa.
+              Espacio y peticiones de IA se muestran como lo que incluye el plan; el consumo real está en la pestaña «Consumo».
               {' '}«Ingreso mensual estimado» suma el precio pactado (o el del catálogo) de cada licencia dividido entre sus meses; no incluye IVA.
             </p>
           </Card>

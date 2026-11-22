@@ -4,11 +4,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
+import { useAdminPayments } from '@/hooks/useBillingAdmin';
 import { useUser } from '@/hooks/useUser';
+import { paymentCounts } from '@/lib/billing/payments';
 import { cn } from '@/lib/utils';
 
 const TABS = [
   { href: '/dashboard/admin/billing/suscripciones', label: 'Suscripciones' },
+  { href: '/dashboard/admin/billing/pagos', label: 'Pagos' },
+  { href: '/dashboard/admin/billing/consumo', label: 'Consumo' },
   { href: '/dashboard/admin/billing/planes', label: 'Planes' },
   { href: '/dashboard/admin/billing/parametros', label: 'Parámetros' },
 ];
@@ -17,6 +21,11 @@ const TABS = [
 export default function BillingAdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useUser();
   const pathname = usePathname() ?? '';
+  // Pagos por revisar, para el número junto a la pestaña «Pagos». Es la misma consulta de la pantalla de pagos (no pide nada extra);
+  // si falla, simplemente no se muestra el número.
+  const isSuper = user?.role === 'SUPER_ADMIN';
+  const paymentsQ = useAdminPayments(isSuper);
+  const pendingPayments = Array.isArray(paymentsQ.data) ? paymentCounts(paymentsQ.data).PENDING : 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -36,18 +45,23 @@ export default function BillingAdminLayout({ children }: { children: React.React
               <p className="text-sm text-gray-600">Administración › Planes y suscripciones</p>
               <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-900">Solo SUPER_ADMIN</span>
             </div>
-            <nav aria-label="Secciones de planes y suscripciones" className="mb-6 flex gap-1 border-b border-gray-200">
+            <nav aria-label="Secciones de planes y suscripciones" className="mb-6 flex gap-1 overflow-x-auto border-b border-gray-200">
               {TABS.map((t) => {
                 const active = pathname === t.href || pathname.startsWith(t.href + '/');
                 return (
                   <Link
                     key={t.href} href={t.href} aria-current={active ? 'page' : undefined}
                     className={cn(
-                      '-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F2D4A]',
+                      '-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F2D4A]',
                       active ? 'border-[#0F2D4A] text-[#0F2D4A]' : 'border-transparent text-gray-600 hover:text-gray-900',
                     )}
                   >
                     {t.label}
+                    {t.href.endsWith('/pagos') && pendingPayments > 0 && (
+                      <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-amber-900">
+                        {pendingPayments}<span className="sr-only"> pendientes de revisar</span>
+                      </span>
+                    )}
                   </Link>
                 );
               })}

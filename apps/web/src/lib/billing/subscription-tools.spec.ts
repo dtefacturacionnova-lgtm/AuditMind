@@ -239,6 +239,22 @@ describe('registro de actividad', () => {
     expect(describeEvent({ type: 'USAGE_ALERT_SENT', data: null }, 'A')).toBe('Se avisó a A de su consumo.');
   });
 
+  it('los pagos y paquetes también dejan un texto claro en el registro', () => {
+    expect(describeEvent({ type: 'PAYMENT_REQUESTED', data: { reference: 'AUD-8M1QRZ', concept: '+5,000 peticiones' } }, 'Norte')).toBe('Norte pidió un pago (AUD-8M1QRZ): +5,000 peticiones.');
+    expect(describeEvent({ type: 'PAYMENT_APPROVED', data: { reference: 'AUD-8M1QRZ', amountUsd: 20, concept: '+5,000 peticiones' } }, 'Norte'))
+      .toBe('Se aprobó el pago AUD-8M1QRZ de Norte: +5,000 peticiones ($20.00).');
+    expect(describeEvent({ type: 'PAYMENT_REJECTED', data: { reference: 'AUD-8M1QRZ', reason: 'Monto incorrecto' } }, 'Norte')).toBe('Se rechazó el pago AUD-8M1QRZ de Norte. Motivo: Monto incorrecto.');
+    expect(describeEvent({ type: 'PACK_CREDITED', data: { pack: 'IA_5000', reference: 'AUD-8M1QRZ' } }, 'Norte')).toBe('Se acreditó el paquete IA_5000 a Norte (pago AUD-8M1QRZ).');
+    expect(describeEvent({ type: 'PACK_CREATED', data: { code: 'IA_5000' } }, null)).toBe('Se creó el paquete IA_5000.');
+    expect(describeEvent({ type: 'PACK_UPDATED', data: { code: 'IA_5000', fields: ['priceUsd'] } }, null)).toBe('Se editó el paquete IA_5000.');
+  });
+
+  it('un pago con datos raros no se interpreta ni rompe', () => {
+    expect(describeEvent({ type: 'PAYMENT_APPROVED', data: null }, 'A')).toBe('Se aprobó el pago de A.');
+    expect(describeEvent({ type: 'PAYMENT_REJECTED', data: { reason: 'x'.repeat(300) } }, 'A').length).toBeLessThan(120);
+    expect(describeEvent({ type: 'PAYMENT_REQUESTED', data: 'texto' }, null)).toBe('una organización pidió un pago.');
+  });
+
   it('un aviso con datos raros no se interpreta', () => {
     expect(describeEvent({ type: 'REMINDER_SENT', data: { kind: '<script>', days: -3, emailed: 'x' } }, 'A')).toBe('Se avisó a A del estado de su plan.');
     expect(describeEvent({ type: 'REMINDER_SENT', data: null }, 'A')).toBe('Se avisó a A del estado de su plan.');

@@ -267,6 +267,20 @@ export class EmailService {
     });
   }
 
+  /** Aviso de vencimiento de la prueba o la licencia (texto plano: aquí se escapa; nunca llega HTML ajeno al correo). */
+  async sendSubscriptionNotice(to: string, params: { subject: string; heading: string; paragraphs: string[] }) {
+    return this.send({
+      to,
+      subject: params.subject,
+      body: {
+        heading: params.heading,
+        paragraphs: params.paragraphs.map((p) => escHtml(p)),
+        ctaLabel: 'Ver mi plan',
+        ctaUrl: `${this.appUrl}/dashboard/billing`,
+      },
+    });
+  }
+
   /** Alerta de Finding generado automáticamente (Benford / COSO / Pruebas IA) */
   async sendAutoFindingAlert(to: string, params: {
     findingTitle: string;

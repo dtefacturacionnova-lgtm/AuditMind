@@ -4,6 +4,7 @@ import { UserRole } from '@prisma/client';
 import { AuthUser } from '../auth/jwt.strategy';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { BillingRemindersService } from './billing-reminders.service';
 import { BillingSettingsService } from './billing-settings.service';
 import { BillingUsageService } from './billing-usage.service';
 import {
@@ -25,6 +26,7 @@ export class BillingAdminController {
     private readonly settings: BillingSettingsService,
     private readonly payments: PaymentsService,
     private readonly usage: BillingUsageService,
+    private readonly reminders: BillingRemindersService,
   ) {}
 
   // ── Planes ──
@@ -134,6 +136,22 @@ export class BillingAdminController {
   @ApiOperation({ summary: 'Consumo del mes por organización, asistente y tipo de archivo: peticiones, dinero y margen' })
   consumption(@Query('period') period?: string) {
     return this.usage.adminConsumption(period && /^\d{4}-(0[1-9]|1[0-2])$/.test(period) ? period : undefined);
+  }
+
+  // ── Avisos de vencimiento ──
+  @Get('reminders/preview')
+  @ApiOperation({ summary: 'Qué avisos de vencimiento tocan hoy y a quién, SIN enviar nada (la corrida diaria envía solo con el cumplimiento en ENFORCE)' })
+  async remindersPreview() {
+    const [{ checked, items }, settings] = await Promise.all([this.reminders.preview(), this.settings.get()]);
+    return {
+      mode: settings.enforcementMode,
+      reminderDays: settings.reminderDays,
+      checked,
+      items: items.map((i) => ({
+        organizationId: i.organizationId, organizationName: i.organizationName, planName: i.planName,
+        kind: i.decision.kind, days: i.decision.days ?? null, endsAt: i.endsAt, subject: i.text.subject,
+      })),
+    };
   }
 
   // ── Parámetros de la plataforma ──

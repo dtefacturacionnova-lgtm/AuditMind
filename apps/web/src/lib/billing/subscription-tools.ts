@@ -270,6 +270,15 @@ export function describeEvent(ev: Pick<BillingEventRow, 'type' | 'data'>, orgNam
       const st = typeof d.status === 'string' && isStatus(d.status) ? STATUS_LABEL[d.status].toLowerCase() : '';
       return `Se ajustó la suscripción de ${org}${fields.length ? `: ${fields.join(', ')}` : ''}${st ? ` (estado: ${st})` : ''}.`;
     }
+    case 'REMINDER_SENT': {
+      const days = typeof d.days === 'number' && Number.isInteger(d.days) && d.days > 0 ? d.days : null;
+      const what = d.kind === 'EXPIRING' ? `que su licencia o prueba vence${days ? ` (aviso de ${days} ${days === 1 ? 'día' : 'días'})` : ''}`
+        : d.kind === 'GRACE' ? 'que su licencia venció y está en periodo de gracia'
+        : d.kind === 'READ_ONLY' ? 'que su cuenta pasó a solo lectura'
+        : 'del estado de su plan';
+      const reached = typeof d.emailed === 'number' && typeof d.recipients === 'number' ? ` (correo a ${d.emailed} de ${d.recipients} ${d.recipients === 1 ? 'persona' : 'personas'})` : '';
+      return `Se avisó a ${org} ${what}${reached}.`;
+    }
     case 'PLAN_CREATED':
       return `Se creó el plan ${text(d.code) || '—'}.`;
     case 'PLAN_UPDATED':

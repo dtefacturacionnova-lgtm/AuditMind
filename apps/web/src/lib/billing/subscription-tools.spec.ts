@@ -218,6 +218,21 @@ describe('registro de actividad', () => {
     expect(describeEvent({ type: 'SUBSCRIPTION_CREATED', data: { plan: 'P' } }, 'A')).toBe('Se creó la suscripción de A con el plan P.');
   });
 
+  it('los avisos de vencimiento dicen qué se avisó y a cuántas personas llegó el correo', () => {
+    expect(describeEvent({ type: 'REMINDER_SENT', data: { kind: 'EXPIRING', days: 7, recipients: 2, emailed: 2 } }, 'Norte'))
+      .toBe('Se avisó a Norte que su licencia o prueba vence (aviso de 7 días) (correo a 2 de 2 personas).');
+    expect(describeEvent({ type: 'REMINDER_SENT', data: { kind: 'EXPIRING', days: 1, recipients: 1, emailed: 0 } }, 'Norte'))
+      .toBe('Se avisó a Norte que su licencia o prueba vence (aviso de 1 día) (correo a 0 de 1 persona).');
+    expect(describeEvent({ type: 'REMINDER_SENT', data: { kind: 'GRACE' } }, 'Norte')).toBe('Se avisó a Norte que su licencia venció y está en periodo de gracia.');
+    expect(describeEvent({ type: 'REMINDER_SENT', data: { kind: 'READ_ONLY', recipients: 0, emailed: 0 } }, null))
+      .toBe('Se avisó a una organización que su cuenta pasó a solo lectura (correo a 0 de 0 personas).');
+  });
+
+  it('un aviso con datos raros no se interpreta', () => {
+    expect(describeEvent({ type: 'REMINDER_SENT', data: { kind: '<script>', days: -3, emailed: 'x' } }, 'A')).toBe('Se avisó a A del estado de su plan.');
+    expect(describeEvent({ type: 'REMINDER_SENT', data: null }, 'A')).toBe('Se avisó a A del estado de su plan.');
+  });
+
   it('un tipo desconocido o datos raros no rompen ni se interpretan', () => {
     expect(describeEvent({ type: 'OTRO', data: null }, 'A')).toBe('Se registró un cambio.');
     expect(describeEvent({ type: 'PLAN_ASSIGNED', data: 'texto' }, null)).toContain('una organización');

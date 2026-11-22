@@ -1,8 +1,11 @@
 import { Global, Module } from '@nestjs/common';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { BillingAdminController } from './billing-admin.controller';
+import { BillingRemindersService } from './billing-reminders.service';
 import { BillingSettingsService } from './billing-settings.service';
 import { BillingUsageService } from './billing-usage.service';
 import { BillingController } from './billing.controller';
+import { BillingScheduler } from './billing.scheduler';
 import { EntitlementsService } from './entitlements.service';
 import { PaymentsService } from './payments.service';
 import { PlansService } from './plans.service';
@@ -17,10 +20,12 @@ import { UsageService } from './usage.service';
  */
 @Global()
 @Module({
+  imports: [NotificationsModule],
   controllers: [BillingController, BillingAdminController],
   providers: [
     BillingSettingsService, EntitlementsService, PlansService, SubscriptionsService, SubscriptionGuard,
     UsageService, StorageUsageService, BillingUsageService, PaymentsService,
+    BillingRemindersService, BillingScheduler,
   ],
   exports: [BillingSettingsService, EntitlementsService, SubscriptionsService, SubscriptionGuard, UsageService, StorageUsageService],
 })

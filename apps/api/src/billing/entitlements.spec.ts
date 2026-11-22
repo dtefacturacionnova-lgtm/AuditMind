@@ -1,4 +1,4 @@
-import { DEFAULT_LIMITS, SubscriptionInput, addMonths, computeEntitlements, computeStatus, hasEntitlement, seatsAllowed } from './entitlements';
+import { DEFAULT_LIMITS, SubscriptionInput, addMonths, canReactivateManually, computeEntitlements, computeStatus, hasEntitlement, seatsAllowed } from './entitlements';
 import { isBillableRole, suggestAssistants } from './billing.constants';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -64,6 +64,29 @@ describe('estado vigente deducido de las fechas', () => {
 
   it('un GRACE o READ_ONLY guardado en la base se recalcula por fechas (no depende de que un cron haya corrido)', () => {
     expect(computeEntitlements(sub({ status: 'READ_ONLY', currentPeriodEnd: day(30) }), SETTINGS, NOW).status).toBe('ACTIVE');
+  });
+});
+
+describe('reactivar a mano («Activa»): solo con fecha o sin vencimiento por diseño', () => {
+  const s = (over: Partial<Pick<SubscriptionInput, 'currentPeriodEnd' | 'trialEndsAt' | 'months'>> = {}) => ({ currentPeriodEnd: null, trialEndsAt: null, months: 0, ...over });
+
+  it('con fecha de vencimiento: sí, vigente o ya vencida (si venció, el estado vuelve a salir de las fechas)', () => {
+    expect(canReactivateManually(s({ currentPeriodEnd: day(100), months: 12 }), false)).toBe(true);
+    expect(canReactivateManually(s({ currentPeriodEnd: day(-30), months: 1 }), false)).toBe(true);
+  });
+  it('venía de una prueba (sin fecha de licencia y con fecha de prueba): no, quedaría gratis para siempre', () => {
+    expect(canReactivateManually(s({ trialEndsAt: day(5) }), false)).toBe(false);
+    expect(canReactivateManually(s({ trialEndsAt: day(-30) }), false)).toBe(false); // prueba ya terminada: igual
+  });
+  it('sin vencimiento por diseño (0 meses y sin prueba: Piloto, Interno, licencia sin vencimiento): sí', () => {
+    expect(canReactivateManually(s(), false)).toBe(true);
+  });
+  it('datos incoherentes (meses pero sin fecha ni prueba): no se adivina, se rechaza', () => {
+    expect(canReactivateManually(s({ months: 12 }), false)).toBe(false);
+  });
+  it('si el mismo ajuste la marca exenta, sí: una exenta nunca se bloquea y no necesita fecha', () => {
+    expect(canReactivateManually(s({ trialEndsAt: day(5) }), true)).toBe(true);
+    expect(canReactivateManually(s({ months: 12 }), true)).toBe(true);
   });
 });
 

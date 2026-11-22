@@ -97,6 +97,18 @@ export function computeStatus(sub: SubscriptionInput, settings: LifecycleSetting
   return { status: 'SUSPENDED', endsAt, graceEndsAt, readOnlyEndsAt };
 }
 
+/**
+ * ¿Se puede pasar a mano una cuenta a «Activa»? Solo si queda con fecha de vencimiento, o sin vencimiento POR DISEÑO (exenta, o licencia
+ * sin vencimiento: 0 meses y sin prueba). Una cuenta que venía de una prueba no tiene fecha de licencia: dejarla «Activa» a secas la
+ * volvería gratis para siempre. Para darle fecha existen «Extender prueba», «Renovar» y «Cambiar plan».
+ * `exemptAfter` es la exención que tendrá la cuenta DESPUÉS del cambio (el mismo ajuste puede marcarla como exenta).
+ */
+export function canReactivateManually(sub: Pick<SubscriptionInput, 'currentPeriodEnd' | 'trialEndsAt' | 'months'>, exemptAfter: boolean): boolean {
+  if (exemptAfter) return true;
+  if (sub.currentPeriodEnd !== null) return true;
+  return sub.months === 0 && sub.trialEndsAt === null;
+}
+
 /** Plazas de usuario permitidas: incluidas + extras compradas, sin pasar del máximo del plan. */
 export function seatsAllowed(limits: PlanLimits, extraUsers: number): number {
   if (limits.users < 0) return Infinity;

@@ -217,6 +217,98 @@ suite('planes y suscripciones contra Postgres real', () => {
       expect(await code(subs.update(id, { extraUsers: -1 }, 'a'))).toMatch(/≥ 0/);
       expect(await code(subs.update(id, { agreedPriceUsd: -5 }, 'a'))).toMatch(/negativo/);
     });
+
+    describe('reactivar a mano una cuenta («Activa»)', () => {
+      const updatedEvents = async (id: string) => (await subs.events(id)).filter((e: any) => e.type === 'SUBSCRIPTION_UPDATED').length;
+      const stored = (id: string) => prisma.billingSubscription.findUnique({ where: { organizationId: id } });
+
+      it('una cuenta en prueba no pasa a «Activa» a secas (quedaría gratis para siempre) y no se escribe NADA del ajuste', async () => {
+        const id = await newOrg();
+        await subs.createForNewOrganization(id);
+        const before = (await stored(id))!;
+        const err = await subs.update(id, { status: 'ACTIVE', extraUsers: 7, notes: 'no debe guardarse' }, 'a').catch((e: any) => e);
+        expect(err.getStatus()).toBe(409); // conflicto de estado (como renovar una licencia sin vencimiento), no un dato mal escrito
+        expect(err.message).toMatch(/sin fecha de vencimiento/);
+        const after = (await stored(id))!;
+        expect(after.status).toBe('TRIAL');
+        expect(after.trialEndsAt).toEqual(before.trialEndsAt);
+        expect(after.extraUsers).toBe(0); // el resto del mismo ajuste tampoco se aplicó
+        expect(after.notes).toBe(before.notes);
+        expect(await updatedEvents(id)).toBe(0); // y no quedó un registro de un cambio que no ocurrió
+      });
+
+      it('una cuenta suspendida que venía de una prueba no se reactiva sin fecha; «Extender prueba» sí la reactiva con fecha', async () => {
+        const id = await newOrg();
+        await subs.createForNewOrganization(id);
+        await subs.update(id, { status: 'SUSPENDED' }, 'a');
+        expect(await code(subs.update(id, { status: 'ACTIVE' }, 'a'))).toMatch(/Extender prueba/);
+        expect((await stored(id))!.status).toBe('SUSPENDED');
+        await subs.extendTrial(id, 10, 'a');
+        const e = await entitlements.get(id);
+        expect(e.status).toBe('TRIAL');
+        expect(e.endsAt).not.toBeNull();
+      });
+
+      it('suspender o cancelar una cuenta en prueba sigue permitido', async () => {
+        const a = await newOrg(); const b = await newOrg();
+        await subs.createForNewOrganization(a); await subs.createForNewOrganization(b);
+        await subs.update(a, { status: 'SUSPENDED' }, 'x'); await subs.update(b, { status: 'CANCELLED' }, 'x');
+        expect((await stored(a))!.status).toBe('SUSPENDED');
+        expect((await stored(b))!.status).toBe('CANCELLED');
+      });
+
+      it('una licencia con fecha se suspende y se reactiva sin tocar su vencimiento', async () => {
+        const id = await newOrg();
+        await subs.createForNewOrganization(id);
+        const s = await subs.assign(id, { planCode: 'EMPRESA_DESPACHO', months: 12 }, 'a');
+        await subs.update(id, { status: 'SUSPENDED' }, 'a');
+        await subs.update(id, { status: 'ACTIVE' }, 'a');
+        const after = (await stored(id))!;
+        expect(after.status).toBe('ACTIVE');
+        expect(after.currentPeriodEnd).toEqual(s.currentPeriodEnd);
+        expect((await entitlements.get(id)).status).toBe('ACTIVE');
+      });
+
+      it('una licencia ya vencida que se suspende y se «reactiva» NO se libera: el estado vuelve a salir de las fechas', async () => {
+        const id = await newOrg();
+        await subs.createForNewOrganization(id);
+        await subs.assign(id, { planCode: 'EMPRESA_DESPACHO', months: 1 }, 'a');
+        await prisma.billingSubscription.update({ where: { organizationId: id }, data: { currentPeriodEnd: new Date(Date.now() - 30 * DAY) } });
+        await subs.update(id, { status: 'SUSPENDED' }, 'a');
+        await subs.update(id, { status: 'ACTIVE' }, 'a');
+        entitlements.invalidate(id);
+        const e = await entitlements.get(id);
+        expect(e.status).toBe('READ_ONLY');
+        expect(e.readOnly).toBe(true);
+      });
+
+      it('una cuenta exenta sin vencimiento (Piloto) se suspende y se reactiva sin problema', async () => {
+        const id = await newOrg();
+        await subs.createForNewOrganization(id, 'PILOTO');
+        await subs.update(id, { status: 'SUSPENDED' }, 'a');
+        await subs.update(id, { status: 'ACTIVE' }, 'a');
+        const after = (await stored(id))!;
+        expect(after).toMatchObject({ status: 'ACTIVE', currentPeriodEnd: null, exempt: true });
+      });
+
+      it('si el mismo ajuste la marca exenta, una cuenta en prueba sí puede quedar «Activa» (exención explícita)', async () => {
+        const id = await newOrg();
+        await subs.createForNewOrganization(id);
+        await subs.update(id, { status: 'ACTIVE', exempt: true }, 'a');
+        const e = await entitlements.get(id);
+        expect(e.exempt).toBe(true);
+        expect((await stored(id))!.status).toBe('ACTIVE');
+      });
+
+      it('«Activa» sobre una cuenta que ya está activa no es un cambio: no se rechaza aunque sus datos sean raros', async () => {
+        const id = await newOrg();
+        await subs.createForNewOrganization(id);
+        await subs.assign(id, { planCode: 'EMPRESA_DESPACHO', months: 12 }, 'a');
+        await prisma.billingSubscription.update({ where: { organizationId: id }, data: { currentPeriodEnd: null } }); // dato incoherente heredado
+        await subs.update(id, { status: 'ACTIVE', notes: 'sin cambio de estado' }, 'a');
+        expect((await stored(id))!.notes).toBe('sin cambio de estado');
+      });
+    });
   });
 
   describe('plazas de usuario', () => {

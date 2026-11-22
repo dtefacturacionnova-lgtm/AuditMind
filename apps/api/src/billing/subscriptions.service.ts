@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ASSISTANT_KEYS, BILLABLE_ROLES, EXEMPT_PLAN_CODES, FUNCTION_KEYS, LICENSE_MONTHS, MODULE_KEYS } from './billing.constants';
 import { BillingSettingsService } from './billing-settings.service';
-import { addMonths, computeEntitlements } from './entitlements';
+import { addMonths, canReactivateManually, computeEntitlements } from './entitlements';
 import { EntitlementsService } from './entitlements.service';
 import { planSnapshotOf } from './plans.service';
 
@@ -151,6 +151,10 @@ export class SubscriptionsService {
     if (!sub) throw new NotFoundException('La organización no tiene suscripción.');
     if (patch.extraUsers !== undefined && (!Number.isInteger(patch.extraUsers) || patch.extraUsers < 0)) throw new BadRequestException('Los usuarios extra deben ser un entero ≥ 0.');
     if (patch.agreedPriceUsd !== undefined && patch.agreedPriceUsd !== null && (!Number.isFinite(patch.agreedPriceUsd) || patch.agreedPriceUsd < 0)) throw new BadRequestException('El precio pactado no puede ser negativo.');
+    // Pasar a «Activa» sin fecha de vencimiento dejaría la cuenta gratis para siempre (una prueba no tiene fecha de licencia): se rechaza ANTES de escribir nada.
+    if (patch.status === 'ACTIVE' && sub.status !== 'ACTIVE' && !canReactivateManually(sub, patch.exempt ?? sub.exempt)) {
+      throw new ConflictException('Reactivarla dejaría la cuenta activa sin fecha de vencimiento. Usa «Extender prueba», «Renovar» o «Cambiar plan» para reactivarla con una fecha.');
+    }
     const data: Prisma.BillingSubscriptionUpdateInput = {
       ...(patch.agreedPriceUsd !== undefined && { agreedPriceUsd: patch.agreedPriceUsd }),
       ...(patch.extraUsers !== undefined && { extraUsers: patch.extraUsers }),

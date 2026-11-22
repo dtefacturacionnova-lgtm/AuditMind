@@ -14,6 +14,7 @@ const TABS = [
   { href: '/dashboard/admin/billing/pagos', label: 'Pagos' },
   { href: '/dashboard/admin/billing/consumo', label: 'Consumo' },
   { href: '/dashboard/admin/billing/planes', label: 'Planes' },
+  { href: '/dashboard/admin/billing/paquetes', label: 'Paquetes' },
   { href: '/dashboard/admin/billing/parametros', label: 'Parámetros' },
 ];
 

@@ -6,6 +6,7 @@ import type {
   AdminConsumption, AdminPackRow, AdminPaymentRow, BillingEventRow, BillingSettingsRow, OrganizationLite, PlanRow, SubscriptionOverrides, SubscriptionRow,
 } from '@/lib/billing/admin-types';
 import { isPeriodKey } from '@/lib/billing/consumption';
+import type { CreatePackBody, UpdatePackBody } from '@/lib/billing/pack-catalog';
 
 /**
  * Planes y suscripciones — administración de la plataforma (solo SUPER_ADMIN). Rutas de apps/api/src/billing/billing-admin.controller.ts.
@@ -197,6 +198,38 @@ export function useAdminPayments(enabled = true) {
 export function useAdminPacks(enabled = true) {
   return useQuery<AdminPackRow[]>({
     queryKey: keys.packs, queryFn: () => apiClient.get<AdminPackRow[]>('/billing-admin/packs'), enabled, staleTime: 60_000,
+  });
+}
+
+/**
+ * Cambiar el catálogo refresca la lista del superadmin, el catálogo que ve el cliente («Comprar más») y el registro de actividad; y también los
+ * pagos, porque la cantidad de un paquete se bloquea mientras tiene pagos pendientes (y un 409 significa que esa lista estaba desactualizada).
+ */
+function useRefreshAfterPackChange() {
+  const qc = useQueryClient();
+  return () => Promise.all([
+    qc.invalidateQueries({ queryKey: keys.packs }),
+    qc.invalidateQueries({ queryKey: keys.payments }),
+    qc.invalidateQueries({ queryKey: [...ROOT, 'events'] }),
+    qc.invalidateQueries({ queryKey: ['billing', 'packs'] }),
+  ]);
+}
+
+/** Crea un paquete del catálogo (POST /billing-admin/packs). */
+export function useCreatePack() {
+  const refresh = useRefreshAfterPackChange();
+  return useMutation({
+    mutationFn: (body: CreatePackBody) => apiClient.post<AdminPackRow>('/billing-admin/packs', body),
+    onSettled: () => refresh(),
+  });
+}
+
+/** Edita un paquete (PATCH /billing-admin/packs/:id): solo los campos que cambiaron. */
+export function useUpdatePack() {
+  const refresh = useRefreshAfterPackChange();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdatePackBody }) => apiClient.patch<AdminPackRow>(`/billing-admin/packs/${encodeURIComponent(id)}`, body),
+    onSettled: () => refresh(),
   });
 }
 

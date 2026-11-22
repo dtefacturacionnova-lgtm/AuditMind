@@ -47,12 +47,21 @@ const info = (msg) => console.log(`           ${msg}`);
 const check = (cond, good, bad) => (cond ? ok(good) : fail(bad));
 const n = (v) => Number(v);
 
+/**
+ * La base real se conecta por el pooler de Supabase, que tiene pocas conexiones (15) compartidas con la API en producción: esta verificación
+ * solo necesita UNA, así que se fija explícitamente (igual que hace el PM2 del servidor para la API con `connection_limit`).
+ */
+function withOneConnection(url) {
+  if (/[?&]connection_limit=/.test(url)) return url;
+  return url + (url.includes('?') ? '&' : '?') + 'connection_limit=1';
+}
+
 function target(url) {
   try { const u = new URL(url); return `${u.hostname}:${u.port || '5432'}${u.pathname}`; } catch (e) { return '(dirección ilegible)'; }
 }
 
 (async () => {
-  const prisma = new PrismaClient({ datasourceUrl: process.env.DATABASE_URL });
+  const prisma = new PrismaClient({ datasourceUrl: withOneConnection(process.env.DATABASE_URL) });
   const q = (sql, ...params) => prisma.$queryRawUnsafe(sql, ...params);
   try {
     console.log(`\nVerificación «${MODE}» de planes y suscripciones`);

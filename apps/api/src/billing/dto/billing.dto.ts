@@ -108,8 +108,10 @@ export class SavePackDto {
   @IsOptional() @IsString() @MaxLength(40) code?: string;
   @IsOptional() @IsIn(['AI', 'STORAGE']) kind?: 'AI' | 'STORAGE';
   @IsOptional() @IsString() @MaxLength(120) name?: string;
-  @IsOptional() @IsInt() @Min(1) quantity?: number;
-  @IsOptional() @IsNumber() @Min(0) priceUsd?: number;
+  /** Peticiones (IA) o GB (espacio). El tope evita desbordar la columna entera de la base. */
+  @IsOptional() @IsInt() @Min(1) @Max(100_000_000) quantity?: number;
+  /** Hasta 7 cifras enteras: la columna admite 8 y así un error de dedo no revienta con un 500. */
+  @IsOptional() @IsNumber() @Min(0) @Max(9_999_999) priceUsd?: number;
   @IsOptional() @StrictBoolean() recurring?: boolean;
   @IsOptional() @StrictBoolean() active?: boolean;
   @IsOptional() @IsInt() @Min(0) @Max(1000) sortOrder?: number;

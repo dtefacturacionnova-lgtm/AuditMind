@@ -589,6 +589,66 @@ suite('etapa 2 de planes: IA en peticiones, espacio y pagos contra Postgres real
       expect((await payments.packsFor(id)).map((p: any) => p.code)).not.toContain(c);
       await prisma.addonPack.deleteMany({ where: { code: { startsWith: 'TEST_PACK_' } } });
     });
+
+    it('la cantidad de un paquete NO se puede cambiar con pagos pendientes (se acredita la cantidad vigente al aprobar); el precio, el nombre y desactivarlo sí', async () => {
+      const c = `TEST_PACK_${randomUUID().slice(0, 5).toUpperCase()}`;
+      const pack = await payments.createPack({ code: c, kind: 'AI', name: 'Paquete con pagos', quantity: 100, priceUsd: 1 }, 'test-actor-2');
+      const org = await orgOnPlan(await testPlan('PQP', {}));
+      const p1 = await payments.createRequest(admin(org), { kind: 'PACK', packCode: c, method: 'QR' });
+      await payments.createRequest(admin(org), { kind: 'PACK', packCode: c, method: 'TRANSFER' });
+      try {
+        const e = await code(payments.updatePack(pack.id, { quantity: 500 }, 'test-actor-2'));
+        expect(e).toMatch(/2 pagos pendientes de este paquete/);
+        expect(await status(payments.updatePack(pack.id, { quantity: 500 }, 'test-actor-2'))).toBe(409);
+        expect((await prisma.addonPack.findUniqueOrThrow({ where: { id: pack.id } })).quantity).toBe(100); // no cambió
+
+        // singular con un solo pendiente
+        await payments.cancel(org, p1.id);
+        expect(await code(payments.updatePack(pack.id, { quantity: 500 }, 'test-actor-2'))).toMatch(/1 pago pendiente de este paquete/);
+
+        // lo que no cambia lo que se acredita sí se puede editar; y mandar la MISMA cantidad no cuenta como cambio
+        await payments.updatePack(pack.id, { priceUsd: 3, name: 'Nuevo nombre', active: false, sortOrder: 99, quantity: 100 }, 'test-actor-2');
+        expect(await prisma.addonPack.findUniqueOrThrow({ where: { id: pack.id } })).toMatchObject({ quantity: 100, name: 'Nuevo nombre', active: false, sortOrder: 99 });
+
+        // sin pagos pendientes de ese paquete, la cantidad se cambia; los pendientes de OTRO paquete no estorban
+        const other = await payments.createPack({ code: `${c}_B`, kind: 'AI', name: 'Otro', quantity: 10, priceUsd: 1 }, 'test-actor-2');
+        await payments.updatePack(other.id, { quantity: 20 }, 'test-actor-2');
+        expect((await prisma.addonPack.findUniqueOrThrow({ where: { id: other.id } })).quantity).toBe(20);
+      } finally {
+        await prisma.billingPayment.deleteMany({ where: { organizationId: org, packCode: c } });
+        await prisma.addonPack.deleteMany({ where: { code: { startsWith: 'TEST_PACK_' } } });
+      }
+    });
+
+    it('al aprobar, los pagos resueltos (aprobados, rechazados o cancelados) ya no impiden cambiar la cantidad', async () => {
+      const c = `TEST_PACK_${randomUUID().slice(0, 5).toUpperCase()}`;
+      const pack = await payments.createPack({ code: c, kind: 'AI', name: 'Paquete resuelto', quantity: 100, priceUsd: 1 }, 'test-actor-2');
+      const org = await orgOnPlan(await testPlan('PQR', {}));
+      const pay = await payments.createRequest(admin(org), { kind: 'PACK', packCode: c, method: 'QR' });
+      try {
+        expect(await status(payments.updatePack(pack.id, { quantity: 7 }, 'test-actor-2'))).toBe(409);
+        await payments.reject(pay.id, 'test-actor-2', 'Comprobante ilegible');
+        await payments.updatePack(pack.id, { quantity: 7 }, 'test-actor-2');
+        expect((await prisma.addonPack.findUniqueOrThrow({ where: { id: pack.id } })).quantity).toBe(7);
+      } finally {
+        await prisma.billingPayment.deleteMany({ where: { organizationId: org, packCode: c } });
+        await prisma.addonPack.deleteMany({ where: { code: { startsWith: 'TEST_PACK_' } } });
+      }
+    });
+
+    it('el nombre de un paquete no puede quedar vacío al editarlo', async () => {
+      const c = `TEST_PACK_${randomUUID().slice(0, 5).toUpperCase()}`;
+      const pack = await payments.createPack({ code: c, kind: 'STORAGE', name: 'Con nombre', quantity: 5, priceUsd: 1 }, 'test-actor-2');
+      try {
+        expect(await status(payments.updatePack(pack.id, { name: '   ' }, 'test-actor-2'))).toBe(400);
+        expect(await code(payments.updatePack(pack.id, { name: '' }, 'test-actor-2'))).toMatch(/no puede quedar vacío/);
+        expect((await prisma.addonPack.findUniqueOrThrow({ where: { id: pack.id } })).name).toBe('Con nombre');
+        await payments.updatePack(pack.id, { name: '  Nombre recortado  ' }, 'test-actor-2');
+        expect((await prisma.addonPack.findUniqueOrThrow({ where: { id: pack.id } })).name).toBe('Nombre recortado');
+      } finally {
+        await prisma.addonPack.deleteMany({ where: { code: { startsWith: 'TEST_PACK_' } } });
+      }
+    });
   });
 
   describe('lo que se ve del consumo', () => {

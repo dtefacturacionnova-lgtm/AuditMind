@@ -205,6 +205,18 @@ export class PaymentsService {
   async updatePack(id: string, input: { name?: string; quantity?: number; priceUsd?: number; recurring?: boolean; active?: boolean; sortOrder?: number }, actorId: string) {
     const pack = await this.prisma.addonPack.findUnique({ where: { id } });
     if (!pack) throw new NotFoundException('Paquete no encontrado');
+    if (input.name !== undefined && !input.name.trim()) throw new BadRequestException('El nombre del paquete no puede quedar vacío.');
+    // Al aprobar un pago se acredita la cantidad que tenga el paquete EN ESE MOMENTO, mientras que el monto cobrado queda fijo al pedirlo:
+    // cambiar la cantidad con pagos pendientes haría que el cliente reciba algo distinto de lo que pagó.
+    if (input.quantity !== undefined && input.quantity !== pack.quantity) {
+      const pending = await this.prisma.billingPayment.count({ where: { kind: 'PACK', packCode: pack.code, status: 'PENDING' } });
+      if (pending > 0) {
+        throw new ConflictException(
+          `Hay ${pending} pago${pending === 1 ? '' : 's'} pendiente${pending === 1 ? '' : 's'} de este paquete: se acreditan con la cantidad vigente al aprobarse, `
+          + 'así que no se puede cambiar la cantidad hasta que se aprueben, se rechacen o venzan. Puedes crear otro paquete con la cantidad nueva y desactivar este.',
+        );
+      }
+    }
     const updated = await this.prisma.addonPack.update({
       where: { id },
       data: {

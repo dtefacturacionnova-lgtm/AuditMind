@@ -10,6 +10,7 @@ import { BillingScheduler } from './billing.scheduler';
 import { EntitlementsService } from './entitlements.service';
 import { PaymentsService } from './payments.service';
 import { PlansService } from './plans.service';
+import { PublicPlansController } from './public-plans.controller';
 import { StorageUsageService } from './storage-usage.service';
 import { SubscriptionGuard } from './subscription.guard';
 import { SubscriptionsService } from './subscriptions.service';
@@ -22,7 +23,7 @@ import { UsageService } from './usage.service';
 @Global()
 @Module({
   imports: [NotificationsModule],
-  controllers: [BillingController, BillingAdminController],
+  controllers: [BillingController, BillingAdminController, PublicPlansController],
   providers: [
     BillingSettingsService, EntitlementsService, PlansService, SubscriptionsService, SubscriptionGuard,
     UsageService, StorageUsageService, BillingUsageService, PaymentsService,

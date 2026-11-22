@@ -97,6 +97,16 @@ module.exports = {
         // y recargando (pm2 reload ... --update-env). Es el interruptor para abrir/cerrar la superficie pública.
         SIGNATURES_PUBLIC_ENABLED: e.SIGNATURES_PUBLIC_ENABLED,
         SIGNATURE_TSA_URLS:        e.SIGNATURE_TSA_URLS, // opcional; por defecto DigiCert y Sectigo
+        // Página pública de precios (/precios): APAGADA por defecto (responde 404). Se publica poniendo PUBLIC_PRICING_ENABLED=true en
+        // /home/deploy/auditmind/.env y recargando el API (pm2 reload auditmind-api --update-env). Los precios salen de los planes (editor del
+        // superadmin) y los botones de contacto de la página usan SALES_CONTACT_EMAIL y/o SALES_CONTACT_WHATSAPP (con país, solo dígitos);
+        // sin ninguno de los dos, la página no muestra botones de contacto.
+        PUBLIC_PRICING_ENABLED: e.PUBLIC_PRICING_ENABLED || '',
+        SALES_CONTACT_EMAIL:    e.SALES_CONTACT_EMAIL || '',
+        SALES_CONTACT_WHATSAPP: e.SALES_CONTACT_WHATSAPP || '',
+        // Tareas programadas de planes (avisos de vencimiento y de uso, pagos vencidos): corren solas en producción y solo escriben a los
+        // clientes con el cumplimiento en ENFORCE. BILLING_REMINDERS_ENABLED=false las apaga del todo (con =true corren también fuera de producción).
+        BILLING_REMINDERS_ENABLED: e.BILLING_REMINDERS_ENABLED || '',
         // ClamAV (antivirus de adjuntos de terceros) — contenedor Docker separado, solo 127.0.0.1
         CLAMAV_HOST: '127.0.0.1',
         CLAMAV_PORT: '3310',

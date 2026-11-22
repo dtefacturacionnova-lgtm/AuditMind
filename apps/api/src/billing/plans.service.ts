@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ASSISTANT_KEYS, FILE_TYPE_KEYS, FUNCTION_KEYS, LICENSE_MONTHS, MODULE_KEYS } from './billing.constants';
 import { EntitlementsService } from './entitlements.service';
 import { DEFAULT_LIMITS, PlanLimits } from './entitlements';
+import { toPublicCatalog, type PublicCatalog } from './public-catalog';
 
 export interface PlanInput {
   code?: string;
@@ -78,6 +79,25 @@ export class PlansService {
     ]);
     const bySubscribers = new Map(counts.map((c) => [c.planId, c._count._all]));
     return plans.map((p) => ({ ...p, subscribers: bySubscribers.get(p.id) ?? 0 }));
+  }
+
+  /**
+   * Catálogo para la página pública de precios: solo planes públicos y activos (nunca Piloto ni Interno), precios activos, paquetes activos y
+   * el contacto de ventas que el superadmin configuró. Es una proyección de lista blanca (ver public-catalog.ts): no sale ningún costo interno.
+   */
+  async publicCatalog(contact: { email?: unknown; whatsapp?: unknown }): Promise<PublicCatalog> {
+    const plans = await this.prisma.billingPlan.findMany({
+      where: { isPublic: true, active: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { prices: { where: { active: true }, orderBy: { months: 'asc' } } },
+    });
+    let packs: Awaited<ReturnType<typeof this.prisma.addonPack.findMany>> = [];
+    try {
+      packs = await this.prisma.addonPack.findMany({ where: { active: true }, orderBy: [{ sortOrder: 'asc' }, { quantity: 'asc' }] });
+    } catch {
+      packs = []; // etapa 2 del SQL sin aplicar: el catálogo de planes se publica igual, sin paquetes
+    }
+    return toPublicCatalog(plans, packs, contact);
   }
 
   async get(id: string) {

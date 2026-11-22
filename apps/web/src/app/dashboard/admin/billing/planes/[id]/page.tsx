@@ -213,7 +213,7 @@ function PlanEditor({ plan, settings, settingsFailed, subscribers }: {
               </div>
             </fieldset>
             <div className="mt-4">
-              <Field label="Descripción (opcional)" htmlFor="plan-description" error={err('description')} help="Hasta 500 caracteres. Se muestra en el catálogo público cuando exista.">
+              <Field label="Descripción (opcional)" htmlFor="plan-description" error={err('description')} help="Hasta 500 caracteres. Se muestra en la página pública de precios.">
                 <textarea
                   id="plan-description" rows={2} value={form.description} maxLength={500} onChange={(e) => patch({ description: e.target.value })}
                   aria-invalid={!!err('description')} className={INPUT_CLS}
@@ -222,7 +222,7 @@ function PlanEditor({ plan, settings, settingsFailed, subscribers }: {
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
               <CheckRow id="plan-active" checked={form.active} onChange={(v) => patch({ active: v })} label="Plan activo" description="Se puede asignar a organizaciones" />
-              <CheckRow id="plan-public" checked={form.isPublic} onChange={(v) => patch({ isPublic: v })} label="Visible al público" description="Aparecerá en la página de precios (aún no existe)" />
+              <CheckRow id="plan-public" checked={form.isPublic} onChange={(v) => patch({ isPublic: v })} label="Visible al público" description="Aparecerá en la página pública de precios cuando la publiques" />
               <CheckRow id="plan-featured" checked={form.featured} onChange={(v) => patch({ featured: v })} label="Marcar como «Más elegido»" />
             </div>
             <div className="mt-4 max-w-[12rem]">
@@ -302,7 +302,7 @@ function PlanEditor({ plan, settings, settingsFailed, subscribers }: {
               </div>
             </fieldset>
             <div className="mt-4">
-              <CheckRow id="plan-packsStorage" checked={form.packsStorage} onChange={(v) => patch({ packsStorage: v })} label="Permitir que el cliente compre paquetes de espacio cuando se llene" description="La compra de paquetes llegará en una etapa posterior; la casilla ya queda guardada." />
+              <CheckRow id="plan-packsStorage" checked={form.packsStorage} onChange={(v) => patch({ packsStorage: v })} label="Permitir que el cliente compre paquetes de espacio cuando se llene" description="Los pide desde «Comprar más» y los paga con su referencia; tú apruebas el pago." />
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
@@ -310,7 +310,7 @@ function PlanEditor({ plan, settings, settingsFailed, subscribers }: {
                 <p className="mt-2 text-sm text-gray-900"><strong>Espacio incluido:</strong> {form.storageGb.unlimited ? 'sin tope' : eco.storageGb !== null ? `${intText(eco.storageGb)} GB` : '—'}</p>
                 <p className="mt-1 text-xs leading-relaxed text-gray-700">
                   Archivo máximo: {form.maxFileMb.unlimited ? 'sin tope' : `${form.maxFileMb.value || '—'} MB`}.{' '}
-                  {form.packsStorage ? 'Podrá ampliar el espacio con paquetes adicionales (próximamente).' : 'Si se llena no podrá subir más archivos hasta liberar espacio.'}
+                  {form.packsStorage ? 'Podrá ampliar el espacio con paquetes adicionales desde «Comprar más».' : 'Si se llena no podrá subir más archivos hasta liberar espacio.'}
                 </p>
               </div>
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -358,14 +358,14 @@ function PlanEditor({ plan, settings, settingsFailed, subscribers }: {
               </ul>
             </div>
             <div className="mt-4">
-              <CheckRow id="plan-packsAi" checked={form.packsAi} onChange={(v) => patch({ packsAi: v })} label="Permitir que el cliente compre paquetes de peticiones cuando llegue al límite" description="La compra de paquetes llegará en una etapa posterior; la casilla ya queda guardada." />
+              <CheckRow id="plan-packsAi" checked={form.packsAi} onChange={(v) => patch({ packsAi: v })} label="Permitir que el cliente compre paquetes de peticiones cuando llegue al límite" description="Los pide desde «Comprar más» y los paga con su referencia; tú apruebas el pago." />
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-blue-900">Lo que verá el cliente</p>
                 <p className="mt-2 text-sm text-gray-900"><strong>Peticiones de IA al mes:</strong> {aiRequests === null ? 'sin tope' : intText(aiRequests)}</p>
                 <p className="mt-1 text-xs leading-relaxed text-gray-700">
-                  {form.packsAi ? 'Al llegar al límite podrá ampliar con paquetes adicionales (próximamente).' : 'Al llegar al límite la IA se pausa hasta el próximo mes.'} Nunca ve dinero ni costos.
+                  {form.packsAi ? 'Al llegar al límite podrá ampliar con paquetes adicionales desde «Comprar más».' : 'Al llegar al límite la IA se pausa hasta el próximo mes.'} Nunca ve dinero ni costos.
                 </p>
               </div>
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">

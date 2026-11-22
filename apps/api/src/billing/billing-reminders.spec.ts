@@ -184,7 +184,8 @@ describe('BillingScheduler', () => {
     const config = { get: (k: string) => env[k] } as any;
     const reminders = { run: jest.fn(async () => ({ mode: 'ENFORCE', checked: 3, due: 1, sent: 1, emailed: 2, emailFailed: 0, duplicates: 0, errors: 0 })) };
     const payments = { expireOld: jest.fn(async () => 2) };
-    return { scheduler: new BillingScheduler(config, reminders as any, payments as any), reminders, payments };
+    const usageAlerts = { run: jest.fn(async () => ({ mode: 'ENFORCE', checked: 3, due: 1, sent: 1, emailed: 1, emailFailed: 0, duplicates: 0, errors: 0 })) };
+    return { scheduler: new BillingScheduler(config, reminders as any, payments as any, usageAlerts as any), reminders, payments, usageAlerts };
   };
 
   it('fuera de producción y sin interruptor no hace nada (la base local es la de producción)', async () => {
@@ -227,5 +228,59 @@ describe('BillingScheduler', () => {
     await expect(b.scheduler.run(NOW)).resolves.toBeUndefined();
     await b.scheduler.run(NOW); // y la guardia se liberó
     expect(b.reminders.run).toHaveBeenCalledTimes(2);
+  });
+
+  describe('avisos de uso (cada hora)', () => {
+    it('fuera de producción y sin interruptor no hace nada', async () => {
+      const { scheduler, usageAlerts } = build({ NODE_ENV: 'development' });
+      await scheduler.runUsage(NOW);
+      expect(usageAlerts.run).not.toHaveBeenCalled();
+    });
+    it('con BILLING_REMINDERS_ENABLED=false no corre ni en producción; con =true corre aunque no sea producción', async () => {
+      const off = build({ NODE_ENV: 'production', BILLING_REMINDERS_ENABLED: 'false' });
+      await off.scheduler.runUsage(NOW);
+      expect(off.usageAlerts.run).not.toHaveBeenCalled();
+      const on = build({ NODE_ENV: 'development', BILLING_REMINDERS_ENABLED: 'true' });
+      await on.scheduler.runUsage(NOW);
+      expect(on.usageAlerts.run).toHaveBeenCalledWith(NOW);
+    });
+    it('en producción corre con la hora recibida y NO toca los pagos ni los avisos de vencimiento', async () => {
+      const { scheduler, usageAlerts, reminders, payments } = build({ NODE_ENV: 'production' });
+      await scheduler.runUsage(NOW);
+      expect(usageAlerts.run).toHaveBeenCalledWith(NOW);
+      expect(reminders.run).not.toHaveBeenCalled();
+      expect(payments.expireOld).not.toHaveBeenCalled();
+    });
+    it('dos corridas superpuestas: la segunda no hace nada; al terminar vuelve a poder correr', async () => {
+      const { scheduler, usageAlerts } = build({ NODE_ENV: 'production' });
+      let release!: () => void;
+      usageAlerts.run.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ mode: 'ENFORCE', checked: 0, due: 0, sent: 0, emailed: 0, emailFailed: 0, duplicates: 0, errors: 0 }); }));
+      const first = scheduler.runUsage(NOW);
+      await new Promise((r) => setImmediate(r));
+      await scheduler.runUsage(NOW);
+      expect(usageAlerts.run).toHaveBeenCalledTimes(1);
+      release();
+      await first;
+      await scheduler.runUsage(NOW);
+      expect(usageAlerts.run).toHaveBeenCalledTimes(2);
+    });
+    it('si falla no revienta el cron y la guardia se libera', async () => {
+      const { scheduler, usageAlerts } = build({ NODE_ENV: 'production' });
+      usageAlerts.run.mockRejectedValueOnce(new Error('base caída'));
+      await expect(scheduler.runUsage(NOW)).resolves.toBeUndefined();
+      await scheduler.runUsage(NOW);
+      expect(usageAlerts.run).toHaveBeenCalledTimes(2);
+    });
+    it('la tarea diaria y la horaria no se bloquean entre sí', async () => {
+      const { scheduler, reminders, usageAlerts } = build({ NODE_ENV: 'production' });
+      let release!: () => void;
+      reminders.run.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ mode: 'ENFORCE', checked: 0, due: 0, sent: 0, emailed: 0, emailFailed: 0, duplicates: 0, errors: 0 }); }));
+      const daily = scheduler.run(NOW);
+      await new Promise((r) => setImmediate(r));
+      await scheduler.runUsage(NOW); // la diaria sigue en curso y aun así corre la horaria
+      expect(usageAlerts.run).toHaveBeenCalledTimes(1);
+      release();
+      await daily;
+    });
   });
 });

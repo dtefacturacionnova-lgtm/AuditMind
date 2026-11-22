@@ -228,6 +228,17 @@ describe('registro de actividad', () => {
       .toBe('Se avisó a una organización que su cuenta pasó a solo lectura (correo a 0 de 0 personas).');
   });
 
+  it('los avisos de uso (IA y espacio al 80 % y al 100 %) dicen qué se avisó y a cuántas personas llegó el correo', () => {
+    expect(describeEvent({ type: 'USAGE_ALERT_SENT', data: { kind: 'AI_80', recipients: 2, emailed: 2 } }, 'Norte'))
+      .toBe('Se avisó a Norte que lleva el 80 % o más de sus peticiones de IA del mes (correo a 2 de 2 personas).');
+    expect(describeEvent({ type: 'USAGE_ALERT_SENT', data: { kind: 'AI_100', recipients: 1, emailed: 0 } }, 'Norte'))
+      .toBe('Se avisó a Norte que llegó al límite de peticiones de IA del mes (correo a 0 de 1 persona).');
+    expect(describeEvent({ type: 'USAGE_ALERT_SENT', data: { kind: 'STORAGE_80' } }, 'Norte')).toBe('Se avisó a Norte que lleva el 80 % o más de su espacio.');
+    expect(describeEvent({ type: 'USAGE_ALERT_SENT', data: { kind: 'STORAGE_100' } }, null)).toBe('Se avisó a una organización que su espacio está lleno.');
+    expect(describeEvent({ type: 'USAGE_ALERT_SENT', data: { kind: '<script>' } }, 'A')).toBe('Se avisó a A de su consumo.');
+    expect(describeEvent({ type: 'USAGE_ALERT_SENT', data: null }, 'A')).toBe('Se avisó a A de su consumo.');
+  });
+
   it('un aviso con datos raros no se interpreta', () => {
     expect(describeEvent({ type: 'REMINDER_SENT', data: { kind: '<script>', days: -3, emailed: 'x' } }, 'A')).toBe('Se avisó a A del estado de su plan.');
     expect(describeEvent({ type: 'REMINDER_SENT', data: null }, 'A')).toBe('Se avisó a A del estado de su plan.');

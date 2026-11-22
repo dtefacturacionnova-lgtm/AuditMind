@@ -241,6 +241,12 @@ const text = (v: unknown, max = 60): string => {
 
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
+/** « (correo a 2 de 2 personas)» si el registro trae a cuántas personas se les escribió y a cuántas llegó. */
+function reachedText(d: Record<string, unknown>): string {
+  return typeof d.emailed === 'number' && typeof d.recipients === 'number'
+    ? ` (correo a ${d.emailed} de ${d.recipients} ${d.recipients === 1 ? 'persona' : 'personas'})` : '';
+}
+
 export function describeEvent(ev: Pick<BillingEventRow, 'type' | 'data'>, orgName: string | null): string {
   const d = rec(ev.data);
   const org = orgName ? orgName : 'una organización';
@@ -276,8 +282,15 @@ export function describeEvent(ev: Pick<BillingEventRow, 'type' | 'data'>, orgNam
         : d.kind === 'GRACE' ? 'que su licencia venció y está en periodo de gracia'
         : d.kind === 'READ_ONLY' ? 'que su cuenta pasó a solo lectura'
         : 'del estado de su plan';
-      const reached = typeof d.emailed === 'number' && typeof d.recipients === 'number' ? ` (correo a ${d.emailed} de ${d.recipients} ${d.recipients === 1 ? 'persona' : 'personas'})` : '';
-      return `Se avisó a ${org} ${what}${reached}.`;
+      return `Se avisó a ${org} ${what}${reachedText(d)}.`;
+    }
+    case 'USAGE_ALERT_SENT': {
+      const what = d.kind === 'AI_80' ? 'que lleva el 80 % o más de sus peticiones de IA del mes'
+        : d.kind === 'AI_100' ? 'que llegó al límite de peticiones de IA del mes'
+        : d.kind === 'STORAGE_80' ? 'que lleva el 80 % o más de su espacio'
+        : d.kind === 'STORAGE_100' ? 'que su espacio está lleno'
+        : 'de su consumo';
+      return `Se avisó a ${org} ${what}${reachedText(d)}.`;
     }
     case 'PLAN_CREATED':
       return `Se creó el plan ${text(d.code) || '—'}.`;

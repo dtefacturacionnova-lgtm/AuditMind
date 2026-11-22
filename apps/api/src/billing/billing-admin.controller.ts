@@ -5,6 +5,7 @@ import { AuthUser } from '../auth/jwt.strategy';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { BillingRemindersService } from './billing-reminders.service';
+import { BillingUsageAlertsService } from './billing-usage-alerts.service';
 import { BillingSettingsService } from './billing-settings.service';
 import { BillingUsageService } from './billing-usage.service';
 import {
@@ -27,6 +28,7 @@ export class BillingAdminController {
     private readonly payments: PaymentsService,
     private readonly usage: BillingUsageService,
     private readonly reminders: BillingRemindersService,
+    private readonly usageAlerts: BillingUsageAlertsService,
   ) {}
 
   // ── Planes ──
@@ -140,9 +142,9 @@ export class BillingAdminController {
 
   // ── Avisos de vencimiento ──
   @Get('reminders/preview')
-  @ApiOperation({ summary: 'Qué avisos de vencimiento tocan hoy y a quién, SIN enviar nada (la corrida diaria envía solo con el cumplimiento en ENFORCE)' })
+  @ApiOperation({ summary: 'Qué avisos de vencimiento y de uso (80 % y 100 % de IA y espacio) tocan ahora, SIN enviar nada (las tareas envían solo con el cumplimiento en ENFORCE)' })
   async remindersPreview() {
-    const [{ checked, items }, settings] = await Promise.all([this.reminders.preview(), this.settings.get()]);
+    const [{ checked, items }, usage, settings] = await Promise.all([this.reminders.preview(), this.usageAlerts.preview(), this.settings.get()]);
     return {
       mode: settings.enforcementMode,
       reminderDays: settings.reminderDays,
@@ -151,6 +153,13 @@ export class BillingAdminController {
         organizationId: i.organizationId, organizationName: i.organizationName, planName: i.planName,
         kind: i.decision.kind, days: i.decision.days ?? null, endsAt: i.endsAt, subject: i.text.subject,
       })),
+      usage: {
+        checked: usage.checked,
+        items: usage.items.map((i) => ({
+          organizationId: i.organizationId, organizationName: i.organizationName, planName: i.planName,
+          kind: i.decision.kind, percent: i.decision.percent, subject: i.text.subject,
+        })),
+      },
     };
   }
 

@@ -33,6 +33,33 @@ export interface ReminderRunResult {
   errors: number;
 }
 
+export type DeliverResult = 'duplicate' | { emailed: number; failed: number; recipients: number };
+
+export interface NoticeDelivery {
+  organizationId: string;
+  organizationName: string;
+  subscriptionId: string;
+  /** Tipo del registro en `billing_events`: avisos de vencimiento o de uso. */
+  eventType: 'REMINDER_SENT' | 'USAGE_ALERT_SENT';
+  /** Qué avisa, para el registro de errores. */
+  label: string;
+  /** Identifica el aviso: los mismos valores = el mismo aviso (no se repite). */
+  key: Record<string, string | number>;
+  /** Si se indica, solo cuentan como «ya enviado» los registros creados desde esta fecha: pasado el plazo el aviso puede volver a salir. */
+  since?: Date;
+  text: NoticeText;
+  now: Date;
+}
+
+/** Suscripciones a las que pueden tocar avisos: no exentas, no suspendidas ni canceladas a mano, de organizaciones activas. */
+export function billableSubscriptions(prisma: PrismaService) {
+  return prisma.billingSubscription.findMany({
+    where: { exempt: false, status: { notIn: ['SUSPENDED', 'CANCELLED'] }, organization: { active: true } },
+    include: { organization: { select: { id: true, name: true } } },
+    take: 2000,
+  });
+}
+
 /** Clave del candado de Postgres que serializa el reclamo de avisos de UNA organización (las pruebas lo toman para comprobar que se respeta). */
 export const reminderLockKey = (organizationId: string) => `billing-reminder:${organizationId}`;
 
@@ -59,11 +86,7 @@ export class BillingRemindersService {
   /** Qué avisos tocan hoy, sin enviar ni escribir nada (la vista previa y el modo OBSERVE usan esto). */
   async preview(now: Date = new Date()): Promise<{ checked: number; items: ReminderCandidate[] }> {
     const settings = await this.settings.get();
-    const subs = await this.prisma.billingSubscription.findMany({
-      where: { exempt: false, status: { notIn: ['SUSPENDED', 'CANCELLED'] }, organization: { active: true } },
-      include: { organization: { select: { id: true, name: true } } },
-      take: 2000,
-    });
+    const subs = await billableSubscriptions(this.prisma);
     const items: ReminderCandidate[] = [];
     for (const sub of subs) {
       const ent = computeEntitlements(sub, settings, now);
@@ -112,50 +135,59 @@ export class BillingRemindersService {
     return result;
   }
 
-  /** Reclama el aviso (una sola vez) y lo envía por correo y dentro de la aplicación. */
-  async deliver(item: ReminderCandidate, now: Date): Promise<'duplicate' | { emailed: number; failed: number; recipients: number }> {
-    const endsIso = item.endsAt.toISOString();
-    const claim = await this.claim(item.organizationId, item.decision, endsIso);
+  /** Reclama el aviso de vencimiento (una sola vez) y lo envía por correo y dentro de la aplicación. */
+  async deliver(item: ReminderCandidate, now: Date): Promise<DeliverResult> {
+    return this.deliverNotice({
+      organizationId: item.organizationId, organizationName: item.organizationName, subscriptionId: item.subscriptionId,
+      eventType: 'REMINDER_SENT', label: item.decision.kind, text: item.text, now,
+      // Misma fecha de vencimiento + mismo tipo [+ mismo día configurado] = mismo aviso.
+      key: { kind: item.decision.kind, endsAt: item.endsAt.toISOString(), ...(item.decision.days !== undefined && { days: item.decision.days }) },
+    });
+  }
+
+  /**
+   * Envío común a los avisos de vencimiento y a los de uso: reclama el aviso (una sola vez), escribe a quienes administran la organización
+   * y deja el rastro en el registro de actividad.
+   */
+  async deliverNotice(p: NoticeDelivery): Promise<DeliverResult> {
+    const claim = await this.claim(p.organizationId, p.eventType, p.key, p.since);
     if (!claim) return 'duplicate';
 
-    const recipients = await this.recipients(item.organizationId);
+    const recipients = await this.recipients(p.organizationId);
     let emailed = 0;
     let failed = 0;
     for (const to of recipients.map((r) => r.email)) {
-      const res = await this.email.sendSubscriptionNotice(to, { subject: item.text.subject, heading: item.text.heading, paragraphs: item.text.paragraphs })
+      const res = await this.email.sendSubscriptionNotice(to, { subject: p.text.subject, heading: p.text.heading, paragraphs: p.text.paragraphs })
         .catch((err: Error) => ({ sent: false, error: err.message }));
       if (res.sent) emailed++; else failed++;
     }
-    if (failed > 0) this.logger.warn(`Aviso ${item.decision.kind} de ${item.organizationName}: ${failed} correo(s) no salieron (¿RESEND_API_KEY sin configurar?). Quedó la notificación dentro de la aplicación.`);
-    if (recipients.length === 0) this.logger.warn(`Aviso ${item.decision.kind} de ${item.organizationName}: la organización no tiene un ADMIN ni un CAE activo a quien avisar.`);
+    if (failed > 0) this.logger.warn(`Aviso ${p.label} de ${p.organizationName}: ${failed} correo(s) no salieron (¿RESEND_API_KEY sin configurar?). Quedó la notificación dentro de la aplicación.`);
+    if (recipients.length === 0) this.logger.warn(`Aviso ${p.label} de ${p.organizationName}: la organización no tiene un ADMIN ni un CAE activo a quien avisar.`);
 
     await this.notifications.createBulk(recipients.map((r) => ({
-      organizationId: item.organizationId, userId: r.id, type: item.text.notificationType, title: item.text.title, body: item.text.body,
-      entityType: 'subscription', entityId: item.subscriptionId,
+      organizationId: p.organizationId, userId: r.id, type: p.text.notificationType, title: p.text.title, body: p.text.body,
+      entityType: 'subscription', entityId: p.subscriptionId,
     })));
     await this.prisma.billingEvent.update({
       where: { id: claim.id },
-      data: { data: { ...(claim.data as Record<string, unknown>), recipients: recipients.length, emailed, emailFailed: failed, at: now.toISOString() } },
+      data: { data: { ...(claim.data as Record<string, unknown>), recipients: recipients.length, emailed, emailFailed: failed, at: p.now.toISOString() } },
     });
     return { emailed, failed, recipients: recipients.length };
   }
 
   /**
-   * Reclamo atómico: dentro de una transacción con candado por organización, si no existe ya un registro de este aviso, lo crea.
-   * (Misma fecha de vencimiento + mismo tipo [+ mismo día configurado] = mismo aviso.)
+   * Reclamo atómico: dentro de una transacción con candado por organización, si no existe ya un registro de este aviso (mismo tipo de evento y
+   * todos los valores de `key` iguales, creado desde `since` si se indica), lo crea.
    */
-  private async claim(organizationId: string, decision: NoticeDecision, endsIso: string) {
+  private async claim(organizationId: string, eventType: NoticeDelivery['eventType'], key: Record<string, string | number>, since?: Date) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${reminderLockKey(organizationId)}::text))`;
-      const same: Prisma.BillingEventWhereInput[] = [
-        { data: { path: ['kind'], equals: decision.kind } },
-        { data: { path: ['endsAt'], equals: endsIso } },
-        ...(decision.days !== undefined ? [{ data: { path: ['days'], equals: decision.days } }] : []),
-      ];
-      const existing = await tx.billingEvent.findFirst({ where: { organizationId, type: 'REMINDER_SENT', AND: same }, select: { id: true } });
+      const same: Prisma.BillingEventWhereInput[] = Object.entries(key).map(([field, value]) => ({ data: { path: [field], equals: value } }));
+      const existing = await tx.billingEvent.findFirst({
+        where: { organizationId, type: eventType, ...(since && { createdAt: { gte: since } }), AND: same }, select: { id: true },
+      });
       if (existing) return null;
-      const data: Record<string, unknown> = { kind: decision.kind, endsAt: endsIso, ...(decision.days !== undefined && { days: decision.days }) };
-      return tx.billingEvent.create({ data: { organizationId, actorId: null, type: 'REMINDER_SENT', data: data as Prisma.InputJsonValue } });
+      return tx.billingEvent.create({ data: { organizationId, actorId: null, type: eventType, data: { ...key } as Prisma.InputJsonValue } });
     }, { timeout: 15_000 });
   }
 

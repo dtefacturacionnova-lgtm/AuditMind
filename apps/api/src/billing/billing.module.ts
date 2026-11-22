@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { BillingAdminController } from './billing-admin.controller';
 import { BillingRemindersService } from './billing-reminders.service';
+import { BillingUsageAlertsService } from './billing-usage-alerts.service';
 import { BillingSettingsService } from './billing-settings.service';
 import { BillingUsageService } from './billing-usage.service';
 import { BillingController } from './billing.controller';
@@ -25,7 +26,7 @@ import { UsageService } from './usage.service';
   providers: [
     BillingSettingsService, EntitlementsService, PlansService, SubscriptionsService, SubscriptionGuard,
     UsageService, StorageUsageService, BillingUsageService, PaymentsService,
-    BillingRemindersService, BillingScheduler,
+    BillingRemindersService, BillingUsageAlertsService, BillingScheduler,
   ],
   exports: [BillingSettingsService, EntitlementsService, SubscriptionsService, SubscriptionGuard, UsageService, StorageUsageService],
 })

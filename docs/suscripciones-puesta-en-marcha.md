@@ -215,6 +215,34 @@ Abre `https://auditoria.ianovatechsystems.com/precios`. Sin correo ni WhatsApp l
 
 ---
 
+## Etapa 3 — medición de descargas (se aplica DESPUÉS de las etapas 1 y 2)
+
+La pantalla **Consumo** tenía el aviso «las descargas no se miden». La etapa 3 las mide: cada vez que el API entrega a una persona el enlace de un archivo, anota qué archivo era, de qué organización y de qué tipo, **una vez por archivo y día**. Lo que se ve es una **guía**, no la factura de Supabase: el navegador baja el archivo directo de Supabase y el API no ve los bytes (abrir cinco veces el mismo video en un día cuenta una; un enlace entregado que nadie abrió también cuenta). La cifra real está en el panel de Supabase.
+
+**Orden: SQL primero, luego desplegar.** El SQL solo **agrega** una tabla (`storage_egress_daily`), sin datos de fábrica. Si despliegas sin aplicarlo no se rompe nada: el API avisa en el registro (como máximo cada 10 minutos) y Consumo dice **«No medido»** en vez de 0.
+
+```powershell
+cd apps/api
+npx prisma db execute --schema prisma/schema.prisma --file ../../infrastructure/db-migrations/2026-11-suscripciones-3-descargas.sql
+```
+Respuesta esperada: `Script executed successfully.` Si lo repites falla con `relation "storage_egress_daily" already exists` y no cambia nada.
+
+```powershell
+cd ../..
+node infrastructure/db-migrations/2026-11-suscripciones-verificar.js despues
+```
+Debe terminar en `TODO EN ORDEN` con **10 tablas** (la nueva con RLS y sin permisos para `anon`/`authenticated`).
+
+**Cómo se ve:** tarjeta «Descargas del mes» (archivos, GB y cuánto va de los 250 GB que incluye Supabase Pro; con Cloudflare R2 no cuestan), columna «Descargas del mes» por organización y tarjeta «Descargas por tipo de archivo». Si el total pasa de 250 GB, el excedente se cobra a $0.09/GB y se reparte entre las organizaciones según lo que descargó cada una; ese costo entra en el costo variable y el margen.
+
+**Qué no cuenta:** los PDF sellados de los papeles y los archivos de la firma por enlace (no tienen tamaño guardado o salen por su propia ruta), y las descargas del portal de auditados. Mejor medir de menos que inventar un tamaño.
+
+**Apagar:** `EGRESS_METER_ENABLED=false` en `/home/deploy/auditmind/.env` y `pm2 reload ecosystem.config.cjs --only auditmind-api --update-env`. Corre sola en producción; en desarrollo local no corre (comparte base con producción) salvo `=true`.
+
+**Reversa:** `…3-descargas.REVERSA.sql` borra solo la tabla de mediciones (no toca cobros, planes ni archivos).
+
+---
+
 ## Reversa
 
 | Qué | Cómo |

@@ -42,7 +42,9 @@ suite('etapa 2 de planes: IA en peticiones, espacio y pagos contra Postgres real
     usage = new UsageService(prisma as any, settings, entitlements);
     storage = new StorageUsageService(prisma as any, settings, entitlements);
     payments = new PaymentsService(prisma as any, entitlements, subs);
-    consumption = new BillingUsageService(prisma as any, settings, entitlements, usage, storage);
+    const { StorageEgressService } = await import('./storage-egress.service');
+    const egress = new StorageEgressService(prisma as any, { get: () => ({ addIssuedListener: () => undefined }) } as any, { get: () => undefined } as any);
+    consumption = new BillingUsageService(prisma as any, settings, entitlements, usage, storage, egress);
   });
 
   afterAll(async () => {

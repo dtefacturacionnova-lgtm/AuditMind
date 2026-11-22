@@ -29,14 +29,14 @@ TMP = tempfile.gettempdir()
 MODELS = ["EngagementFee", "EngagementFeeAmendment", "BillingScheduleItem", "ClientInvoice", "ClientPayment", "PaymentApplication",
           "InvoiceWithholding", "CollectionLog", "ClientCreditNote", "ClientWriteOff", "CollectionNote", "ClientInvoiceHour",
           "BillingPlan", "BillingPlanPrice", "BillingSubscription", "BillingSettings", "BillingEvent",
-          "UsageLedger", "AddonPack", "AddonPurchase", "BillingPayment"]
+          "UsageLedger", "AddonPack", "AddonPurchase", "BillingPayment", "StorageEgressDaily"]
 ENUMS = ["FeeType", "FeeSource", "FeeProgressMethod", "ScheduleItemKind", "ScheduleItemStatus", "ClientInvoiceStatus", "ClientPaymentStatus",
          "ClientPaymentMethod", "WithholdingTaxType", "CollectionLogAction", "CreditNoteStatus", "WriteOffStatus", "CollectionContactMethod", "PromiseStatus",
          "BillingAudience", "SubscriptionStatus", "EnforcementMode",
          "AddonKind", "AddonPurchaseStatus", "BillingPaymentKind", "BillingPaymentMethod", "BillingPaymentStatus"]
 MIGRATIONS = ["2026-10-cobros-3a.sql", "2026-10-cobros-3a-fix1.sql", "2026-10-cobros-3d.sql", "2026-10-cobros-3d-fix1.sql",
               "2026-10-cobros-4.sql", "2026-10-pbc-portal-otp.sql", "2026-11-suscripciones-1-nucleo.sql",
-              "2026-11-suscripciones-2-medicion-pagos.sql"]
+              "2026-11-suscripciones-2-medicion-pagos.sql", "2026-11-suscripciones-3-descargas.sql"]
 
 src = open(os.path.join(API, "prisma", "schema.prisma"), encoding="utf-8").read().replace("\r\n", "\n")
 for name in MODELS:

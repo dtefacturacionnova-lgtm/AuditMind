@@ -11,6 +11,7 @@ import { EntitlementsService } from './entitlements.service';
 import { PaymentsService } from './payments.service';
 import { PlansService } from './plans.service';
 import { PublicPlansController } from './public-plans.controller';
+import { StorageEgressService } from './storage-egress.service';
 import { StorageUsageService } from './storage-usage.service';
 import { SubscriptionGuard } from './subscription.guard';
 import { SubscriptionsService } from './subscriptions.service';
@@ -26,7 +27,7 @@ import { UsageService } from './usage.service';
   controllers: [BillingController, BillingAdminController, PublicPlansController],
   providers: [
     BillingSettingsService, EntitlementsService, PlansService, SubscriptionsService, SubscriptionGuard,
-    UsageService, StorageUsageService, BillingUsageService, PaymentsService,
+    UsageService, StorageUsageService, StorageEgressService, BillingUsageService, PaymentsService,
     BillingRemindersService, BillingUsageAlertsService, BillingScheduler,
   ],
   exports: [BillingSettingsService, EntitlementsService, SubscriptionsService, SubscriptionGuard, UsageService, StorageUsageService],

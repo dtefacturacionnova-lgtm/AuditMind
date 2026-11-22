@@ -2,7 +2,7 @@ import type { ConsumptionOrgRow } from './admin-types';
 import {
   ALERT_SHORT, BYTES_PER_GB, LOW_MARGIN_PCT, aiMeter, agentBreakdown, agentTotals, attentionList, barWidth, consumptionTotals, costText, countText, formatBytes,
   gbText, isCurrentPeriod, isPeriodKey, meterLevel, normalizeConsumption, orgView, pctText, periodKeyOf, periodLabel, providerComparison,
-  ratioPct, recentPeriods, sortOrgs, storageMeter, typeBreakdown, typeTotals, usageNotices,
+  ratioPct, recentPeriods, sortOrgs, storageMeter, typeBreakdown, typeTotals, usageNotices, egressKpi, egressTypeTotals,
 } from './consumption';
 
 const GB = BYTES_PER_GB;
@@ -646,11 +646,114 @@ describe('respuesta del API', () => {
     expect(n.periodKey).toBe('2026-11');
     expect(n.organizations).toHaveLength(1);
     const empty = normalizeConsumption(null);
-    expect(empty).toEqual({ periodKey: '', costPerRequestUsd: 0, safetyMultiplier: 0, rates: { supabase: 0, cloudflareR2: 0 }, organizations: [], agents: [] });
+    expect(empty).toEqual({
+      periodKey: '', costPerRequestUsd: 0, safetyMultiplier: 0, rates: { supabase: 0, cloudflareR2: 0 }, organizations: [], agents: [],
+      egress: { measured: false, includedGb: 0, supabaseUsdPerGb: 0, r2UsdPerGb: 0, totalGb: 0, overageGb: 0, overageCostSupabaseUsd: 0 },
+    });
     const weird = normalizeConsumption({ organizations: 'x' as never, agents: {} as never, periodKey: 'abc' });
     expect(weird.organizations).toEqual([]);
     expect(weird.agents).toEqual([]);
     expect(weird.periodKey).toBe('');
+  });
+});
+
+describe('descargas del mes', () => {
+  const EG = { measured: true, includedGb: 250, supabaseUsdPerGb: 0.09, r2UsdPerGb: 0, totalGb: 40, overageGb: 0, overageCostSupabaseUsd: 0 };
+
+  it('una organización trae sus descargas y su parte del excedente; el costo total las incluye', () => {
+    const v = orgView(org({ egressFiles: 12, egressBytes: 5 * GB, egressCostSupabaseUsd: 1.5, egressCostR2Usd: 0, aiCostUsd: 2, storageCostSupabaseUsd: 1, monthlyIncomeUsd: 100 }), 'SUPABASE');
+    expect(v).toMatchObject({ egressFiles: 12, egressBytes: 5 * GB, egressCost: 1.5, totalCost: 4.5 });
+    expect(v.margin).toBeCloseTo(95.5, 10);
+  });
+  it('con Cloudflare R2 las descargas no cuestan, aunque con Supabase sí', () => {
+    const row = org({ egressFiles: 3, egressBytes: GB, egressCostSupabaseUsd: 7, egressCostR2Usd: 0, aiCostUsd: 1, storageCostR2Usd: 0.5 });
+    expect(orgView(row, 'R2')).toMatchObject({ egressCost: 0, totalCost: 1.5, egressBytes: GB });
+    expect(orgView(row, 'SUPABASE').egressCost).toBe(7);
+  });
+  it('un API anterior (sin campos de descargas) da ceros, nunca NaN ni undefined', () => {
+    const v = orgView(org(), 'SUPABASE');
+    expect(v).toMatchObject({ egressFiles: 0, egressBytes: 0, egressCost: 0 });
+    expect(v.totalCost).toBeCloseTo(2.34 + 0.39192, 10);
+  });
+  it('valores raros (negativos, texto) se toman como 0', () => {
+    const v = orgView(org({ egressFiles: -4, egressBytes: 'x' as never, egressCostSupabaseUsd: Number.NaN }), 'SUPABASE');
+    expect(v).toMatchObject({ egressFiles: 0, egressBytes: 0, egressCost: 0 });
+  });
+  it('los totales suman descargas y su costo entra en el costo variable y el margen', () => {
+    const t = consumptionTotals([
+      orgView(org({ egressFiles: 2, egressBytes: 2 * GB, egressCostSupabaseUsd: 3, aiCostUsd: 1, storageCostSupabaseUsd: 1, monthlyIncomeUsd: 50 }), 'SUPABASE'),
+      orgView(org({ organizationId: 'o2', egressFiles: 5, egressBytes: 3 * GB, egressCostSupabaseUsd: 1, aiCostUsd: 0, storageCostSupabaseUsd: 0, monthlyIncomeUsd: 50 }), 'SUPABASE'),
+    ]);
+    expect(t).toMatchObject({ egressFiles: 7, egressBytes: 5 * GB, egressCost: 4, variableCost: 1 + 1 + 4, income: 100 });
+    expect(t.margin).toBeCloseTo(94, 10);
+    expect(consumptionTotals([])).toMatchObject({ egressFiles: 0, egressBytes: 0, egressCost: 0 });
+  });
+
+  describe('por tipo de archivo', () => {
+    it('suma las organizaciones y ordena de mayor a menor', () => {
+      const r = egressTypeTotals([
+        org({ egressByType: { VIDEO: 6 * GB, PDF: 1 * GB } }), org({ organizationId: 'o2', egressByType: { VIDEO: 2 * GB, AUDIO: 1 * GB } }), org({ organizationId: 'o3', egressByType: null }),
+      ]);
+      expect(r.totalBytes).toBe(10 * GB);
+      expect(r.types[0]).toMatchObject({ key: 'VIDEO', bytes: 8 * GB, barPct: 100 });
+      expect(r.types[0].share).toBeCloseTo(80, 10);
+      expect(r.types.slice(1, 3).map((t) => t.key).sort()).toEqual(['AUDIO', 'PDF']);
+      expect(r.types.find((t) => t.key === 'AUDIO')!.barPct).toBeCloseTo(12.5, 10);
+    });
+    it('sin descargas: todo en 0 y sin NaN', () => {
+      const r = egressTypeTotals([org(), org({ egressByType: null })]);
+      expect(r.totalBytes).toBe(0);
+      expect(r.types.every((t) => t.bytes === 0 && t.share === 0 && t.barPct === 0)).toBe(true);
+      expect(egressTypeTotals([]).totalBytes).toBe(0);
+    });
+    it('ignora valores raros', () => {
+      const r = egressTypeTotals([org({ egressByType: { VIDEO: -5, PDF: Number.NaN, AUDIO: GB } as never })]);
+      expect(r.totalBytes).toBe(GB);
+    });
+  });
+
+  describe('tarjeta del superadmin', () => {
+    const T = { egressBytes: 40 * GB, egressFiles: 120, egressCost: 0 };
+    it('Supabase bajo lo incluido: cuánto va de lo incluido y que no cuesta nada todavía', () => {
+      const k = egressKpi(T, EG, 'SUPABASE');
+      expect(k.value).toBe('40.0 GB');
+      expect(k.sub).toBe('120 archivos · 40 GB de 250 GB incluidos');
+      expect(k.note).toContain('Sin costo mientras no pase lo incluido');
+      expect(k.note).toContain('no la factura de Supabase');
+    });
+    it('Supabase pasando lo incluido: muestra el excedente y su costo', () => {
+      const k = egressKpi({ egressBytes: 300 * GB, egressFiles: 1, egressCost: 4.5 }, { ...EG, totalGb: 300, overageGb: 50, overageCostSupabaseUsd: 4.5 }, 'SUPABASE');
+      expect(k.sub).toBe('1 archivo · 300 GB de 250 GB incluidos');
+      expect(k.note).toContain('Excedente 50 GB ≈ $4.50');
+    });
+    it('Cloudflare R2: no cobra descargas', () => {
+      const k = egressKpi(T, EG, 'R2');
+      expect(k.value).toBe('40.0 GB');
+      expect(k.sub).toBe('120 archivos · Cloudflare R2 no cobra descargas');
+    });
+    it('sin medir dice «No medido» (nunca 0) y por qué', () => {
+      for (const provider of ['SUPABASE', 'R2'] as const) {
+        const k = egressKpi({ egressBytes: 0, egressFiles: 0, egressCost: 0 }, { ...EG, measured: false }, provider);
+        expect(k.value).toBe('No medido');
+        expect(k.note).toContain('SQL de descargas');
+      }
+    });
+    it('medido pero sin descargas: 0 B (sí se midió) y «0 archivos»', () => {
+      const k = egressKpi({ egressBytes: 0, egressFiles: 0, egressCost: 0 }, { ...EG, totalGb: 0 }, 'SUPABASE');
+      expect(k.value).toBe('0 B');
+      expect(k.sub).toBe('0 archivos · 0 GB de 250 GB incluidos');
+    });
+    it('sin dato de lo incluido, no inventa el «de N GB»', () => {
+      expect(egressKpi(T, { ...EG, includedGb: 0 }, 'SUPABASE').sub).toBe('120 archivos · 40 GB');
+    });
+  });
+
+  it('la respuesta del API trae el bloque de descargas ya limpio; sin él cuenta como «no medido»', () => {
+    const n = normalizeConsumption({ organizations: [], egress: { ...EG, totalGb: 12, overageGb: 3, overageCostSupabaseUsd: 0.27 } });
+    expect(n.egress).toEqual({ measured: true, includedGb: 250, supabaseUsdPerGb: 0.09, r2UsdPerGb: 0, totalGb: 12, overageGb: 3, overageCostSupabaseUsd: 0.27 });
+    expect(normalizeConsumption({ organizations: [] }).egress.measured).toBe(false);
+    expect(normalizeConsumption({ egress: { ...EG, measured: 'si' as never } }).egress.measured).toBe(false);
+    expect(normalizeConsumption({ egress: { ...EG, totalGb: -3, overageGb: Number.NaN } }).egress).toMatchObject({ totalGb: 0, overageGb: 0 });
   });
 });
 

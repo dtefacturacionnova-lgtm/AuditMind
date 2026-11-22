@@ -1,4 +1,4 @@
-import type { AdminConsumption, ConsumptionAgentRow, ConsumptionOrgRow } from './admin-types';
+import type { AdminConsumption, ConsumptionAgentRow, ConsumptionEgress, ConsumptionOrgRow } from './admin-types';
 import { ASSISTANT_INFO, FILE_TYPE_KEYS, isAssistantKey, isStatus, STATUS_LABEL, type FileTypeKey } from './catalog';
 import type { ClientAiUsage, ClientStorageUsage } from './client-types';
 
@@ -342,6 +342,10 @@ export interface OrgView {
   storagePct: number | null;
   storageLevel: MeterLevel;
   storageCost: number;
+  /** Descargas del mes: archivos con enlace emitido, sus bytes y la parte del excedente de egress que le toca (con el proveedor elegido). */
+  egressFiles: number;
+  egressBytes: number;
+  egressCost: number;
   totalCost: number;
   income: number;
   margin: number;
@@ -362,7 +366,8 @@ export function orgView(row: ConsumptionOrgRow, provider: StorageProvider): OrgV
   const storagePct = ratioPct(storageBytes, limitGb === null ? null : limitGb * BYTES_PER_GB);
   const aiCost = num(row.aiCostUsd);
   const storageCost = num(provider === 'R2' ? row.storageCostR2Usd : row.storageCostSupabaseUsd);
-  const totalCost = aiCost + storageCost;
+  const egressCost = num(provider === 'R2' ? row.egressCostR2Usd : row.egressCostSupabaseUsd);
+  const totalCost = aiCost + storageCost + egressCost;
   const income = num(row.monthlyIncomeUsd);
   const margin = income - totalCost;
   const marginPct = income > 0 ? (margin / income) * 100 : null;
@@ -383,7 +388,8 @@ export function orgView(row: ConsumptionOrgRow, provider: StorageProvider): OrgV
     id: String(row.organizationId), name: row.organizationName || '—',
     planLabel: row.planName || row.planCode || 'Sin plan', statusLabel: status, exempt: row.exempt === true,
     requests, packRequests, planRequests, included, requestsPct, requestsLevel,
-    aiCost, storageBytes, storageLimitGb: limitGb, storagePct, storageLevel, storageCost, totalCost,
+    aiCost, storageBytes, storageLimitGb: limitGb, storagePct, storageLevel, storageCost,
+    egressFiles: num(row.egressFiles), egressBytes: num(row.egressBytes), egressCost, totalCost,
     income, margin, marginPct, alerts,
   };
 }
@@ -422,6 +428,9 @@ export interface ConsumptionTotals {
   aiCost: number;
   storageBytes: number;
   storageCost: number;
+  egressFiles: number;
+  egressBytes: number;
+  egressCost: number;
   income: number;
   variableCost: number;
   margin: number;
@@ -430,15 +439,18 @@ export interface ConsumptionTotals {
 }
 
 export function consumptionTotals(views: readonly OrgView[]): ConsumptionTotals {
-  const t = { orgs: views.length, requests: 0, aiCost: 0, storageBytes: 0, storageCost: 0, income: 0 };
+  const t = { orgs: views.length, requests: 0, aiCost: 0, storageBytes: 0, storageCost: 0, egressFiles: 0, egressBytes: 0, egressCost: 0, income: 0 };
   for (const v of views) {
     t.requests += v.requests;
     t.aiCost += v.aiCost;
     t.storageBytes += v.storageBytes;
     t.storageCost += v.storageCost;
+    t.egressFiles += v.egressFiles;
+    t.egressBytes += v.egressBytes;
+    t.egressCost += v.egressCost;
     t.income += v.income;
   }
-  const variableCost = t.aiCost + t.storageCost;
+  const variableCost = t.aiCost + t.storageCost + t.egressCost;
   const margin = t.income - variableCost;
   return { ...t, variableCost, margin, marginPct: t.income > 0 ? (margin / t.income) * 100 : null };
 }
@@ -472,6 +484,44 @@ export function typeTotals(rows: ReadonlyArray<Pick<ConsumptionOrgRow, 'storageB
     }))
     .sort((a, b) => b.bytes - a.bytes || FILE_TYPE_KEYS.indexOf(a.key) - FILE_TYPE_KEYS.indexOf(b.key));
   return { types, totalBytes, measured };
+}
+
+export interface EgressTypeTotal {
+  key: FileTypeKey;
+  bytes: number;
+  share: number;
+  /** Ancho de la barra respecto del tipo que más se descargó. */
+  barPct: number;
+}
+
+/** Descargas de toda la plataforma en el mes por tipo de archivo (suma de las organizaciones), de mayor a menor. */
+export function egressTypeTotals(rows: ReadonlyArray<Pick<ConsumptionOrgRow, 'egressByType'>>): { types: EgressTypeTotal[]; totalBytes: number } {
+  const sum: Record<FileTypeKey, number> = Object.fromEntries(FILE_TYPE_KEYS.map((k) => [k, 0])) as Record<FileTypeKey, number>;
+  for (const r of rows) {
+    if (!r.egressByType) continue;
+    for (const k of FILE_TYPE_KEYS) sum[k] += num(r.egressByType[k]);
+  }
+  const totalBytes = FILE_TYPE_KEYS.reduce((t, k) => t + sum[k], 0);
+  const max = Math.max(0, ...FILE_TYPE_KEYS.map((k) => sum[k]));
+  const types = FILE_TYPE_KEYS
+    .map((key) => ({ key, bytes: sum[key], share: totalBytes > 0 ? (sum[key] / totalBytes) * 100 : 0, barPct: max > 0 ? (sum[key] / max) * 100 : 0 }))
+    .sort((a, b) => b.bytes - a.bytes || FILE_TYPE_KEYS.indexOf(a.key) - FILE_TYPE_KEYS.indexOf(b.key));
+  return { types, totalBytes };
+}
+
+/** Texto de la tarjeta «Descargas del mes» del superadmin: cifra, línea de costo y nota. Dice «no medido» (nunca «0») si el servidor no puede medir. */
+export function egressKpi(
+  totals: Pick<ConsumptionTotals, 'egressBytes' | 'egressFiles' | 'egressCost'>,
+  egress: ConsumptionEgress,
+  provider: StorageProvider,
+): { value: string; sub: string; note: string } {
+  const note = 'Enlaces de descarga emitidos: cada archivo cuenta una vez por día. Es una guía, no la factura de Supabase.';
+  if (!egress.measured) return { value: 'No medido', sub: 'El servidor aún no puede medir las descargas', note: 'Falta aplicar el SQL de descargas en la base de datos.' };
+  const files = `${countText(totals.egressFiles)} ${totals.egressFiles === 1 ? 'archivo' : 'archivos'}`;
+  if (provider === 'R2') return { value: formatBytes(totals.egressBytes), sub: `${files} · Cloudflare R2 no cobra descargas`, note };
+  const included = egress.includedGb > 0 ? `${gbText(egress.totalGb)} de ${gbText(egress.includedGb)} incluidos` : gbText(egress.totalGb);
+  const cost = egress.overageGb > 0 ? `excedente ${gbText(egress.overageGb)} ≈ ${costText(totals.egressCost)}` : 'sin costo mientras no pase lo incluido';
+  return { value: formatBytes(totals.egressBytes), sub: `${files} · ${included}`, note: `${cost.charAt(0).toUpperCase()}${cost.slice(1)}. ${note}` };
 }
 
 export interface AgentTotal {
@@ -522,12 +572,18 @@ export function isCurrentPeriod(key: string, now: Date): boolean {
 }
 
 /** Respuesta del API ya limpia: listas siempre listas, números siempre números. */
-export function normalizeConsumption(raw: Partial<AdminConsumption> | null | undefined): AdminConsumption {
+export function normalizeConsumption(raw: Partial<AdminConsumption> | null | undefined): AdminConsumption & { egress: ConsumptionEgress } {
+  const eg = raw?.egress;
   return {
     periodKey: isPeriodKey(raw?.periodKey) ? raw!.periodKey! : '',
     costPerRequestUsd: num(raw?.costPerRequestUsd),
     safetyMultiplier: num(raw?.safetyMultiplier),
     rates: { supabase: num(raw?.rates?.supabase), cloudflareR2: num(raw?.rates?.cloudflareR2) },
+    // Un API anterior a la medición no manda `egress`: se trata como «no medido», no como cero descargas.
+    egress: {
+      measured: eg?.measured === true, includedGb: num(eg?.includedGb), supabaseUsdPerGb: num(eg?.supabaseUsdPerGb), r2UsdPerGb: num(eg?.r2UsdPerGb),
+      totalGb: num(eg?.totalGb), overageGb: num(eg?.overageGb), overageCostSupabaseUsd: num(eg?.overageCostSupabaseUsd),
+    },
     organizations: Array.isArray(raw?.organizations) ? raw!.organizations! : [],
     agents: Array.isArray(raw?.agents) ? raw!.agents! : [],
   };

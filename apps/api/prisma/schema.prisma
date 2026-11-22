@@ -4181,6 +4181,21 @@ model UsageLedger {
   @@map("usage_ledger")
 }
 
+/// Descargas de archivos por organización, día y tipo (2026-11-22). Mide los ENLACES DE DESCARGA emitidos: cada archivo cuenta una vez por día.
+/// No es la factura de Supabase (la descarga ocurre directo entre el navegador y Supabase y el API no ve los bytes): sirve para comparar
+/// organizaciones y para vigilar el egress de video/audio. Solo se escribe desde StorageEgressService.
+model StorageEgressDaily {
+  organizationId String
+  day            DateTime @db.Date
+  fileType       String
+  files          Int      @default(0)
+  bytes          BigInt   @default(0)
+
+  @@id([organizationId, day, fileType])
+  @@index([day])
+  @@map("storage_egress_daily")
+}
+
 model AddonPack {
   id        String    @id @default(cuid())
   code      String    @unique

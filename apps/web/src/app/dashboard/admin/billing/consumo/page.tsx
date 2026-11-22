@@ -6,7 +6,7 @@ import { Callout, Card, INPUT_CLS, Pill, QueryError } from '@/components/billing
 import { useAdminConsumption } from '@/hooks/useBillingAdmin';
 import { FILE_TYPE_INFO } from '@/lib/billing/catalog';
 import {
-  ALERT_SHORT, LOW_MARGIN_PCT, ORG_SORT_LABEL, PROVIDER_LABEL, agentTotals, attentionList, barWidth, consumptionTotals, costText, countText, formatBytes,
+  ALERT_SHORT, LOW_MARGIN_PCT, ORG_SORT_LABEL, PROVIDER_LABEL, agentTotals, attentionList, barWidth, consumptionTotals, costText, countText, egressKpi, egressTypeTotals, formatBytes,
   gbText, isCurrentPeriod, normalizeConsumption, orgView, pctText, periodKeyOf, periodLabel, providerComparison, recentPeriods, sortOrgs, typeTotals,
   type MeterLevel, type OrgSort, type OrgView, type StorageProvider,
 } from '@/lib/billing/consumption';
@@ -87,6 +87,14 @@ function OrgRow({ v }: { v: OrgView }) {
         {v.storagePct !== null && <MiniBar pct={v.storagePct} level={v.storageLevel} />}
       </td>
       <td className="px-2.5 py-3 text-right tabular-nums">{costText(v.storageCost)}</td>
+      <td className="px-2.5 py-3 text-right tabular-nums">
+        {v.egressFiles > 0 ? (
+          <>
+            {formatBytes(v.egressBytes)}
+            <span className="block text-xs text-gray-600">{countText(v.egressFiles)} {v.egressFiles === 1 ? 'archivo' : 'archivos'}{v.egressCost > 0 ? ` · ${costText(v.egressCost)}` : ''}</span>
+          </>
+        ) : <span className="text-gray-600">—</span>}
+      </td>
       <td className="px-2.5 py-3 text-right font-semibold tabular-nums">{costText(v.totalCost)}</td>
       <td className="px-2.5 py-3 text-right tabular-nums">{v.income > 0 ? costText(v.income) : <span className="text-gray-600">{v.exempt ? 'Exenta' : 'Sin ingreso'}</span>}</td>
       <td className="px-2.5 py-3 text-right tabular-nums">
@@ -116,6 +124,8 @@ export default function ConsumptionPage() {
   const totals = useMemo(() => consumptionTotals(views), [views]);
   const types = useMemo(() => typeTotals(data.organizations, provider, data.rates), [data.organizations, data.rates, provider]);
   const agents = useMemo(() => agentTotals(data.agents), [data.agents]);
+  const egressTypes = useMemo(() => egressTypeTotals(data.organizations), [data.organizations]);
+  const egressInfo = useMemo(() => egressKpi(totals, data.egress, provider), [totals, data.egress, provider]);
   const watch = useMemo(() => attentionList(views), [views]);
   const compare = useMemo(() => providerComparison(data.organizations), [data.organizations]);
   const current = isCurrentPeriod(period, now);
@@ -146,7 +156,7 @@ export default function ConsumptionPage() {
 
       {!current && (
         <Callout tone="info" title={`Estás viendo ${label}`}>
-          Las peticiones de IA y su costo son de ese mes. El <strong>espacio</strong> y el <strong>ingreso</strong> son los de hoy: el sistema no guarda su historia mes a mes.
+          Las peticiones de IA, las <strong>descargas</strong> y sus costos son de ese mes. El <strong>espacio</strong> y el <strong>ingreso</strong> son los de hoy: el sistema no guarda su historia mes a mes.
         </Callout>
       )}
 
@@ -156,14 +166,15 @@ export default function ConsumptionPage() {
         <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-gray-400" aria-label="Cargando" /></div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             <Kpi label="Peticiones de IA del mes" value={countText(totals.requests)} sub={`en ${totals.orgs} ${totals.orgs === 1 ? 'organización' : 'organizaciones'}`} note="Lo que ve el cliente" />
             <Kpi label="Costo de IA del mes" value={costText(totals.aiCost)} sub={`≈ ${costText(perThousand)} por cada 1,000 peticiones`} note="Peticiones × costo por petición de Parámetros" />
-            <Kpi label="Espacio usado" value={formatBytes(totals.storageBytes)} sub={`costo ${costText(totals.storageCost)} con ${providerName}`} note="Sin descargas: el sistema aún no las mide" />
+            <Kpi label="Espacio usado" value={formatBytes(totals.storageBytes)} sub={`costo ${costText(totals.storageCost)} con ${providerName}`} note="Espacio de hoy; las descargas van en su propia tarjeta" />
+            <Kpi label="Descargas del mes" value={egressInfo.value} sub={egressInfo.sub} note={egressInfo.note} />
             <Kpi label="Ingreso mensual de licencias" value={costText(totals.income)} sub="sin contar paquetes comprados" note="Licencias llevadas a mes" />
             <Kpi
               label="Margen sobre costo variable" value={totals.marginPct === null ? '—' : pctText(totals.marginPct)}
-              sub={totals.income > 0 ? `${costText(totals.margin)} después de IA y espacio` : 'Sin ingreso este mes'} note="Antes de costos fijos"
+              sub={totals.income > 0 ? `${costText(totals.margin)} después de IA, espacio y descargas` : 'Sin ingreso este mes'} note="Antes de costos fijos"
             />
           </div>
 
@@ -182,7 +193,7 @@ export default function ConsumptionPage() {
 
           <Card
             title="Por organización: peticiones y dinero"
-            subtitle={`Costo de IA = peticiones × costo por petición (${usd(data.costPerRequestUsd, 4)}). Costo de espacio según ${providerName}.`}
+            subtitle={`Costo de IA = peticiones × costo por petición (${usd(data.costPerRequestUsd, 4)}). Costo de espacio y de descargas según ${providerName}.`}
             action={
               <div>
                 <label htmlFor="cm-sort" className="mb-1 block text-xs font-semibold text-gray-700">Ordenar por</label>
@@ -196,7 +207,7 @@ export default function ConsumptionPage() {
               <p className="py-8 text-center text-sm text-gray-600">Todavía no hay organizaciones con suscripción, así que no hay consumo que mostrar.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1040px] text-sm">
+                <table className="w-full min-w-[1160px] text-sm">
                   <caption className="sr-only">Consumo y costos de {label} por organización</caption>
                   <thead>
                     <tr className="border-b border-gray-300 text-left text-xs text-gray-600">
@@ -205,6 +216,7 @@ export default function ConsumptionPage() {
                       <th scope="col" className="px-2.5 py-2 text-right font-semibold">Costo IA</th>
                       <th scope="col" className="px-2.5 py-2 font-semibold">Espacio</th>
                       <th scope="col" className="px-2.5 py-2 text-right font-semibold">Costo espacio</th>
+                      <th scope="col" className="px-2.5 py-2 text-right font-semibold">Descargas del mes</th>
                       <th scope="col" className="px-2.5 py-2 text-right font-semibold">Costo total</th>
                       <th scope="col" className="px-2.5 py-2 text-right font-semibold">Ingreso al mes</th>
                       <th scope="col" className="px-2.5 py-2 text-right font-semibold">Margen</th>
@@ -217,7 +229,7 @@ export default function ConsumptionPage() {
               </div>
             )}
             <p className="mt-3 text-xs leading-relaxed text-gray-600">
-              No incluye costos fijos (servidor, base de datos, correo y dominio) ni descargas. «Sin ingreso» son pruebas, cuentas en solo lectura o sin precio cargado;
+              No incluye costos fijos (servidor, base de datos, correo y dominio). Las descargas son enlaces emitidos (cada archivo cuenta una vez por día): una guía para comparar organizaciones, no la factura de Supabase. «Sin ingreso» son pruebas, cuentas en solo lectura o sin precio cargado;
               «Exenta» es el plan interno o de cortesía. El porcentaje de peticiones compara lo gastado del plan con lo incluido: lo que salió de paquetes comprados se muestra aparte.
             </p>
           </Card>
@@ -265,7 +277,32 @@ export default function ConsumptionPage() {
               )}
               <p className="mt-3 text-xs leading-relaxed text-gray-600">
                 Comparación del espacio de hoy: {costText(compare.supabase)} en Supabase contra {costText(compare.r2)} en Cloudflare R2 (tarifas por GB-mes
-                de {usd(data.rates.supabase, 4)} y {usd(data.rates.cloudflareR2, 4)}). Las descargas no se miden todavía, así que la diferencia real puede ser mayor.
+                de {usd(data.rates.supabase, 4)} y {usd(data.rates.cloudflareR2, 4)}). Las descargas del mes se ven aparte: con Cloudflare R2 no tienen costo, y con Supabase solo cuestan lo que pase de {gbText(data.egress.includedGb)} al mes en toda la plataforma.
+              </p>
+            </Card>
+
+            <Card title="Descargas por tipo de archivo" subtitle={`Suma de todas las organizaciones en ${label}: archivos con enlace de descarga emitido.`}>
+              {!data.egress.measured ? (
+                <p className="text-sm text-gray-700">Las descargas todavía no se pueden medir: falta aplicar el SQL de descargas en la base de datos.</p>
+              ) : egressTypes.totalBytes === 0 ? (
+                <p className="text-sm text-gray-700">Nadie descargó archivos en este mes.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {egressTypes.types.map((t) => (
+                    <li key={t.key} className="flex flex-col gap-1">
+                      <div className="flex items-baseline justify-between gap-3 text-sm tabular-nums">
+                        <span className="font-semibold text-gray-900">{FILE_TYPE_INFO[t.key].label}</span>
+                        <span className="text-gray-800">{formatBytes(t.bytes)} · {t.bytes > 0 ? pctText(t.share) : '—'}</span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-gray-200" aria-hidden="true">
+                        <div className="h-full rounded-full bg-amber-600" style={{ width: `${barWidth(t.barPct)}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-3 text-xs leading-relaxed text-gray-600">
+                El video y el audio pesan más por archivo: son los que más egress pueden generar. Si un cliente baja mucho video, conviene hablar de un paquete de espacio o mover ese tipo de archivo a Cloudflare R2.
               </p>
             </Card>
           </div>

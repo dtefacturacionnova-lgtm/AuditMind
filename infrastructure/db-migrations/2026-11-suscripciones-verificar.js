@@ -3,11 +3,11 @@
 'use strict';
 
 /**
- * Verificación de los SQL de planes y suscripciones (2026-11-suscripciones-1-nucleo.sql y 2026-11-suscripciones-2-medicion-pagos.sql).
+ * Verificación de los SQL de planes y suscripciones (2026-11-suscripciones-1-nucleo.sql, -2-medicion-pagos.sql y -3-descargas.sql).
  * SOLO LEE: no escribe nada en la base.
  *
  *   node infrastructure/db-migrations/2026-11-suscripciones-verificar.js antes     (antes de aplicar: nada debe existir; lista las organizaciones)
- *   node infrastructure/db-migrations/2026-11-suscripciones-verificar.js despues   (después de aplicar los dos SQL: todo debe estar en orden)
+ *   node infrastructure/db-migrations/2026-11-suscripciones-verificar.js despues   (después de aplicar los tres SQL: todo debe estar en orden)
  *
  * Usa DATABASE_URL de la variable de entorno o, si no existe, de apps/api/.env. Imprime a qué base se conectó (servidor y nombre, nunca la
  * contraseña) para que se vea si es la base que se esperaba. Termina con código 0 si todo está en orden y 1 si hay algún problema.
@@ -33,7 +33,8 @@ const { PrismaClient } = require('@prisma/client');
 
 const STAGE1_TABLES = ['billing_plans', 'billing_plan_prices', 'billing_subscriptions', 'billing_settings', 'billing_events'];
 const STAGE2_TABLES = ['usage_ledger', 'addon_packs', 'addon_purchases', 'billing_payments'];
-const ALL_TABLES = [...STAGE1_TABLES, ...STAGE2_TABLES];
+const STAGE3_TABLES = ['storage_egress_daily']; // 2026-11-suscripciones-3-descargas.sql (medición de descargas)
+const ALL_TABLES = [...STAGE1_TABLES, ...STAGE2_TABLES, ...STAGE3_TABLES];
 const STAGE1_TYPES = ['BillingAudience', 'SubscriptionStatus', 'EnforcementMode'];
 const STAGE2_TYPES = ['AddonKind', 'AddonPurchaseStatus', 'BillingPaymentKind', 'BillingPaymentMethod', 'BillingPaymentStatus'];
 const ALL_TYPES = [...STAGE1_TYPES, ...STAGE2_TYPES];
@@ -74,7 +75,7 @@ function target(url) {
 
     if (MODE === 'antes') {
       console.log('\n1) Estado actual (no debe existir nada de planes todavía)');
-      check(tables.length === 0, 'No existe ninguna de las 9 tablas nuevas.', `Ya existen tablas: ${tables.join(', ')}. NO apliques el SQL: se aplicó antes (o a medias). Revisa antes de seguir.`);
+      check(tables.length === 0, 'No existe ninguna de las 10 tablas nuevas.', `Ya existen tablas: ${tables.join(', ')}. NO apliques el SQL: se aplicó antes (o a medias). Revisa antes de seguir.`);
       check(types.length === 0, 'No existe ninguno de los 8 tipos nuevos.', `Ya existen tipos: ${types.join(', ')}.`);
 
       console.log(`\n2) Organizaciones que recibirán una suscripción exenta (${orgs.length})`);
@@ -86,10 +87,11 @@ function target(url) {
       console.log('\n1) Tablas y tipos');
       const missingTables = ALL_TABLES.filter((t) => !tables.includes(t));
       const missingTypes = ALL_TYPES.filter((t) => !types.includes(t));
-      check(missingTables.length === 0, `Existen las 9 tablas nuevas.`, `Faltan tablas: ${missingTables.join(', ')}.`);
+      check(missingTables.length === 0, `Existen las 10 tablas nuevas.`, `Faltan tablas: ${missingTables.join(', ')}.`);
       check(missingTypes.length === 0, `Existen los 8 tipos nuevos.`, `Faltan tipos: ${missingTypes.join(', ')}.`);
       if (missingTables.some((t) => STAGE1_TABLES.includes(t))) info('Falta la ETAPA 1: aplica primero 2026-11-suscripciones-1-nucleo.sql.');
       else if (missingTables.some((t) => STAGE2_TABLES.includes(t))) info('La etapa 1 está aplicada, pero falta la ETAPA 2: aplica 2026-11-suscripciones-2-medicion-pagos.sql.');
+      else if (missingTables.some((t) => STAGE3_TABLES.includes(t))) info('Las etapas 1 y 2 están aplicadas, pero falta la ETAPA 3 (medición de descargas): aplica 2026-11-suscripciones-3-descargas.sql. Mientras tanto Consumo dice «No medido».');
 
       if (tables.length > 0) {
         console.log('\n2) Seguridad (las tablas no deben ser accesibles desde internet con la clave pública)');

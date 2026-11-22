@@ -135,3 +135,49 @@ describe('StorageUrlService: solo firma lo que es del usuario (dueño de la ruta
     expect((await svc.signResponse({ url }, ME)).url).toBe(url);
   });
 });
+
+describe('StorageUrlService: aviso de enlaces emitidos (medición de descargas)', () => {
+  const mine = `${AUDIT_OK}/evidencia.pdf`;
+
+  it('avisa a quien se suscribió con la organización y SOLO las rutas permitidas', async () => {
+    const { svc } = build([]);
+    const seen: Array<[string, string[]]> = [];
+    svc.addIssuedListener((org, paths) => seen.push([org, paths]));
+    await svc.signResponse({ a: canonical(mine), b: canonical(`evidence/cmforeign0000000000000009/x/e.jpg`) }, ME);
+    expect(seen).toEqual([[ORG, [mine]]]); // la ruta ajena (no permitida) no se anota
+  });
+
+  it('varios oyentes reciben el mismo aviso', async () => {
+    const { svc } = build([]);
+    const a = jest.fn(); const b = jest.fn();
+    svc.addIssuedListener(a); svc.addIssuedListener(b);
+    await svc.signResponse({ url: canonical(mine) }, ME);
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(1);
+  });
+
+  it('no avisa si no hay nada que firmar ni si no se sabe de qué organización es la petición', async () => {
+    const { svc } = build([]);
+    const l = jest.fn();
+    svc.addIssuedListener(l);
+    await svc.signResponse({ texto: 'sin archivos' }, ME);
+    await svc.signResponse({ url: canonical(`evidence/cmforeign0000000000000009/x/e.jpg`) }, ME); // ninguna permitida
+    await svc.signResponse({ url: canonical(mine) }, { userId: 'user-1', role: 'AUDITOR' }); // sin organización
+    expect(l).not.toHaveBeenCalled();
+  });
+
+  it('un oyente que lanza una excepción NO tumba la respuesta ni a los demás oyentes', async () => {
+    const { svc } = build([]);
+    const after = jest.fn();
+    svc.addIssuedListener(() => { throw new Error('medición rota'); });
+    svc.addIssuedListener(after);
+    const out = await svc.signResponse({ url: canonical(mine) }, ME);
+    expect(out.url).toBe(`FIRMADA:${mine}`);
+    expect(after).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin oyentes todo funciona igual', async () => {
+    const { svc } = build([]);
+    expect((await svc.signResponse({ url: canonical(mine) }, ME)).url).toBe(`FIRMADA:${mine}`);
+  });
+});

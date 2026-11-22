@@ -89,9 +89,24 @@ export class StorageUrlService {
   private readonly logger = new Logger(StorageUrlService.name);
   private readonly supabase: SupabaseClient;
   private readonly cache = new Map<string, { url: string; at: number }>();
+  private readonly issuedListeners: Array<(organizationId: string, paths: string[]) => void> = [];
 
   constructor(private readonly prisma: PrismaService) {
     this.supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  }
+
+  /**
+   * Quien quiera saber qué archivos de qué organización recibieron un enlace de descarga (medición de descargas de «Consumo») se suscribe aquí.
+   * Los oyentes son SÍNCRONOS y no pueden afectar la respuesta: si uno lanza una excepción se ignora. Esta clase no conoce a quien la usa.
+   */
+  addIssuedListener(listener: (organizationId: string, paths: string[]) => void): void {
+    this.issuedListeners.push(listener);
+  }
+
+  private notifyIssued(organizationId: string, paths: string[]): void {
+    for (const listener of this.issuedListeners) {
+      try { listener(organizationId, paths); } catch { /* una medición nunca debe tumbar una respuesta */ }
+    }
   }
 
   /** Qué rutas de las encontradas en la respuesta se pueden firmar para quien consulta. */
@@ -171,6 +186,7 @@ export class StorageUrlService {
 
     const allowed = await this.allowedPaths([...paths], scope);
     if (allowed.length === 0) return data;
+    if (scope.organizationId) this.notifyIssued(scope.organizationId, allowed);
     const signed = await this.signPaths(allowed);
     return this.mapStrings(
       data,

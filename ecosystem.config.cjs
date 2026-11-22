@@ -107,6 +107,9 @@ module.exports = {
         // Tareas programadas de planes (avisos de vencimiento y de uso, pagos vencidos): corren solas en producción y solo escriben a los
         // clientes con el cumplimiento en ENFORCE. BILLING_REMINDERS_ENABLED=false las apaga del todo (con =true corren también fuera de producción).
         BILLING_REMINDERS_ENABLED: e.BILLING_REMINDERS_ENABLED || '',
+        // Medición de descargas (pantalla Consumo): anota qué archivos recibieron enlace de descarga. Corre sola en producción;
+        // EGRESS_METER_ENABLED=false la apaga (con =true corre también fuera de producción). Si la tabla storage_egress_daily no existe, no pasa nada: Consumo dice «No medido».
+        EGRESS_METER_ENABLED: e.EGRESS_METER_ENABLED || '',
         // ClamAV (antivirus de adjuntos de terceros) — contenedor Docker separado, solo 127.0.0.1
         CLAMAV_HOST: '127.0.0.1',
         CLAMAV_PORT: '3310',

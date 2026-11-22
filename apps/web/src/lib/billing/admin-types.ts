@@ -163,11 +163,35 @@ export interface ConsumptionOrgRow {
   storageByType: StorageBytesByType | null;
   storageCostSupabaseUsd: number;
   storageCostR2Usd: number;
+  /**
+   * Descargas DEL MES: archivos con enlace de descarga emitido (cada archivo cuenta una vez por día). No es la factura de Supabase.
+   * Opcionales: un API anterior a la medición de descargas no los manda.
+   */
+  egressFiles?: number;
+  egressBytes?: number;
+  /** Bytes descargados por tipo de archivo; null si no hubo descargas. */
+  egressByType?: StorageBytesByType | null;
+  /** Parte del excedente de egress de Supabase que le toca a esta organización (0 mientras el total no pase lo incluido). */
+  egressCostSupabaseUsd?: number;
+  egressCostR2Usd?: number;
   /** Licencia llevada a mes (precio pactado o del catálogo ÷ meses); 0 si no hay ingreso. */
   monthlyIncomeUsd: number;
-  /** IA + espacio (con Supabase). */
+  /** IA + espacio + descargas (con Supabase). */
   variableCostUsd: number;
   marginUsd: number;
+}
+
+/** Descargas de toda la plataforma en el mes y su costo estimado. */
+export interface ConsumptionEgress {
+  /** false cuando el servidor aún no puede medir (falta la tabla): la pantalla debe decir «no medido», no «0». */
+  measured: boolean;
+  /** GB de descarga que incluye Supabase al mes en todo el proyecto. */
+  includedGb: number;
+  supabaseUsdPerGb: number;
+  r2UsdPerGb: number;
+  totalGb: number;
+  overageGb: number;
+  overageCostSupabaseUsd: number;
 }
 
 export interface ConsumptionAgentRow {
@@ -182,6 +206,8 @@ export interface AdminConsumption {
   safetyMultiplier: number;
   /** USD por GB-mes de cada proveedor. */
   rates: { supabase: number; cloudflareR2: number };
+  /** Descargas del mes (ausente en un API anterior a la medición). */
+  egress?: ConsumptionEgress;
   /** Ya viene ordenado por costo variable, de mayor a menor. */
   organizations: ConsumptionOrgRow[];
   agents: ConsumptionAgentRow[];

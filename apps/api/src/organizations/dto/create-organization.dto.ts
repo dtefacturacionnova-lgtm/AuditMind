@@ -36,7 +36,10 @@ export class CreateOrganizationDto {
   @Max(500)
   maxUsers?: number;
 
-  @ApiPropertyOptional({ example: 'PROFESSIONAL' })
+  @ApiPropertyOptional({
+    example: 'EMPRESA_DESPACHO',
+    description: 'Código del plan de la organización (EMPRESA_DESPACHO, PERSONA_INICIAL, PILOTO, INTERNO…). Los de venta empiezan con su prueba; Piloto e Interno son exentos. Sin él (o con un código que no existe) se usa el plan por defecto de la plataforma.',
+  })
   @IsOptional()
   @IsString()
   subscriptionTier?: string;

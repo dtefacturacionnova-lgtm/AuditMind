@@ -1,14 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Building2, Plus, Mail, Loader2, AlertCircle, X, ShieldAlert,
   Power, Users, FolderOpen, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
+import { OrgPlanSelect } from '@/components/billing/OrgPlanSelect';
 import { apiClient } from '@/lib/api-client';
+import { useBillingSettings, usePlans, useSubscriptions } from '@/hooks/useBillingAdmin';
 import { useUser } from '@/hooks/useUser';
+import { defaultPlanCode, orgPlanView, planChoiceGroups, subscriptionsByOrg, tierToSend } from '@/lib/billing/org-plans';
 import { formatDate } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -37,12 +40,6 @@ const MODALITY_LABELS: Record<Modality, string> = {
   EXTERNAL: 'Solo Externa',
 };
 
-const PLAN_OPTIONS = [
-  { value: 'starter', label: 'Starter' },
-  { value: 'professional', label: 'Professional' },
-  { value: 'enterprise', label: 'Enterprise' },
-];
-
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
 function useOrganizations(enabled: boolean) {
@@ -60,11 +57,16 @@ function useCreateOrganization() {
     mutationFn: (dto: {
       name: string;
       auditModality: Modality;
-      subscriptionTier: string;
+      /** Código del plan (EMPRESA_DESPACHO, PILOTO…). Sin él el API usa el plan por defecto de la plataforma. */
+      subscriptionTier?: string;
       adminName?: string;
       adminEmail?: string;
     }) => apiClient.post<CreateOrgResponse>('/organizations', dto),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['organizations'] }),
+    // También la lista de suscripciones: la organización nueva ya tiene la suya y la tabla muestra su plan real.
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ['organizations'] }),
+      qc.invalidateQueries({ queryKey: ['billing-admin'] }),
+    ]),
   });
 }
 
@@ -115,20 +117,27 @@ function CreateOrgModal({
 }: { onClose: () => void; onCreated: (res: CreateOrgResponse) => void }) {
   const [name, setName] = useState('');
   const [modality, setModality] = useState<Modality>('BOTH');
-  const [plan, setPlan] = useState('professional');
+  const [plan, setPlan] = useState('');
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const create = useCreateOrganization();
+
+  // Los planes salen del catálogo real (Planes y suscripciones): un plan nuevo o editado aparece aquí solo.
+  const plansQ = usePlans();
+  const settingsQ = useBillingSettings();
+  const groups = useMemo(() => planChoiceGroups(plansQ.data), [plansQ.data]);
+  const selectedPlan = plan || defaultPlanCode(groups, settingsQ.data?.defaultPlanCode);
 
   const wantsAdmin = adminEmail.trim().length > 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
+      const tier = tierToSend(selectedPlan, groups);
       const res = await create.mutateAsync({
         name: name.trim(),
         auditModality: modality,
-        subscriptionTier: plan,
+        ...(tier && { subscriptionTier: tier }),
         ...(wantsAdmin && { adminEmail: adminEmail.trim(), adminName: adminName.trim() || name.trim() }),
       });
       onCreated(res);
@@ -154,22 +163,21 @@ function CreateOrgModal({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">Módulos</label>
-            <select value={modality} onChange={e => setModality(e.target.value as Modality)} className={`${INPUT_CLS} bg-white`}>
-              {(Object.keys(MODALITY_LABELS) as Modality[]).map(m => (
-                <option key={m} value={m}>{MODALITY_LABELS[m]}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">Plan</label>
-            <select value={plan} onChange={e => setPlan(e.target.value)} className={`${INPUT_CLS} bg-white`}>
-              {PLAN_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
-          </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">Módulos</label>
+          <select value={modality} onChange={e => setModality(e.target.value as Modality)} className={`${INPUT_CLS} bg-white`}>
+            {(Object.keys(MODALITY_LABELS) as Modality[]).map(m => (
+              <option key={m} value={m}>{MODALITY_LABELS[m]}</option>
+            ))}
+          </select>
         </div>
+
+        <OrgPlanSelect
+          groups={groups} value={selectedPlan} onChange={setPlan}
+          loading={plansQ.isLoading} failed={plansQ.isError}
+          enforcementMode={settingsQ.data?.enforcementMode}
+          className={`${INPUT_CLS} bg-white`}
+        />
 
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-3">
           <div>
@@ -273,6 +281,9 @@ export default function OrganizationsPage() {
   const { user, loading: userLoading } = useUser();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const { data: orgs, isLoading, isError, error, refetch } = useOrganizations(isSuperAdmin);
+  // Plan real de cada organización (de su suscripción). Si no se puede leer, la tabla muestra el texto antiguo, sin romperse.
+  const subsQ = useSubscriptions(isSuperAdmin);
+  const subsByOrg = useMemo(() => subscriptionsByOrg(subsQ.data), [subsQ.data]);
   const toggle = useToggleActive();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -397,7 +408,15 @@ Todos sus usuarios dejarán de poder usar AuditMind hasta que la reactives. Sus 
                             <span className="inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
                               {MODALITY_LABELS[org.auditModality]}
                             </span>
-                            <p className="text-[11px] text-gray-400 mt-0.5 capitalize">{org.plan}</p>
+                            {(() => {
+                              const p = orgPlanView(org.plan, subsByOrg.get(org.id));
+                              return (
+                                <p className="text-[11px] text-gray-500 mt-0.5">
+                                  {p.name}
+                                  {p.detail && <span className={p.exempt ? 'text-emerald-700' : 'text-gray-400'}> · {p.detail}</span>}
+                                </p>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3">
                             {org.users.length === 0 ? (

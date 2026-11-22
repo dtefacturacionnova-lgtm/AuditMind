@@ -177,7 +177,7 @@ Nada de esto afecta a los clientes actuales:
 1. **Datos de pago:** pestaña **Pagos** › «Datos de pago» (QR 365, transferencia, efectivo). Sin esto el cliente que pida un pago no verá a dónde pagar.
 2. **Revisar precios y planes** en la pestaña **Planes** (los de fábrica son hipótesis).
 3. **Correo:** confirma que `RESEND_API_KEY` está bien (paso 1.3) y prueba un aviso.
-4. **Hallazgo — la lista de planes de «Organizaciones» está desactualizada.** La pantalla de alta todavía ofrece `Starter / Professional / Enterprise`, que no existen en el catálogo nuevo: al crear una organización cae al plan por defecto (**prueba de 14 días de Empresa Despacho, no exenta**). Con OFF no tiene efecto. **Antes de ENFORCE**: crea la organización y cambia su plan en **Suscripciones**, o pídeme que cambie esa lista para que muestre los planes reales (cambio pequeño).
+4. **Al crear una organización eliges su plan de verdad.** «Organizaciones › Nueva organización» ofrece los planes del catálogo (los que empiezan con prueba y, aparte, Piloto/Interno, que son exentos), con el plan por defecto de la plataforma preseleccionado; la tabla muestra el plan real de cada organización (nombre, estado y vencimiento, o «Exenta»). **Para un cliente que ya paga o que es de confianza, elige Piloto**; si dejas un plan con prueba, la organización empieza con esos días y, con el cumplimiento en ENFORCE, pasa a gracia y solo lectura al vencer. Si no se pueden leer los planes, la pantalla lo dice y crea la organización con el plan por defecto.
 5. **Organización de prueba no exenta** para ensayar: créala y déjala en prueba.
 
 ---

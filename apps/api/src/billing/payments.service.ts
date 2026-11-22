@@ -133,10 +133,15 @@ export class PaymentsService {
     throw new ConflictException('No se pudo generar la referencia de pago. Intenta de nuevo.');
   }
 
-  private async instructions(method: string): Promise<string | null> {
+  /** Texto de «cómo pagar» que la plataforma cargó para cada método (QR, TRANSFER, CASH); lo que no sea texto se ignora. */
+  private async instructionTexts(): Promise<Record<string, string>> {
     const row = await this.prisma.billingSettings.findUnique({ where: { id: 'default' }, select: { paymentInstructions: true } });
     const all = (row?.paymentInstructions ?? {}) as Record<string, unknown>;
-    return typeof all[method] === 'string' ? (all[method] as string) : null;
+    return Object.fromEntries(Object.entries(all).filter(([, v]) => typeof v === 'string')) as Record<string, string>;
+  }
+
+  private async instructions(method: string): Promise<string | null> {
+    return (await this.instructionTexts())[method] ?? null;
   }
 
   private present(p: Prisma.BillingPaymentGetPayload<object>, instructions: string | null = null) {
@@ -149,7 +154,9 @@ export class PaymentsService {
 
   async listMine(organizationId: string) {
     const rows = await this.prisma.billingPayment.findMany({ where: { organizationId }, orderBy: { createdAt: 'desc' }, take: 50 });
-    return rows.map((p) => this.present(p));
+    // Mientras el pago sigue pendiente, el cliente puede volver a ver cómo pagarlo (no solo al pedirlo); en los demás estados ya no hace falta.
+    const texts = rows.some((p) => p.status === 'PENDING') ? await this.instructionTexts() : {};
+    return rows.map((p) => this.present(p, p.status === 'PENDING' ? (texts[p.method] ?? null) : null));
   }
 
   async attachProof(organizationId: string, paymentId: string, file: { originalname: string; buffer: Buffer } | undefined) {

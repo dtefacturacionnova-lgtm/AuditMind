@@ -532,6 +532,32 @@ suite('etapa 2 de planes: IA en peticiones, espacio y pagos contra Postgres real
       expect(all.find((p: any) => p.id === pa.id)).toMatchObject({ organizationId: a, organizationName: expect.stringContaining('Prueba etapa2') });
     });
 
+    it('«Mis pagos» vuelve a mostrar cómo pagar mientras el pago está pendiente (no solo al pedirlo); ya no en los demás estados', async () => {
+      const before = (await settings.get()).paymentInstructions;
+      await settings.update({ paymentInstructions: { QR: 'Banco Cuscatlán · QR 365 · concepto: tu referencia', TRANSFER: 'Cuenta 123 del banco X' } }, 'test-actor-2');
+      try {
+        const id = await orgOnPlan(await testPlan('INST', {}));
+        const qr = await payments.createRequest(admin(id), { kind: 'PACK', packCode: 'AI_1000', method: 'QR' });
+        const transfer = await payments.createRequest(admin(id), { kind: 'PACK', packCode: 'AI_5000', method: 'TRANSFER' });
+        const cash = await payments.createRequest(admin(id), { kind: 'PACK', packCode: 'AI_1000', method: 'CASH' }); // sin texto cargado
+        const cancelled = await payments.createRequest(admin(id), { kind: 'PACK', packCode: 'AI_1000', method: 'QR' });
+        await payments.cancel(id, cancelled.id);
+
+        const mine = await payments.listMine(id);
+        const by = (pid: string) => mine.find((p: any) => p.id === pid);
+        expect(by(qr.id).instructions).toBe('Banco Cuscatlán · QR 365 · concepto: tu referencia');
+        expect(by(transfer.id).instructions).toBe('Cuenta 123 del banco X');
+        expect(by(cash.id).instructions).toBeNull();
+        expect(by(cancelled.id)).toMatchObject({ status: 'CANCELLED', instructions: null });
+        // y al pedirlo se ve lo mismo, según el método elegido
+        expect(qr.instructions).toBe('Banco Cuscatlán · QR 365 · concepto: tu referencia');
+        expect(transfer.instructions).toBe('Cuenta 123 del banco X');
+        expect(cash.instructions).toBeNull();
+      } finally {
+        await settings.update({ paymentInstructions: before }, 'test-actor-2');
+      }
+    });
+
     it('el comprobante se valida ANTES de tocar el almacenamiento: vacío, muy grande o de tipo falso', async () => {
       const id = await orgOnPlan(await testPlan('PRF', {}));
       const p = await payments.createRequest(admin(id), { kind: 'PACK', packCode: 'AI_1000', method: 'QR' });

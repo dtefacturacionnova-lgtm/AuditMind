@@ -1,0 +1,40 @@
+﻿Reporte de Libro Mayor - Auditoria Financiera 2026
+Empresa Comercial Demo SA de CV  -  Generado: 22/08/2026
+
+Fecha,Cuenta_Contable,Descripcion,Monto,Usuario,Hora
+2026-01-05,4010,Ingresos por ventas,2288.33,aperez,11:14
+2026-01-07,5020,Servicios profesionales,13340.81,admin,09:37
+2026-01-09,2030,Cuentas por pagar,881.92,jsmith,11:14
+2026-01-10,5040,Mantenimiento y reparaciones,5000.0,jsmith,10:00
+2026-01-10,6010,Gastos de administracion,8200.5,mgarcia,11:15
+2026-01-11,6010,Gastos de administracion,10963.69,admin,11:45
+2026-01-11,5040,Mantenimiento y reparaciones,3100.0,aperez,16:40
+2026-01-12,5020,Servicios profesionales,10000.0,mgarcia,10:00
+2026-01-13,4010,Ingresos por ventas,12719.43,lrodriguez,11:28
+2026-01-15,6010,Gastos de administracion,5238.41,jsmith,10:44
+2026-01-15,5010,Gastos operacionales,45000.0,jsmith,09:32
+2026-01-15,5010,Gastos operacionales,45000.0,jsmith,09:33
+2026-01-17,2030,Cuentas por pagar,6335.63,mgarcia,11:48
+2026-01-19,1010,Caja y bancos,2127.08,lrodriguez,09:22
+2026-01-21,5040,Mantenimiento y reparaciones,6401.14,aperez,08:46
+2026-01-23,2030,Cuentas por pagar,9800.51,lrodriguez,09:35
+2026-01-25,1010,Caja y bancos,14983.87,admin,13:36
+2026-01-27,5020,Servicios profesionales,12776.83,jsmith,11:49
+2026-01-29,1010,Caja y bancos,17738.72,mgarcia,09:24
+2026-01-29,6010,Gastos de administracion,15000.0,lrodriguez,10:00
+2026-01-31,1010,Caja y bancos,8336.29,aperez,10:23
+2026-02-02,1010,Caja y bancos,4024.08,aperez,09:38
+2026-02-04,4010,Ingresos por ventas,3345.73,mgarcia,10:29
+2026-02-06,2030,Cuentas por pagar,5092.68,admin,11:43
+2026-02-08,1010,Caja y bancos,15221.62,jsmith,11:52
+2026-02-10,5010,Gastos operacionales,14553.21,lrodriguez,12:04
+2026-02-12,5020,Servicios profesionales,16464.25,admin,13:13
+2026-02-12,5010,Gastos operacionales,1000.0,lrodriguez,10:00
+2026-02-14,4010,Ingresos por ventas,9146.41,lrodriguez,10:16
+2026-02-16,5020,Servicios profesionales,4680.37,admin,16:16
+2026-02-18,4010,Ingresos por ventas,10655.48,admin,14:23
+2026-02-20,5020,Servicios profesionales,17952.72,mgarcia,16:31
+2026-02-24,4010,Ingresos por ventas,25000.0,lrodriguez,10:00
+2026-02-26,2030,Cuentas por pagar,980000.0,admin,23:10
+2026-02-27,6010,Gastos de administracion,76500.0,admin,22:45
+2026-02-28,5020,Servicios profesionales,54000.0,admin,21:58

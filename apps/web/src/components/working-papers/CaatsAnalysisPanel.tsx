@@ -5,11 +5,12 @@ import {
   Play, Loader2, AlertCircle, AlertTriangle, CheckCircle2, RotateCcw,
   Upload, FileUp, X, ListChecks, Database, FileSpreadsheet, TrendingUp,
   BarChart3, Cpu, ShieldAlert, Building2, Users, Receipt,
-  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe, FileCheck2, ShieldBan,
+  CalendarClock, Gavel, Clock, Package, Layers, Ghost, Globe, FileCheck2, ShieldBan, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { AnalysisResultView } from '@/components/caats/CaatsResultView';
+import { CaatsMethodologyModal } from '@/components/caats/CaatsMethodologyModal';
 import { SecondaryDatasetUpload, type SecondaryDatasetValue } from '@/components/caats/SecondaryDatasetUpload';
 import { DteJsonUpload } from '@/components/caats/DteJsonUpload';
 import { DteMhOption } from '@/components/caats/DteMhOption';
@@ -64,6 +65,7 @@ const ENGINES: { id: AnalysisId; label: string; icon: typeof Database; color: st
 
 export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readOnly = false, lockedEngine }: Props) {
   const [engine, setEngine] = useState<AnalysisId | null>(value?.engine ?? lockedEngine ?? null);
+  const [infoEngine, setInfoEngine] = useState<AnalysisId | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<Record<string, unknown> | null>(value?.result ?? null);
@@ -260,24 +262,34 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
       {!lockedEngine && (
       <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-2">
         {ENGINES.map(e => (
-          <button
-            key={e.id}
-            type="button"
-            onClick={() => selectEngine(e.id)}
-            className={cn(
-              'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
-              engine === e.id
-                ? 'border-[#0F2D4A] bg-[#0F2D4A]/5 shadow-sm'
-                : 'border-gray-200 bg-white hover:border-gray-300',
-            )}
-          >
-            <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', e.color)}>
-              <e.icon className="w-4 h-4 text-white" />
-            </div>
-            <p className={cn('text-[11px] font-semibold leading-tight', engine === e.id ? 'text-[#0F2D4A]' : 'text-gray-600')}>
-              {e.label}
-            </p>
-          </button>
+          <div key={e.id} className="relative">
+            <button
+              type="button"
+              onClick={() => selectEngine(e.id)}
+              className={cn(
+                'w-full h-full flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
+                engine === e.id
+                  ? 'border-[#0F2D4A] bg-[#0F2D4A]/5 shadow-sm'
+                  : 'border-gray-200 bg-white hover:border-gray-300',
+              )}
+            >
+              <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', e.color)}>
+                <e.icon className="w-4 h-4 text-white" />
+              </div>
+              <p className={cn('text-[11px] font-semibold leading-tight', engine === e.id ? 'text-[#0F2D4A]' : 'text-gray-600')}>
+                {e.label}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setInfoEngine(e.id)}
+              className="absolute top-1 right-1 p-1 rounded-full text-gray-300 hover:text-[#0F2D4A] hover:bg-gray-100 transition-colors"
+              title={`Qué pruebas ejecuta: ${e.label}`}
+              aria-label={`Ver las pruebas y análisis de ${e.label}`}
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </div>
         ))}
       </div>
       )}
@@ -489,6 +501,14 @@ export function CaatsAnalysisPanel({ paperId, sectionKey, value, onChange, readO
 
       {!engine && (
         <p className="text-xs text-gray-400 italic">Selecciona un motor de análisis para comenzar.</p>
+      )}
+
+      {infoEngine && (
+        <CaatsMethodologyModal
+          analysisId={infoEngine}
+          label={ENGINES.find(x => x.id === infoEngine)?.label ?? infoEngine}
+          onClose={() => setInfoEngine(null)}
+        />
       )}
     </div>
   );

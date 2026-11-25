@@ -288,6 +288,7 @@ export const METHODOLOGY: Record<string, MethodologyInfo> = {
     normativa: 'NIIF 15 (Reconocimiento de Ingresos), NIA 240 (fraude — área de riesgo presunta)',
     pruebas: [
       { nombre: 'Factura sin Entrega Confirmada', descripcion: 'Facturas cerca del cierre sin guía de despacho registrada, o con entrega varios días después de la factura.' },
+      { nombre: 'Corte sin Datos de Entrega', descripcion: 'Variante de la prueba anterior cuando no se mapeó la fecha de guía de despacho: no puede confirmar la entrega, así que solo lista las facturas de los últimos días del período para revisarlas a mano (riesgo medio).' },
       { nombre: 'Concentración de Facturación al Cierre', descripcion: 'El promedio diario de facturación en los últimos días del período es anormalmente más alto que el resto — patrón de "channel stuffing".' },
     ],
     limitaciones:

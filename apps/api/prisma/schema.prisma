@@ -1532,6 +1532,7 @@ model Audit {
   connectorImports      ConnectorImport[]
   requestDocuments      AuditRequestDocument[]
   trialBalances         TrialBalance[]
+  auditVisits           AuditVisit[]
   // ─── Expediente de auditoría (fases y carpetas) ───────────────────────────
   phases                AuditPhase[]
   folders               AuditFolder[]
@@ -2410,11 +2411,55 @@ model TrialBalance {
   benfordRunAt     DateTime?
   benfordFindingId String? // Finding draft auto-generated when risk is high
 
+  // ─── Visitas (2026-11-25): a qué visita pertenece esta carga y a qué fecha están los saldos. Nulos = carga anterior a las visitas ───
+  visitId  String?
+  asOfDate DateTime? @db.Date
+
   audit      Audit                   @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  visit      AuditVisit?             @relation(fields: [visitId], references: [id], onDelete: SetNull)
   paperLinks TrialBalancePaperLink[]
 
   @@index([auditId])
+  @@index([visitId])
   @@map("trial_balances")
+}
+
+enum AuditVisitKind {
+  PLANNING // Planificación
+  INTERIM // Interina
+  FINAL // Final / de cierre
+}
+
+enum AuditVisitStatus {
+  PLANNED
+  IN_PROGRESS
+  CLOSED
+}
+
+/// Visita de una auditoría financiera externa (2026-11-25): siempre una de cada tipo como máximo por encargo, con su fecha de corte.
+/// Cada visita tiene su propio balance de comprobación (TrialBalance.visitId). `isAnalysisBase` marca la visita cuyo balance alimenta
+/// el `saldo_actual` de B-00 (una sola por encargo). Reglas puras en apps/api/src/audits/visits/visit-rules.ts.
+/// SQL: infrastructure/db-migrations/2026-11-visitas-1-saldos.sql (CHECK de cierre, índice parcial de base única, RLS).
+model AuditVisit {
+  id             String           @id @default(cuid())
+  auditId        String
+  organizationId String
+  kind           AuditVisitKind
+  cutoffDate     DateTime         @db.Date
+  status         AuditVisitStatus @default(PLANNED)
+  isAnalysisBase Boolean          @default(false)
+  notes          String?
+  closedAt       DateTime?
+  closedById     String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  audit         Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  trialBalances TrialBalance[]
+
+  @@unique([auditId, kind])
+  @@index([organizationId])
+  @@map("audit_visits")
 }
 
 model TrialBalancePaperLink {

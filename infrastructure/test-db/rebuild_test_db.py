@@ -29,14 +29,15 @@ TMP = tempfile.gettempdir()
 MODELS = ["EngagementFee", "EngagementFeeAmendment", "BillingScheduleItem", "ClientInvoice", "ClientPayment", "PaymentApplication",
           "InvoiceWithholding", "CollectionLog", "ClientCreditNote", "ClientWriteOff", "CollectionNote", "ClientInvoiceHour",
           "BillingPlan", "BillingPlanPrice", "BillingSubscription", "BillingSettings", "BillingEvent",
-          "UsageLedger", "AddonPack", "AddonPurchase", "BillingPayment", "StorageEgressDaily"]
+          "UsageLedger", "AddonPack", "AddonPurchase", "BillingPayment", "StorageEgressDaily", "AuditVisit"]
 ENUMS = ["FeeType", "FeeSource", "FeeProgressMethod", "ScheduleItemKind", "ScheduleItemStatus", "ClientInvoiceStatus", "ClientPaymentStatus",
          "ClientPaymentMethod", "WithholdingTaxType", "CollectionLogAction", "CreditNoteStatus", "WriteOffStatus", "CollectionContactMethod", "PromiseStatus",
          "BillingAudience", "SubscriptionStatus", "EnforcementMode",
-         "AddonKind", "AddonPurchaseStatus", "BillingPaymentKind", "BillingPaymentMethod", "BillingPaymentStatus"]
+         "AddonKind", "AddonPurchaseStatus", "BillingPaymentKind", "BillingPaymentMethod", "BillingPaymentStatus",
+         "AuditVisitKind", "AuditVisitStatus"]
 MIGRATIONS = ["2026-10-cobros-3a.sql", "2026-10-cobros-3a-fix1.sql", "2026-10-cobros-3d.sql", "2026-10-cobros-3d-fix1.sql",
               "2026-10-cobros-4.sql", "2026-10-pbc-portal-otp.sql", "2026-11-suscripciones-1-nucleo.sql",
-              "2026-11-suscripciones-2-medicion-pagos.sql", "2026-11-suscripciones-3-descargas.sql"]
+              "2026-11-suscripciones-2-medicion-pagos.sql", "2026-11-suscripciones-3-descargas.sql", "2026-11-visitas-1-saldos.sql"]
 
 src = open(os.path.join(API, "prisma", "schema.prisma"), encoding="utf-8").read().replace("\r\n", "\n")
 for name in MODELS:
@@ -49,6 +50,14 @@ for name in ENUMS:
 # quedarían colgando: se quitan, porque la migración SQL crea esas tablas con sus propias claves foráneas.
 for name in MODELS:
     src = re.sub(r"^[ \t]+\w+[ \t]+" + name + r"(\[\])?\??[^\n]*\n", "", src, flags=re.M)
+# Las 2 columnas que la migración de visitas agrega a trial_balances (visitId, asOfDate) y su índice: la migración SQL las crea ella misma.
+def _sin_visitas(m):
+    return re.sub(r"^[ \t]*(?:visitId|asOfDate|@@index\(\[visitId\]\))[^\n]*\n", "", m.group(1), flags=re.M)
+
+
+src, n = re.subn(r"(model TrialBalance \{.*?\n\}\n)", _sin_visitas, src, count=1, flags=re.S)
+_tb = re.search(r"model TrialBalance \{.*?\n\}\n", src, flags=re.S).group(0)
+assert n == 1 and "visitId" not in _tb and "asOfDate" not in _tb, "no se pudieron quitar las columnas de visitas de TrialBalance"
 trimmed = os.path.join(TMP, "auditmind_schema_trimmed.prisma")
 open(trimmed, "w", encoding="utf-8").write(src)
 

@@ -172,6 +172,13 @@ export function CrossAuditSuggestions({ auditId, paperId, onApply }: CrossAuditS
         </button>
       </div>
 
+      {/* Aviso: sin contexto suficiente / la IA no respondió (no se rellena con sugerencias genéricas) */}
+      {result?.notice && (
+        <div role="status" className="mx-4 mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+          {result.notice}
+        </div>
+      )}
+
       {/* Recurring areas */}
       {result?.recurringAreas && result.recurringAreas.length > 0 && (
         <div className="px-4 pt-4 pb-1">

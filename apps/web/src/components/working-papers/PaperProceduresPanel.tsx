@@ -46,25 +46,31 @@ interface PaperProceduresPanelProps {
 // ─── AI-enhanced textarea ─────────────────────────────────────────────────────
 
 function AiTextarea({
-  value, onChange, placeholder, rows = 2, fieldType, paperTitle, paperType, disabled,
+  value, onChange, placeholder, rows = 2, fieldType, paperId, paperTitle, paperType, disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
   fieldType: 'title' | 'statement' | 'development';
+  paperId?: string;
   paperTitle?: string;
   paperType?: string;
   disabled?: boolean;
 }) {
   const improve = useImproveText();
+  const [aviso, setAviso] = useState('');
 
   async function handleImprove() {
     if (!value.trim()) return;
+    setAviso('');
     try {
-      const res = await improve.mutateAsync({ text: value, fieldType, paperTitle, paperType });
+      // Con paperId el servidor arma el contexto del papel y del encargo: la redacción se alinea con ESTE papel.
+      const res = await improve.mutateAsync({ paperId, text: value, fieldType, paperTitle, paperType });
       if (res.improved) onChange(res.improved);
-    } catch { /* ignore */ }
+    } catch (e) {
+      setAviso(e instanceof Error && e.message ? e.message : 'No se pudo mejorar el texto. Intenta de nuevo.');
+    }
   }
 
   return (
@@ -96,6 +102,7 @@ function AiTextarea({
       >
         {improve.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
       </button>
+      {aviso && <p role="status" className="mt-1 text-[11px] text-amber-700">{aviso}</p>}
     </div>
   );
 }
@@ -234,6 +241,7 @@ function ProcedureCard({
   const update  = useUpdateProcedure();
   const remove  = useRemoveProcedure();
   const draft   = useDraftProcedure();
+  const [aiNotice, setAiNotice] = useState('');
 
   async function handleSave() {
     await update.mutateAsync({ paperId, procedureId: proc.id, title, statement, development });
@@ -241,10 +249,14 @@ function ProcedureCard({
   }
 
   async function handleDraftDevelopment() {
+    setAiNotice('');
     try {
-      const res = await draft.mutateAsync({ title, statement, paperTitle, paperType, paperCode: paperCode ?? undefined });
-      if (res.development) setDevelopment(res.development);
-    } catch { /* ignore */ }
+      const res = await draft.mutateAsync({ paperId, title, statement, paperTitle, paperType, paperCode: paperCode ?? undefined });
+      if (res.insufficientContext) setAiNotice(res.message ?? 'La IA no tiene contexto suficiente de este papel.');
+      else if (res.development) setDevelopment(res.development);
+    } catch (e) {
+      setAiNotice(e instanceof Error && e.message ? e.message : 'No se pudo generar el borrador. Intenta de nuevo.');
+    }
   }
 
   const displayTitle = proc.title ?? proc.area ?? 'Procedimiento';
@@ -263,12 +275,12 @@ function ProcedureCard({
             <div>
               <label className="text-[10px] font-semibold text-gray-500 uppercase">Título</label>
               <AiTextarea value={title} onChange={setTitle} fieldType="title"
-                placeholder="Título corto del procedimiento" paperTitle={paperTitle} paperType={paperType} />
+                placeholder="Título corto del procedimiento" paperId={paperId} paperTitle={paperTitle} paperType={paperType} />
             </div>
             <div>
               <label className="text-[10px] font-semibold text-gray-500 uppercase">Enunciado (qué se hace)</label>
               <AiTextarea value={statement} onChange={setStatement} fieldType="statement" rows={2}
-                placeholder="Describe el procedimiento a ejecutar" paperTitle={paperTitle} paperType={paperType} />
+                placeholder="Describe el procedimiento a ejecutar" paperId={paperId} paperTitle={paperTitle} paperType={paperType} />
             </div>
             <div>
               <div className="flex items-center justify-between">
@@ -284,7 +296,8 @@ function ProcedureCard({
                 </button>
               </div>
               <AiTextarea value={development} onChange={setDevelopment} fieldType="development" rows={4}
-                placeholder="Cómo se ejecutó y qué se obtuvo" paperTitle={paperTitle} paperType={paperType} />
+                placeholder="Cómo se ejecutó y qué se obtuvo" paperId={paperId} paperTitle={paperTitle} paperType={paperType} />
+              {aiNotice && <p role="status" className="mt-1 text-[11px] text-amber-700">{aiNotice}</p>}
             </div>
             <div className="flex items-center gap-2 pt-1">
               <button onClick={handleSave} disabled={update.isPending}
@@ -356,6 +369,7 @@ function AddProcedureForm({
   const [development, setDevelopment] = useState('');
   const append = useAppendProcedure();
   const draft  = useDraftProcedure();
+  const [aiNotice, setAiNotice] = useState('');
 
   async function handleAdd() {
     if (!statement.trim() && !title.trim()) return;
@@ -364,10 +378,14 @@ function AddProcedureForm({
   }
 
   async function handleDraft() {
+    setAiNotice('');
     try {
-      const res = await draft.mutateAsync({ title, statement, paperTitle, paperType, paperCode: paperCode ?? undefined });
-      if (res.development) setDevelopment(res.development);
-    } catch { /* ignore */ }
+      const res = await draft.mutateAsync({ paperId, title, statement, paperTitle, paperType, paperCode: paperCode ?? undefined });
+      if (res.insufficientContext) setAiNotice(res.message ?? 'La IA no tiene contexto suficiente de este papel.');
+      else if (res.development) setDevelopment(res.development);
+    } catch (e) {
+      setAiNotice(e instanceof Error && e.message ? e.message : 'No se pudo generar el borrador. Intenta de nuevo.');
+    }
   }
 
   return (
@@ -375,12 +393,12 @@ function AddProcedureForm({
       <div>
         <label className="text-[10px] font-semibold text-gray-500 uppercase">Título</label>
         <AiTextarea value={title} onChange={setTitle} fieldType="title"
-          placeholder="Ej. Revisión de conciliaciones bancarias" paperTitle={paperTitle} paperType={paperType} />
+          placeholder="Ej. Revisión de conciliaciones bancarias" paperId={paperId} paperTitle={paperTitle} paperType={paperType} />
       </div>
       <div>
         <label className="text-[10px] font-semibold text-gray-500 uppercase">Enunciado</label>
         <AiTextarea value={statement} onChange={setStatement} fieldType="statement" rows={2}
-          placeholder="Qué se va a ejecutar..." paperTitle={paperTitle} paperType={paperType} />
+          placeholder="Qué se va a ejecutar..." paperId={paperId} paperTitle={paperTitle} paperType={paperType} />
       </div>
       <div>
         <div className="flex items-center justify-between">
@@ -392,7 +410,8 @@ function AddProcedureForm({
           </button>
         </div>
         <AiTextarea value={development} onChange={setDevelopment} fieldType="development" rows={3}
-          placeholder="Cómo se ejecutó (puedes generarlo con IA)" paperTitle={paperTitle} paperType={paperType} />
+          placeholder="Cómo se ejecutó (puedes generarlo con IA)" paperId={paperId} paperTitle={paperTitle} paperType={paperType} />
+        {aiNotice && <p role="status" className="mt-1 text-[11px] text-amber-700">{aiNotice}</p>}
       </div>
       <div className="flex items-center gap-2">
         <button onClick={handleAdd} disabled={append.isPending || (!statement.trim() && !title.trim())}

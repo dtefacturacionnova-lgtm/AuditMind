@@ -5,6 +5,11 @@ import { UsageService } from '../billing/usage.service';
 import { AuthUser } from '../auth/jwt.strategy';
 import { assertInvestigationAccess, visibleAuditWhere } from '../common/utils/investigation-scope.util';
 import { generateText, isLlmConfigured } from '../common/llm/llm-client';
+import { AiService } from '../ai/ai.service';
+import {
+  BUDGETS, PaperAiInput, assessPaperContext, buildPaperBrief, buildRagBlock, frameworkFor, insufficientInstruction, insufficientMessage,
+  loadPaperAiInput, parseInsufficient, ragBaseFor, ragQueryFor,
+} from './paper-ai-context';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +33,9 @@ export interface CrossAuditSuggestionsResult {
   recurringAreas:   string[];
   generatedAt:      string;
   aiGenerated:      boolean;
+  /** Con papel: la IA (o el servidor) avisa que no hay contexto suficiente / que la IA no respondió, en vez de rellenar con reglas genéricas. */
+  insufficientContext?: boolean;
+  notice?:          string;
 }
 
 interface GeminiSuggestion {
@@ -49,6 +57,8 @@ export class CrossAuditLearningService {
     private readonly config:  ConfigService,
     // Opcional: sin él (pruebas que construyen el servicio a mano) las acciones de IA corren sin medirse.
     @Optional() private readonly usage?: UsageService,
+    // Opcional: sin él no se consulta la normativa (RAG) y el resto funciona igual.
+    @Optional() private readonly aiService?: AiService,
   ) {}
 
   // ─── Public API ───────────────────────────────────────────────────────────
@@ -132,34 +142,64 @@ export class CrossAuditLearningService {
         })
       : [];
 
-    // ─── 3. Current audit's SMART sections for context ───────────────────
-    const smartSections = await this.prisma.paperSection.findMany({
-      where: {
-        paper: { auditId },
-      },
-      select: {
-        sectionKey: true, label: true, value: true, sortOrder: true,
-        paper: { select: { paperCode: true, title: true } },
-      },
-      orderBy: { sortOrder: 'asc' },
-      take: 20,
-    });
+    // ─── 3. Contexto del papel actual ─────────────────────────────────────
+    // Con papel: la ficha de ESE papel (paper-ai-context.ts) reemplaza las 20 secciones de todos los papeles del encargo, que mezclaban
+    // temas ajenos. Sin papel (vista del encargo): comportamiento anterior.
+    const paperInput = paperContext && paperId ? await loadPaperAiInput(this.prisma, paperId) : null;
+
+    const smartSections = paperInput
+      ? []
+      : await this.prisma.paperSection.findMany({
+          where: { paper: { auditId } },
+          select: {
+            sectionKey: true, label: true, value: true, sortOrder: true,
+            paper: { select: { paperCode: true, title: true } },
+          },
+          orderBy: { sortOrder: 'asc' },
+          take: 20,
+        });
 
     // ─── 4. Identify recurring areas ─────────────────────────────────────
     const recurringAreas = this.identifyRecurringAreas(pastFindings);
 
-    // ─── 5. Generate AI suggestions ───────────────────────────────────────
+    const base = {
+      auditId,
+      basedOnAudits:  sourceAuditIds.length,
+      totalFindings:  pastFindings.length,
+      recurringAreas,
+      generatedAt:    new Date().toISOString(),
+    };
     const llmReady = isLlmConfigured(this.config);
+
+    // ─── 5a. Con papel: sugerencias específicas de ESE papel, o decir que no se puede ──
+    if (paperInput) {
+      const check = assessPaperContext(paperInput);
+      if (!check.enough) {
+        return { ...base, suggestions: [], aiGenerated: false, insufficientContext: true, notice: insufficientMessage(check.missing) };
+      }
+      if (!llmReady) {
+        return { ...base, suggestions: [], aiGenerated: false, notice: 'La IA no está configurada en este entorno; no se muestran sugerencias genéricas.' };
+      }
+      try {
+        const out = await this.callLlmForPaper(audit, entityName, sector, pastFindings, recurringAreas, paperInput);
+        if ('insufficient' in out) {
+          return { ...base, suggestions: [], aiGenerated: true, insufficientContext: true, notice: insufficientMessage([out.insufficient]) };
+        }
+        return { ...base, suggestions: out.suggestions, aiGenerated: true };
+      } catch (err) {
+        this.logger.warn('[CrossAudit] LLM failed (con papel), sin relleno genérico', String(err));
+        return { ...base, suggestions: [], aiGenerated: false, notice: 'La IA no respondió. Intenta de nuevo; no se muestran sugerencias genéricas que no correspondan a este papel.' };
+      }
+    }
+
+    // ─── 5b. Sin papel (vista del encargo): comportamiento anterior ───────
     let suggestions: AiProcedureSuggestion[];
     let aiGenerated = false;
-
-    // Corre Gemini si hay historial, secciones, O contexto de papel (para que
-    // un papel nuevo sin historial reciba sugerencias relevantes a su tipo).
-    if (llmReady && (pastFindings.length > 0 || smartSections.length > 0 || paperContext)) {
+    if (llmReady && (pastFindings.length > 0 || smartSections.length > 0)) {
       try {
         suggestions = await this.callLlm(
           audit, entityName, sector,
-          pastFindings, smartSections, recurringAreas, paperContext,
+          pastFindings, smartSections, recurringAreas, null,
         );
         aiGenerated = true;
       } catch (err) {
@@ -170,15 +210,7 @@ export class CrossAuditLearningService {
       suggestions = this.ruleBased(pastFindings, audit.type, recurringAreas);
     }
 
-    return {
-      auditId,
-      suggestions,
-      basedOnAudits:  sourceAuditIds.length,
-      totalFindings:  pastFindings.length,
-      recurringAreas,
-      generatedAt:    new Date().toISOString(),
-      aiGenerated,
-    };
+    return { ...base, suggestions, aiGenerated };
   }
 
   // ─── Recurring area detection ─────────────────────────────────────────────
@@ -301,6 +333,93 @@ INSTRUCCIONES:
         ? `${pastFindings.length} hallazgo(s) en auditorías anteriores`
         : 'Análisis de contexto actual',
     }));
+  }
+
+  // ─── Llamada al LLM con la ficha del papel ────────────────────────────────
+
+  /**
+   * Sugerencias de aprendizaje cruzado para UN papel: ficha compacta del papel y del encargo + normativa del marco (RAG, 3 fragmentos)
+   * + hallazgos históricos (el «cruce»). Si la IA no puede ser específica responde `{"sin_contexto": …}` y se devuelve el aviso.
+   */
+  private async callLlmForPaper(
+    audit:          { title: string; type: string },
+    entityName:     string,
+    sector:         string,
+    pastFindings:   Array<{ title: string; severity: string; condition: string | null; recommendation: string | null }>,
+    recurringAreas: string[],
+    paper:          PaperAiInput,
+  ): Promise<{ suggestions: AiProcedureSuggestion[] } | { insufficient: string }> {
+    const brief = buildPaperBrief(paper, BUDGETS.estandar);
+
+    let ragBlock = '';
+    const ragBase = ragBaseFor(audit.type);
+    if (ragBase && this.aiService) {
+      const labels = paper.sections.map((sec) => sec.label).slice(0, 3);
+      const hits = await this.aiService.searchRag(ragQueryFor([paper.paper.title, ...labels]), [ragBase], 3);
+      ragBlock = buildRagBlock(hits);
+    }
+
+    const findingsSummary = pastFindings.slice(0, 10).map((f, i) =>
+      `${i + 1}. [${f.severity}] ${f.title}${f.condition ? ` — ${f.condition.slice(0, 120)}` : ''}`,
+    ).join('\n');
+    const areasText = recurringAreas.length > 0
+      ? `Áreas con hallazgos recurrentes: ${recurringAreas.join(', ')}`
+      : 'Sin historial previo de hallazgos en esta entidad.';
+
+    const prompt = `Eres un auditor experto en ${frameworkFor(audit.type)}. Sugiere procedimientos de auditoría para UN papel de trabajo concreto, usando también el historial de la entidad.
+
+ENTIDAD: ${entityName}${sector ? ` (sector: ${sector})` : ''}
+
+FICHA DEL PAPEL Y DEL ENCARGO (los procedimientos deben ser ejecutables en ESTE papel, no en otro):
+${brief}
+${ragBlock ? `
+NORMATIVA RECUPERADA DE LA BASE DE CONOCIMIENTO (fuente autorizada; cita artículo o norma SOLO si aparece aquí):
+${ragBlock}
+` : ''}
+${areasText}
+HALLAZGOS DE AUDITORÍAS ANTERIORES (${pastFindings.length} total):
+${findingsSummary || 'Sin hallazgos históricos disponibles.'}
+
+Genera de 4 a 6 procedimientos específicos de ESTE papel. No repitas los que la ficha ya lista como existentes. Si hay hallazgos recurrentes relevantes a este papel, incluye al menos 1 basado en ellos; si no son relevantes, ignóralos.
+${insufficientInstruction(true)}
+
+Responde EXCLUSIVAMENTE con un JSON array:
+[
+  {
+    "area": "<área específica>",
+    "procedure": "<procedimiento concreto a ejecutar, máx. 100 palabras>",
+    "rationale": "<por qué es relevante para ESTE papel>",
+    "priority": "HIGH|MEDIUM|LOW",
+    "niaRef": "<norma o artículo aplicable, solo si aparece en la normativa recuperada o es una NIA que conoces con certeza; si no, omitir>"
+  }
+]
+Verbos de acción (verificar, comparar, recalcular, indagar, confirmar). Solo el JSON, sin texto extra.`;
+
+    const raw = await generateText(this.config, {
+      messages: [{ role: 'user', content: prompt }], temperature: 0.4, maxTokens: 1600, json: true, timeoutMs: 35_000,
+      meter: { usage: this.usage, agent: 'MINERVA', weight: 1 },
+    });
+
+    const motivo = parseInsufficient(raw);
+    if (motivo !== null) return { insufficient: motivo };
+
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error('No JSON array in LLM response');
+    const parsed = JSON.parse(match[0]) as GeminiSuggestion[];
+
+    return {
+      suggestions: parsed.map((sg, i) => ({
+        id:        `sug-${Date.now()}-${i}`,
+        area:      sg.area,
+        procedure: sg.procedure,
+        rationale: sg.rationale,
+        priority:  sg.priority,
+        niaRef:    sg.niaRef,
+        basedOn:   pastFindings.length > 0
+          ? `Ficha del papel + ${pastFindings.length} hallazgo(s) en auditorías anteriores`
+          : 'Ficha del papel y del encargo',
+      })),
+    };
   }
 
   // ─── Rule-based fallback ──────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { WorkingPapersController } from './working-papers.controller';
 import { WorkingPapersService } from './working-papers.service';
 import { PaperGraphService } from './paper-graph.service';
 import { PaperSectionsService } from './paper-sections.service';
+import { PaperAiAssistService } from './paper-ai-assist.service';
 import { PaperConsolidationService } from './paper-consolidation.service';
 import { PaperQualityService } from './paper-quality.service';
 import { PaperLiveService } from './paper-live.service';
@@ -22,6 +23,7 @@ import { PdfToolsModule } from '../pdf-tools/pdf-tools.module';
     WorkingPapersService,
     PaperGraphService,
     PaperSectionsService,
+    PaperAiAssistService,          // IA con el contexto del papel: mejorar redacción + borrador de desarrollo
     PaperConsolidationService,     // Sprint 2: AI consolidation engine
     PaperQualityService,           // Sprint 3: Semantic quality gate
     PaperLiveService,              // Sprint 3: LIVE paper dashboard

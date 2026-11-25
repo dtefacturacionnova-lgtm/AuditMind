@@ -15,6 +15,7 @@ from app.config import settings
 from app.services.llm_router import chat_with_agent, TaskComplexity
 from app.services.agent_prompts import get_agent_system_prompt
 from app.services.json_utils import parse_json_response as _parse_json_response
+from app.services.paper_prompts import build_improve_messages, build_draft_messages, parse_insufficient
 
 router = APIRouter()
 
@@ -72,6 +73,7 @@ class ImproveTextRequest(BaseModel):
     fieldType: Optional[str] = None     # 'title' | 'statement' | 'development'
     paperTitle: Optional[str] = None
     paperType: Optional[str] = None
+    contextBrief: Optional[str] = None  # ficha del papel y del encargo, armada por el API (app/services/paper_prompts.py)
 
 
 class DraftProcedureRequest(BaseModel):
@@ -81,6 +83,8 @@ class DraftProcedureRequest(BaseModel):
     paperType: Optional[str] = None
     paperCode: Optional[str] = None
     auditType: Optional[str] = None
+    contextBrief: Optional[str] = None  # ficha del papel y del encargo, armada por el API
+    ragBlock: Optional[str] = None      # normativa recuperada del RAG del marco del encargo
 
 
 class CosoAssessRequest(BaseModel):
@@ -550,27 +554,12 @@ async def improve_procedure_text(
     if not request.text or not request.text.strip():
         raise HTTPException(status_code=400, detail="El texto a mejorar está vacío")
 
-    field_guidance = {
-        "title":       "Es un TÍTULO corto de procedimiento (máx 8 palabras, sin punto final).",
-        "statement":   "Es el ENUNCIADO del procedimiento: qué se va a ejecutar. Usa verbos de acción (verificar, recalcular, confirmar, indagar). 1-2 oraciones claras.",
-        "development": "Es el DESARROLLO/EJECUCIÓN del procedimiento: cómo se ejecutó y qué se obtuvo. Lenguaje formal de papel de trabajo, en pasado.",
-    }
-    guidance = field_guidance.get(request.fieldType or "", "Mejora la redacción profesional.")
-
-    system_prompt = (
-        "Eres SCRIPTORIUM, redactor experto de papeles de trabajo de auditoría. "
-        "Mejoras la redacción manteniendo SIEMPRE el sentido y los hechos originales. "
-        "No inventas datos. Respondes solo con el texto mejorado, sin comillas ni explicaciones."
-    )
-
-    context = ""
-    if request.paperTitle or request.paperType:
-        context = f"\nContexto del papel: {request.paperTitle or ''} ({request.paperType or ''})."
-
-    user_message = (
-        f"Mejora la redacción del siguiente texto.\n{guidance}{context}\n\n"
-        f"TEXTO ORIGINAL:\n{request.text}\n\n"
-        f"Responde SOLO con el texto mejorado."
+    system_prompt, user_message = build_improve_messages(
+        text=request.text,
+        field_type=request.fieldType,
+        paper_title=request.paperTitle,
+        paper_type=request.paperType,
+        context_brief=request.contextBrief,
     )
 
     result = await chat_with_agent(
@@ -604,28 +593,16 @@ async def draft_procedure(
     if not (request.title or request.statement):
         raise HTTPException(status_code=400, detail="Se requiere al menos título o enunciado")
 
-    system_prompt = (
-        "Eres SCRIPTORIUM, auditor experto que redacta el desarrollo de procedimientos "
-        "de auditoría en papeles de trabajo. Redactas el desarrollo de forma profesional, "
-        "específica y ejecutable, siguiendo NIA. No inventas resultados concretos: dejas "
-        "marcadores claros [completar con resultado] donde el auditor debe documentar la evidencia."
+    system_prompt, user_message = build_draft_messages(
+        title=request.title,
+        statement=request.statement,
+        paper_title=request.paperTitle,
+        paper_type=request.paperType,
+        paper_code=request.paperCode,
+        audit_type=request.auditType,
+        context_brief=request.contextBrief,
+        rag_block=request.ragBlock,
     )
-
-    user_message = f"""Redacta el DESARROLLO de este procedimiento de auditoría.
-
-PAPEL DE TRABAJO: {request.paperCode or ''} {request.paperTitle or ''} (tipo: {request.paperType or request.auditType or 'general'})
-TÍTULO DEL PROCEDIMIENTO: {request.title or '(sin título)'}
-ENUNCIADO: {request.statement or '(sin enunciado)'}
-
-Redacta un desarrollo de 3-5 oraciones que describa:
-1. Cómo se ejecuta el procedimiento (pasos concretos)
-2. Qué evidencia/documentación se revisa
-3. Qué se concluye o verifica
-
-Usa lenguaje formal de papel de trabajo. Inserta marcadores [completar...] donde el auditor
-debe poner datos específicos (montos, fechas, muestras, resultados).
-
-Responde SOLO con el texto del desarrollo, sin encabezados ni comillas."""
 
     result = await chat_with_agent(
         agent_type="SCRIPTORIUM",
@@ -636,6 +613,16 @@ Responde SOLO con el texto del desarrollo, sin encabezados ni comillas."""
     )
 
     development = (result["content"] or "").strip().strip('"')
+    motivo = parse_insufficient(development)
+    if motivo is not None:
+        # La IA dijo que con la ficha no puede escribir algo específico de este papel: se avisa, no se inventa.
+        return {
+            "development": "",
+            "insufficientContext": True,
+            "message": f"La IA no tiene contexto suficiente de este papel para redactar algo específico y prefiere no inventar. {motivo}",
+            "model": result["model"],
+            "tokens_used": result["input_tokens"] + result["output_tokens"],
+        }
     return {
         "development": development,
         "model": result["model"],

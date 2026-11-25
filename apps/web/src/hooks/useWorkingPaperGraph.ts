@@ -651,6 +651,9 @@ export interface CrossAuditSuggestionsResult {
   recurringAreas: string[];
   generatedAt:   string;
   aiGenerated:   boolean;
+  /** Con papel: la IA no tiene contexto suficiente (o no respondió) y por eso no hay sugerencias; `notice` explica qué falta. */
+  insufficientContext?: boolean;
+  notice?:       string;
 }
 
 export function useAiSuggestions() {
@@ -758,7 +761,7 @@ export function useUpdateProcedure() {
 // IA: mejorar redacción de un texto
 export function useImproveText() {
   return useMutation({
-    mutationFn: (body: { text: string; fieldType?: string; paperTitle?: string; paperType?: string }) =>
+    mutationFn: (body: { paperId?: string; text: string; fieldType?: string; paperTitle?: string; paperType?: string }) =>
       apiClient.post<{ improved: string; original: string }>(
         `/working-papers/ai/improve-text`, body,
       ),
@@ -769,10 +772,11 @@ export function useImproveText() {
 export function useDraftProcedure() {
   return useMutation({
     mutationFn: (body: {
+      paperId?: string;
       title?: string; statement?: string;
       paperTitle?: string; paperType?: string; paperCode?: string; auditType?: string;
     }) =>
-      apiClient.post<{ development: string }>(
+      apiClient.post<{ development: string; insufficientContext?: boolean; message?: string }>(
         `/working-papers/ai/draft-procedure`, body,
       ),
   });

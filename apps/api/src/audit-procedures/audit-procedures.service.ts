@@ -9,6 +9,11 @@ import { assertInvestigationAccess, AUDIT_ACCESS_SELECT } from '../common/utils/
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { removeStoragePrefixes } from '../common/storage/storage-prefix.util';
 import { generateText, isLlmConfigured } from '../common/llm/llm-client';
+import { AiService } from '../ai/ai.service';
+import {
+  BUDGETS, assessPaperContext, buildPaperBrief, buildRagBlock, clip, frameworkFor, insufficientInstruction, insufficientMessage,
+  loadPaperAiInput, parseInsufficient, ragBaseFor, ragQueryFor, usesFinancialAssertions, valueSummary,
+} from '../working-papers/paper-ai-context';
 import {
   ProcStatus, StepStatus, StepConclusion, TestType, AuditNature, AuditTiming,
 } from '@prisma/client';
@@ -80,6 +85,8 @@ export class AuditProceduresService {
     @Optional() private readonly usage?: UsageService,
     // Opcional: sin él (pruebas que construyen el servicio a mano) no se verifica la cuota del plan.
     @Optional() private readonly storageQuota?: StorageUsageService,
+    // Opcional: sin él no se consulta la normativa (RAG) y el resto funciona igual.
+    @Optional() private readonly aiService?: AiService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -423,65 +430,83 @@ export class AuditProceduresService {
   async suggestAndCreateProcedures(sectionId: string, user: AuthUser) {
     const section = await this.assertSectionAccess(sectionId, user);
 
+    // Contexto del papel donde está la cuadrícula (paper-ai-context.ts). Antes el programa se armaba solo con el nombre de la sección y con
+    // un prompt fijo de auditoría financiera aunque el encargo fuera fiscal, PLD o gubernamental.
+    const paperInput = await loadPaperAiInput(this.prisma, section.paperId);
+    if (!paperInput) throw new NotFoundException('Papel no encontrado');
+    const check = assessPaperContext(paperInput);
+    if (!check.enough) throw new BadRequestException(insufficientMessage(check.missing));
+
     if (!isLlmConfigured(this.config)) {
       throw new BadRequestException('IA no configurada: falta OPENROUTER_API_KEY o GEMINI_API_KEY en las variables de entorno.');
     }
 
-    // Load context: paper info + sibling papers of the same audit
     const paper = await this.prisma.workingPaper.findUnique({
       where: { id: section.paperId },
       select: { auditId: true },
     });
     if (!paper) throw new NotFoundException('Papel no encontrado');
 
-    const audit = await this.prisma.audit.findUnique({
-      where:   { id: paper.auditId },
-      select:  { title: true, auditPeriodEnd: true },
-    });
-
     // "Auditoría Financiera Externa v1.0" no tiene un papel PT-A5 dedicado — la
     // evaluación de riesgos vive en PT-A2 (score RMM por área en S4, riesgos
     // significativos NIA 315 en S6) y el enfoque por área en PT-STRAT S5.
+    // En otros tipos de encargo estos papeles no existen y el bloque de riesgo simplemente no se incluye.
     const siblingPapers = await this.prisma.workingPaper.findMany({
       where:   { auditId: paper.auditId, paperCode: { in: ['PT-A2', 'PT-STRAT'] } },
       include: { sections: { orderBy: { sortOrder: 'asc' } } },
     });
+    const a2Paper     = siblingPapers.find(p => p.paperCode === 'PT-A2');
+    const stratPaper  = siblingPapers.find(p => p.paperCode === 'PT-STRAT');
+    const riskBlocks: string[] = [];
+    const addRisk = (label: string, value: unknown) => {
+      const text = clip(valueSummary(value), 500);
+      if (text) riskBlocks.push(`### ${label}\n${text}`);
+    };
+    addRisk('Áreas auditadas (PT-A2 S1)', a2Paper?.sections.find(x => x.sectionKey === 'S1')?.value);
+    addRisk('Score de Riesgo Inherente por área (PT-A2 S4)', a2Paper?.sections.find(x => x.sectionKey === 'S4')?.value);
+    addRisk('Riesgos Significativos NIA 315 (PT-A2 S6)', a2Paper?.sections.find(x => x.sectionKey === 'S6')?.value);
+    addRisk('Enfoque de auditoría por área (PT-STRAT S5)', stratPaper?.sections.find(x => x.sectionKey === 'S5')?.value);
 
-    // Extract relevant sections from sibling papers
-    const a2Paper  = siblingPapers.find(p => p.paperCode === 'PT-A2');
-    const areas    = a2Paper?.sections.find(s => s.sectionKey === 'S1')?.value ?? '';
-    const rmmText  = a2Paper?.sections.find(s => s.sectionKey === 'S4')?.value ?? '';
-    const sigRisks = a2Paper?.sections.find(s => s.sectionKey === 'S6')?.value ?? '';
-
-    const stratPaper = siblingPapers.find(p => p.paperCode === 'PT-STRAT');
-    const strategy    = stratPaper?.sections.find(s => s.sectionKey === 'S5')?.value ?? '';
-
-    const auditName = audit?.title ?? 'Auditoría';
-    const year      = audit?.auditPeriodEnd?.getFullYear() ?? new Date().getFullYear();
+    const auditType = paperInput.audit.type;
     const paperLabel = section.label ?? 'Programa de Auditoría';
 
+    let ragBlock = '';
+    const ragBase = ragBaseFor(auditType);
+    if (ragBase && this.aiService) {
+      const hits = await this.aiService.searchRag(ragQueryFor([paperInput.paper.title, paperLabel]), [ragBase], 3);
+      ragBlock = buildRagBlock(hits);
+    }
+
+    // Lo que la sección ya tiene, para no repetirlo (solo descripciones recortadas).
+    const existing = await this.prisma.auditProcedure.findMany({
+      where: { sectionId }, orderBy: { sortOrder: 'asc' }, take: 15, select: { description: true },
+    });
+
+    const assertionsRule = usesFinancialAssertions(auditType)
+      ? 'Usa aserciones NIA 315 (EXI, VAL, COM, OCC, EXA, COR, CLA).'
+      : 'Este encargo NO es de estados financieros: deja "assertions" como [] (no uses aserciones de estados financieros).';
+
     const prompt = `
-Eres un auditor de Big 4 experto en NIAs (normas IAASB). Genera un programa de auditoría estructurado para el papel "${paperLabel}" del encargo "${auditName}" (año ${year}).
+Eres un auditor experto en ${frameworkFor(auditType)}. Genera un programa de auditoría estructurado para la sección "${paperLabel}" de ESTE papel de trabajo.
 
+## Ficha del papel y del encargo (el programa debe corresponder a este papel, no a otro):
+${buildPaperBrief(paperInput, BUDGETS.estandar)}
+${ragBlock ? `
+## Normativa recuperada de la base de conocimiento (fuente autorizada; cita artículo o norma SOLO si aparece aquí):
+${ragBlock}
+` : ''}${riskBlocks.length > 0 ? `
 ## Contexto de riesgo disponible:
-
-### Áreas auditadas (PT-A2 S1):
-${areas || '(No disponible)'}
-
-### Score de Riesgo Inherente por área (PT-A2 S4):
-${rmmText || '(No disponible)'}
-
-### Riesgos Significativos NIA 315 (PT-A2 S6):
-${sigRisks || '(No disponible)'}
-
-### Enfoque de auditoría por área (PT-STRAT S5):
-${strategy || '(No disponible)'}
-
+${riskBlocks.join('\n\n')}
+` : ''}${existing.length > 0 ? `
+## Procedimientos que la sección ya tiene (no los repitas):
+${existing.map(e => `- ${clip(e.description ?? '', 90)}`).join('\n')}
+` : ''}
 ## Instrucciones:
-Genera entre 3 y 8 procedimientos de auditoría (nivel 1) con sus actividades ejecutables (nivel 2).
+Genera entre 3 y 8 procedimientos de auditoría (nivel 1) con sus actividades ejecutables (nivel 2), específicos de ESTE papel.
 Cada procedimiento debe tener entre 2 y 5 actividades.
-Usa aserciones NIA 315 (EXI, VAL, COM, OCC, EXA, COR, CLA).
+${assertionsRule}
 RMM levels: BAJO, MODERADO, ALTO, MUY_ALTO.
+${insufficientInstruction(true)}
 Responde ÚNICAMENTE con JSON válido, sin texto adicional ni markdown.
 
 JSON schema:
@@ -490,19 +515,19 @@ JSON schema:
     {
       "refNumber": "P-01",
       "description": "Descripción del procedimiento (1 oración)",
-      "assertions": ["EXI", "VAL"],
+      "assertions": [],
       "significantRisk": false,
       "rmmLevel": "MODERADO",
       "steps": [
         {
           "refNumber": "P-01.1",
           "description": "Descripción de la actividad ejecutable",
-          "assertions": ["EXI"],
+          "assertions": [],
           "testType": "DETAIL",
           "nature": "INSPECTION",
           "timing": "YEAR_END",
-          "extent": "100% de los items > $10,000",
-          "population": "Saldos al 31/12"
+          "extent": "<alcance o muestra, p. ej. 100% de las partidas sobre el umbral definido>",
+          "population": "<población que cubre el papel>"
         }
       ]
     }
@@ -514,6 +539,7 @@ nature values: INSPECTION, OBSERVATION, INQUIRY, CONFIRMATION, RECALCULATION, RE
 timing values: INTERIM, YEAR_END, ROLLFORWARD
 `;
 
+    let insufficientReason: string | null = null;
     let parsed: { procedures: Array<{
       refNumber: string; description: string; assertions?: string[];
       significantRisk?: boolean; rmmLevel?: string;
@@ -527,11 +553,16 @@ timing values: INTERIM, YEAR_END, ROLLFORWARD
     try {
       const raw = await this.callLlmText(prompt);
       const cleaned = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-      parsed = JSON.parse(cleaned);
+      const motivo = parseInsufficient(cleaned);
+      if (motivo !== null) insufficientReason = motivo;
+      parsed = motivo !== null ? { procedures: [] } : JSON.parse(cleaned);
     } catch (e) {
       this.logger.error('AI suggest parse error', e);
       throw new BadRequestException('La IA no pudo generar procedimientos válidos. Intente de nuevo.');
     }
+
+    // La IA dijo que con la ficha no puede proponer algo específico de este papel: se avisa y no se crea nada.
+    if (insufficientReason !== null) throw new BadRequestException(insufficientMessage([insufficientReason]));
 
     const baseCount = await this.prisma.auditProcedure.count({ where: { sectionId } });
 

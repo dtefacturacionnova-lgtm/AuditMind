@@ -44,6 +44,7 @@ class UpdateProcedureDto {
 }
 
 class ImproveTextDto {
+  @IsOptional() @IsString() paperId?: string;   // con paperId el servidor arma el contexto del papel (paper-ai-context.ts)
   @IsString() text!: string;
   @IsOptional() @IsString() fieldType?: string;
   @IsOptional() @IsString() paperTitle?: string;
@@ -51,6 +52,7 @@ class ImproveTextDto {
 }
 
 class DraftProcedureDto {
+  @IsOptional() @IsString() paperId?: string;   // con paperId el servidor arma el contexto del papel (paper-ai-context.ts)
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() statement?: string;
   @IsOptional() @IsString() paperTitle?: string;
@@ -64,6 +66,7 @@ import { CreateWorkingPaperDto, AddCommentDto, AddTickMarkEntryDto } from './dto
 import { UpdateWorkingPaperDto, UpdateWorkingPaperStatusDto } from './dto/update-working-paper.dto';
 import { UpdateSectionValueDto, CreatePaperLinkDto, CreatePaperReferenceDto } from './dto/paper-section.dto';
 import { PaperSectionsService } from './paper-sections.service';
+import { PaperAiAssistService } from './paper-ai-assist.service';
 import { PaperGraphService } from './paper-graph.service';
 import { PaperQualityService } from './paper-quality.service';
 import { PaperLiveService } from './paper-live.service';
@@ -103,6 +106,7 @@ export class WorkingPapersController {
     private readonly pdfService:       PdfService,
     private readonly excelEngine:      ExcelTemplateEngineService,
     private readonly prisma:           PrismaService,
+    private readonly paperAiAssist:    PaperAiAssistService,
   ) {}
 
   // ─── Listados ─────────────────────────────────────────────────────────────────
@@ -778,16 +782,16 @@ export class WorkingPapersController {
   @Post('ai/improve-text')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Mejorar la redacción de un texto (título/enunciado/desarrollo) con IA' })
-  improveText(@Body() body: ImproveTextDto) {
-    return this.aiService.improveProcedureText({ ...body });
+  improveText(@Body() body: ImproveTextDto, @CurrentUser() user: AuthUser) {
+    return this.paperAiAssist.improveText(body, user);
   }
 
   // ─── IA: generar desarrollo de un procedimiento ────────────────────────────
   @Post('ai/draft-procedure')
   @Roles(UserRole.AUDITOR)
   @ApiOperation({ summary: 'Generar el desarrollo de un procedimiento con IA (desde título + enunciado)' })
-  draftProcedure(@Body() body: DraftProcedureDto) {
-    return this.aiService.draftProcedure({ ...body });
+  draftProcedure(@Body() body: DraftProcedureDto, @CurrentUser() user: AuthUser) {
+    return this.paperAiAssist.draftProcedure(body, user);
   }
 
   // ─── PDF profesional del papel de trabajo ──────────────────────────────────

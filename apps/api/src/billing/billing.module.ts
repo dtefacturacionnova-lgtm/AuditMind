@@ -30,6 +30,6 @@ import { UsageService } from './usage.service';
     UsageService, StorageUsageService, StorageEgressService, BillingUsageService, PaymentsService,
     BillingRemindersService, BillingUsageAlertsService, BillingScheduler,
   ],
-  exports: [BillingSettingsService, EntitlementsService, SubscriptionsService, SubscriptionGuard, UsageService, StorageUsageService],
+  exports: [BillingSettingsService, EntitlementsService, SubscriptionsService, SubscriptionGuard, UsageService, StorageUsageService, StorageEgressService],
 })
 export class BillingModule {}

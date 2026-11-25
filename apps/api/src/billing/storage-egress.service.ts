@@ -72,6 +72,15 @@ export class StorageEgressService implements OnModuleInit, OnModuleDestroy {
     this.logger.warn(message);
   }
 
+  /**
+   * Para quien firma enlaces por su cuenta (sin pasar por `StorageUrlService`, como la evidencia de campo): avisa que acaba de entregar el enlace
+   * de estas rutas. Respeta el interruptor (apagado = no hace nada), no espera a nadie y nunca lanza.
+   */
+  noteIssued(organizationId: string | null | undefined, paths: string[]): void {
+    if (!organizationId || !this.isEnabled()) return;
+    void this.record(organizationId, paths);
+  }
+
   /** Anota los archivos que recibieron enlace. Devuelve cuántos archivos NUEVOS (no contados hoy) con tamaño conocido sumó. Nunca lanza. */
   async record(organizationId: string, paths: string[], now: Date = new Date()): Promise<number> {
     let marked: string[] = [];

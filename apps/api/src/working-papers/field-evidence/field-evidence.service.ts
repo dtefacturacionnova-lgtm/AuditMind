@@ -4,6 +4,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
 import { FieldEvidenceKind, Prisma, RefType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageEgressService } from '../../billing/storage-egress.service';
 import { StorageUsageService } from '../../billing/storage-usage.service';
 import { AuthUser } from '../../auth/jwt.strategy';
 import { AiService } from '../../ai/ai.service';
@@ -80,6 +81,8 @@ export class FieldEvidenceService {
     private readonly investigationGraphService: InvestigationGraphService,
     // Opcional: sin él (pruebas que construyen el servicio a mano) no se verifica la cuota del plan.
     @Optional() private readonly storageQuota?: StorageUsageService,
+    // Opcional: mide las descargas de «Consumo». Sin él (pruebas que construyen el servicio a mano) simplemente no se mide.
+    @Optional() private readonly storageEgress?: StorageEgressService,
   ) {
     this.supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -967,6 +970,8 @@ export class FieldEvidenceService {
       );
     if (error || !data) throw new Error(error?.message ?? 'No se pudo generar la URL del archivo original');
 
+    // Descargas de «Consumo»: aquí sale el video, el audio y las fotos originales (lo que más pesa), y esta ruta firma por su cuenta.
+    this.storageEgress?.noteIssued(user.organizationId, [evidencia.storageKey]);
     return { url: data.signedUrl, expiresIn: EXPIRES_IN };
   }
 

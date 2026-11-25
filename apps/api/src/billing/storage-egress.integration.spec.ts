@@ -251,6 +251,32 @@ suite('descargas por organización contra Postgres real', () => {
       } finally { await svc.onModuleDestroy(); }
     });
 
+    it('noteIssued (para quien firma por su cuenta, como la evidencia de campo): anota de punta a punta con el tamaño real', async () => {
+      const org = await newOrg(); const { audit, lead } = await mkAudit(org);
+      const path = await evidence(audit.id, lead.id, 'INTERVIEW_AUDIO', 'audio/wav', 'entrevista.wav', 1_788_318);
+      const { svc } = make({ EGRESS_METER_ENABLED: 'true' });
+      expect(svc.noteIssued(org, [path])).toBeUndefined(); // no espera ni devuelve nada
+      for (let i = 0; i < 50 && (svc as any).acc.size === 0; i++) await new Promise((r) => setTimeout(r, 100));
+      await svc.flush();
+      const r = await rows(org);
+      expect(r.map((x: any) => [x.fileType, x.files, Number(x.bytes)])).toEqual([['AUDIO', 1, 1_788_318]]);
+    });
+
+    it('noteIssued apagado, sin organización o sin rutas: no anota nada', async () => {
+      const org = await newOrg(); const { audit, lead } = await mkAudit(org);
+      const path = await evidence(audit.id, lead.id, 'PDF_DOCUMENT', 'application/pdf', 'a.pdf', MB);
+      const off = make({ EGRESS_METER_ENABLED: 'false' }).svc;
+      off.noteIssued(org, [path]);
+      const on = make({ EGRESS_METER_ENABLED: 'true' }).svc;
+      on.noteIssued(undefined, [path]); on.noteIssued(null, [path]); on.noteIssued('', [path]); on.noteIssued(org, []);
+      await new Promise((r) => setTimeout(r, 500));
+      expect((off as any).acc.size).toBe(0); // se mira ANTES del flush: el flush vaciaría el acumulador y ocultaría el fallo
+      expect((on as any).acc.size).toBe(0);
+      expect((on as any).seen.size).toBe(0); // ni siquiera lo intentó
+      await off.flush(); await on.flush();
+      expect(await rows(org)).toEqual([]);
+    });
+
     it('apagado (EGRESS_METER_ENABLED=false): no se suscribe', () => {
       const { svc, host } = make({ EGRESS_METER_ENABLED: 'false' });
       svc.onModuleInit();

@@ -63,8 +63,8 @@ async function bootstrap() {
   const swagger = process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true';
   if (swagger) {
     const config = new DocumentBuilder()
-      .setTitle('AuditMind API')
-      .setDescription('API de la plataforma de auditoría inteligente AuditMind')
+      .setTitle('Nova Criterio API')
+      .setDescription('API de la plataforma de auditoría inteligente Nova Criterio')
       .setVersion('1.0')
       .addBearerAuth()
       .build();
@@ -77,7 +77,7 @@ async function bootstrap() {
   const port = process.env.PORT ?? process.env.PORT_API ?? 3001;
   const host = process.env.API_HOST || '0.0.0.0';
   await app.listen(port, host);
-  console.log(`🚀 AuditMind API corriendo en http://${host}:${port}/api/v1`);
+  console.log(`🚀 Nova Criterio API corriendo en http://${host}:${port}/api/v1`);
   if (swagger) console.log(`📚 Swagger en http://localhost:${port}/api/docs`);
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AuditMind — Setup inicial en el VPS (correr como root, UNA SOLA VEZ)
+# Nova Criterio — Setup inicial en el VPS (correr como root, UNA SOLA VEZ)
 # Subdominio: auditoria.ianovatechsystems.com
 #
 # Requisitos previos (ya deben estar en el VPS):
@@ -65,7 +65,7 @@ ANTHROPIC_API_KEY=
 # ── Emails ─────────────────────────────────────────────────────────────────
 RESEND_API_KEY=
 EMAIL_FROM=noreply@ianovatechsystems.com
-EMAIL_FROM_NAME=AuditMind
+EMAIL_FROM_NAME=Nova Criterio
 
 # ── Internos ───────────────────────────────────────────────────────────────
 AI_SERVICE_INTERNAL_KEY=auditmind-internal-2026-xK9mP3qR

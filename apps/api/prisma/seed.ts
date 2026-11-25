@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
 const d = (s: string) => new Date(s);
 
 async function main() {
-  console.log('\n🌱  AuditMind — Seed rico v2.0\n');
+  console.log('\n🌱  Nova Criterio — Seed rico v2.0\n');
 
   // ══════════════════════════════════════════════════════════════
   // 1. ORGANIZACIÓN

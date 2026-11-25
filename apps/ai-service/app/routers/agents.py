@@ -182,7 +182,7 @@ async def multi_year_analysis(
     entity_name = request.audit_entity_name or "la entidad auditada"
 
     system_prompt = (
-        "Eres Atlas, el Agente de Inteligencia Histórica Multi-Año de AuditMind. "
+        "Eres Atlas, el Agente de Inteligencia Histórica Multi-Año de Nova Criterio. "
         "Analizas múltiples ciclos de la misma auditoría para generar inteligencia "
         "comparable a la de las grandes firmas (Big 4) en sus análisis de carry-forward. "
         "IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto antes ni después del JSON."

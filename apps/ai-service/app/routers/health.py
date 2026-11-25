@@ -9,6 +9,6 @@ async def health_check():
     return {
         "status": "ok",
         "timestamp": datetime.utcnow().isoformat(),
-        "service": "AuditMind AI Service",
+        "service": "Nova Criterio AI Service",
         "version": "1.0.0",
     }

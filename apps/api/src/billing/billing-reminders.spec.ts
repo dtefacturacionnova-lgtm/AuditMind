@@ -109,7 +109,7 @@ describe('describeNotice — el texto', () => {
   it('licencia por vencer: dice los días que REALMENTE faltan, no el número configurado', () => {
     const t = describeNotice({ kind: 'EXPIRING', days: 7 }, ctx({ endsAt: at(5) }));
     expect(t.heading).toBe('Tu licencia vence en 5 días');
-    expect(t.subject).toBe('Tu licencia de AuditMind vence en 5 días');
+    expect(t.subject).toBe('Tu licencia de Nova Criterio vence en 5 días');
     expect(t.paragraphs.join(' ')).toContain('Despacho Pérez');
     expect(t.paragraphs.join(' ')).toContain('Plan: Despacho');
     expect(t.paragraphs.join(' ')).toMatch(/7 días de gracia/);
@@ -123,7 +123,7 @@ describe('describeNotice — el texto', () => {
   it('una prueba dice «prueba», no «licencia»', () => {
     const t = describeNotice({ kind: 'EXPIRING', days: 7 }, ctx({ storedStatus: 'TRIAL', endsAt: at(3) }));
     expect(t.heading).toBe('Tu prueba termina en 3 días');
-    expect(t.subject).toBe('Tu prueba de AuditMind termina en 3 días');
+    expect(t.subject).toBe('Tu prueba de Nova Criterio termina en 3 días');
     expect(describeNotice({ kind: 'EXPIRING', days: 1 }, ctx({ storedStatus: 'TRIAL', endsAt: at(1) })).heading).toBe('Tu prueba termina mañana');
   });
   it('promete que nada se borra y no inventa un precio ni un enlace de pago', () => {

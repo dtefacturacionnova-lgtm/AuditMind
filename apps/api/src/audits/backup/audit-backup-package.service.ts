@@ -38,7 +38,7 @@ export class AuditBackupPackageService {
     const manifestEntry = zip.file('manifest.json');
     const dataEntry = zip.file('data.json');
     if (!manifestEntry || !dataEntry) {
-      throw new BadRequestException('El archivo no tiene la estructura esperada de un backup de AuditMind');
+      throw new BadRequestException('El archivo no tiene la estructura esperada de un backup de Nova Criterio');
     }
 
     let manifestCrudo: unknown;

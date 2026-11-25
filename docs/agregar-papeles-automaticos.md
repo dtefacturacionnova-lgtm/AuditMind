@@ -1,4 +1,4 @@
-# Cómo agregar papeles automáticos a AuditMind
+# Cómo agregar papeles automáticos a Nova Criterio
 
 > **Audiencia:** equipo de desarrollo + product owners.
 > **Tiempo de lectura:** 15-20 minutos.
@@ -8,7 +8,7 @@
 
 ## TL;DR
 
-Hay **3 niveles** de "automatización" que puedes aplicar a un papel de trabajo en AuditMind:
+Hay **3 niveles** de "automatización" que puedes aplicar a un papel de trabajo en Nova Criterio:
 
 | Nivel | Qué hace | Cómo se agrega | Tiempo |
 |-------|----------|----------------|--------|

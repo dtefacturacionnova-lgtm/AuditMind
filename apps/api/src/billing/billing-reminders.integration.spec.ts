@@ -161,7 +161,7 @@ suite('avisos de vencimiento contra Postgres real', () => {
       expect(emailsTo(o.admin)).toHaveLength(1);
       expect(emailsTo(o.auditor, o.retired)).toHaveLength(0);
       const mail = emailsTo(o.admin)[0];
-      expect(mail.subject).toBe('Tu licencia de AuditMind vence en 5 días');
+      expect(mail.subject).toBe('Tu licencia de Nova Criterio vence en 5 días');
       expect(mail.paragraphs.join(' ')).toContain('Prueba avisos');
 
       const notes = await notificationsOf(o.id);
@@ -207,7 +207,7 @@ suite('avisos de vencimiento contra Postgres real', () => {
       await reminders.run(at(10)); // pasó la gracia de 7 días: solo lectura
       await reminders.run(at(11));
       expect(emailsTo(o.admin).map((m) => m.subject)).toEqual([
-        'Tu licencia de AuditMind vence mañana', 'Tu licencia de AuditMind venció', 'Tu cuenta de AuditMind está en solo lectura',
+        'Tu licencia de Nova Criterio vence mañana', 'Tu licencia de Nova Criterio venció', 'Tu cuenta de Nova Criterio está en solo lectura',
       ]);
       expect((await eventsOf(o.id)).map((e: any) => e.data.kind)).toEqual(['EXPIRING', 'GRACE', 'READ_ONLY']);
     });
@@ -219,7 +219,7 @@ suite('avisos de vencimiento contra Postgres real', () => {
       expect(emailsTo(o.admin)).toHaveLength(1);
       await reminders.run(new Date(NOW.getTime() + 4.5 * DAY)); // queda medio día: toca el de 1
       expect(emailsTo(o.admin)).toHaveLength(2);
-      expect(emailsTo(o.admin)[1].subject).toBe('Tu licencia de AuditMind vence mañana');
+      expect(emailsTo(o.admin)[1].subject).toBe('Tu licencia de Nova Criterio vence mañana');
       await reminders.run(new Date(NOW.getTime() + 4.8 * DAY));
       expect(emailsTo(o.admin)).toHaveLength(2);
       expect((await eventsOf(o.id)).map((e: any) => e.data.days)).toEqual([7, 1]);
@@ -271,7 +271,7 @@ suite('avisos de vencimiento contra Postgres real', () => {
       await subs.createForNewOrganization(id);
       await prisma.billingSubscription.update({ where: { organizationId: id }, data: { status: 'TRIAL', startedAt: at(-12), trialEndsAt: at(2) } });
       await reminders.run(NOW);
-      expect(emailsTo(admin)[0].subject).toBe('Tu prueba de AuditMind termina en 2 días');
+      expect(emailsTo(admin)[0].subject).toBe('Tu prueba de Nova Criterio termina en 2 días');
     });
 
     it('avisa una sola vez al entrar en gracia y una sola vez al pasar a solo lectura; suspendida ya no', async () => {
@@ -281,9 +281,9 @@ suite('avisos de vencimiento contra Postgres real', () => {
       await reminders.run(NOW);
       await reminders.run(NOW);
       expect(emailsTo(grace.admin)).toHaveLength(1);
-      expect(emailsTo(grace.admin)[0].subject).toBe('Tu licencia de AuditMind venció');
+      expect(emailsTo(grace.admin)[0].subject).toBe('Tu licencia de Nova Criterio venció');
       expect(emailsTo(readOnly.admin)).toHaveLength(1);
-      expect(emailsTo(readOnly.admin)[0].subject).toBe('Tu cuenta de AuditMind está en solo lectura');
+      expect(emailsTo(readOnly.admin)[0].subject).toBe('Tu cuenta de Nova Criterio está en solo lectura');
       expect(emailsTo(suspended.admin)).toHaveLength(0);
       expect((await notificationsOf(readOnly.id))[0].type).toBe('SUBSCRIPTION_READ_ONLY');
     });

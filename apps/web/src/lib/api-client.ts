@@ -131,7 +131,7 @@ export const apiClient = {
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   },
   /** Igual que `downloadFile`, pero devuelve los headers de la respuesta —
-   *  usado por la plantilla genérica (EXC-27) para leer `X-AuditMind-Omitidas`. */
+   *  usado por la plantilla genérica (EXC-27) para leer `X-Nova Criterio-Omitidas`. */
   downloadFileWithHeaders: async (path: string, filename: string): Promise<Headers> => {
     const token = await getAuthToken();
     const res = await fetch(`${API_BASE}${path}`, {

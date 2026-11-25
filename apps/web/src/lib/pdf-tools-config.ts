@@ -127,14 +127,14 @@ export const PDF_TOOL_OPERATIONS: PdfToolOperation[] = [
   {
     id: 'sign-internal',
     label: 'Firmar (sello interno)',
-    description: 'Sello de integridad con tu certificado interno de AuditMind',
+    description: 'Sello de integridad con tu certificado interno de Nova Criterio',
     icon: Stamp,
     endpoint: '/pdf-tools/sign-internal',
     fileFieldName: 'file',
     multiFile: false,
     fields: [
-      { name: 'reason', label: 'Motivo', type: 'text', placeholder: 'Aprobación en AuditMind', advanced: true },
-      { name: 'location', label: 'Ubicación', type: 'text', placeholder: 'AuditMind', advanced: true },
+      { name: 'reason', label: 'Motivo', type: 'text', placeholder: 'Aprobación en Nova Criterio', advanced: true },
+      { name: 'location', label: 'Ubicación', type: 'text', placeholder: 'Nova Criterio', advanced: true },
       { name: 'pageNumber', label: 'Página a firmar', type: 'number', advanced: true },
     ],
   },

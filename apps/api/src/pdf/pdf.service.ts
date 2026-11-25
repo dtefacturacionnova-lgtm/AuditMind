@@ -169,7 +169,7 @@ export class PdfService implements OnModuleDestroy {
       const footerTemplate = opts.printPageNumbers
         ? `<div style="width: 100%; padding: 0 15mm; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;">
              <div style="border-top: 1px solid #E2E8F0; padding-top: 2mm; display: flex; justify-content: space-between; align-items: center; font-size: 8px; color: #94a3b8;">
-               <span>AuditMind &middot; Plataforma de Auditoría Inteligente${opts.footerNote ? ` &middot; ${escFooter(opts.footerNote)}` : ''}</span>
+               <span>Nova Criterio &middot; Plataforma de Auditoría Inteligente${opts.footerNote ? ` &middot; ${escFooter(opts.footerNote)}` : ''}</span>
                <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
              </div>
              ${opts.hideLegalNotice ? '' : `<div style="padding-top: 1mm; font-size: 6.5px; color: #b0b8c4; line-height: 1.3;">${escFooter(LEGAL_NOTICE)}</div>`}
@@ -197,7 +197,7 @@ export class PdfService implements OnModuleDestroy {
   }
 
   /**
-   * Helper que envuelve el body con el layout base AuditMind.
+   * Helper que envuelve el body con el layout base Nova Criterio.
    * Si pasas HTML completo, usa generateFromHtml directamente.
    */
   async generateBranded(opts: {
@@ -300,7 +300,7 @@ export class PdfService implements OnModuleDestroy {
 </head>
 <body>
   <header class="pdf-header">
-    <div class="brand">AuditMind · Plataforma de Auditoría Inteligente</div>
+    <div class="brand">Nova Criterio · Plataforma de Auditoría Inteligente</div>
     <div class="title">${escFooter(opts.title)}</div>
     ${opts.subtitle ? `<div class="subtitle">${escFooter(opts.subtitle)}</div>` : ''}
   </header>

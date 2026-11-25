@@ -136,7 +136,7 @@ describe('describeUsageAlert — el texto', () => {
   });
   it('espacio al 80 %: GB usados, capacidad y lo que queda; lo guardado no se borra', () => {
     const t = describeUsageAlert(d({ kind: 'STORAGE_80', percent: 85, used: 8.5 * GB, capacity: 10 * GB, remaining: 1.5 * GB }), ctx);
-    expect(t.subject).toBe('Usaste el 85 % de tu espacio en AuditMind');
+    expect(t.subject).toBe('Usaste el 85 % de tu espacio en Nova Criterio');
     expect(t.paragraphs[0]).toContain('8.5 GB de 10 GB');
     expect(t.paragraphs[0]).toContain('te quedan 1.5 GB');
     expect(t.paragraphs.join(' ')).toContain('no se borra');

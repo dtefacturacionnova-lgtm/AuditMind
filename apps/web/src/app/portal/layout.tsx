@@ -1,7 +1,7 @@
 // Página PÚBLICA para el auditado externo: nunca debe indexarse ni enviar Referer
 // (los encabezados HTTP equivalentes se fijan en next.config.js).
 export const metadata = {
-  title: 'Portal del Auditado — AuditMind',
+  title: 'Portal del Auditado — Nova Criterio',
   description: 'Portal seguro para respuesta de solicitudes de auditoría',
   robots: { index: false, follow: false, nocache: true },
   referrer: 'no-referrer' as const,
@@ -20,7 +20,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               </svg>
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-800 leading-none">AuditMind</p>
+              <p className="text-sm font-bold text-gray-800 leading-none">Nova Criterio</p>
               <p className="text-[10px] text-gray-400">Portal del Auditado</p>
             </div>
             <div className="ml-auto">
@@ -39,7 +39,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
         {/* Footer */}
         <footer className="text-center py-6 text-xs text-gray-400">
-          © {new Date().getFullYear()} AuditMind — Plataforma de auditoría inteligente
+          © {new Date().getFullYear()} Nova Criterio — Plataforma de auditoría inteligente
         </footer>
       </div>
     </>

@@ -25,7 +25,7 @@ Cuatro motores Python **completos y funcionales**, expuestos vía `POST /ai/anal
 | **Payroll** (nómina) | `payroll_analysis.py` | Empleados fantasma, outliers de sueldo (z-score, `scipy.stats`), neto mayor que bruto, cuentas bancarias compartidas entre empleados, concentración por aprobador |
 | **Anomaly** (genérico) | `anomaly_detection.py` | Isolation Forest (`sklearn`) + z-score sobre cualquier campo numérico |
 
-**Por qué están "a medias"**: los 4 requieren **detalle transaccional** (asientos individuales, facturas, registros de nómina) que AuditMind **no importa hoy** — solo tenemos totales por cuenta del Balance de Comprobación. La pantalla `/dashboard/analytics` (`apps/web/src/app/dashboard/analytics/page.tsx`) existe y tiene selector + botón "Ejecutar análisis", pero envía **datos de muestra hardcodeados** (`SAMPLE_DATA`) — el propio banner de la pantalla dice *"En producción, los datos provendrán de los conectores SAP/REST configurados"*. Es un sandbox de demostración, no una herramienta de trabajo real todavía.
+**Por qué están "a medias"**: los 4 requieren **detalle transaccional** (asientos individuales, facturas, registros de nómina) que Nova Criterio **no importa hoy** — solo tenemos totales por cuenta del Balance de Comprobación. La pantalla `/dashboard/analytics` (`apps/web/src/app/dashboard/analytics/page.tsx`) existe y tiene selector + botón "Ejecutar análisis", pero envía **datos de muestra hardcodeados** (`SAMPLE_DATA`) — el propio banner de la pantalla dice *"En producción, los datos provendrán de los conectores SAP/REST configurados"*. Es un sandbox de demostración, no una herramienta de trabajo real todavía.
 
 ### Hallazgos adicionales (a corregir cuando se retome, no urgente)
 

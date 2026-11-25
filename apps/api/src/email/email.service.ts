@@ -5,7 +5,7 @@
  * - Si RESEND_API_KEY no está configurada → modo "no-op" (loguea pero no envía).
  *   Permite que dev funcione sin credenciales y prod sin downtime si Resend cae.
  * - Cualquier error de envío se captura y se loguea — NO interrumpe el flujo del caller.
- * - Templates HTML con estilo consistente AuditMind.
+ * - Templates HTML con estilo consistente Nova Criterio.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -58,7 +58,7 @@ export class EmailService {
 
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
-    this.defaultFrom = this.config.get<string>('EMAIL_FROM', 'AuditMind <onboarding@resend.dev>');
+    this.defaultFrom = this.config.get<string>('EMAIL_FROM', 'Nova Criterio <onboarding@resend.dev>');
     // WEB_URL no existe en el env de producción (solo APP_URL, que sí define ecosystem.config.cjs):
     // sin este fallback los links de los correos (CTA) saldrían como http://localhost:3000/...
     this.appUrl      = (this.config.get<string>('WEB_URL')
@@ -113,7 +113,7 @@ export class EmailService {
 
   // ─── Layout HTML ─────────────────────────────────────────────────────────
 
-  /** Default email layout — AuditMind branded */
+  /** Default email layout — Nova Criterio branded */
   renderEmailLayout(opts: {
     heading?:    string;
     paragraphs?: string[];
@@ -123,7 +123,7 @@ export class EmailService {
   }): string {
     const heading = escHtml(opts.heading ?? '');
     const paragraphs = opts.paragraphs ?? [];
-    const footer = escHtml(opts.footer ?? 'AuditMind · Plataforma de Auditoría Inteligente');
+    const footer = escHtml(opts.footer ?? 'Nova Criterio · Plataforma de Auditoría Inteligente');
 
     const ctaOk = !!opts.ctaLabel && !!opts.ctaUrl && /^https?:\/\//i.test(opts.ctaUrl);
     const ctaBlock = ctaOk ? `
@@ -161,7 +161,7 @@ export class EmailService {
               <table cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
                   <td style="color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: -0.3px;">
-                    AuditMind
+                    Nova Criterio
                   </td>
                   <td align="right" style="color: rgba(255,255,255,0.65); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px;">
                     Notificación
@@ -382,7 +382,7 @@ export class EmailService {
   sendSignatureOtp(to: string, p: { orgName: string; code: string }) {
     return this.send({
       to,
-      subject: 'Tu código de verificación de AuditMind',
+      subject: 'Tu código de verificación de Nova Criterio',
       body: {
         heading: 'Tu código de verificación',
         paragraphs: [
@@ -428,7 +428,7 @@ export class EmailService {
           ...(!signed && p.reason ? [`<strong>Motivo:</strong> ${escHtml(p.reason)}`] : []),
           ...(signed ? ['El documento se está sellando; en unos minutos tendrás la copia firmada disponible.'] : []),
         ],
-        ctaLabel: 'Ver en AuditMind',
+        ctaLabel: 'Ver en Nova Criterio',
         ctaUrl: this.panelUrl(p.panelPath),
       },
     });
@@ -443,9 +443,9 @@ export class EmailService {
         heading: 'No se pudo sellar el documento firmado',
         paragraphs: [
           `La firma de «${escHtml(p.title)}» quedó registrada, pero no se pudo generar el PDF sellado después de varios intentos.`,
-          'Abre el documento en AuditMind y usa «Reintentar sellado». Si el problema persiste, avisa al administrador.',
+          'Abre el documento en Nova Criterio y usa «Reintentar sellado». Si el problema persiste, avisa al administrador.',
         ],
-        ctaLabel: 'Abrir en AuditMind',
+        ctaLabel: 'Abrir en Nova Criterio',
         ctaUrl: this.panelUrl(p.panelPath),
       },
     });
@@ -460,9 +460,9 @@ export class EmailService {
         heading: 'El documento no pudo verificarse',
         paragraphs: [
           `Alguien intentó firmar «${escHtml(p.title)}», pero la huella del PDF guardado no coincide con la que se calculó al enviarlo, así que la firma no se aceptó.`,
-          'Revisa el documento y la bitácora en AuditMind; revoca la solicitud y envía una nueva.',
+          'Revisa el documento y la bitácora en Nova Criterio; revoca la solicitud y envía una nueva.',
         ],
-        ctaLabel: 'Abrir en AuditMind',
+        ctaLabel: 'Abrir en Nova Criterio',
         ctaUrl: this.panelUrl(p.panelPath),
       },
     });
@@ -479,7 +479,7 @@ export class EmailService {
           `El enlace que enviaste a ${escHtml(p.signerEmail)} para firmar «${escHtml(p.title)}» recibió demasiados códigos de verificación incorrectos y quedó bloqueado.`,
           'Puede ser un error de la persona o un intento de adivinar el código. Confirma con ella antes de usar «Reenviar», que genera un enlace nuevo.',
         ],
-        ctaLabel: 'Abrir en AuditMind',
+        ctaLabel: 'Abrir en Nova Criterio',
         ctaUrl: this.panelUrl(p.panelPath),
       },
     });
@@ -492,7 +492,7 @@ export class EmailService {
   sendPbcPortalOtp(to: string, p: { orgName: string; code: string }) {
     return this.send({
       to,
-      subject: 'Tu código para entrar al portal de solicitudes de AuditMind',
+      subject: 'Tu código para entrar al portal de solicitudes de Nova Criterio',
       body: {
         heading: 'Tu código de verificación',
         paragraphs: [
@@ -515,7 +515,7 @@ export class EmailService {
           `El enlace que enviaste a ${escHtml(p.requestedToEmail)} para responder «${escHtml(p.title)}» recibió demasiados códigos de verificación incorrectos y quedó inservible.`,
           'Puede ser un error de la persona o un intento de adivinar el código. Confirma con ella antes de usar «Regenerar enlace», que crea un enlace nuevo.',
         ],
-        ctaLabel: 'Abrir en AuditMind',
+        ctaLabel: 'Abrir en Nova Criterio',
         ctaUrl: this.panelUrl(p.panelPath),
       },
     });
@@ -525,11 +525,11 @@ export class EmailService {
   async sendTestEmail(to: string) {
     return this.send({
       to,
-      subject: '✅ Test de email AuditMind',
+      subject: '✅ Test de email Nova Criterio',
       body: {
         heading: 'Tu configuración Resend funciona',
         paragraphs: [
-          'Este es un email de prueba enviado desde AuditMind.',
+          'Este es un email de prueba enviado desde Nova Criterio.',
           `Si lo recibiste, tu integración con Resend está correctamente configurada.`,
         ],
       },

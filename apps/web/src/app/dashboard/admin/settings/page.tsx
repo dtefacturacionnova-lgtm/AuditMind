@@ -391,7 +391,7 @@ export default function SettingsPage() {
           {/* ── 1. Perfil personal ───────────────────────────────────────────── */}
           <SectionCard
             title="Perfil personal"
-            description="Tu información de cuenta en AuditMind"
+            description="Tu información de cuenta en Nova Criterio"
           >
             <div className="space-y-5">
               {/* Avatar + name + email row */}
@@ -662,7 +662,7 @@ export default function SettingsPage() {
                       Cerrar sesión
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      Salir de AuditMind en este dispositivo
+                      Salir de Nova Criterio en este dispositivo
                     </p>
                   </div>
                 </div>

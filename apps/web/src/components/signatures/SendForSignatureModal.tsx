@@ -111,7 +111,7 @@ function ModalBody({
         <OneTimeLink url={result.signUrl} emailSent={result.emailSent} emailSkipped={result.emailSkipped} signerEmail={result.request.signerEmail}
           onCopied={() => setCopied(true)} onOpenInPerson={() => openSignUrl(result.signUrl)} />
         <p className="mt-3 text-[11px] text-gray-500">
-          El documento quedó congelado: el firmante verá exactamente el PDF que se generó ahora. Si cambias el documento en AuditMind, esta solicitud se revoca y habrá que enviarla de nuevo.
+          El documento quedó congelado: el firmante verá exactamente el PDF que se generó ahora. Si cambias el documento en Nova Criterio, esta solicitud se revoca y habrá que enviarla de nuevo.
         </p>
         {confirmingClose && (
           <div className="mt-4"><Note tone="warn">Todavía no copiaste el enlace y el correo no salió. Si cierras, tendrás que usar «Reenviar» para obtener uno nuevo.</Note></div>

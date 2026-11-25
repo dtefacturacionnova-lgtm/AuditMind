@@ -110,7 +110,7 @@ export default function LoginPage() {
                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
             </div>
-            <span className="text-2xl font-bold text-[#0F2D4A]">AuditMind</span>
+            <span className="text-2xl font-bold text-[#0F2D4A]">Nova Criterio</span>
           </div>
           <p className="text-[#64748B] text-sm">Plataforma de Auditoría Inteligente</p>
         </div>
@@ -258,7 +258,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-[#94A3B8] mt-6">
-          AuditMind © 2026 · Todos los derechos reservados
+          Nova Criterio © 2026 · Todos los derechos reservados
         </p>
       </div>
     </div>

@@ -892,7 +892,7 @@ export class WorkingPapersController {
     }
     const { buffer, resultado, omitidas } = await this.excelEngine.generarGenerica(id, sectionKeys, user);
     if (omitidas.length > 0) {
-      res.setHeader('X-AuditMind-Omitidas', encodeURIComponent(JSON.stringify(omitidas)));
+      res.setHeader('X-Nova Criterio-Omitidas', encodeURIComponent(JSON.stringify(omitidas)));
     }
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${resultado.nombreArchivo}"`);

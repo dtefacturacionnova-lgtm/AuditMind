@@ -71,7 +71,7 @@ export default function CollectionsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-gray-800 flex items-center gap-2"><Wallet className="w-5 h-5" /> Cobranza</h1>
-          <p className="text-sm text-gray-500">Facturas ya emitidas, cobros recibidos y retenciones. Aquí solo se registra; la facturación se emite fuera de AuditMind.</p>
+          <p className="text-sm text-gray-500">Facturas ya emitidas, cobros recibidos y retenciones. Aquí solo se registra; la facturación se emite fuera de Nova Criterio.</p>
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={() => setNewInvoice(true)} className={btnPrimary}><Receipt className="inline w-4 h-4 mr-1" />Registrar factura</button>

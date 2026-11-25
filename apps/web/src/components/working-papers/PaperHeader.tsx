@@ -120,7 +120,7 @@ export function PaperHeader({ wp }: { wp: WorkingPaper }) {
             </div>
           )}
           <p className="text-[8px] font-bold text-center text-[#1A2B4A] uppercase leading-tight tracking-wide">
-            {org?.name ?? 'AuditMind'}
+            {org?.name ?? 'Nova Criterio'}
           </p>
         </div>
 

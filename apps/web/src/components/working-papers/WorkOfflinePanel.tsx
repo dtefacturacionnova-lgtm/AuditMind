@@ -62,7 +62,7 @@ export function WorkOfflinePanel({ paperId, sections, readonly }: Props) {
         `/working-papers/${paperId}/excel-generic?sections=${encodeURIComponent(query)}`,
         `AuditMind_Generico_${paperId.slice(0, 8)}.xlsx`,
       );
-      const raw = headers.get('X-AuditMind-Omitidas');
+      const raw = headers.get('X-Nova Criterio-Omitidas');
       if (raw) {
         try { setOmitidas(JSON.parse(decodeURIComponent(raw))); } catch { /* ignore */ }
       }

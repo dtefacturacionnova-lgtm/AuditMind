@@ -39,7 +39,7 @@ class ImportRequest(BaseModel):
 # ─── Helpers de normalización ──────────────────────────────────────────────────
 
 def _normalize_gl_record(raw: dict, field_mapping: dict) -> dict:
-    """Normaliza un registro de Libro Mayor al formato AuditMind."""
+    """Normaliza un registro de Libro Mayor al formato Nova Criterio."""
     mapped = {field_mapping.get(k, k): v for k, v in raw.items()}
     return {
         "date":        mapped.get("date") or mapped.get("posting_date") or mapped.get("fecha"),

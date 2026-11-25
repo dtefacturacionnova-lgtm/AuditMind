@@ -1007,7 +1007,7 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
                 justifyContent: 'space-between',
               }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: C.navy }}>AuditMind — Reporte Completo de Auditoría</p>
+                  <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: C.navy }}>Nova Criterio — Reporte Completo de Auditoría</p>
                   <p style={{ margin: 0, fontSize: 9, color: '#94a3b8' }}>
                     {audit!.title} · {audit!.code} · {nowFull()}
                   </p>

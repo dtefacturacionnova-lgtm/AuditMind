@@ -1,4 +1,4 @@
-"""AuditMind AI Service — FastAPI + Claude API + Gemini Embeddings + pgvector RAG"""
+"""Nova Criterio AI Service — FastAPI + Claude API + Gemini Embeddings + pgvector RAG"""
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AuditMind AI Service",
+    title="Nova Criterio AI Service",
     version="2.0.0",
     description="Motor de Inteligencia Artificial — 14 Agentes, 9 RAG Bases, CAATs, Claude API",
     lifespan=lifespan,

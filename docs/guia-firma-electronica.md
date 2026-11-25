@@ -14,7 +14,7 @@ La especificación técnica completa está en [firma-externa-por-enlace.md](firm
 
 ### 1. Qué es y qué deja guardado
 
-Una persona que no tiene cuenta en AuditMind recibe un correo, confirma su identidad con un código que llega a ese mismo correo, lee el documento y lo firma o decide no firmarlo.
+Una persona que no tiene cuenta en Nova Criterio recibe un correo, confirma su identidad con un código que llega a ese mismo correo, lee el documento y lo firma o decide no firmarlo.
 
 Al firmar queda guardado:
 
@@ -26,7 +26,7 @@ Al firmar queda guardado:
 - su respuesta y, en confirmaciones, los archivos de soporte que adjuntó;
 - una bitácora encadenada, donde cualquier cambio posterior se nota.
 
-AuditMind produce un PDF final con una hoja de evidencia, sellado con el certificado de la organización y con sello de tiempo de un tercero (RFC 3161).
+Nova Criterio produce un PDF final con una hoja de evidencia, sellado con el certificado de la organización y con sello de tiempo de un tercero (RFC 3161).
 
 **Es una firma electrónica simple con evidencia. No es una firma certificada** (la que emite un Prestador de Servicios de Certificación acreditado). Si un caso exige firma certificada, esta función no la reemplaza.
 
@@ -70,8 +70,8 @@ Tiene tres posibles títulos:
 
 Dos avisos que conviene entender:
 
-- **«No se volverá a mostrar»**. El enlace de firma aparece completo una sola vez, en esa ventana. AuditMind no lo guarda de forma que el equipo pueda volver a verlo. Si lo pierdes, usa **Reenviar**, que genera uno nuevo. Si cierras sin copiarlo y el correo no salió, la ventana te pide confirmar.
-- **«El documento quedó congelado»**. El firmante verá exactamente el PDF que se generó al enviar. Si después cambias el documento en AuditMind, la solicitud se revoca y hay que enviarla otra vez. Así nunca se firma algo distinto de lo que se leyó.
+- **«No se volverá a mostrar»**. El enlace de firma aparece completo una sola vez, en esa ventana. Nova Criterio no lo guarda de forma que el equipo pueda volver a verlo. Si lo pierdes, usa **Reenviar**, que genera uno nuevo. Si cierras sin copiarlo y el correo no salió, la ventana te pide confirmar.
+- **«El documento quedó congelado»**. El firmante verá exactamente el PDF que se generó al enviar. Si después cambias el documento en Nova Criterio, la solicitud se revoca y hay que enviarla otra vez. Así nunca se firma algo distinto de lo que se leyó.
 
 ### 4. Qué recibe el firmante
 
@@ -130,7 +130,7 @@ La persona entrevistada es quien firma, así que su nombre y cargo se piden una 
 
 - No sale correo con el enlace ni recordatorios.
 - La ventana final dice **Lista para firma presencial** y muestra el enlace una sola vez.
-- Lo mejor es que la persona abra el enlace **en su propio teléfono** (envíaselo por el medio que tengan a mano) o en una ventana privada. El enlace no se abre solo en el navegador de AuditMind para que la persona no vea tu sesión.
+- Lo mejor es que la persona abra el enlace **en su propio teléfono** (envíaselo por el medio que tengan a mano) o en una ventana privada. El enlace no se abre solo en el navegador de Nova Criterio para que la persona no vea tu sesión.
 - **El código de verificación sí llega al correo de la persona entrevistada.** Así se confirma quién es. Lo lee en su teléfono.
 - Para una solicitud ya enviada por correo, el botón **Firma presencial** de la solicitud renueva el enlace sin enviar nada.
 
@@ -231,7 +231,7 @@ Esta parte se puede copiar y enviar tal cual a quien tenga dudas.
 
 ### Le enviaron un documento para firmar
 
-La organización que se lo envió usa AuditMind para recoger firmas electrónicas. No necesita crear una cuenta ni instalar nada. Le toma unos minutos y puede hacerlo desde el teléfono.
+La organización que se lo envió usa Nova Criterio para recoger firmas electrónicas. No necesita crear una cuenta ni instalar nada. Le toma unos minutos y puede hacerlo desde el teléfono.
 
 **Si no esperaba este documento, puede ignorar el correo.** Nadie puede ver el documento ni firmarlo sin el código que llega a su correo.
 

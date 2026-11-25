@@ -127,7 +127,7 @@ export class AiController {
   ) {
     const html = this.pdfService.renderBrandedLayout({
       title: `Análisis CAATs — ${body.label}`,
-      subtitle: 'Computer-Assisted Audit Techniques — generado con AuditMind Intelligence Platform',
+      subtitle: 'Computer-Assisted Audit Techniques — generado con Nova Criterio Intelligence Platform',
       body: renderCaatsPdfBody(type, body.result, body.label),
     });
     const pdf = await this.pdfService.generateFromHtml(html, { printPageNumbers: true, footerNote: `Analytics CAATs — ${body.label}` });

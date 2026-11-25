@@ -50,7 +50,7 @@ export class CreatePbcRequestDto {
  * los vería después como enlaces firmados a archivos del bucket privado (revisión de seguridad F5b, 2026-10-19).
  */
 const NO_STORAGE_URL = /^(?![\s\S]*\/storage\/v1\/object\/)/;
-const NO_STORAGE_URL_MSG = 'Los adjuntos no pueden ser direcciones del almacenamiento interno de AuditMind.';
+const NO_STORAGE_URL_MSG = 'Los adjuntos no pueden ser direcciones del almacenamiento interno de Nova Criterio.';
 
 // Lo que escribe el auditado en el portal PÚBLICO: se acota el tamaño de todo (sin login, cualquiera con el enlace puede enviar).
 export class AddPortalMessageDto {

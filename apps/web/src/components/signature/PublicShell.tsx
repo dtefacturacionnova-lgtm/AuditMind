@@ -11,7 +11,7 @@ export function PublicShell({ subtitle, children }: { subtitle: string; children
             <ShieldCheck className="h-4 w-4 text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold leading-none text-gray-800">AuditMind</p>
+            <p className="text-sm font-bold leading-none text-gray-800">Nova Criterio</p>
             <p className="text-[10px] text-gray-500">{subtitle}</p>
           </div>
           <span className="ml-auto flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
@@ -24,7 +24,7 @@ export function PublicShell({ subtitle, children }: { subtitle: string; children
 
       <footer className="px-4 py-6 text-center text-xs text-gray-500">
         <p>Firma electrónica simple · Cada firma queda registrada con fecha, hora y huella del documento.</p>
-        <p className="mt-1">© {new Date().getFullYear()} AuditMind</p>
+        <p className="mt-1">© {new Date().getFullYear()} Nova Criterio</p>
       </footer>
     </div>
   );

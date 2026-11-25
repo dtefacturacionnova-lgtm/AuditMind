@@ -159,7 +159,7 @@ export class SignatureSealingService {
     const signed = await this.pdfTools.signPdf(
       merged, 'documento-firmado.pdf',
       { privateKeyPem: Buffer.from(seal.privateKeyPem), certPem: Buffer.from(seal.certPem) },
-      { name: `${org.name} · Sello de evidencia`, reason: 'Constancia de firma electrónica simple', location: 'AuditMind', pageNumber: totalPages, showSignature: true },
+      { name: `${org.name} · Sello de evidencia`, reason: 'Constancia de firma electrónica simple', location: 'Nova Criterio', pageNumber: totalPages, showSignature: true },
     );
     const { pdf: finalPdf, tsa } = await this.timestamp(signed);
 

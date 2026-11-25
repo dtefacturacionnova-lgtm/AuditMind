@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════
--- AuditMind — pgvector Setup para RAG
+-- Nova Criterio — pgvector Setup para RAG
 -- Ejecutar en Supabase SQL Editor (idempotente — se puede re-ejecutar)
 -- Gemini gemini-embedding-001 → 3072 dimensiones
 --

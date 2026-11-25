@@ -1,17 +1,17 @@
 # Diseño: calendario de cobros, facturas y cobros de honorarios (Fase 3)
 
-Estado: **diseño v4 para arrancar** (2026-10-23). Ya con la revisión independiente (sección 10) y con las respuestas del despacho (sección 9). No hay código. Parte de lo que pidió el despacho: facturar dentro de AuditMind **solo registrando** (sin facturación en línea ni con Hacienda), programar los pagos a partir del contrato y registrar cada cobro asociándolo, total o parcialmente, a una o varias facturas, como en el módulo de cuentas por cobrar de Nexus Finance; ahora **incluye** notas de crédito, castigo de incobrables y gestión de cobro. Complementa `docs/horas-cierre-y-honorarios-propuesta.md` (sección 3).
+Estado: **diseño v4 para arrancar** (2026-10-23). Ya con la revisión independiente (sección 10) y con las respuestas del despacho (sección 9). No hay código. Parte de lo que pidió el despacho: facturar dentro de Nova Criterio **solo registrando** (sin facturación en línea ni con Hacienda), programar los pagos a partir del contrato y registrar cada cobro asociándolo, total o parcialmente, a una o varias facturas, como en el módulo de cuentas por cobrar de Nexus Finance; ahora **incluye** notas de crédito, castigo de incobrables y gestión de cobro. Complementa `docs/horas-cierre-y-honorarios-propuesta.md` (sección 3).
 
 ## 0. ¿Se puede adaptar lo de Nexus sin programar de cero?
 
-**En parte, y lo más caro de acertar sí se hereda.** Nexus es Next.js con funciones de Postgres (Supabase); AuditMind es NestJS con Prisma. No se puede copiar y pegar. Lo que sí se hereda:
+**En parte, y lo más caro de acertar sí se hereda.** Nexus es Next.js con funciones de Postgres (Supabase); Nova Criterio es NestJS con Prisma. No se puede copiar y pegar. Lo que sí se hereda:
 
 | Se hereda | Cómo |
 |---|---|
 | Las **reglas** de aplicar un cobro a facturas, anular y quitar aplicaciones (`ar_apply_payment`, `ar_void_payment`), las de la nota de crédito (`ar_post_credit_note`) y las notas de gestión de cobro (`ar_collection_notes`) | Se reescriben en servicios de NestJS con transacción; los algoritmos y casos de borde ya están definidos |
-| `ar-payment-allocation.ts` (154 líneas de TypeScript puro: reparto, validación de la lista, pre-chequeo) | Se copia **con tres cambios obligatorios**: acepta los ids `cuid` de AuditMind (Nexus exige UUID y toda aplicación daría 400), los estados cobrables son OPEN/PARTIAL, y el reparto ordena por vencimiento |
+| `ar-payment-allocation.ts` (154 líneas de TypeScript puro: reparto, validación de la lista, pre-chequeo) | Se copia **con tres cambios obligatorios**: acepta los ids `cuid` de Nova Criterio (Nexus exige UUID y toda aplicación daría 400), los estados cobrables son OPEN/PARTIAL, y el reparto ordena por vencimiento |
 | Las pruebas puras de esa librería (~230 líneas) | Se portan a Jest |
-| Pantallas «Registrar cobro» (elegir facturas pendientes con monto «Abonar»), detalle del cobro con anulación, antigüedad por cliente | Se adaptan al estilo de AuditMind |
+| Pantallas «Registrar cobro» (elegir facturas pendientes con monto «Abonar»), detalle del cobro con anulación, antigüedad por cliente | Se adaptan al estilo de Nova Criterio |
 | Los **defectos** de Nexus identificados | No se repiten (sección 7) |
 
 **No se trae:** facturación electrónica con Hacienda, contabilidad, inventario, comisiones, mandantes, plantillas recurrentes, recibos, anticipos como entidad.
@@ -218,7 +218,7 @@ La base en memoria del cierre de horas serializa las transacciones, devuelve vac
 ## 9. Decisiones del despacho (2026-10-23) y lo que sigue abierto
 
 **Decididas:**
-- Facturación dentro de AuditMind solo como **registro**; todo se emite como **DTE** (obligatorio para todos desde diciembre de 2026, según indica el despacho): el número de factura es el número de control del DTE. El despacho confirmó **03 (comprobante de crédito fiscal) y 01 (factura)**: son los únicos que el sistema acepta hoy (exportación, sujeto excluido u otros se agregan cuando el contador defina su tratamiento). El número de control se guarda en mayúsculas y sin espacios para que el mismo DTE no entre dos veces.
+- Facturación dentro de Nova Criterio solo como **registro**; todo se emite como **DTE** (obligatorio para todos desde diciembre de 2026, según indica el despacho): el número de factura es el número de control del DTE. El despacho confirmó **03 (comprobante de crédito fiscal) y 01 (factura)**: son los únicos que el sistema acepta hoy (exportación, sujeto excluido u otros se agregan cuando el contador defina su tratamiento). El número de control se guarda en mayúsculas y sin espacios para que el mismo DTE no entre dos veces.
 - Quién hace qué: como en la sección 5.
 - **Consultorías llevan encargo, horas y costos como las auditorías** (menos rigurosas): toda factura cuelga de un encargo; tipo de encargo en 3.0. **No tienen plantilla de papeles** (depende del tipo de consultoría) pero sí las **tres etapas básicas: Planificación, Ejecución e Informes y cierre**.
 - Avance del devengado: **horas facturables ÷ presupuesto** (nulo si no hay presupuesto completo).
@@ -235,7 +235,7 @@ La base en memoria del cierre de horas serializa las transacciones, devuelve vac
 
 ## 10. Revisión independiente (2026-10-23)
 
-Un segundo modelo revisó la versión 1 contra el código de AuditMind y de Nexus. Encontró 13 fallas de diseño reales y varias afirmaciones mías incorrectas; **todas están corregidas** (separación por claves compuestas, orden único de candados, honorario solo para la dirección, todo en neto, retención corregible, devengado nulo sin presupuesto, movimientos con fecha, únicos parciales, ids `cuid`, pruebas con Postgres real). Esta versión 3 añade partes nuevas (consultorías, notas de crédito, castigo, gestión de cobro) que **se revisarán con el código** de cada fase, con Opus.
+Un segundo modelo revisó la versión 1 contra el código de Nova Criterio y de Nexus. Encontró 13 fallas de diseño reales y varias afirmaciones mías incorrectas; **todas están corregidas** (separación por claves compuestas, orden único de candados, honorario solo para la dirección, todo en neto, retención corregible, devengado nulo sin presupuesto, movimientos con fecha, únicos parciales, ids `cuid`, pruebas con Postgres real). Esta versión 3 añade partes nuevas (consultorías, notas de crédito, castigo, gestión de cobro) que **se revisarán con el código** de cada fase, con Opus.
 
 ## 11. Fases, tamaño y modelo recomendado
 

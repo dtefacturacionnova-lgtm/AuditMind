@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 // futuro fusionar/marca de agua/redacción) ──────────────────────────────────
 // Servicio Docker separado, aislado a 127.0.0.1 (ver infrastructure/stirling-
 // pdf/). No trae header tipo x-internal-key propio (no es un servicio interno
-// de AuditMind como ai-service) — el aislamiento de red es la única barrera,
+// de Nova Criterio como ai-service) — el aislamiento de red es la única barrera,
 // ver el plan de OCR (2026-08-24) para el razonamiento completo.
 @Injectable()
 export class PdfToolsService {
@@ -84,7 +84,7 @@ export class PdfToolsService {
     formData.append('pageNumber', String(opts.pageNumber ?? 1));
     formData.append('name', opts.name);
     formData.append('reason', opts.reason ?? 'Aprobación de papel de trabajo');
-    formData.append('location', opts.location ?? 'AuditMind');
+    formData.append('location', opts.location ?? 'Nova Criterio');
     return this.callStirling('/api/v1/security/cert-sign', formData);
   }
 

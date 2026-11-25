@@ -168,7 +168,7 @@ def _build_claims_extraction_system_prompt() -> str:
 
 def _build_investigation_system_prompt() -> str:
     return (
-        "Eres el Agente de Investigación Forense de AuditMind — analizas un Grafo de "
+        "Eres el Agente de Investigación Forense de Nova Criterio — analizas un Grafo de "
         "Evidencia ya construido (entidades y relaciones extraídas de evidencia de campo, "
         "cada una con su cita textual de respaldo) contra el objetivo de análisis que te "
         "da el auditor. Preparas un informe para que un auditor humano lo revise — nunca "

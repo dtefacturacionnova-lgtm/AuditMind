@@ -591,7 +591,7 @@ function ReportContent({ id }: { id: string }) {
 
         {/* ── Footer ───────────────────────────────────────────────────────── */}
         <div className="mt-10 pt-6 border-t border-gray-200 text-center text-xs text-gray-400 print:mt-6">
-          <p>{audit.organization.name} · Unidad de Auditoría Interna · AuditMind</p>
+          <p>{audit.organization.name} · Unidad de Auditoría Interna · Nova Criterio</p>
           <p>Informe generado: {new Date(report.generatedAt).toLocaleString('es-CL')}</p>
           {isPreliminary
             ? <p className="mt-1 text-amber-500 font-semibold">BORRADOR PRELIMINAR — CONFIDENCIAL — NO DISTRIBUIR</p>

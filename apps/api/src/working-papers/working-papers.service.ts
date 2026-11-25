@@ -1141,7 +1141,7 @@ export class WorkingPapersService {
   }
 
   // ─── Firma digital del PDF del papel al momento del sign-off ─────────────────
-  // Sello de integridad interno (certificado autofirmado por AuditMind, ver
+  // Sello de integridad interno (certificado autofirmado por Nova Criterio, ver
   // SigningIdentityService) — NO bloquea el sign-off si Stirling-PDF no está
   // disponible: la metadata de aprobación (que ya existía antes de esto) es lo
   // esencial, la firma visual es un enriquecimiento sobre eso.
@@ -1163,7 +1163,7 @@ export class WorkingPapersService {
           reason:   level === 'prepare' ? 'Preparación de papel de trabajo'
                   : level === 'review'  ? 'Revisión de papel de trabajo'
                   :                       'Aprobación final de papel de trabajo',
-          location: 'AuditMind',
+          location: 'Nova Criterio',
           showSignature: true,
           showLogo: false,
         },

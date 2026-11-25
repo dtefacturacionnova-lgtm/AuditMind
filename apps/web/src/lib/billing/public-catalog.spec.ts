@@ -258,9 +258,9 @@ describe('contacto — enlaces seguros', () => {
     expect(msg.subject).toBe('Quiero la prueba de 14 días del plan Empresa Despacho');
     expect(msg.body).toContain('plan Empresa Despacho (anual)');
     expect(contactMessage('TRIAL', plan({ trialDays: 0 }), null).subject).toBe('Quiero la prueba del plan Empresa Despacho');
-    expect(contactMessage('DEMO').subject).toBe('Quiero una demo de AuditMind');
-    expect(contactMessage('CORPORATE').subject).toBe('Plan institucional de AuditMind');
-    expect(contactMessage('TRIAL', null).subject).toBe('Quiero una demo de AuditMind'); // sin plan cae en la demo
+    expect(contactMessage('DEMO').subject).toBe('Quiero una demo de Nova Criterio');
+    expect(contactMessage('CORPORATE').subject).toBe('Plan institucional de Nova Criterio');
+    expect(contactMessage('TRIAL', null).subject).toBe('Quiero una demo de Nova Criterio'); // sin plan cae en la demo
   });
   it('con correo: mailto con asunto y cuerpo codificados', () => {
     const href = contactHref({ email: 'ventas@auditmind.com', whatsapp: '50370000000' }, msg)!;

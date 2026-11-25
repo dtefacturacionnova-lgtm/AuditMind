@@ -1,6 +1,6 @@
 # Visitas en la Auditoría Financiera Externa — investigación y propuesta
 
-> Estado: **PROPUESTA, nada construido.** Fecha: 2026-11-25. Pendiente de decisiones del usuario (ver §7).
+> Estado: **DISEÑO CERRADO para F1+F2 (§8), nada construido.** Fecha: 2026-11-25. Decisiones del usuario registradas en §7.
 > Alcance: plantilla «Auditoría Financiera Externa v1.0» (papeles B-00 a B-09) y todo lo que toca saldos por visita.
 
 ---
@@ -123,16 +123,77 @@ Cada fase se puede desplegar sola y deja la app usable; las cargas existentes no
 
 ---
 
-## 7. Decisiones que necesito del usuario
-1. **¿Cuántas visitas son típicas en sus encargos?** (¿planificación + interina + final, o solo interina + final? ¿hay visitas por trimestre?) Determina si `kind` basta o hace falta un número de visita libre.
-2. **¿Qué se hace hoy con los saldos de la interina en un encargo real?** ¿Se prueban cuentas sustantivamente (inventario, caja, confirmaciones) o es sobre todo control interno? Cambia el peso del puente (F2).
-3. **Seguimiento:** ¿el seguimiento de observaciones lo quieren **dentro del encargo** (de la interina a la final del mismo año) y **entre años** (de un año al siguiente), o solo lo primero para empezar?
-4. **Mapeo de cuentas:** ¿el cliente cambia su catálogo entre visitas con frecuencia? Si sí, hay que prever un «mapa de equivalencias» de cuentas.
-5. **Alcance de la primera entrega:** ¿F1 + F2 (saldos y puente) primero, o F3 (seguimiento) primero?
+## 7. Decisiones del usuario (2026-11-25)
+
+| # | Pregunta | Respuesta | Efecto en el diseño |
+|---|---|---|---|
+| 1 | ¿Cuántas visitas? | **Siempre 3: planificación + interina + final** | `kind` fijo con 3 valores, una visita de cada tipo por encargo (único `auditId + kind`). No hace falta número libre ni «visitas por trimestre». |
+| 2 | ¿Interina sustantiva o de controles? | **Ambas, depende del encargo** | El puente no puede ser obligatorio: se calcula para todas las cuentas, y se usa sobre las que tengan pruebas sustantivas en la interina (pasos `INTERIM`). |
+| 3 | ¿Seguimiento de observaciones? | **Solo dentro del mismo año** | `FindingVisitReview` queda acotado al encargo. El seguimiento entre años (`previousFindingId`) queda como está. |
+| 4 | ¿Cambian el catálogo de cuentas? | **No** | Se **elimina** el mapa de equivalencias de cuentas. Las cuentas se emparejan por código. Siguen marcándose cuentas nuevas/desaparecidas (aparecen por la operación normal, no por cambio de catálogo). |
+| 5 | ¿Por dónde empezar? | **Saldos y puente — sin perder los análisis actuales** | F1 + F2 primero. Restricción dura: B-00 y todo lo que sale de él (S2–S14) debe seguir funcionando igual (ver §8.3). |
 
 ---
 
-## 8. Fuentes
+## 8. Diseño cerrado de F1 + F2 (saldos por visita y puente)
+
+### 8.1 Qué se construye
+1. **Visitas del encargo** (siempre 3: planificación, interina, final) con fecha de corte y estado.
+2. **Un balance por visita**, cargado con el mismo importador de hoy.
+3. **Comparación entre visitas** (cuentas nuevas, desaparecidas, en cero, variación).
+4. **Puente interina → final** por cuenta, con alertas y sugerencia de pasos `ROLLFORWARD`.
+5. **Base de análisis**: qué visita alimenta el `saldo_actual` de B-00 (por defecto la final; si aún no hay, la última cargada).
+
+### 8.2 Datos
+- Tabla nueva **`audit_visits`**: `id`, `auditId` (FK cascade), `organizationId`, `kind` (`PLANNING|INTERIM|FINAL`), `cutoffDate` (date), `status` (`PLANNED|IN_PROGRESS|CLOSED`), `isAnalysisBase` (boolean), `notes`, `closedAt/closedById`, `createdAt/updatedAt`. Único `(auditId, kind)`. Un solo `isAnalysisBase = true` por encargo (índice único parcial).
+- Tabla **`trial_balances`** (existe): + `visitId` (FK nullable, `ON DELETE SET NULL`) y `asOfDate` (date nullable). Todo lo cargado hasta hoy queda con `visitId` nulo y se comporta igual.
+- **Sin tabla de filas:** las cuentas siguen en el JSON `accounts`; el servicio las cruza por código. Suficiente para miles de cuentas.
+- El SQL son 1 tabla + 2 columnas, con RLS activado y `REVOKE` a anon/authenticated (regla de la auditoría de seguridad). **Se aplica a la base compartida solo con tu aprobación explícita**, con script de reversa y verificador, como las etapas de suscripciones.
+- Un balance de una visita **cerrada** no se pisa: corregirlo crea otro registro `TrialBalance` en la misma visita y el último es el vigente (el anterior queda como historia).
+
+### 8.3 Compatibilidad: cómo NO se pierde ningún análisis actual
+- B-00 conserva S1..S14 y sus pestañas tal cual. S3..S14 siguen calculando desde `S1` (`saldo_actual`, `saldo_anterior`, `saldo_anterior2`).
+- Lo único nuevo es **de dónde sale `saldo_actual`**: si el encargo tiene visitas, el botón «Usar como base de análisis» copia el balance de esa visita a la columna `saldo_actual` de S1 (los históricos no se tocan).
+- Cambiar la base **no recalcula solo** las clasificaciones y análisis: la pantalla muestra el aviso «Los análisis se calcularon con otra base — Guardar clasificación y Propagar a Cédulas» (los mismos botones de hoy), para que el auditor controle cuándo se actualiza el expediente.
+- Encargos **sin visitas**: nada cambia (la pestaña nueva muestra «Activar visitas» y no más).
+- Pestaña nueva **«Visitas»** en B-00 (junto a Importación, Clasificación, etc.), que contiene: línea de tiempo de las 3 visitas, carga de saldos por visita, comparación y puente.
+
+### 8.4 API (sobre el controlador de auditorías existente)
+- `POST /audits/:id/visits` crea las 3 visitas (fechas de corte editables); `GET /audits/:id/visits` las lista con resumen de su balance; `PATCH /audits/visits/:visitId` (corte, estado, base de análisis).
+- `POST /audits/visits/:visitId/trial-balance` importa un balance a esa visita (reutiliza `importTrialBalance`, agregando `visitId` y `asOfDate`).
+- `GET /audits/:id/visits/compare?from=PLANNING&to=INTERIM` → cuentas nuevas, desaparecidas, en cero, variación $ y %.
+- `GET /audits/:id/visits/bridge` → puente interina→final por cuenta.
+- Todas con la validación habitual de organización y de encargo visible (`assertAuditVisible`), y roles de escritura como el resto de saldos.
+
+### 8.5 Reglas del puente (referencia, no conclusión)
+- **Cuentas de balance** (activo, pasivo, patrimonio): se muestra saldo interina, saldo final y movimiento. Se alerta cuando |movimiento| supera la **materialidad de ejecución** del encargo (`Audit.materialityExecution`).
+- **Cuentas de resultados** (acumulan en el año): esperado final = saldo interina × (meses del año ÷ meses transcurridos a la fecha de corte). Se alerta si |final − esperado| supera la materialidad de ejecución **y** una variación porcentual configurable (por defecto 20%, el mismo umbral que ya usa B-00).
+- Cada alerta puede convertirse en un **paso `ROLLFORWARD` sugerido** (el auditor lo acepta; no se crean solos).
+- Cuenta sin materialidad definida en el encargo → el puente funciona pero sin alertas por monto, y lo dice.
+- El puente se calcula por código de cuenta; cuentas que existen en una visita y no en la otra se listan aparte, no se descartan.
+
+### 8.6 Pruebas (obligatorias antes de entregar)
+- Reglas puras con pruebas unitarias (emparejado por código, nuevas/desaparecidas, anualización de resultados, umbrales).
+- Pruebas de integración en Postgres real (la base Docker de pruebas) para: unicidad de visita, una sola base de análisis, aislamiento entre organizaciones, balance de visita cerrada no se pisa.
+- Prueba de regresión: un encargo **sin visitas** produce exactamente los mismos resultados de B-00 que hoy.
+- Barrido con mutaciones sobre las reglas del puente, como en las etapas anteriores.
+
+### 8.7 Orden de entrega y modelo
+| Paso | Entrega | Modelo |
+|---|---|---|
+| 1 | Modelo + SQL + reglas puras + pruebas | Opus (SQL y reglas) |
+| 2 | API de visitas, importación por visita y comparación | Sonnet |
+| 3 | Pestaña «Visitas» en B-00 (línea de tiempo, carga, comparación, base de análisis) | Sonnet |
+| 4 | Puente y pasos `ROLLFORWARD` sugeridos | Opus (regla) → Sonnet |
+| 5 | Pruebas de regresión y guía de uso | Haiku |
+Se puede desplegar tras el paso 3 (saldos por visita) y luego el puente.
+
+### 8.8 Lo que queda fuera de esta entrega
+Seguimiento de observaciones por visita (F3), matriz de cobertura y diferencias por visita (F4), B-07 en tres ejes (F5). El diseño de §4 sigue vigente para esas fases.
+
+---
+
+## 9. Fuentes
 - IAASB, [ISA 330 — Respuestas del auditor a los riesgos valorados](https://ktkt.uel.edu.vn/Resources/Docs/SubDomain/ktkt/VanBan/ISA/ISA%20330.pdf) (pruebas en fecha intermedia y período restante).
 - FRC, [ISA (UK) 330](https://media.frc.org.uk/documents/ISA_UK_330_-_Revised_July_2017_Updated_May_2022_ooi6JjX.pdf).
 - IAASB, [ISA 450 — Evaluación de incorrecciones](https://ktkt.uel.edu.vn/Resources/Docs/SubDomain/ktkt/VanBan/ISA/ISA%20450.pdf); ACCA, [Evaluation of misstatements](https://accaglobal.com/hk/en/student/exam-support-resources/professional-exams-study-resources/p7/technical-articles/misstatements.html).

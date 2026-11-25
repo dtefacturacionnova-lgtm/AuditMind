@@ -1,0 +1,61 @@
+usuario,nombre_completo,departamento,permiso
+u009,Pedro Flores,Bodega,Consultar reportes
+u008,Carlos Chávez,Bodega,Consultar saldos de clientes
+u008,Carlos Chávez,Bodega,Cargar inventario
+u108,Claudia Portillo,TI,Crear cliente
+u013,Claudia Menjívar,Operaciones,Registrar asiento contable
+u007,Marta Chávez,Bodega,Registrar asiento contable
+u102,Rafael Campos,Contabilidad,Conciliar banco
+u018,Carlos Pineda,Operaciones,Emitir factura
+u005,Rosa Quintanilla,Finanzas,Consultar saldos de clientes
+u021,Rafael Guardado,Operaciones,Consultar saldos de clientes
+u106,Héctor Chávez,Ventas,Aplicar nota de crédito
+u107,Sofía Mejía,Gerencia,Registrar asiento contable
+u006,Ernesto Escobar,Operaciones,Emitir factura
+u107,Sofía Mejía,Gerencia,Crear orden de compra
+u107,Sofía Mejía,Gerencia,Conciliar banco
+u016,Beatriz Rauda,Bodega,Cargar inventario
+u005,Rosa Quintanilla,Finanzas,Cargar inventario
+u101,Mauricio Escobar,Compras,Consultar reportes
+u003,Sofía Castillo,Finanzas,Registrar asiento contable
+u106,Héctor Chávez,Ventas,Crear cliente
+u003,Sofía Castillo,Finanzas,Preparar conciliación (solo lectura)
+u101,Mauricio Escobar,Compras,Crear proveedor
+u020,Silvia Alvarado,Finanzas,Emitir factura
+u026,Karla Guardado,Bodega,Registrar asiento contable
+u014,Claudia Rodríguez,Finanzas,Preparar conciliación (solo lectura)
+u002,Héctor Guardado,Ventas,Preparar conciliación (solo lectura)
+u023,Patricia Chávez,Ventas,Registrar asiento contable
+u108,Claudia Portillo,TI,Registrar asiento contable
+u009,Pedro Flores,Bodega,Preparar conciliación (solo lectura)
+u102,Rafael Campos,Contabilidad,Registrar asiento contable
+u015,Walter Barrera,Bodega,Consultar reportes
+u017,Carlos Rivera,Ventas,Consultar reportes
+u108,Claudia Portillo,TI,Administrar usuarios
+u011,Pedro Alvarado,Finanzas,Consultar reportes
+u026,Karla Guardado,Bodega,Emitir factura
+u016,Beatriz Rauda,Bodega,Consultar saldos de clientes
+u020,Silvia Alvarado,Finanzas,Consultar reportes
+u001,Ricardo Menjívar,Ventas,Preparar conciliación (solo lectura)
+u007,Marta Chávez,Bodega,Preparar conciliación (solo lectura)
+u019,Ernesto Cruz,Operaciones,Preparar conciliación (solo lectura)
+u101,Mauricio Escobar,Compras,Aprobar pago
+u014,Claudia Rodríguez,Finanzas,Registrar asiento contable
+u103,Rosa Castillo,Recursos Humanos,Aprobar nómina
+u010,Walter Campos,Bodega,Consultar saldos de clientes
+u012,Jorge Mejía,Ventas,Consultar saldos de clientes
+u022,Sofía Cruz,Operaciones,Consultar reportes
+u022,Sofía Cruz,Operaciones,Registrar asiento contable
+u004,Gloria Quintanilla,Operaciones,Cargar inventario
+u107,Sofía Mejía,Gerencia,Crear proveedor
+u024,Marta Barrera,Finanzas,Consultar reportes
+u104,Mauricio Alvarado,TI,Aprobar transacciones
+u023,Patricia Chávez,Ventas,Preparar conciliación (solo lectura)
+u104,Mauricio Alvarado,TI,Administrar usuarios
+u015,Walter Barrera,Bodega,Preparar conciliación (solo lectura)
+u006,Ernesto Escobar,Operaciones,Cargar inventario
+u018,Carlos Pineda,Operaciones,Cargar inventario
+u025,Mauricio Rivera,Operaciones,Preparar conciliación (solo lectura)
+u105,Héctor Barrera,Compras,Crear orden de compra
+u105,Héctor Barrera,Compras,Aprobar orden de compra
+u103,Rosa Castillo,Recursos Humanos,Procesar nómina

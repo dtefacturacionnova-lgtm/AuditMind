@@ -8,6 +8,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from app.services.caats.name_patterns import is_generic_vendor_name
+
 
 @dataclass
 class APFinding:
@@ -107,10 +109,8 @@ def analyze_ap(
     # TEST 3 — Ghost vendors (proveedores sin nombre o con nombre genérico)
     # ─────────────────────────────────────────────────────────────────────────
     if vendor_name_field in df.columns:
-        ghost_patterns = ["test", "proveedor", "vendor", "xxx", "n/a", "na", "temporal", "temp"]
-        ghost_mask = df[vendor_name_field].str.lower().str.strip().apply(
-            lambda x: any(p in str(x).lower() for p in ghost_patterns) if pd.notna(x) else True
-        )
+        # Palabras completas, no subcadenas: «na» ya no marca «Nacional» ni «Internacional» (ver name_patterns.py)
+        ghost_mask = df[vendor_name_field].apply(is_generic_vendor_name)
         ghosts = df[ghost_mask]
         if len(ghosts) > 0:
             findings.append(APFinding(

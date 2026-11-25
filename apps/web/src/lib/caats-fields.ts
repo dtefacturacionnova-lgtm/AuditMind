@@ -198,7 +198,9 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   account: ['account', 'account_code', 'cuenta', 'codigo_cuenta', 'cta'],
   description: ['description', 'descripcion', 'detalle', 'concepto', 'glosa'],
   vendor_id: ['vendor_id', 'vendor', 'proveedor', 'supplier', 'nombre_proveedor'],
-  vendor_name: ['vendor_name', 'nombre_proveedor', 'proveedor', 'supplier_name'],
+  // `vendor_name` también es el «Nombre del Cliente» de Corte de Ingresos y Antigüedad de CxC y el «Proveedor/Cliente» del screening de
+  // sanciones: por eso lleva alias de cliente (sin ellos, esos motores obligaban a mapear a mano su campo obligatorio).
+  vendor_name: ['vendor_name', 'nombre_proveedor', 'proveedor', 'supplier_name', 'cliente', 'nombre_cliente', 'customer_name', 'customer', 'razon_social'],
   invoice_number: ['invoice_number', 'invoice_id', 'numero_factura', 'factura', 'no_factura'],
   payment_date: ['payment_date', 'fecha_pago', 'fecha_de_pago'],
   gross_pay: ['gross_pay', 'salary', 'salario', 'sueldo', 'sueldo_bruto', 'salario_bruto'],

@@ -1,0 +1,89 @@
+vendor_id,nombre_proveedor,nit,cuenta_bancaria,direccion,estado,ultima_actividad
+P001,Comercial Jiboa Norte S.A. de C.V.,0614-102375-742-3,14749560613904,"18a Calle Oriente #854, Sonsonate",Activo,2025-12-12
+P002,Soluciones Cuscatlán Oriente S.A. de C.V.,0614-230100-635-4,02081751988663,"62a Calle Poniente #269, Santa Ana",Activo,2025-11-07
+P003,Soluciones Apaneca Centro Ltda. de C.V.,0614-309365-180-5,45334403329260,"10a Calle Oriente #682, Soyapango",Inactivo,2025-12-07
+P004,Comercial Lempa Centro S.A. de C.V.,0614-145273-174-0,99992399020732,"64a Calle Poniente #635, Santa Ana",Activo,2025-12-17
+P005,Suministros Izalco Sur S.A. de C.V.,0614-277270-757-9,75049763358801,"20a Calle Poniente #919, Santa Tecla",Activo,2025-11-27
+P006,Servicios Apaneca Norte Ltda. de C.V.,0614-238714-730-0,43079596509554,"82a Calle Poniente #901, Santa Tecla",Activo,2025-10-25
+P007,Importadora Lempa Pacífico S.A. de C.V.,0614-149629-930-4,35879179221530,"39a Calle Poniente #382, San Miguel",Activo,2025-10-22
+P008,Grupo Cuzcachapa Centro S.A. de C.V.,0614-105059-484-6,89756391689147,"7a Calle Oriente #201, Santa Ana",Activo,2025-12-09
+P009,Distribuidora Jiboa Occidente Ltda. de C.V.,0614-201576-758-8,04070954208253,"62a Calle Oriente #867, Sonsonate",Activo,2025-12-14
+P010,Servicios Cuscatlán Occidente S.A. de C.V.,0614-259882-321-7,29822093662003,"21a Calle Oriente #734, Sonsonate",Activo,2025-12-24
+P011,Corporación Quetzal Sur S.A. de C.V.,0614-294944-612-9,57142895392515,"53a Calle Poniente #836, Soyapango",Activo,2025-10-18
+P012,Comercial Cuzcachapa Occidente Ltda. de C.V.,0614-226129-624-4,72974646155063,"78a Calle Oriente #423, Santa Ana",Activo,2025-12-24
+P013,Grupo Apaneca Oriente S.A. de C.V.,0614-309151-442-3,25787420836790,"9a Calle Oriente #167, San Miguel",Activo,2025-10-31
+P014,Suministros Jiboa Pacífico S.A. de C.V.,0614-282486-297-2,23246589444346,"86a Calle Oriente #354, Santa Tecla",Activo,2025-10-22
+P015,Corporación Jiboa Sur Ltda. de C.V.,0614-258540-780-3,08240287253222,"38a Calle Oriente #451, Soyapango",Inactivo,2025-12-18
+P016,Suministros Jiboa Centro S.A. de C.V.,0614-197997-339-6,06674739117524,"31a Calle Poniente #495, Santa Ana",Activo,2025-11-21
+P017,Distribuidora Torogoz Pacífico S.A. de C.V.,0614-145132-410-1,98541669174807,"72a Calle Poniente #823, Soyapango",Activo,2025-12-05
+P018,Comercial Quetzal Pacífico Ltda. de C.V.,0614-235334-887-0,03951471226126,"91a Calle Poniente #534, Sonsonate",Activo,2025-10-16
+P019,Suministros Volcán Occidente S.A. de C.V.,0614-220542-816-7,51570180873820,"71a Calle Poniente #262, Santa Ana",Activo,2025-11-19
+P020,Servicios Torogoz Occidente S.A. de C.V.,0614-252864-392-7,50907603873930,"3a Calle Oriente #491, San Miguel",Activo,2025-10-29
+P021,Grupo Cuzcachapa Pacífico Ltda. de C.V.,0614-135583-792-0,28758981794035,"10a Calle Oriente #846, Santa Ana",Activo,2025-12-08
+P022,Importadora Lempa Centro S.A. de C.V.,0614-240571-110-8,94421120388646,"19a Calle Poniente #620, San Salvador",Activo,2025-10-26
+P023,Suministros Lempa Sur S.A. de C.V.,0614-183148-514-9,71351617786146,"16a Calle Poniente #961, Santa Tecla",Activo,2025-11-12
+P024,Comercial Jiboa Pacífico Ltda. de C.V.,0614-210497-864-3,41373395456508,"82a Calle Poniente #370, Santa Tecla",Activo,2025-10-12
+P025,Soluciones Lempa Oriente S.A. de C.V.,0614-167341-350-4,67947760667076,"15a Calle Oriente #959, Soyapango",Activo,2025-11-05
+P026,Distribuidora Atlacatl Occidente S.A. de C.V.,0614-189268-439-4,55317461333334,"98a Calle Oriente #783, Santa Ana",Activo,2025-11-11
+P027,Suministros Torogoz Sur Ltda. de C.V.,0614-112165-877-8,16285718377646,"91a Calle Poniente #715, Sonsonate",Activo,2025-10-31
+P028,Comercial Cuscatlán Oriente S.A. de C.V.,0614-225121-480-9,80248931302786,"97a Calle Poniente #770, Soyapango",Inactivo,2025-12-18
+P029,Corporación Quetzal Pacífico S.A. de C.V.,0614-267655-738-7,80497431281266,"27a Calle Oriente #766, Santa Ana",Activo,2025-10-16
+P030,Comercial Apaneca Centro Ltda. de C.V.,0614-271226-754-7,41988040593951,"50a Calle Oriente #830, Santa Tecla",Activo,2025-11-07
+P031,Servicios Apaneca Oriente S.A. de C.V.,0614-250829-801-3,43079596509554,"17a Calle Oriente #842, San Miguel",Activo,2025-11-29
+P032,Distribuidora Atlacatl Norte S.A. de C.V.,0614-232532-457-8,44600681953191,"42a Calle Oriente #933, Santa Tecla",Activo,2025-12-26
+P033,Distribuidora Atlacatl Sur Ltda. de C.V.,0614-235565-449-2,16931975746619,"6a Calle Poniente #977, Soyapango",Activo,2025-11-05
+P034,Soluciones Apaneca Sur S.A. de C.V.,0614-171171-838-1,99759977948386,"21a Calle Oriente #734, Sonsonate",Activo,2025-11-28
+P035,Comercial Apaneca Pacífico S.A. de C.V.,0614-294570-437-2,04747124364006,"38a Calle Oriente #802, San Miguel",Activo,2025-12-24
+P036,Importadora Atlacatl Sur Ltda. de C.V.,0614-151240-497-0,38695870049388,"66a Calle Oriente #195, Sonsonate",Activo,2025-12-13
+P037,Comercial Lempa Occidente S.A. de C.V.,0614-266652-363-6,17204926459265,"37a Calle Poniente #929, Sonsonate",Activo,2025-11-15
+P038,Suministros Cuzcachapa Centro S.A. de C.V.,0614-106721-548-5,79958319387108,"49a Calle Poniente #737, Santa Tecla",Activo,2025-11-08
+P039,Grupo Cuscatlán Oriente Ltda. de C.V.,0614-177411-456-4,19215078836508,"78a Calle Oriente #552, Sonsonate",Activo,2025-11-04
+P040,Corporación Cuzcachapa Oriente S.A. de C.V.,0614-180040-207-9,72807034862058,"88a Calle Oriente #535, Sonsonate",Activo,2025-11-12
+P041,Comercial Volcán Sur S.A. de C.V.,0614-306824-123-6,87051690158702,"91a Calle Poniente #210, Santa Ana",Activo,2025-12-06
+P042,Corporación Cuscatlán Sur Ltda. de C.V.,0614-145273-174-0,20595895491344,"68a Calle Poniente #615, Sonsonate",Activo,2025-12-08
+P043,Grupo Lempa Sur S.A. de C.V.,0614-205251-837-4,69612863706335,"69a Calle Poniente #236, Santa Ana",Activo,2025-11-14
+P044,Soluciones Jiboa Oriente S.A. de C.V.,0614-119610-452-3,05634737941398,"81a Calle Poniente #228, San Salvador",Activo,2025-11-15
+P045,Distribuidora Cuscatlán Centro Ltda. de C.V.,0614-201420-807-0,64560845099768,"6a Calle Oriente #843, Soyapango",Activo,2025-11-11
+P046,Suministros Torogoz Oriente S.A. de C.V.,0614-111149-665-9,59672798263741,"30a Calle Poniente #912, San Salvador",Inactivo,2025-12-06
+P047,Comercial Cuscatlán Centro S.A. de C.V.,0614-288792-747-9,40594682386341,"89a Calle Oriente #394, Santa Tecla",Activo,2025-12-06
+P048,Distribuidora Lempa Sur Ltda. de C.V.,0614-296934-839-9,96545802489211,"62a Calle Oriente #820, San Miguel",Activo,2025-12-28
+P049,Importadora Atlacatl Pacífico S.A. de C.V.,0614-135299-764-5,00701412924639,"8a Calle Poniente #207, Sonsonate",Activo,2025-12-19
+P050,Importadora Jiboa Centro S.A. de C.V.,0614-138926-899-5,01477769331827,"41a Calle Poniente #629, Santa Tecla",Activo,2025-12-01
+P051,Servicios Quetzal Pacífico Ltda. de C.V.,0614-142751-452-2,71269677158048,"22a Calle Poniente #943, Soyapango",Activo,2025-12-24
+P052,Suministros Cuscatlán Occidente S.A. de C.V.,0614-159330-339-6,52995764121103,"13a Calle Poniente #104, Santa Ana",Activo,2025-11-22
+P053,Distribuidora Torogoz Occidente S.A. de C.V.,0614-105059-484-6,10777681075687,"35a Calle Poniente #904, San Miguel",Activo,2025-12-07
+P054,Servicios Cuzcachapa Sur Ltda. de C.V.,0614-283813-616-0,75664513758824,"71a Calle Oriente #795, Soyapango",Activo,2025-11-16
+P055,Distribuidora Lempa Oriente S.A. de C.V.,0614-280477-132-6,64466413816836,"13a Calle Oriente #956, Santa Tecla",Activo,2025-11-01
+P056,Suministros Quetzal Centro S.A. de C.V.,0614-209166-643-1,54496396981680,"51a Calle Oriente #232, Sonsonate",Activo,2025-12-30
+P057,Distribuidora Cuscatlán Oriente Ltda. de C.V.,0614-203867-995-6,75113977445253,"11a Calle Oriente #184, Soyapango",Activo,2025-11-09
+P058,Comercial Volcán Occidente S.A. de C.V.,0614-221517-355-5,06225722431142,"49a Calle Poniente #582, San Salvador",Activo,2025-11-17
+P059,Corporación Cuscatlán Pacífico S.A. de C.V.,0614-243383-332-8,31600129844252,"53a Calle Poniente #562, Santa Ana",Activo,2025-10-17
+P060,Comercial Izalco Pacífico Ltda. de C.V.,0614-177138-435-1,98654028277392,"47a Calle Poniente #660, Santa Ana",Activo,2025-11-29
+P061,Comercial Lempa Sur S.A. de C.V.,0614-277797-155-7,66796364770687,"31a Calle Poniente #495, Santa Ana",Activo,2025-11-02
+P062,Importadora Lempa Norte S.A. de C.V.,0614-289453-131-5,65860146590028,"39a Calle Oriente #674, San Miguel",Activo,2025-11-13
+P063,Servicios Izalco Centro Ltda. de C.V.,0614-196155-659-3,97981225424498,"54a Calle Poniente #209, San Salvador",Activo,2025-11-07
+P064,Comercial Cuzcachapa Pacífico S.A. de C.V.,0614-308003-465-9,27509159511205,"8a Calle Oriente #899, San Miguel",Inactivo,2025-12-19
+P065,Soluciones Cuzcachapa Norte S.A. de C.V.,0614-197181-108-6,02713870358464,"37a Calle Oriente #297, Soyapango",Activo,2025-10-26
+P066,Soluciones Cuscatlán Occidente Ltda. de C.V.,0614-280528-270-6,12691625506214,"88a Calle Oriente #471, Sonsonate",Activo,2025-10-25
+P067,Comercial Izalco Oriente S.A. de C.V.,0614-309151-442-3,11734516856288,"41a Calle Poniente #583, San Salvador",Activo,2025-11-26
+P068,Servicios Lempa Norte S.A. de C.V.,0614-192481-769-8,76474318501243,"57a Calle Poniente #766, Sonsonate",Activo,2025-12-13
+P069,Grupo Lempa Norte Ltda. de C.V.,0614-104929-288-7,92588386217974,"47a Calle Poniente #164, San Salvador",Activo,2025-12-01
+P070,Corporación Quetzal Occidente S.A. de C.V.,0614-132880-893-5,66643631206168,"19a Calle Oriente #128, Santa Tecla",Activo,2025-10-30
+P071,Importadora Volcán Sur S.A. de C.V.,0614-141261-983-3,91143112908072,"24a Calle Oriente #944, Santa Ana",Inactivo,2025-03-01
+P072,Importadora Apaneca Centro Ltda. de C.V.,0614-200502-853-7,28758981794035,"13a Calle Poniente #250, Sonsonate",Activo,2025-10-27
+P073,Distribuidora Quetzal Norte S.A. de C.V.,0614-152754-905-2,12952313541429,"61a Calle Oriente #169, Sonsonate",Activo,2025-12-12
+P074,Suministros Cuzcachapa Norte S.A. de C.V.,0614-158640-182-6,82486265138308,"36a Calle Poniente #787, San Salvador",Activo,2025-12-17
+P075,Comercial Atlacatl Sur Ltda. de C.V.,0614-150297-146-7,30387095531551,"29a Calle Oriente #444, Santa Ana",Activo,2025-12-29
+P076,Comercial Volcán Centro S.A. de C.V.,0614-106084-525-1,89592545298965,"7a Calle Poniente #904, Santa Ana",Inactivo,2025-03-01
+P077,Grupo Torogoz Norte S.A. de C.V.,0614-266183-901-6,69615816114424,"95a Calle Poniente #192, Santa Tecla",Activo,2025-12-28
+P078,Grupo Izalco Oriente Ltda. de C.V.,0614-180184-187-7,51440398621030,"89a Calle Oriente #167, San Salvador",Activo,2025-11-14
+P079,Comercial Cuscatlán Occidente S.A. de C.V.,0614-139571-429-3,63193674037234,"47a Calle Poniente #101, Sonsonate",Activo,2025-10-30
+P080,Servicios Quetzal Oriente S.A. de C.V.,0614-197239-480-1,66768147889827,"7a Calle Poniente #128, Santa Ana",Activo,2025-12-27
+P950,Distribuidora Internacional S.A. de C.V.,0614-230284-774-3,41089255300358,"85a Calle Poniente #327, Soyapango",Activo,2025-11-25
+P951,Ferretería Nacional S.A. de C.V.,0614-186660-234-8,59517180532295,"35a Calle Poniente #176, Sonsonate",Activo,2025-10-30
+P952,Panadería La Esperanza,0614-185733-565-8,78263919889787,"65a Calle Oriente #835, San Miguel",Activo,2025-10-29
+P953,Servicios Santa Ana S.A. de C.V.,0614-288388-165-4,31411049677934,"28a Calle Oriente #392, Santa Ana",Activo,2025-12-03
+P954,Corporación Apaneca Ltda. de C.V.,0614-232467-950-1,14066925370808,"9a Calle Oriente #200, Sonsonate",Activo,2025-12-18
+P901,Proveedor Genérico,0614-197469-464-3,97724118025163,"32a Calle Oriente #917, Santa Tecla",Activo,2025-11-20
+P902,Importadora Torogoz Norte Ltda. de C.V.,,76187927536771,,Activo,2025-10-02
+P903,Soluciones Torogoz Norte S.A. de C.V.,,60158826239567,,Activo,2025-09-12

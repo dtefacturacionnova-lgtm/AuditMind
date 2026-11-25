@@ -13,6 +13,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.services.caats.name_patterns import is_generic_vendor_name
+
 
 @dataclass
 class VendorMasterFinding:
@@ -32,7 +34,6 @@ class VendorMasterReport:
     summary: dict
 
 
-GHOST_NAME_PATTERNS = ["test", "proveedor", "vendor", "xxx", "n/a", "na", "temporal", "temp", "generico", "generic"]
 INACTIVE_STATUS_KEYWORDS = ["inactiv", "suspend", "bloque", "cerrad", "baja"]
 
 
@@ -165,8 +166,8 @@ def analyze_vendor_master(
     # TEST 5 — Identidad débil (nombre genérico/sospechoso, o sin NIT ni
     # dirección — no hay forma de verificar que el proveedor existe)
     # ─────────────────────────────────────────────────────────────────────
-    name_norm = df[vendor_name_field].apply(_norm)
-    suspicious_name = name_norm.apply(lambda n: n == "" or any(_norm(p) in n for p in GHOST_NAME_PATTERNS))
+    # Palabras completas, no subcadenas: «na» ya no marca «Nacional», «Internacional» ni «Corporación Apaneca» (ver name_patterns.py)
+    suspicious_name = df[vendor_name_field].apply(is_generic_vendor_name)
     missing_identity = pd.Series(False, index=df.index)
     if tax_id_field in df.columns and address_field in df.columns:
         missing_identity = (df[tax_id_field].apply(_norm) == "") & (df[address_field].apply(_norm) == "")

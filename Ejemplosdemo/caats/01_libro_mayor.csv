@@ -1,0 +1,1325 @@
+fecha,hora,usuario,cuenta,descripcion,monto
+2025-09-17,10:30,usr04,6101-Gastos de operación,Pago a proveedor,1061.6
+2025-09-16,08:38,usr07,4101-Ventas,Registro de venta,319.29
+2025-08-20,16:30,admin_ti,1201-CxC,Gasto de operación,3358.33
+2025-08-14,17:18,admin_ti,2101-Proveedores,Pago a proveedor,2145.57
+2025-06-27,15:36,admin_ti,6101-Gastos de operación,Ajuste de inventario,2009.88
+2025-12-29,15:43,usr05,1201-CxC,Pago a proveedor,6945.53
+2025-01-02,13:17,usr02,1301-Inventarios,Compra de mercadería,8800.9
+2025-09-11,15:54,admin_ti,4101-Ventas,Cobro de cliente,5451.05
+2025-06-19,14:33,usr01,1201-CxC,Cobro de cliente,4302.48
+2025-08-15,00:58,usr02,1101-Caja,Ajuste de inventario,1961.72
+2025-09-29,13:38,usr07,6101-Gastos de operación,Compra de mercadería,5567.9
+2025-11-06,04:01,usr02,1201-CxC,Planilla mensual,557.68
+2025-10-06,15:23,admin_ti,6101-Gastos de operación,Gasto de operación,8204.0
+2025-12-29,09:17,usr09,1301-Inventarios,Compra de mercadería,6112.71
+2025-12-30,14:25,usr10,2101-Proveedores,Registro de venta,7797.5
+2025-12-02,11:31,usr10,1201-CxC,Planilla mensual,1939.78
+2025-06-02,16:28,admin_ti,1301-Inventarios,Ajuste de inventario,6874.0
+2025-12-31,14:01,usr09,5101-Costo de ventas,Pago a proveedor,3007.67
+2025-07-11,08:21,admin_ti,2101-Proveedores,Ajuste de inventario,581.76
+2025-11-03,13:04,usr07,1301-Inventarios,Cobro de cliente,6473.29
+2025-12-30,14:18,usr01,1301-Inventarios,Pago a proveedor,1986.28
+2025-06-19,16:54,admin_ti,2101-Proveedores,Pago a proveedor,7409.02
+2025-06-25,10:26,usr01,6101-Gastos de operación,Compra de mercadería,8093.57
+2025-07-11,13:03,usr01,6101-Gastos de operación,Cobro de cliente,3000.0
+2025-04-03,08:40,usr07,5101-Costo de ventas,Registro de venta,8306.12
+2025-01-11,10:41,usr09,1301-Inventarios,Ajuste de inventario,5418.96
+2025-12-29,15:01,usr07,1102-Bancos,Pago a proveedor,11014.8
+2025-03-17,16:28,usr10,1102-Bancos,Compra de mercadería,3623.22
+2025-12-18,14:12,admin_ti,1101-Caja,Planilla mensual,5014.73
+2025-07-09,09:57,usr07,2101-Proveedores,Pago a proveedor,2148.6
+2025-11-20,15:20,usr05,4101-Ventas,Cobro de cliente,287.43
+2025-06-18,15:06,admin_ti,6101-Gastos de operación,Cobro de cliente,1436.0
+2025-07-18,12:57,usr08,1101-Caja,Pago a proveedor,8307.93
+2025-02-17,17:28,admin_ti,1101-Caja,Compra de mercadería,6062.38
+2025-10-28,13:13,admin_ti,1102-Bancos,Ajuste de inventario,1623.27
+2025-12-31,11:43,usr05,1301-Inventarios,Registro de venta,7486.84
+2025-09-17,04:36,usr04,1102-Bancos,Cobro de cliente,5141.53
+2025-01-27,09:27,usr10,1201-CxC,Pago a proveedor,6463.56
+2025-04-11,10:15,usr03,2101-Proveedores,Compra de mercadería,5744.39
+2025-05-01,16:02,usr02,6101-Gastos de operación,Gasto de operación,8040.48
+2025-09-29,10:32,usr08,6101-Gastos de operación,Ajuste de inventario,7875.16
+2025-10-20,13:59,usr05,1201-CxC,Ajuste de inventario,5200.38
+2025-12-03,17:28,admin_ti,5101-Costo de ventas,Gasto de operación,6157.41
+2025-10-17,12:32,admin_ti,1102-Bancos,Gasto de operación,6214.7
+2025-09-23,08:09,admin_ti,1301-Inventarios,Planilla mensual,3726.35
+2025-11-06,12:16,admin_ti,5101-Costo de ventas,Cobro de cliente,1204.45
+2025-12-30,14:51,usr11,1102-Bancos,Compra de mercadería,8028.97
+2025-11-25,16:40,admin_ti,1301-Inventarios,Cobro de cliente,4829.81
+2025-07-28,16:21,usr02,1102-Bancos,Compra de mercadería,2686.99
+2025-04-17,13:52,usr05,5101-Costo de ventas,Pago a proveedor,7420.17
+2025-12-29,15:11,usr08,6101-Gastos de operación,Pago a proveedor,7432.42
+2025-02-05,15:57,usr06,1301-Inventarios,Planilla mensual,4633.38
+2025-05-13,16:30,admin_ti,2101-Proveedores,Ajuste de inventario,8678.02
+2025-02-14,09:15,admin_ti,6101-Gastos de operación,Registro de venta,965.75
+2025-10-22,16:48,usr05,1102-Bancos,Compra de mercadería,4372.01
+2025-03-10,12:01,admin_ti,1301-Inventarios,Pago a proveedor,6303.86
+2025-12-11,14:10,usr04,4101-Ventas,Registro de venta,428.75
+2025-11-11,04:12,usr11,6101-Gastos de operación,Cobro de cliente,837.4
+2025-11-27,11:01,usr06,1102-Bancos,Cobro de cliente,8540.12
+2025-03-17,15:23,admin_ti,6101-Gastos de operación,Gasto de operación,2063.85
+2025-04-01,04:18,usr03,6101-Gastos de operación,Compra de mercadería,8540.48
+2025-05-30,22:44,usr03,5101-Costo de ventas,Cobro de cliente,6113.48
+2025-09-22,11:32,usr04,4101-Ventas,Registro de venta,5324.81
+2025-05-13,14:29,usr06,5101-Costo de ventas,Ajuste de inventario,8988.73
+2025-01-07,10:12,usr02,1301-Inventarios,Pago a proveedor,8715.84
+2025-09-16,16:24,usr06,5101-Costo de ventas,Gasto de operación,6138.46
+2025-06-04,17:58,admin_ti,1101-Caja,Planilla mensual,3384.8
+2025-09-12,09:31,usr08,1301-Inventarios,Registro de venta,403.37
+2025-12-17,11:55,admin_ti,4101-Ventas,Gasto de operación,4921.5
+2025-12-31,12:33,usr10,4101-Ventas,Planilla mensual,6108.75
+2025-05-16,17:51,usr10,5101-Costo de ventas,Cobro de cliente,8486.78
+2025-05-15,10:23,usr07,1201-CxC,Gasto de operación,5839.12
+2025-03-28,13:18,admin_ti,6101-Gastos de operación,Gasto de operación,3930.62
+2025-12-30,08:09,usr08,5101-Costo de ventas,Ajuste de inventario,615.12
+2025-04-18,17:43,usr08,4101-Ventas,Compra de mercadería,2362.22
+2025-08-22,13:40,usr11,4101-Ventas,Ajuste de inventario,5000.0
+2025-06-16,16:20,admin_ti,2101-Proveedores,Cobro de cliente,6736.2
+2025-05-07,15:21,usr03,1201-CxC,Cobro de cliente,6541.97
+2025-04-25,02:52,usr05,1201-CxC,Registro de venta,6970.09
+2025-03-10,15:23,usr04,4101-Ventas,Compra de mercadería,4944.38
+2025-07-10,10:48,usr07,2101-Proveedores,Planilla mensual,7761.05
+2025-07-28,14:13,admin_ti,1102-Bancos,Ajuste de inventario,149.22
+2025-05-23,15:27,admin_ti,6101-Gastos de operación,Registro de venta,2067.09
+2025-12-04,12:11,usr09,1101-Caja,Gasto de operación,8000.0
+2025-03-10,12:55,usr08,2101-Proveedores,Compra de mercadería,6494.21
+2025-02-05,10:39,admin_ti,1201-CxC,Compra de mercadería,1919.41
+2025-12-02,16:57,admin_ti,1101-Caja,Registro de venta,7467.16
+2025-07-23,08:35,admin_ti,4101-Ventas,Pago a proveedor,5191.33
+2025-05-19,13:34,usr03,5101-Costo de ventas,Planilla mensual,3328.02
+2025-12-29,10:52,usr04,1102-Bancos,Pago a proveedor,11710.33
+2025-06-02,11:51,usr04,1301-Inventarios,Pago a proveedor,7041.18
+2025-01-23,08:46,usr11,1301-Inventarios,Registro de venta,5137.78
+2025-04-09,16:41,usr09,1101-Caja,Gasto de operación,5736.22
+2025-10-20,17:50,usr09,5101-Costo de ventas,Compra de mercadería,2811.3
+2025-04-10,15:25,admin_ti,2101-Proveedores,Cobro de cliente,5246.95
+2025-01-21,16:24,admin_ti,1201-CxC,Pago a proveedor,1053.01
+2025-05-01,13:14,usr01,1301-Inventarios,Gasto de operación,2990.51
+2025-05-12,22:21,usr09,1301-Inventarios,Ajuste de inventario,8383.06
+2025-09-25,16:23,admin_ti,1102-Bancos,Compra de mercadería,7774.9
+2025-01-23,02:18,usr09,4101-Ventas,Gasto de operación,1187.92
+2025-01-02,12:17,admin_ti,4101-Ventas,Registro de venta,600.13
+2025-07-28,13:29,admin_ti,2101-Proveedores,Ajuste de inventario,8833.04
+2025-03-03,13:19,usr07,1101-Caja,Cobro de cliente,2616.6
+2025-09-09,17:54,admin_ti,5101-Costo de ventas,Cobro de cliente,5197.26
+2025-07-01,15:25,admin_ti,1301-Inventarios,Ajuste de inventario,2334.43
+2025-03-10,12:09,admin_ti,2101-Proveedores,Gasto de operación,7364.08
+2025-06-19,16:09,usr08,6101-Gastos de operación,Planilla mensual,5272.86
+2025-05-31,11:33,usr04,1201-CxC,Planilla mensual,349.94
+2025-07-28,14:43,usr05,1102-Bancos,Cobro de cliente,2764.45
+2025-04-16,13:21,admin_ti,4101-Ventas,Pago a proveedor,8804.57
+2025-11-28,17:03,admin_ti,1101-Caja,Compra de mercadería,5864.94
+2025-07-06,12:03,usr07,6101-Gastos de operación,Cobro de cliente,4249.09
+2025-10-30,08:25,usr06,4101-Ventas,Registro de venta,2883.99
+2025-11-21,14:32,usr09,1301-Inventarios,Gasto de operación,15000.0
+2025-03-24,14:44,usr05,1101-Caja,Pago a proveedor,8568.96
+2025-02-07,10:59,admin_ti,5101-Costo de ventas,Registro de venta,3951.05
+2025-04-09,15:17,usr04,4101-Ventas,Compra de mercadería,1903.74
+2025-12-29,15:41,usr08,1201-CxC,Registro de venta,1207.11
+2025-04-25,10:39,admin_ti,1201-CxC,Cobro de cliente,1593.45
+2025-09-12,08:51,admin_ti,1101-Caja,Compra de mercadería,8864.18
+2025-06-17,08:35,usr07,6101-Gastos de operación,Gasto de operación,8991.57
+2025-12-09,13:50,admin_ti,1101-Caja,Gasto de operación,1713.64
+2025-12-30,14:06,usr03,1201-CxC,Gasto de operación,3892.61
+2025-12-31,15:56,usr08,1101-Caja,Ajuste de inventario,1445.06
+2025-06-27,13:49,admin_ti,1301-Inventarios,Cobro de cliente,7394.69
+2025-09-02,13:38,usr07,6101-Gastos de operación,Registro de venta,8403.32
+2025-12-24,13:25,usr10,6101-Gastos de operación,Ajuste de inventario,8000.0
+2025-09-05,11:51,admin_ti,6101-Gastos de operación,Compra de mercadería,5114.06
+2025-12-29,09:26,usr08,4101-Ventas,Pago a proveedor,7112.67
+2025-09-29,15:42,usr06,5101-Costo de ventas,Ajuste de inventario,4544.95
+2025-12-17,13:36,admin_ti,5101-Costo de ventas,Planilla mensual,7608.24
+2025-05-14,17:38,usr08,5101-Costo de ventas,Registro de venta,3012.18
+2025-04-22,08:25,usr06,1201-CxC,Planilla mensual,297.97
+2025-02-25,09:16,usr08,4101-Ventas,Planilla mensual,10000.0
+2025-04-29,16:25,admin_ti,6101-Gastos de operación,Gasto de operación,2178.54
+2025-01-24,17:38,admin_ti,1102-Bancos,Compra de mercadería,4956.39
+2025-04-15,13:56,admin_ti,1301-Inventarios,Registro de venta,5512.84
+2025-10-14,12:21,admin_ti,6101-Gastos de operación,Compra de mercadería,1971.88
+2025-08-07,16:42,usr11,5101-Costo de ventas,Planilla mensual,330.81
+2025-01-07,17:25,usr06,1102-Bancos,Gasto de operación,5025.32
+2025-08-08,12:33,admin_ti,4101-Ventas,Ajuste de inventario,7013.98
+2025-05-19,11:47,admin_ti,4101-Ventas,Registro de venta,5579.51
+2025-11-17,11:57,usr08,1102-Bancos,Gasto de operación,1981.17
+2025-09-24,08:27,admin_ti,2101-Proveedores,Compra de mercadería,7731.39
+2025-07-25,16:36,usr01,5101-Costo de ventas,Registro de venta,1162.67
+2025-11-12,17:22,usr10,6101-Gastos de operación,Planilla mensual,3550.21
+2025-08-22,16:34,admin_ti,4101-Ventas,Compra de mercadería,5800.66
+2025-12-29,13:55,usr06,1201-CxC,Cobro de cliente,1981.57
+2025-09-23,09:52,usr08,6101-Gastos de operación,Registro de venta,7211.11
+2025-01-23,16:40,admin_ti,5101-Costo de ventas,Registro de venta,2852.55
+2025-12-11,08:12,usr05,1201-CxC,Gasto de operación,5597.71
+2025-05-28,08:36,usr04,4101-Ventas,Ajuste de inventario,6211.6
+2025-09-08,10:22,usr02,1101-Caja,Ajuste de inventario,2697.5
+2025-03-03,15:46,admin_ti,1201-CxC,Ajuste de inventario,1048.11
+2025-04-11,04:04,usr11,5101-Costo de ventas,Gasto de operación,5244.82
+2025-02-12,11:03,usr09,4101-Ventas,Ajuste de inventario,8186.96
+2025-09-22,09:56,usr10,1101-Caja,Cobro de cliente,5866.39
+2025-12-30,13:09,usr09,5101-Costo de ventas,Cobro de cliente,9127.11
+2025-04-03,12:21,admin_ti,6101-Gastos de operación,Cobro de cliente,8464.33
+2025-03-05,13:26,usr11,1201-CxC,Registro de venta,4699.61
+2025-05-16,05:01,usr09,6101-Gastos de operación,Planilla mensual,5473.23
+2025-08-06,16:05,usr09,5101-Costo de ventas,Planilla mensual,5000.0
+2025-07-29,16:42,usr04,2101-Proveedores,Cobro de cliente,8005.16
+2025-05-30,12:48,usr06,1201-CxC,Ajuste de inventario,8450.78
+2025-12-29,10:50,usr02,1201-CxC,Pago a proveedor,7721.93
+2025-11-12,11:01,usr05,5101-Costo de ventas,Cobro de cliente,3887.75
+2025-04-23,16:50,usr09,6101-Gastos de operación,Cobro de cliente,8774.23
+2025-06-23,11:17,admin_ti,1201-CxC,Ajuste de inventario,7050.72
+2025-03-10,15:36,admin_ti,1301-Inventarios,Pago a proveedor,3867.45
+2025-06-12,08:35,admin_ti,2101-Proveedores,Gasto de operación,8611.15
+2025-12-16,15:20,usr01,1201-CxC,Cobro de cliente,8000.0
+2025-06-23,09:00,usr06,1101-Caja,Pago a proveedor,3000.0
+2025-04-25,10:44,usr10,1101-Caja,Registro de venta,3731.95
+2025-02-25,14:28,admin_ti,4101-Ventas,Cobro de cliente,938.68
+2025-02-19,08:17,admin_ti,1301-Inventarios,Ajuste de inventario,222.14
+2025-07-17,09:34,usr08,6101-Gastos de operación,Cobro de cliente,25000.0
+2025-02-19,12:14,usr02,6101-Gastos de operación,Registro de venta,2617.38
+2025-06-04,13:16,usr09,5101-Costo de ventas,Registro de venta,1000.0
+2025-05-06,15:08,usr08,1201-CxC,Pago a proveedor,515.39
+2025-06-18,15:24,admin_ti,6101-Gastos de operación,Planilla mensual,8574.45
+2025-09-10,10:47,usr10,1301-Inventarios,Cobro de cliente,7128.47
+2025-11-21,17:34,usr08,2101-Proveedores,Planilla mensual,7535.38
+2025-07-25,09:15,usr03,5101-Costo de ventas,Planilla mensual,1138.37
+2025-04-02,16:22,usr08,1101-Caja,Ajuste de inventario,6107.12
+2025-12-17,13:28,usr07,5101-Costo de ventas,Gasto de operación,4561.63
+2025-04-25,10:07,admin_ti,4101-Ventas,Registro de venta,1146.4
+2025-12-19,13:53,usr07,1101-Caja,Cobro de cliente,3482.59
+2025-06-24,13:59,usr09,4101-Ventas,Cobro de cliente,935.62
+2025-08-06,17:56,admin_ti,6101-Gastos de operación,Pago a proveedor,78.03
+2025-03-05,15:49,usr01,4101-Ventas,Cobro de cliente,1001.32
+2025-10-10,05:49,usr04,6101-Gastos de operación,Pago a proveedor,8716.22
+2025-02-10,03:52,usr06,2101-Proveedores,Cobro de cliente,4930.49
+2025-02-21,17:09,usr04,4101-Ventas,Cobro de cliente,8713.68
+2025-06-04,17:05,usr10,1301-Inventarios,Registro de venta,4247.8
+2025-02-19,17:11,usr06,1102-Bancos,Gasto de operación,8160.69
+2025-04-15,14:29,usr05,1102-Bancos,Cobro de cliente,2440.98
+2025-03-25,12:00,usr04,6101-Gastos de operación,Compra de mercadería,1564.32
+2025-08-14,10:48,usr02,4101-Ventas,Planilla mensual,4534.97
+2025-02-10,09:16,usr06,2101-Proveedores,Gasto de operación,5779.02
+2025-04-08,03:28,usr10,1101-Caja,Planilla mensual,3144.18
+2025-12-31,17:06,usr06,1101-Caja,Compra de mercadería,9657.97
+2025-12-31,17:48,usr03,6101-Gastos de operación,Cobro de cliente,10563.88
+2025-12-29,17:51,usr10,1301-Inventarios,Gasto de operación,2596.86
+2025-06-30,08:23,usr06,6101-Gastos de operación,Gasto de operación,4840.83
+2025-05-27,11:08,usr01,1102-Bancos,Ajuste de inventario,2692.71
+2025-01-13,12:36,usr06,2101-Proveedores,Cobro de cliente,3000.0
+2025-08-28,08:59,usr11,5101-Costo de ventas,Compra de mercadería,3553.69
+2025-06-18,16:34,usr09,1201-CxC,Gasto de operación,8110.64
+2025-04-02,17:10,usr09,6101-Gastos de operación,Gasto de operación,4686.01
+2025-09-12,11:59,usr09,1102-Bancos,Compra de mercadería,6570.14
+2025-03-12,09:42,usr03,6101-Gastos de operación,Registro de venta,8449.64
+2025-07-08,08:47,admin_ti,1102-Bancos,Cobro de cliente,2310.97
+2025-07-28,11:53,admin_ti,5101-Costo de ventas,Registro de venta,5131.95
+2025-07-30,15:50,admin_ti,1102-Bancos,Registro de venta,2855.7
+2025-11-18,10:46,admin_ti,1301-Inventarios,Registro de venta,4576.21
+2025-05-28,08:56,usr08,1201-CxC,Pago a proveedor,3096.45
+2025-02-19,16:33,admin_ti,6101-Gastos de operación,Registro de venta,2132.31
+2025-05-21,09:41,usr11,2101-Proveedores,Compra de mercadería,6150.58
+2025-02-12,22:05,usr03,6101-Gastos de operación,Gasto de operación,2001.22
+2025-08-21,09:23,usr11,4101-Ventas,Pago a proveedor,3986.24
+2025-03-11,09:38,usr01,1101-Caja,Ajuste de inventario,8219.92
+2025-10-21,14:57,admin_ti,1201-CxC,Registro de venta,4132.81
+2025-02-06,16:27,usr10,4101-Ventas,Gasto de operación,5804.78
+2025-09-26,14:06,usr05,5101-Costo de ventas,Ajuste de inventario,2433.59
+2025-08-06,10:46,usr06,1101-Caja,Planilla mensual,575.05
+2025-04-08,17:38,usr09,5101-Costo de ventas,Cobro de cliente,7853.53
+2025-09-22,15:29,usr11,1201-CxC,Cobro de cliente,5818.79
+2025-05-26,13:23,usr03,4101-Ventas,Compra de mercadería,5744.39
+2025-01-13,08:30,usr04,1102-Bancos,Cobro de cliente,1008.87
+2025-02-20,13:42,usr09,1201-CxC,Cobro de cliente,538.31
+2025-03-11,13:25,usr03,1102-Bancos,Cobro de cliente,5709.23
+2025-10-30,14:07,admin_ti,5101-Costo de ventas,Registro de venta,3651.51
+2025-12-29,15:06,usr10,2101-Proveedores,Registro de venta,1770.61
+2025-01-16,17:14,admin_ti,6101-Gastos de operación,Planilla mensual,8919.13
+2025-02-26,11:46,admin_ti,6101-Gastos de operación,Gasto de operación,4405.93
+2025-11-27,10:35,usr06,1301-Inventarios,Pago a proveedor,5914.65
+2025-06-18,09:50,usr03,1102-Bancos,Planilla mensual,2354.37
+2025-06-16,12:19,admin_ti,5101-Costo de ventas,Cobro de cliente,7941.94
+2025-05-01,13:40,admin_ti,6101-Gastos de operación,Compra de mercadería,2130.64
+2025-12-31,17:40,usr04,1102-Bancos,Compra de mercadería,3565.41
+2025-03-20,08:34,usr04,1102-Bancos,Ajuste de inventario,1228.14
+2025-08-05,13:58,admin_ti,1301-Inventarios,Pago a proveedor,3415.57
+2025-05-12,12:40,admin_ti,1101-Caja,Planilla mensual,4829.14
+2025-12-30,13:33,usr02,1301-Inventarios,Pago a proveedor,7271.38
+2025-01-24,12:44,usr06,5101-Costo de ventas,Ajuste de inventario,8844.06
+2025-01-16,15:42,usr09,1201-CxC,Cobro de cliente,7234.78
+2025-01-03,14:20,usr01,6101-Gastos de operación,Ajuste de inventario,6858.87
+2025-12-03,04:03,usr11,6101-Gastos de operación,Registro de venta,1249.72
+2025-05-25,09:26,usr06,1102-Bancos,Planilla mensual,1999.25
+2025-07-15,09:44,usr10,1301-Inventarios,Cobro de cliente,2930.82
+2025-12-03,13:10,admin_ti,6101-Gastos de operación,Cobro de cliente,7525.44
+2025-04-18,17:44,admin_ti,5101-Costo de ventas,Planilla mensual,4239.5
+2025-02-14,11:06,usr09,1102-Bancos,Ajuste de inventario,8880.84
+2025-07-18,09:01,usr01,1101-Caja,Pago a proveedor,2000.0
+2025-01-07,09:19,admin_ti,1301-Inventarios,Cobro de cliente,3888.17
+2025-02-19,22:53,usr11,1101-Caja,Registro de venta,3535.44
+2025-05-05,13:39,usr05,1301-Inventarios,Compra de mercadería,3582.67
+2025-09-10,11:23,usr09,2101-Proveedores,Compra de mercadería,8549.18
+2025-12-29,09:36,usr03,1301-Inventarios,Planilla mensual,3718.26
+2025-07-14,17:29,usr02,5101-Costo de ventas,Gasto de operación,2479.4
+2025-02-19,11:40,admin_ti,6101-Gastos de operación,Compra de mercadería,6427.37
+2025-10-27,08:48,admin_ti,6101-Gastos de operación,Pago a proveedor,8999.61
+2025-09-04,13:17,admin_ti,1102-Bancos,Pago a proveedor,148.67
+2025-07-29,17:12,admin_ti,1102-Bancos,Ajuste de inventario,1604.03
+2025-01-01,16:09,admin_ti,2101-Proveedores,Compra de mercadería,1220.67
+2025-12-29,10:57,usr03,6101-Gastos de operación,Cobro de cliente,6804.99
+2025-07-25,11:54,usr02,4101-Ventas,Cobro de cliente,1980.43
+2025-02-13,08:27,usr11,1301-Inventarios,Ajuste de inventario,1774.67
+2025-04-21,16:31,admin_ti,1201-CxC,Ajuste de inventario,2037.47
+2025-11-26,13:24,admin_ti,2101-Proveedores,Cobro de cliente,6370.19
+2025-07-14,10:45,usr01,2101-Proveedores,Gasto de operación,5252.12
+2025-09-10,11:46,admin_ti,6101-Gastos de operación,Cobro de cliente,277.59
+2025-12-23,08:11,admin_ti,2101-Proveedores,Cobro de cliente,3368.12
+2025-06-24,08:05,usr06,1102-Bancos,Cobro de cliente,5385.14
+2025-06-18,15:16,usr06,6101-Gastos de operación,Registro de venta,2819.39
+2025-04-08,08:44,usr05,2101-Proveedores,Registro de venta,3218.78
+2025-07-28,13:09,usr09,1201-CxC,Registro de venta,8463.63
+2025-05-29,12:56,usr09,1201-CxC,Compra de mercadería,1677.34
+2025-05-16,14:19,usr06,1201-CxC,Pago a proveedor,6243.92
+2025-06-18,14:16,admin_ti,1101-Caja,Pago a proveedor,5241.56
+2025-12-29,14:02,usr05,1102-Bancos,Gasto de operación,10862.89
+2025-09-29,13:19,usr06,5101-Costo de ventas,Gasto de operación,25000.0
+2025-06-13,17:20,admin_ti,1301-Inventarios,Cobro de cliente,7800.55
+2025-05-22,08:18,admin_ti,6101-Gastos de operación,Gasto de operación,5753.42
+2025-12-24,17:45,admin_ti,1301-Inventarios,Registro de venta,6838.85
+2025-12-29,10:32,usr01,1102-Bancos,Compra de mercadería,8965.05
+2025-05-21,16:06,admin_ti,2101-Proveedores,Registro de venta,2151.51
+2025-01-14,17:58,usr06,2101-Proveedores,Pago a proveedor,1129.17
+2025-08-11,13:31,usr09,1102-Bancos,Ajuste de inventario,8822.72
+2025-12-02,04:53,usr05,2101-Proveedores,Cobro de cliente,7653.19
+2025-07-23,11:11,admin_ti,1102-Bancos,Cobro de cliente,3117.69
+2025-03-11,09:43,usr05,4101-Ventas,Ajuste de inventario,265.76
+2025-12-31,17:15,usr09,1301-Inventarios,Ajuste de inventario,11793.4
+2025-07-28,11:41,usr06,1102-Bancos,Registro de venta,4012.19
+2025-04-15,00:15,usr04,1301-Inventarios,Pago a proveedor,5704.12
+2025-02-14,16:09,usr10,5101-Costo de ventas,Ajuste de inventario,3930.78
+2025-12-31,16:16,usr01,2101-Proveedores,Ajuste de inventario,2972.31
+2025-02-11,11:59,usr10,1102-Bancos,Registro de venta,5171.6
+2025-12-04,14:02,admin_ti,1102-Bancos,Ajuste de inventario,2423.57
+2025-11-26,02:56,usr04,1102-Bancos,Cobro de cliente,7397.63
+2025-01-24,12:44,usr08,1102-Bancos,Ajuste de inventario,6525.56
+2025-11-11,15:04,usr04,1301-Inventarios,Cobro de cliente,8897.71
+2025-04-07,03:42,usr05,1102-Bancos,Cobro de cliente,2732.24
+2025-01-07,11:39,usr06,1102-Bancos,Compra de mercadería,6553.92
+2025-12-12,14:57,usr11,5101-Costo de ventas,Registro de venta,3249.94
+2025-02-19,13:55,admin_ti,5101-Costo de ventas,Pago a proveedor,2126.09
+2025-04-14,10:03,admin_ti,1301-Inventarios,Gasto de operación,7094.91
+2025-12-30,12:41,usr10,1301-Inventarios,Ajuste de inventario,2404.86
+2025-11-25,17:08,usr08,4101-Ventas,Planilla mensual,7842.86
+2025-10-31,13:17,admin_ti,1102-Bancos,Planilla mensual,961.55
+2025-08-04,08:34,usr06,2101-Proveedores,Registro de venta,6348.24
+2025-06-23,14:13,usr11,2101-Proveedores,Planilla mensual,7631.76
+2025-03-10,10:26,usr09,1102-Bancos,Pago a proveedor,4957.65
+2025-01-20,12:09,usr07,1301-Inventarios,Planilla mensual,367.54
+2025-01-22,08:04,usr09,4101-Ventas,Ajuste de inventario,8052.24
+2025-12-31,09:26,usr11,2101-Proveedores,Ajuste de inventario,9640.02
+2025-02-03,08:49,usr09,5101-Costo de ventas,Ajuste de inventario,7297.01
+2025-09-02,16:40,usr09,4101-Ventas,Planilla mensual,3607.07
+2025-10-13,11:17,usr07,4101-Ventas,Compra de mercadería,8000.0
+2025-08-18,08:26,usr09,1201-CxC,Registro de venta,3618.24
+2025-03-04,12:50,usr07,1102-Bancos,Cobro de cliente,7081.62
+2025-08-28,15:03,usr04,1301-Inventarios,Planilla mensual,5704.62
+2025-12-29,12:39,usr04,4101-Ventas,Compra de mercadería,4441.45
+2025-07-24,09:11,usr02,5101-Costo de ventas,Cobro de cliente,2106.94
+2025-12-03,02:34,usr05,2101-Proveedores,Planilla mensual,5219.12
+2025-11-14,16:23,admin_ti,5101-Costo de ventas,Cobro de cliente,5968.56
+2025-07-30,12:28,usr10,1201-CxC,Planilla mensual,1567.94
+2025-06-06,11:04,usr09,1201-CxC,Registro de venta,8054.33
+2025-06-13,16:36,usr09,1102-Bancos,Compra de mercadería,2455.66
+2025-02-18,14:59,usr06,1201-CxC,Planilla mensual,994.22
+2025-01-03,17:51,usr04,6101-Gastos de operación,Pago a proveedor,6503.87
+2025-01-20,23:50,usr02,1201-CxC,Registro de venta,6687.37
+2025-04-22,09:11,usr05,1101-Caja,Planilla mensual,3599.58
+2025-09-09,13:38,admin_ti,1102-Bancos,Ajuste de inventario,2635.02
+2025-09-15,16:56,usr10,5101-Costo de ventas,Registro de venta,7849.31
+2025-01-06,14:06,usr08,1102-Bancos,Compra de mercadería,7091.84
+2025-07-15,13:05,usr06,1101-Caja,Compra de mercadería,2000.0
+2025-01-15,11:37,usr11,2101-Proveedores,Pago a proveedor,7083.46
+2025-02-14,01:20,usr11,1102-Bancos,Planilla mensual,1874.09
+2025-05-30,14:18,usr05,1301-Inventarios,Cobro de cliente,8559.24
+2025-11-14,09:23,admin_ti,2101-Proveedores,Gasto de operación,711.59
+2025-05-08,05:56,usr04,6101-Gastos de operación,Gasto de operación,7025.27
+2025-09-30,13:58,admin_ti,5101-Costo de ventas,Gasto de operación,587.93
+2025-03-13,12:16,admin_ti,1301-Inventarios,Ajuste de inventario,1096.14
+2025-12-29,12:35,usr07,5101-Costo de ventas,Cobro de cliente,5005.56
+2025-05-15,12:44,usr05,2101-Proveedores,Gasto de operación,3253.65
+2025-07-27,11:47,usr07,1201-CxC,Planilla mensual,552.77
+2025-10-30,14:02,usr06,4101-Ventas,Compra de mercadería,6280.27
+2025-05-27,10:44,usr07,2101-Proveedores,Cobro de cliente,1460.26
+2025-12-15,13:39,admin_ti,1201-CxC,Cobro de cliente,6939.69
+2025-03-03,12:24,usr05,1102-Bancos,Planilla mensual,8969.23
+2025-10-17,15:03,admin_ti,1102-Bancos,Cobro de cliente,4940.75
+2025-11-04,14:35,admin_ti,1101-Caja,Ajuste de inventario,4315.64
+2025-12-31,11:59,usr05,5101-Costo de ventas,Registro de venta,9506.43
+2025-11-04,14:39,usr08,1101-Caja,Cobro de cliente,2439.56
+2025-12-29,08:12,usr05,1201-CxC,Planilla mensual,7301.83
+2025-10-02,09:19,usr07,1101-Caja,Ajuste de inventario,8221.49
+2025-03-11,14:17,usr02,2101-Proveedores,Gasto de operación,10000.0
+2025-07-08,22:49,usr06,4101-Ventas,Compra de mercadería,3301.85
+2025-09-11,16:03,admin_ti,5101-Costo de ventas,Ajuste de inventario,2448.89
+2025-03-24,02:31,usr04,6101-Gastos de operación,Registro de venta,8063.16
+2025-12-30,15:24,usr06,1201-CxC,Planilla mensual,8937.37
+2025-01-23,08:01,admin_ti,5101-Costo de ventas,Planilla mensual,3613.89
+2025-07-16,15:42,usr08,5101-Costo de ventas,Registro de venta,4865.97
+2025-07-23,11:13,admin_ti,4101-Ventas,Compra de mercadería,7031.88
+2025-11-04,12:24,admin_ti,1301-Inventarios,Cobro de cliente,8087.65
+2025-10-09,14:10,admin_ti,1101-Caja,Cobro de cliente,884.8
+2025-10-13,14:09,admin_ti,5101-Costo de ventas,Compra de mercadería,4892.18
+2025-01-01,08:10,usr04,5101-Costo de ventas,Compra de mercadería,2986.06
+2025-07-25,14:16,admin_ti,6101-Gastos de operación,Cobro de cliente,1230.32
+2025-04-08,09:43,admin_ti,1101-Caja,Cobro de cliente,1098.68
+2025-04-10,12:51,usr03,1102-Bancos,Pago a proveedor,6159.8
+2025-06-19,08:08,usr04,1301-Inventarios,Cobro de cliente,7886.53
+2025-05-21,11:51,usr07,1102-Bancos,Pago a proveedor,5109.22
+2025-03-25,14:22,admin_ti,1101-Caja,Planilla mensual,518.49
+2025-09-17,12:17,usr01,2101-Proveedores,Pago a proveedor,3890.1
+2025-01-16,16:58,admin_ti,4101-Ventas,Planilla mensual,1448.28
+2025-05-20,13:03,usr09,1101-Caja,Cobro de cliente,3910.32
+2025-02-24,10:42,usr01,1102-Bancos,Compra de mercadería,4405.89
+2025-05-26,13:37,admin_ti,1102-Bancos,Cobro de cliente,2174.6
+2025-10-13,09:12,usr06,6101-Gastos de operación,Planilla mensual,6386.85
+2025-09-19,14:27,usr08,2101-Proveedores,Ajuste de inventario,8145.15
+2025-03-09,11:14,usr11,4101-Ventas,Registro de venta,5430.41
+2025-02-12,14:23,usr05,1101-Caja,Planilla mensual,4744.86
+2025-12-30,16:29,usr05,1102-Bancos,Ajuste de inventario,7481.97
+2025-12-31,11:14,usr07,6101-Gastos de operación,Planilla mensual,8320.39
+2025-09-08,11:23,usr05,1201-CxC,Pago a proveedor,367.28
+2025-12-30,14:10,usr01,6101-Gastos de operación,Compra de mercadería,8712.79
+2025-06-16,10:33,usr05,1102-Bancos,Planilla mensual,7297.89
+2025-02-04,11:03,usr11,2101-Proveedores,Compra de mercadería,2404.27
+2025-07-08,09:23,usr11,6101-Gastos de operación,Cobro de cliente,323.48
+2025-04-07,14:10,usr02,1101-Caja,Planilla mensual,4721.54
+2025-05-16,16:29,admin_ti,4101-Ventas,Registro de venta,7166.48
+2025-05-15,08:19,usr03,5101-Costo de ventas,Planilla mensual,6127.92
+2025-12-31,11:46,usr04,1301-Inventarios,Registro de venta,6083.85
+2025-07-29,16:38,admin_ti,6101-Gastos de operación,Ajuste de inventario,4380.52
+2025-02-11,09:00,usr02,1102-Bancos,Ajuste de inventario,8492.16
+2025-05-28,12:12,admin_ti,6101-Gastos de operación,Ajuste de inventario,5061.15
+2025-09-04,10:25,usr10,5101-Costo de ventas,Compra de mercadería,1763.82
+2025-01-17,10:27,admin_ti,1201-CxC,Planilla mensual,7733.82
+2025-01-13,11:58,admin_ti,5101-Costo de ventas,Pago a proveedor,1410.0
+2025-12-05,12:22,admin_ti,1301-Inventarios,Ajuste de inventario,3025.77
+2025-12-15,14:45,usr09,2101-Proveedores,Compra de mercadería,8013.33
+2025-08-21,08:56,admin_ti,2101-Proveedores,Pago a proveedor,7596.37
+2025-04-21,16:59,admin_ti,1102-Bancos,Registro de venta,4719.23
+2025-12-31,08:18,usr06,2101-Proveedores,Planilla mensual,9251.76
+2025-10-24,22:34,usr05,1201-CxC,Planilla mensual,3232.13
+2025-03-19,09:35,admin_ti,1101-Caja,Registro de venta,325.09
+2025-09-09,11:58,usr04,2101-Proveedores,Planilla mensual,2612.7
+2025-08-07,15:02,usr10,1102-Bancos,Cobro de cliente,4202.13
+2025-09-12,16:36,usr09,1301-Inventarios,Registro de venta,817.28
+2025-08-04,12:38,usr09,1101-Caja,Planilla mensual,4997.06
+2025-12-30,13:32,usr03,1102-Bancos,Registro de venta,1316.52
+2025-12-02,11:12,admin_ti,1201-CxC,Cobro de cliente,268.09
+2025-05-27,15:39,usr11,5101-Costo de ventas,Gasto de operación,8456.15
+2025-02-20,12:37,admin_ti,6101-Gastos de operación,Registro de venta,2909.46
+2025-09-18,09:22,admin_ti,6101-Gastos de operación,Ajuste de inventario,784.71
+2025-10-28,23:08,usr02,1101-Caja,Cobro de cliente,8245.13
+2025-12-03,10:13,admin_ti,2101-Proveedores,Registro de venta,1187.71
+2025-04-09,12:32,usr02,1301-Inventarios,Gasto de operación,25000.0
+2025-11-11,11:28,admin_ti,1102-Bancos,Pago a proveedor,2288.77
+2025-08-04,09:07,admin_ti,1101-Caja,Pago a proveedor,7831.69
+2025-01-02,03:57,usr11,6101-Gastos de operación,Compra de mercadería,4286.23
+2025-10-31,08:20,admin_ti,1102-Bancos,Pago a proveedor,1863.17
+2025-10-22,08:58,usr03,1201-CxC,Registro de venta,2971.75
+2025-10-30,17:58,usr09,1101-Caja,Pago a proveedor,6150.63
+2025-03-31,17:29,usr07,1102-Bancos,Cobro de cliente,1949.89
+2025-07-09,08:28,usr08,5101-Costo de ventas,Compra de mercadería,108.7
+2025-05-09,22:15,usr02,1301-Inventarios,Compra de mercadería,7655.16
+2025-12-31,14:30,usr07,4101-Ventas,Compra de mercadería,8492.68
+2025-10-31,11:35,usr09,6101-Gastos de operación,Registro de venta,5284.86
+2025-02-28,08:04,usr07,1101-Caja,Compra de mercadería,8402.99
+2025-07-28,15:43,usr11,1101-Caja,Planilla mensual,5234.13
+2025-10-21,00:13,usr09,1201-CxC,Gasto de operación,3462.75
+2025-03-18,16:33,usr01,6101-Gastos de operación,Ajuste de inventario,8334.27
+2025-05-14,10:47,admin_ti,4101-Ventas,Compra de mercadería,406.56
+2025-04-11,11:02,usr06,1201-CxC,Planilla mensual,4247.26
+2025-04-03,12:15,usr07,1301-Inventarios,Registro de venta,6736.86
+2025-03-26,00:27,usr10,4101-Ventas,Cobro de cliente,7118.66
+2025-03-28,15:57,usr06,5101-Costo de ventas,Cobro de cliente,3576.73
+2025-12-29,09:37,usr02,1301-Inventarios,Cobro de cliente,5101.11
+2025-09-19,12:26,usr02,6101-Gastos de operación,Cobro de cliente,8058.19
+2025-12-04,14:19,admin_ti,1101-Caja,Ajuste de inventario,8938.78
+2025-08-14,23:58,usr08,6101-Gastos de operación,Registro de venta,2117.46
+2025-12-17,16:05,usr03,5101-Costo de ventas,Planilla mensual,5000.0
+2025-12-04,09:42,usr07,1201-CxC,Cobro de cliente,10000.0
+2025-07-14,14:33,admin_ti,1201-CxC,Gasto de operación,3811.68
+2025-01-09,14:53,usr05,6101-Gastos de operación,Compra de mercadería,1694.11
+2025-10-07,17:42,admin_ti,4101-Ventas,Pago a proveedor,4566.04
+2025-12-04,08:21,admin_ti,5101-Costo de ventas,Ajuste de inventario,7812.77
+2025-02-07,08:46,usr09,1301-Inventarios,Compra de mercadería,726.18
+2025-01-31,08:48,usr02,5101-Costo de ventas,Planilla mensual,3780.03
+2025-01-28,23:46,usr01,2101-Proveedores,Gasto de operación,1144.86
+2025-04-16,03:38,usr02,1102-Bancos,Compra de mercadería,3673.23
+2025-05-19,14:53,admin_ti,1101-Caja,Compra de mercadería,5100.36
+2025-08-29,16:32,admin_ti,1102-Bancos,Gasto de operación,1929.84
+2025-05-28,11:09,usr02,1101-Caja,Pago a proveedor,7478.92
+2025-04-21,15:26,admin_ti,4101-Ventas,Ajuste de inventario,6393.58
+2025-07-23,13:53,usr07,1301-Inventarios,Gasto de operación,1826.72
+2025-04-22,09:42,admin_ti,6101-Gastos de operación,Cobro de cliente,3416.91
+2025-01-08,17:42,admin_ti,1101-Caja,Planilla mensual,724.46
+2025-10-16,15:16,admin_ti,2101-Proveedores,Cobro de cliente,6459.04
+2025-10-14,08:57,usr06,5101-Costo de ventas,Gasto de operación,2594.12
+2025-05-14,12:59,admin_ti,2101-Proveedores,Gasto de operación,2494.59
+2025-04-28,14:56,admin_ti,1301-Inventarios,Gasto de operación,218.19
+2025-02-20,14:31,usr03,1201-CxC,Registro de venta,4157.75
+2025-06-04,09:33,admin_ti,1102-Bancos,Cobro de cliente,2693.83
+2025-10-31,09:01,admin_ti,1301-Inventarios,Compra de mercadería,8555.68
+2025-05-06,14:32,usr07,1102-Bancos,Planilla mensual,2000.0
+2025-02-14,17:49,admin_ti,1301-Inventarios,Compra de mercadería,2127.3
+2025-05-26,16:44,usr06,5101-Costo de ventas,Cobro de cliente,7918.59
+2025-08-14,12:22,usr03,1101-Caja,Gasto de operación,5121.64
+2025-05-22,10:54,usr07,6101-Gastos de operación,Ajuste de inventario,2522.88
+2025-03-26,11:06,admin_ti,1102-Bancos,Gasto de operación,4809.81
+2025-12-16,16:22,admin_ti,2101-Proveedores,Registro de venta,3338.11
+2025-06-03,09:40,usr06,1301-Inventarios,Gasto de operación,2077.77
+2025-07-03,04:27,usr09,2101-Proveedores,Registro de venta,3427.71
+2025-06-20,12:50,admin_ti,1102-Bancos,Compra de mercadería,2573.41
+2025-04-17,10:46,usr05,1301-Inventarios,Compra de mercadería,5266.8
+2025-10-01,15:15,usr08,1102-Bancos,Planilla mensual,4506.01
+2025-06-25,04:37,usr03,4101-Ventas,Compra de mercadería,399.77
+2025-05-29,13:18,admin_ti,1101-Caja,Registro de venta,715.62
+2025-01-06,11:43,usr11,1101-Caja,Compra de mercadería,1580.72
+2025-02-03,08:02,usr11,6101-Gastos de operación,Planilla mensual,7827.37
+2025-09-04,12:12,usr11,1201-CxC,Gasto de operación,4298.67
+2025-06-05,14:56,usr11,1301-Inventarios,Pago a proveedor,7986.5
+2025-04-30,15:33,admin_ti,1201-CxC,Compra de mercadería,3095.76
+2025-01-28,16:48,admin_ti,4101-Ventas,Compra de mercadería,6411.19
+2025-10-23,05:36,usr02,5101-Costo de ventas,Compra de mercadería,1166.83
+2025-04-03,08:20,usr02,4101-Ventas,Cobro de cliente,3206.34
+2025-02-11,10:18,admin_ti,1102-Bancos,Ajuste de inventario,7450.74
+2025-03-20,11:47,usr09,5101-Costo de ventas,Planilla mensual,2872.92
+2025-08-25,17:05,usr02,2101-Proveedores,Compra de mercadería,4920.43
+2025-09-19,11:15,usr03,1101-Caja,Planilla mensual,6889.42
+2025-09-11,12:44,usr01,6101-Gastos de operación,Cobro de cliente,6259.99
+2025-05-08,10:46,usr05,1201-CxC,Pago a proveedor,3450.47
+2025-01-16,08:25,usr08,5101-Costo de ventas,Ajuste de inventario,4912.0
+2025-10-09,15:48,usr08,4101-Ventas,Gasto de operación,1350.32
+2025-04-28,13:09,admin_ti,6101-Gastos de operación,Gasto de operación,6373.32
+2025-10-22,22:41,usr09,1201-CxC,Planilla mensual,1655.3
+2025-12-15,10:52,usr10,6101-Gastos de operación,Ajuste de inventario,4465.97
+2025-06-27,15:58,admin_ti,1301-Inventarios,Pago a proveedor,5333.31
+2025-12-30,09:58,usr05,6101-Gastos de operación,Planilla mensual,1976.45
+2025-07-21,11:02,usr01,1102-Bancos,Ajuste de inventario,3000.0
+2025-06-09,12:18,usr03,1201-CxC,Planilla mensual,7162.81
+2025-08-29,16:01,usr08,1102-Bancos,Compra de mercadería,4059.24
+2025-08-11,13:01,usr04,4101-Ventas,Ajuste de inventario,5386.52
+2025-04-21,00:08,usr09,5101-Costo de ventas,Pago a proveedor,5142.87
+2025-09-11,10:45,admin_ti,6101-Gastos de operación,Registro de venta,8997.03
+2025-08-26,10:15,usr09,1201-CxC,Gasto de operación,4032.12
+2025-02-17,11:12,usr05,1102-Bancos,Cobro de cliente,5521.45
+2025-02-12,09:49,admin_ti,1102-Bancos,Pago a proveedor,1451.13
+2025-09-01,15:31,usr10,1301-Inventarios,Planilla mensual,3959.34
+2025-06-16,16:55,admin_ti,1102-Bancos,Registro de venta,3066.41
+2025-03-14,14:07,admin_ti,2101-Proveedores,Registro de venta,3128.51
+2025-08-19,09:51,admin_ti,2101-Proveedores,Ajuste de inventario,1189.57
+2025-06-26,12:55,admin_ti,1101-Caja,Cobro de cliente,3997.1
+2025-04-24,22:04,usr10,1201-CxC,Registro de venta,5064.72
+2025-09-30,10:20,admin_ti,1301-Inventarios,Pago a proveedor,106.36
+2025-10-21,10:49,usr07,1301-Inventarios,Planilla mensual,8000.0
+2025-09-22,11:16,usr04,1201-CxC,Compra de mercadería,6708.34
+2025-07-23,16:20,admin_ti,6101-Gastos de operación,Pago a proveedor,2657.08
+2025-02-19,09:14,admin_ti,1301-Inventarios,Pago a proveedor,3647.22
+2025-03-04,12:01,admin_ti,1301-Inventarios,Cobro de cliente,3116.91
+2025-11-25,11:34,admin_ti,1201-CxC,Ajuste de inventario,5419.98
+2025-12-23,17:41,admin_ti,1101-Caja,Registro de venta,4296.58
+2025-08-26,12:55,usr06,1102-Bancos,Planilla mensual,8157.52
+2025-12-29,15:46,usr09,2101-Proveedores,Registro de venta,3408.52
+2025-05-08,17:42,admin_ti,1101-Caja,Compra de mercadería,3150.22
+2025-12-17,12:38,admin_ti,1201-CxC,Planilla mensual,5996.45
+2025-04-28,13:27,usr07,4101-Ventas,Ajuste de inventario,7803.57
+2025-09-02,16:54,usr11,6101-Gastos de operación,Planilla mensual,2000.0
+2025-09-04,14:39,usr04,1201-CxC,Compra de mercadería,6157.02
+2025-12-30,14:11,usr07,1301-Inventarios,Registro de venta,2302.94
+2025-10-08,08:47,admin_ti,2101-Proveedores,Registro de venta,2913.87
+2025-12-30,15:51,usr08,6101-Gastos de operación,Compra de mercadería,2852.12
+2025-06-19,12:26,usr02,4101-Ventas,Registro de venta,7424.45
+2025-01-22,08:44,usr08,5101-Costo de ventas,Ajuste de inventario,3618.25
+2025-06-13,08:12,admin_ti,1102-Bancos,Gasto de operación,5743.21
+2025-05-19,09:22,usr02,1102-Bancos,Gasto de operación,4129.56
+2025-05-06,08:10,admin_ti,6101-Gastos de operación,Gasto de operación,1800.87
+2025-03-31,08:26,admin_ti,1201-CxC,Gasto de operación,107.81
+2025-12-29,11:01,usr07,6101-Gastos de operación,Pago a proveedor,11488.77
+2025-11-19,14:36,usr01,2101-Proveedores,Ajuste de inventario,1850.51
+2025-12-29,11:52,usr02,5101-Costo de ventas,Compra de mercadería,11958.15
+2025-11-13,08:51,usr05,1201-CxC,Gasto de operación,7608.6
+2025-08-15,17:22,usr10,1201-CxC,Ajuste de inventario,510.86
+2025-09-30,15:40,admin_ti,1102-Bancos,Gasto de operación,2369.67
+2025-04-01,14:11,admin_ti,5101-Costo de ventas,Pago a proveedor,197.57
+2025-10-20,22:19,usr06,1101-Caja,Pago a proveedor,3256.04
+2025-12-31,08:11,usr06,6101-Gastos de operación,Planilla mensual,7382.64
+2025-05-01,09:39,usr07,1301-Inventarios,Planilla mensual,8432.25
+2025-04-24,15:40,admin_ti,1102-Bancos,Ajuste de inventario,5932.16
+2025-12-30,12:29,usr03,1201-CxC,Cobro de cliente,4748.7
+2025-08-01,11:19,usr05,4101-Ventas,Gasto de operación,7960.88
+2025-11-18,11:32,usr08,5101-Costo de ventas,Cobro de cliente,4814.85
+2025-07-21,16:19,usr09,1301-Inventarios,Ajuste de inventario,7101.33
+2025-02-11,12:51,admin_ti,5101-Costo de ventas,Gasto de operación,3050.3
+2025-01-10,17:29,usr05,4101-Ventas,Pago a proveedor,5585.98
+2025-04-22,08:41,usr02,2101-Proveedores,Ajuste de inventario,3675.56
+2025-12-30,08:32,usr10,1102-Bancos,Compra de mercadería,9505.62
+2025-04-29,11:10,usr03,4101-Ventas,Compra de mercadería,1719.72
+2025-07-08,17:17,usr09,1201-CxC,Cobro de cliente,5967.59
+2025-06-10,09:53,usr03,1301-Inventarios,Registro de venta,8189.5
+2025-03-05,15:09,usr02,1201-CxC,Registro de venta,7696.03
+2025-09-30,01:11,usr07,1201-CxC,Cobro de cliente,4567.63
+2025-09-11,14:28,admin_ti,5101-Costo de ventas,Registro de venta,3433.53
+2025-02-05,10:54,usr11,5101-Costo de ventas,Planilla mensual,2922.75
+2025-12-30,16:36,usr02,1201-CxC,Planilla mensual,3060.63
+2025-12-18,11:45,usr07,1101-Caja,Gasto de operación,4649.36
+2025-09-10,13:16,admin_ti,5101-Costo de ventas,Cobro de cliente,1144.92
+2025-08-07,09:43,usr11,6101-Gastos de operación,Cobro de cliente,5234.13
+2025-10-15,17:08,admin_ti,2101-Proveedores,Cobro de cliente,8033.01
+2025-10-03,14:48,usr05,5101-Costo de ventas,Gasto de operación,5599.73
+2025-12-30,13:31,usr09,4101-Ventas,Gasto de operación,11199.68
+2025-04-01,08:53,usr03,1301-Inventarios,Pago a proveedor,4489.28
+2025-05-26,09:59,usr03,1102-Bancos,Cobro de cliente,1627.46
+2025-05-27,10:22,admin_ti,6101-Gastos de operación,Compra de mercadería,8380.37
+2025-04-10,12:11,usr06,4101-Ventas,Ajuste de inventario,8374.64
+2025-05-08,17:24,admin_ti,4101-Ventas,Registro de venta,2697.4
+2025-12-10,11:30,usr03,5101-Costo de ventas,Cobro de cliente,2532.07
+2025-11-12,17:46,usr02,1201-CxC,Ajuste de inventario,4266.98
+2025-04-23,17:58,admin_ti,5101-Costo de ventas,Ajuste de inventario,8654.78
+2025-06-23,12:37,admin_ti,1301-Inventarios,Pago a proveedor,3352.37
+2025-05-13,12:44,admin_ti,5101-Costo de ventas,Planilla mensual,80.15
+2025-03-10,17:46,usr06,4101-Ventas,Registro de venta,6492.73
+2025-08-20,08:20,usr05,1201-CxC,Ajuste de inventario,2757.23
+2025-10-07,17:19,usr05,5101-Costo de ventas,Compra de mercadería,4758.97
+2025-09-23,08:56,usr08,1201-CxC,Compra de mercadería,2038.12
+2025-02-13,15:14,usr04,1301-Inventarios,Cobro de cliente,1944.21
+2025-12-31,13:20,usr08,5101-Costo de ventas,Ajuste de inventario,11996.48
+2025-08-18,01:45,usr03,1101-Caja,Ajuste de inventario,8376.36
+2025-09-16,13:20,usr01,6101-Gastos de operación,Registro de venta,1167.98
+2025-03-26,10:18,admin_ti,6101-Gastos de operación,Compra de mercadería,6509.21
+2025-06-03,13:20,admin_ti,1101-Caja,Planilla mensual,5458.8
+2025-10-30,13:37,admin_ti,5101-Costo de ventas,Registro de venta,3577.73
+2025-06-24,12:15,admin_ti,4101-Ventas,Pago a proveedor,3696.25
+2025-07-15,08:19,usr06,1101-Caja,Registro de venta,8453.82
+2025-07-15,03:19,usr02,4101-Ventas,Compra de mercadería,4613.76
+2025-03-10,15:31,admin_ti,1301-Inventarios,Planilla mensual,5909.72
+2025-02-05,10:06,usr02,5101-Costo de ventas,Compra de mercadería,3000.0
+2025-07-23,12:30,usr11,1301-Inventarios,Cobro de cliente,2000.0
+2025-07-02,17:16,usr09,1301-Inventarios,Cobro de cliente,646.2
+2025-11-03,10:23,usr02,4101-Ventas,Registro de venta,5557.01
+2025-12-31,14:03,usr05,1102-Bancos,Compra de mercadería,10119.58
+2025-08-11,13:29,usr07,1301-Inventarios,Gasto de operación,8294.33
+2025-07-11,00:39,usr08,2101-Proveedores,Pago a proveedor,3255.55
+2025-12-31,09:00,usr09,5101-Costo de ventas,Gasto de operación,5414.84
+2025-03-28,02:02,usr11,1101-Caja,Planilla mensual,8543.1
+2025-09-19,05:47,usr11,1101-Caja,Compra de mercadería,1867.0
+2025-10-08,14:01,admin_ti,1102-Bancos,Planilla mensual,4564.26
+2025-12-31,13:49,usr04,5101-Costo de ventas,Compra de mercadería,11186.85
+2025-04-15,05:52,usr01,1301-Inventarios,Planilla mensual,7727.65
+2025-04-02,10:47,usr01,1101-Caja,Compra de mercadería,2511.02
+2025-09-01,09:47,admin_ti,5101-Costo de ventas,Registro de venta,7907.13
+2025-03-04,13:54,admin_ti,1301-Inventarios,Planilla mensual,2973.29
+2025-10-17,16:29,usr05,1201-CxC,Cobro de cliente,6152.09
+2025-09-11,11:58,usr11,1102-Bancos,Pago a proveedor,962.51
+2025-04-30,10:35,usr07,5101-Costo de ventas,Ajuste de inventario,3000.0
+2025-02-14,10:52,admin_ti,1101-Caja,Ajuste de inventario,528.15
+2025-02-14,12:20,admin_ti,4101-Ventas,Registro de venta,397.22
+2025-10-09,14:36,admin_ti,1101-Caja,Cobro de cliente,8472.1
+2025-01-22,08:09,admin_ti,1201-CxC,Cobro de cliente,1208.51
+2025-11-06,09:52,usr04,1101-Caja,Planilla mensual,25000.0
+2025-03-14,16:31,admin_ti,6101-Gastos de operación,Ajuste de inventario,4276.24
+2025-12-23,14:49,usr08,1102-Bancos,Cobro de cliente,6158.82
+2025-01-08,08:11,usr04,6101-Gastos de operación,Planilla mensual,602.94
+2025-04-21,12:32,admin_ti,6101-Gastos de operación,Gasto de operación,7682.85
+2025-10-20,11:24,admin_ti,1102-Bancos,Gasto de operación,3954.96
+2025-12-30,12:02,usr09,2101-Proveedores,Pago a proveedor,6808.06
+2025-11-19,08:15,usr09,1102-Bancos,Cobro de cliente,4973.44
+2025-12-16,08:23,usr08,1101-Caja,Ajuste de inventario,6948.64
+2025-12-24,05:24,usr11,1301-Inventarios,Planilla mensual,4850.64
+2025-07-08,15:45,usr03,5101-Costo de ventas,Pago a proveedor,4848.05
+2025-07-14,11:19,admin_ti,1102-Bancos,Gasto de operación,1639.28
+2025-01-21,09:29,usr06,6101-Gastos de operación,Cobro de cliente,6380.46
+2025-02-14,13:13,usr05,4101-Ventas,Compra de mercadería,3328.25
+2025-06-30,17:07,usr09,6101-Gastos de operación,Registro de venta,1764.87
+2025-09-04,09:05,usr11,1102-Bancos,Registro de venta,6803.6
+2025-09-29,11:42,admin_ti,6101-Gastos de operación,Gasto de operación,2533.34
+2025-08-23,15:47,usr02,1101-Caja,Planilla mensual,2907.64
+2025-01-20,16:52,usr10,1201-CxC,Compra de mercadería,4822.6
+2025-03-07,17:07,admin_ti,1301-Inventarios,Pago a proveedor,8367.92
+2025-06-09,10:19,usr09,1102-Bancos,Gasto de operación,3426.24
+2025-09-11,13:30,usr10,5101-Costo de ventas,Cobro de cliente,1233.2
+2025-01-10,09:39,usr03,6101-Gastos de operación,Pago a proveedor,1067.51
+2025-11-14,17:03,admin_ti,2101-Proveedores,Compra de mercadería,6302.85
+2025-09-26,14:24,usr01,5101-Costo de ventas,Pago a proveedor,8918.58
+2025-04-29,12:08,admin_ti,6101-Gastos de operación,Registro de venta,3604.46
+2025-02-21,16:21,admin_ti,1301-Inventarios,Cobro de cliente,3119.45
+2025-10-01,11:12,usr06,1101-Caja,Ajuste de inventario,4985.42
+2025-08-27,12:08,admin_ti,1101-Caja,Ajuste de inventario,2866.2
+2025-12-29,13:03,usr11,2101-Proveedores,Pago a proveedor,6270.39
+2025-06-19,08:47,usr11,1201-CxC,Ajuste de inventario,2855.53
+2025-11-06,04:02,usr06,6101-Gastos de operación,Registro de venta,7003.95
+2025-05-23,17:39,usr09,4101-Ventas,Cobro de cliente,6750.92
+2025-05-22,15:22,admin_ti,5101-Costo de ventas,Compra de mercadería,7584.34
+2025-04-25,15:00,usr06,2101-Proveedores,Pago a proveedor,7381.34
+2025-12-02,09:51,admin_ti,1102-Bancos,Planilla mensual,5726.01
+2025-07-15,10:17,usr07,5101-Costo de ventas,Compra de mercadería,4472.05
+2025-05-16,16:05,usr05,2101-Proveedores,Ajuste de inventario,4483.58
+2025-04-17,11:11,usr06,1201-CxC,Cobro de cliente,1954.26
+2025-01-31,09:09,usr11,1102-Bancos,Pago a proveedor,4978.67
+2025-08-19,12:39,admin_ti,1201-CxC,Gasto de operación,8632.69
+2025-03-14,16:04,usr05,4101-Ventas,Cobro de cliente,3862.4
+2025-02-03,16:16,usr01,2101-Proveedores,Compra de mercadería,7001.8
+2025-06-20,13:15,usr11,1102-Bancos,Compra de mercadería,2000.0
+2025-12-29,12:53,usr09,1102-Bancos,Compra de mercadería,6541.46
+2025-07-10,17:49,usr03,1301-Inventarios,Ajuste de inventario,7518.31
+2025-02-25,15:38,usr09,4101-Ventas,Registro de venta,1572.96
+2025-06-27,13:35,admin_ti,4101-Ventas,Pago a proveedor,880.23
+2025-01-28,02:18,usr03,5101-Costo de ventas,Ajuste de inventario,4230.15
+2025-08-21,08:55,admin_ti,1301-Inventarios,Cobro de cliente,2892.45
+2025-08-14,16:32,admin_ti,2101-Proveedores,Planilla mensual,5081.56
+2025-07-10,11:47,admin_ti,2101-Proveedores,Compra de mercadería,113.46
+2025-01-01,16:14,usr04,4101-Ventas,Compra de mercadería,398.5
+2025-01-23,17:02,usr06,5101-Costo de ventas,Planilla mensual,8333.53
+2025-11-14,10:30,admin_ti,2101-Proveedores,Registro de venta,3178.06
+2025-05-13,14:05,usr02,4101-Ventas,Ajuste de inventario,6773.04
+2025-12-31,12:34,usr01,5101-Costo de ventas,Cobro de cliente,4979.27
+2025-10-23,16:09,usr02,1101-Caja,Cobro de cliente,2000.0
+2025-07-24,12:52,admin_ti,6101-Gastos de operación,Cobro de cliente,2030.68
+2025-03-11,10:53,usr11,1301-Inventarios,Cobro de cliente,169.87
+2025-06-13,16:01,admin_ti,4101-Ventas,Compra de mercadería,8769.68
+2025-06-12,17:39,admin_ti,1301-Inventarios,Planilla mensual,1466.39
+2025-02-17,17:44,admin_ti,1201-CxC,Gasto de operación,2045.13
+2025-11-07,17:23,admin_ti,6101-Gastos de operación,Pago a proveedor,1600.44
+2025-08-26,09:17,usr05,5101-Costo de ventas,Planilla mensual,10000.0
+2025-10-07,10:41,admin_ti,6101-Gastos de operación,Cobro de cliente,8759.54
+2025-03-07,12:03,usr02,6101-Gastos de operación,Registro de venta,2056.68
+2025-06-03,16:26,admin_ti,6101-Gastos de operación,Ajuste de inventario,5178.82
+2025-05-15,14:44,usr01,1201-CxC,Ajuste de inventario,7864.33
+2025-04-30,09:53,usr08,1201-CxC,Planilla mensual,7936.84
+2025-07-17,01:24,usr05,2101-Proveedores,Pago a proveedor,6042.06
+2025-07-31,15:58,usr06,2101-Proveedores,Registro de venta,5010.08
+2025-06-25,08:24,usr11,1301-Inventarios,Pago a proveedor,7204.34
+2025-11-17,08:41,usr05,1201-CxC,Planilla mensual,3852.6
+2025-06-09,09:24,usr05,1101-Caja,Registro de venta,15000.0
+2025-09-04,12:27,usr09,1301-Inventarios,Gasto de operación,972.9
+2025-12-31,17:11,usr09,2101-Proveedores,Planilla mensual,1143.56
+2025-12-29,10:02,usr02,1101-Caja,Cobro de cliente,11660.32
+2025-06-07,14:08,usr01,2101-Proveedores,Compra de mercadería,8976.08
+2025-04-01,11:19,usr08,1201-CxC,Cobro de cliente,5000.0
+2025-03-26,08:54,usr08,6101-Gastos de operación,Gasto de operación,2119.79
+2025-04-18,08:15,admin_ti,1201-CxC,Registro de venta,3250.95
+2025-03-05,12:44,admin_ti,1101-Caja,Planilla mensual,4528.49
+2025-05-23,14:04,usr10,4101-Ventas,Pago a proveedor,2822.69
+2025-12-31,14:32,usr09,1301-Inventarios,Gasto de operación,5064.6
+2025-03-05,12:01,usr11,4101-Ventas,Pago a proveedor,8535.85
+2025-10-28,14:20,usr10,5101-Costo de ventas,Planilla mensual,2596.0
+2025-12-30,09:12,usr05,1201-CxC,Pago a proveedor,8644.59
+2025-10-17,16:10,usr01,1101-Caja,Ajuste de inventario,2384.71
+2025-04-07,16:19,admin_ti,5101-Costo de ventas,Compra de mercadería,4256.85
+2025-12-29,14:29,usr09,1201-CxC,Registro de venta,3366.38
+2025-04-14,14:40,usr02,2101-Proveedores,Cobro de cliente,4302.49
+2025-12-30,14:58,usr05,1102-Bancos,Planilla mensual,6002.9
+2025-04-25,13:59,usr08,1301-Inventarios,Planilla mensual,134.75
+2025-01-01,12:51,admin_ti,1102-Bancos,Cobro de cliente,2447.98
+2025-04-07,08:04,admin_ti,1301-Inventarios,Ajuste de inventario,2631.11
+2025-09-15,14:47,usr07,2101-Proveedores,Cobro de cliente,1000.0
+2025-09-29,15:20,usr02,4101-Ventas,Registro de venta,2807.04
+2025-04-15,10:34,usr11,1201-CxC,Gasto de operación,1144.58
+2025-01-30,11:41,usr06,4101-Ventas,Gasto de operación,5294.58
+2025-11-11,17:44,admin_ti,1201-CxC,Cobro de cliente,8620.31
+2025-12-30,08:55,usr06,1201-CxC,Gasto de operación,5745.17
+2025-01-29,05:54,usr08,1301-Inventarios,Cobro de cliente,5896.6
+2025-06-10,13:21,admin_ti,5101-Costo de ventas,Pago a proveedor,975.52
+2025-09-22,09:53,usr05,1201-CxC,Cobro de cliente,5061.28
+2025-07-04,09:32,admin_ti,1102-Bancos,Ajuste de inventario,6214.13
+2025-08-20,11:12,admin_ti,1101-Caja,Cobro de cliente,2588.92
+2025-10-21,17:06,usr05,4101-Ventas,Ajuste de inventario,6813.35
+2025-12-29,09:48,usr01,1102-Bancos,Pago a proveedor,1653.63
+2025-09-01,13:59,admin_ti,1301-Inventarios,Cobro de cliente,7061.97
+2025-10-23,03:08,usr03,4101-Ventas,Ajuste de inventario,8632.9
+2025-02-20,15:22,usr07,1201-CxC,Registro de venta,7828.56
+2025-09-10,17:13,admin_ti,6101-Gastos de operación,Ajuste de inventario,3712.41
+2025-07-31,14:15,usr05,1101-Caja,Compra de mercadería,5781.38
+2025-07-28,23:30,usr05,1102-Bancos,Ajuste de inventario,7066.76
+2025-01-16,10:53,admin_ti,5101-Costo de ventas,Pago a proveedor,1383.82
+2025-03-13,15:59,usr04,1101-Caja,Pago a proveedor,8483.9
+2025-08-25,13:39,admin_ti,1201-CxC,Gasto de operación,2397.16
+2025-02-14,10:11,usr11,1301-Inventarios,Pago a proveedor,2000.0
+2025-06-11,17:07,admin_ti,5101-Costo de ventas,Planilla mensual,5456.13
+2025-11-05,14:27,usr09,6101-Gastos de operación,Gasto de operación,4327.7
+2025-12-30,11:05,usr10,4101-Ventas,Registro de venta,659.3
+2025-02-19,16:46,admin_ti,5101-Costo de ventas,Compra de mercadería,3005.62
+2025-03-31,11:35,admin_ti,1201-CxC,Ajuste de inventario,5572.93
+2025-01-30,22:45,usr08,2101-Proveedores,Planilla mensual,2553.6
+2025-01-13,17:10,usr03,2101-Proveedores,Planilla mensual,150.67
+2025-05-28,13:37,usr01,5101-Costo de ventas,Ajuste de inventario,3176.87
+2025-08-06,13:19,usr11,1101-Caja,Registro de venta,10000.0
+2025-08-23,10:00,usr04,1101-Caja,Compra de mercadería,4720.34
+2025-01-03,14:25,usr07,1201-CxC,Cobro de cliente,5362.43
+2025-11-21,08:57,usr05,1101-Caja,Compra de mercadería,6669.26
+2025-07-04,14:39,admin_ti,4101-Ventas,Planilla mensual,3418.72
+2025-11-24,11:21,usr11,1102-Bancos,Registro de venta,6695.54
+2025-03-26,11:22,usr05,1102-Bancos,Ajuste de inventario,1446.33
+2025-08-22,15:08,usr09,1301-Inventarios,Compra de mercadería,3490.79
+2025-02-05,16:27,usr11,1301-Inventarios,Registro de venta,5489.88
+2025-09-12,08:35,admin_ti,4101-Ventas,Gasto de operación,3815.15
+2025-06-17,12:43,usr02,1101-Caja,Registro de venta,1459.94
+2025-12-11,13:05,usr03,1102-Bancos,Compra de mercadería,8280.18
+2025-09-10,10:41,admin_ti,1301-Inventarios,Ajuste de inventario,2953.74
+2025-02-08,14:25,usr11,4101-Ventas,Registro de venta,6752.66
+2025-05-07,15:49,admin_ti,6101-Gastos de operación,Compra de mercadería,7277.47
+2025-10-03,17:06,usr02,2101-Proveedores,Compra de mercadería,4077.96
+2025-12-03,12:50,admin_ti,2101-Proveedores,Compra de mercadería,5170.92
+2025-12-17,15:32,admin_ti,1301-Inventarios,Gasto de operación,3706.69
+2025-05-22,11:40,admin_ti,6101-Gastos de operación,Compra de mercadería,7966.23
+2025-06-25,17:06,admin_ti,1201-CxC,Compra de mercadería,3411.22
+2025-12-29,10:12,usr04,2101-Proveedores,Compra de mercadería,2840.04
+2025-01-06,08:02,usr09,4101-Ventas,Planilla mensual,8865.81
+2025-08-28,15:15,admin_ti,1301-Inventarios,Cobro de cliente,5691.08
+2025-05-21,17:18,admin_ti,6101-Gastos de operación,Pago a proveedor,1248.46
+2025-01-27,10:20,admin_ti,1201-CxC,Gasto de operación,3439.06
+2025-12-02,14:40,admin_ti,1201-CxC,Pago a proveedor,1997.74
+2025-01-10,14:48,admin_ti,1301-Inventarios,Pago a proveedor,7003.31
+2025-08-05,15:03,usr02,1201-CxC,Registro de venta,5324.39
+2025-07-01,13:35,usr01,5101-Costo de ventas,Pago a proveedor,2531.36
+2025-01-13,08:15,usr06,1101-Caja,Planilla mensual,3502.36
+2025-08-05,13:17,admin_ti,4101-Ventas,Cobro de cliente,3360.24
+2025-04-02,13:25,usr05,1102-Bancos,Registro de venta,5000.0
+2025-07-21,11:05,admin_ti,6101-Gastos de operación,Pago a proveedor,6509.28
+2025-03-27,16:35,admin_ti,6101-Gastos de operación,Compra de mercadería,1858.9
+2025-06-15,12:56,usr04,1102-Bancos,Registro de venta,2889.46
+2025-10-09,14:53,admin_ti,2101-Proveedores,Cobro de cliente,286.86
+2025-08-29,17:49,usr02,1301-Inventarios,Registro de venta,3660.43
+2025-03-19,12:24,admin_ti,1201-CxC,Registro de venta,1074.38
+2025-09-01,17:49,usr09,4101-Ventas,Ajuste de inventario,5582.99
+2025-12-29,09:13,usr02,2101-Proveedores,Planilla mensual,6546.47
+2025-01-20,12:33,admin_ti,2101-Proveedores,Pago a proveedor,6382.21
+2025-08-06,16:13,admin_ti,1201-CxC,Cobro de cliente,7818.68
+2025-12-31,12:56,usr10,1301-Inventarios,Compra de mercadería,8249.05
+2025-02-05,17:43,admin_ti,1301-Inventarios,Gasto de operación,1667.89
+2025-02-17,08:48,admin_ti,4101-Ventas,Compra de mercadería,7457.1
+2025-10-13,22:52,usr02,1301-Inventarios,Compra de mercadería,8540.74
+2025-06-09,13:22,usr01,5101-Costo de ventas,Ajuste de inventario,360.3
+2025-08-13,14:36,usr02,5101-Costo de ventas,Gasto de operación,4266.98
+2025-01-29,05:38,usr08,6101-Gastos de operación,Pago a proveedor,4251.96
+2025-07-22,14:45,admin_ti,5101-Costo de ventas,Planilla mensual,220.88
+2025-04-09,16:58,admin_ti,6101-Gastos de operación,Pago a proveedor,434.86
+2025-01-15,22:35,usr08,6101-Gastos de operación,Ajuste de inventario,1617.49
+2025-12-31,08:53,usr08,1102-Bancos,Cobro de cliente,1375.38
+2025-12-29,12:21,usr03,4101-Ventas,Cobro de cliente,1514.84
+2025-11-17,12:11,usr08,1102-Bancos,Pago a proveedor,7569.23
+2025-07-09,09:15,usr01,1101-Caja,Gasto de operación,3793.02
+2025-08-05,14:03,admin_ti,1201-CxC,Planilla mensual,2560.3
+2025-12-31,10:35,usr05,2101-Proveedores,Compra de mercadería,9094.93
+2025-03-25,12:38,usr03,5101-Costo de ventas,Cobro de cliente,4264.88
+2025-07-08,16:53,usr08,2101-Proveedores,Gasto de operación,3237.27
+2025-09-10,12:57,admin_ti,4101-Ventas,Pago a proveedor,905.45
+2025-10-08,11:39,admin_ti,1301-Inventarios,Gasto de operación,6062.31
+2025-09-15,16:22,admin_ti,4101-Ventas,Pago a proveedor,1751.09
+2025-12-22,10:50,admin_ti,1101-Caja,Compra de mercadería,4411.71
+2025-02-20,15:08,admin_ti,2101-Proveedores,Pago a proveedor,7862.61
+2025-12-30,15:43,usr04,5101-Costo de ventas,Pago a proveedor,5926.56
+2025-03-04,15:52,admin_ti,1301-Inventarios,Compra de mercadería,5940.03
+2025-11-13,10:48,usr01,1301-Inventarios,Gasto de operación,5161.85
+2025-11-06,10:10,usr06,6101-Gastos de operación,Registro de venta,4984.3
+2025-08-29,02:02,usr08,1201-CxC,Ajuste de inventario,1442.87
+2025-09-01,09:20,usr07,2101-Proveedores,Compra de mercadería,5707.41
+2025-07-03,13:12,usr05,1101-Caja,Cobro de cliente,3471.62
+2025-03-19,13:45,usr04,1101-Caja,Cobro de cliente,1793.09
+2025-03-07,10:32,usr02,1101-Caja,Registro de venta,861.01
+2025-07-10,10:29,admin_ti,1101-Caja,Registro de venta,4309.5
+2025-05-22,09:06,usr10,4101-Ventas,Cobro de cliente,879.1
+2025-05-23,12:30,usr08,1101-Caja,Gasto de operación,3735.68
+2025-09-12,16:35,usr11,1201-CxC,Ajuste de inventario,257.46
+2025-08-26,14:22,usr05,4101-Ventas,Registro de venta,8316.6
+2025-10-23,10:27,usr04,1101-Caja,Cobro de cliente,2218.83
+2025-07-17,16:08,admin_ti,4101-Ventas,Compra de mercadería,5443.01
+2025-10-15,10:13,admin_ti,1102-Bancos,Ajuste de inventario,7726.37
+2025-05-29,09:41,admin_ti,1102-Bancos,Planilla mensual,1413.96
+2025-04-03,16:01,usr11,5101-Costo de ventas,Planilla mensual,8353.03
+2025-05-20,17:11,usr04,2101-Proveedores,Pago a proveedor,2573.3
+2025-06-20,10:49,admin_ti,5101-Costo de ventas,Cobro de cliente,4917.3
+2025-04-29,13:24,usr08,2101-Proveedores,Gasto de operación,1000.0
+2025-01-06,13:25,admin_ti,2101-Proveedores,Compra de mercadería,4645.3
+2025-12-31,16:10,usr07,1102-Bancos,Compra de mercadería,2595.75
+2025-03-26,14:02,usr11,2101-Proveedores,Ajuste de inventario,8000.0
+2025-02-26,13:22,admin_ti,2101-Proveedores,Cobro de cliente,3835.41
+2025-09-08,02:31,usr07,5101-Costo de ventas,Ajuste de inventario,6981.69
+2025-05-22,04:03,usr10,6101-Gastos de operación,Compra de mercadería,4664.55
+2025-01-16,13:11,admin_ti,5101-Costo de ventas,Cobro de cliente,1384.02
+2025-11-07,16:22,usr10,6101-Gastos de operación,Ajuste de inventario,3731.95
+2025-02-13,16:07,usr09,2101-Proveedores,Compra de mercadería,7739.88
+2025-12-05,14:01,admin_ti,1102-Bancos,Planilla mensual,3721.45
+2025-01-06,09:51,usr09,2101-Proveedores,Cobro de cliente,3000.0
+2025-10-27,17:00,usr03,6101-Gastos de operación,Gasto de operación,6710.94
+2025-12-31,16:14,usr09,2101-Proveedores,Registro de venta,5110.57
+2025-01-28,13:42,usr01,2101-Proveedores,Cobro de cliente,8887.2
+2025-04-29,02:06,usr06,6101-Gastos de operación,Cobro de cliente,1793.15
+2025-11-11,14:44,usr02,5101-Costo de ventas,Cobro de cliente,3273.17
+2025-05-08,17:51,admin_ti,1201-CxC,Planilla mensual,418.88
+2025-06-13,12:36,usr11,1201-CxC,Planilla mensual,4467.76
+2025-07-30,15:00,usr04,1301-Inventarios,Pago a proveedor,6176.12
+2025-05-09,14:46,usr10,4101-Ventas,Gasto de operación,1825.68
+2025-01-28,11:23,usr03,1102-Bancos,Ajuste de inventario,5386.43
+2025-02-05,01:51,usr01,1301-Inventarios,Cobro de cliente,7933.65
+2025-03-11,10:08,usr10,1301-Inventarios,Pago a proveedor,1780.52
+2025-04-15,11:00,usr02,6101-Gastos de operación,Cobro de cliente,7247.58
+2025-10-23,08:25,admin_ti,1301-Inventarios,Registro de venta,3299.72
+2025-04-28,11:10,admin_ti,2101-Proveedores,Ajuste de inventario,4078.15
+2025-11-07,12:40,admin_ti,1301-Inventarios,Gasto de operación,6088.67
+2025-06-25,16:54,usr07,1101-Caja,Compra de mercadería,5010.35
+2025-05-16,12:26,admin_ti,1201-CxC,Cobro de cliente,8028.56
+2025-08-26,09:53,usr11,4101-Ventas,Planilla mensual,1838.43
+2025-09-26,14:54,admin_ti,2101-Proveedores,Gasto de operación,45.24
+2025-04-23,16:27,usr06,1301-Inventarios,Planilla mensual,6224.96
+2025-09-29,09:10,usr02,1101-Caja,Ajuste de inventario,1638.03
+2025-09-24,10:37,usr03,2101-Proveedores,Gasto de operación,3176.54
+2025-04-09,09:53,usr04,5101-Costo de ventas,Ajuste de inventario,5423.83
+2025-11-04,13:18,admin_ti,2101-Proveedores,Ajuste de inventario,3537.23
+2025-02-17,12:22,usr09,1301-Inventarios,Cobro de cliente,1878.86
+2025-05-09,09:07,usr04,1201-CxC,Pago a proveedor,6916.05
+2025-01-06,10:08,admin_ti,1102-Bancos,Cobro de cliente,4827.81
+2025-06-09,16:57,admin_ti,5101-Costo de ventas,Gasto de operación,6413.93
+2025-11-24,13:57,usr06,5101-Costo de ventas,Compra de mercadería,3384.74
+2025-12-31,17:15,usr07,6101-Gastos de operación,Pago a proveedor,4064.22
+2025-12-29,10:04,usr09,5101-Costo de ventas,Compra de mercadería,11938.17
+2025-04-25,08:40,usr07,2101-Proveedores,Gasto de operación,3013.83
+2025-09-24,08:02,usr04,6101-Gastos de operación,Ajuste de inventario,5416.91
+2025-01-06,13:47,admin_ti,1102-Bancos,Cobro de cliente,7294.47
+2025-11-11,15:52,admin_ti,1201-CxC,Cobro de cliente,2660.36
+2025-11-03,13:28,usr02,1201-CxC,Gasto de operación,2000.0
+2025-07-11,12:53,admin_ti,1102-Bancos,Planilla mensual,5425.58
+2025-06-20,17:52,usr02,1101-Caja,Planilla mensual,4399.41
+2025-02-07,13:59,usr10,2101-Proveedores,Compra de mercadería,2152.18
+2025-01-27,01:20,usr05,4101-Ventas,Gasto de operación,4780.94
+2025-04-24,10:58,usr07,6101-Gastos de operación,Planilla mensual,7032.78
+2025-11-21,16:27,usr08,2101-Proveedores,Compra de mercadería,5000.0
+2025-02-26,12:42,admin_ti,1201-CxC,Gasto de operación,3182.25
+2025-02-18,15:07,usr03,2101-Proveedores,Cobro de cliente,4103.07
+2025-07-23,14:06,usr06,1101-Caja,Pago a proveedor,6159.72
+2025-05-12,12:44,admin_ti,4101-Ventas,Ajuste de inventario,4336.05
+2025-08-25,11:22,usr02,6101-Gastos de operación,Planilla mensual,5305.06
+2025-02-10,15:43,usr07,5101-Costo de ventas,Ajuste de inventario,3000.0
+2025-05-01,13:13,usr05,1301-Inventarios,Pago a proveedor,1000.0
+2025-10-21,01:56,usr07,1102-Bancos,Planilla mensual,8975.13
+2025-09-19,11:09,usr07,1101-Caja,Pago a proveedor,3586.9
+2025-07-15,10:44,usr08,1301-Inventarios,Compra de mercadería,2747.15
+2025-06-03,14:12,usr01,1201-CxC,Pago a proveedor,7654.01
+2025-03-12,11:11,usr06,1201-CxC,Registro de venta,15000.0
+2025-07-11,15:46,admin_ti,5101-Costo de ventas,Pago a proveedor,7787.25
+2025-11-26,13:57,usr09,1102-Bancos,Planilla mensual,70.43
+2025-10-13,13:28,admin_ti,1102-Bancos,Registro de venta,6225.99
+2025-09-10,13:28,usr05,5101-Costo de ventas,Compra de mercadería,2168.97
+2025-10-21,14:51,usr04,5101-Costo de ventas,Planilla mensual,3320.32
+2025-03-07,15:07,usr04,2101-Proveedores,Compra de mercadería,6695.79
+2025-11-18,11:11,admin_ti,1201-CxC,Planilla mensual,3188.16
+2025-03-14,13:31,usr05,6101-Gastos de operación,Gasto de operación,4677.38
+2025-07-03,16:08,usr11,2101-Proveedores,Cobro de cliente,7335.77
+2025-07-23,09:20,usr10,1301-Inventarios,Registro de venta,359.68
+2025-07-18,12:25,usr05,1101-Caja,Pago a proveedor,7282.03
+2025-11-14,17:40,usr06,1201-CxC,Compra de mercadería,3421.32
+2025-05-20,14:59,usr04,1201-CxC,Registro de venta,4096.21
+2025-02-18,15:22,usr04,1101-Caja,Gasto de operación,4338.63
+2025-06-25,10:27,usr06,1301-Inventarios,Gasto de operación,241.58
+2025-05-30,12:19,usr08,1101-Caja,Ajuste de inventario,3333.47
+2025-12-22,08:14,admin_ti,1102-Bancos,Planilla mensual,148.41
+2025-06-19,16:22,admin_ti,1102-Bancos,Planilla mensual,8489.82
+2025-10-03,10:53,usr03,6101-Gastos de operación,Pago a proveedor,66.19
+2025-07-25,09:10,admin_ti,1201-CxC,Planilla mensual,5575.94
+2025-04-25,14:21,admin_ti,5101-Costo de ventas,Cobro de cliente,2932.04
+2025-07-17,13:10,admin_ti,1301-Inventarios,Cobro de cliente,3631.83
+2025-06-12,08:58,usr11,5101-Costo de ventas,Registro de venta,4176.91
+2025-07-11,08:19,usr01,1201-CxC,Gasto de operación,5323.34
+2025-08-05,13:37,admin_ti,2101-Proveedores,Planilla mensual,3527.68
+2025-12-31,09:59,usr04,2101-Proveedores,Gasto de operación,483.8
+2025-09-16,12:55,admin_ti,6101-Gastos de operación,Ajuste de inventario,1479.69
+2025-09-09,11:30,usr09,6101-Gastos de operación,Pago a proveedor,6570.14
+2025-08-27,14:17,admin_ti,1201-CxC,Compra de mercadería,1945.8
+2025-01-09,15:19,admin_ti,1301-Inventarios,Compra de mercadería,2707.84
+2025-07-04,15:41,usr06,1201-CxC,Gasto de operación,8710.24
+2025-05-09,10:40,usr05,2101-Proveedores,Gasto de operación,3542.85
+2025-12-29,11:14,usr07,2101-Proveedores,Gasto de operación,2483.31
+2025-03-25,17:48,admin_ti,1102-Bancos,Pago a proveedor,3968.56
+2025-11-19,00:09,usr01,1301-Inventarios,Compra de mercadería,4302.31
+2025-11-11,14:36,usr11,1301-Inventarios,Pago a proveedor,5743.22
+2025-10-19,09:27,usr03,2101-Proveedores,Cobro de cliente,2034.73
+2025-07-30,12:01,admin_ti,1201-CxC,Pago a proveedor,8299.47
+2025-02-26,11:47,admin_ti,1301-Inventarios,Ajuste de inventario,7578.3
+2025-09-01,17:07,usr04,1102-Bancos,Pago a proveedor,6464.72
+2025-09-12,14:18,usr09,4101-Ventas,Planilla mensual,7783.93
+2025-03-06,08:26,admin_ti,6101-Gastos de operación,Ajuste de inventario,564.1
+2025-12-30,14:59,usr08,6101-Gastos de operación,Compra de mercadería,2776.89
+2025-10-22,16:06,usr02,1101-Caja,Gasto de operación,3206.34
+2025-03-03,14:41,admin_ti,5101-Costo de ventas,Gasto de operación,5292.79
+2025-03-13,08:30,admin_ti,2101-Proveedores,Compra de mercadería,3352.85
+2025-04-09,14:09,admin_ti,1102-Bancos,Gasto de operación,1073.59
+2025-03-31,00:17,usr11,1102-Bancos,Compra de mercadería,8294.53
+2025-08-20,13:38,admin_ti,5101-Costo de ventas,Registro de venta,3166.33
+2025-02-13,10:54,usr07,1201-CxC,Planilla mensual,3122.32
+2025-04-17,12:31,admin_ti,2101-Proveedores,Pago a proveedor,8187.57
+2025-12-30,09:16,usr11,6101-Gastos de operación,Ajuste de inventario,11454.43
+2025-12-30,08:46,usr07,1201-CxC,Compra de mercadería,4949.84
+2025-11-04,15:43,usr08,2101-Proveedores,Planilla mensual,199.19
+2025-11-05,17:26,usr02,1101-Caja,Registro de venta,3171.44
+2025-02-17,11:06,usr10,2101-Proveedores,Gasto de operación,8064.91
+2025-11-12,16:08,admin_ti,4101-Ventas,Gasto de operación,6066.57
+2025-07-10,11:14,admin_ti,1301-Inventarios,Gasto de operación,3972.87
+2025-10-10,15:54,usr03,1201-CxC,Registro de venta,1682.41
+2025-09-25,22:10,usr07,4101-Ventas,Gasto de operación,976.5
+2025-05-12,15:02,usr10,1101-Caja,Gasto de operación,2911.19
+2025-03-04,12:22,usr02,1102-Bancos,Registro de venta,6821.04
+2025-03-11,08:10,admin_ti,4101-Ventas,Compra de mercadería,1008.73
+2025-07-02,14:09,usr11,1201-CxC,Compra de mercadería,879.26
+2025-08-20,16:54,admin_ti,1101-Caja,Compra de mercadería,5376.2
+2025-06-18,23:44,usr10,1102-Bancos,Pago a proveedor,6913.03
+2025-04-07,08:15,usr08,1201-CxC,Compra de mercadería,8955.07
+2025-12-29,10:42,usr01,4101-Ventas,Pago a proveedor,9709.18
+2025-03-27,11:51,admin_ti,4101-Ventas,Cobro de cliente,3984.8
+2025-04-29,12:05,admin_ti,2101-Proveedores,Compra de mercadería,5145.58
+2025-07-31,12:07,admin_ti,1201-CxC,Ajuste de inventario,6768.2
+2025-10-30,10:28,usr10,1102-Bancos,Cobro de cliente,3811.28
+2025-03-20,05:43,usr06,2101-Proveedores,Ajuste de inventario,1423.55
+2025-07-31,16:53,admin_ti,2101-Proveedores,Planilla mensual,2575.84
+2025-07-29,08:05,admin_ti,1101-Caja,Ajuste de inventario,3550.25
+2025-05-23,11:53,usr09,4101-Ventas,Registro de venta,5832.24
+2025-02-19,08:24,usr06,1301-Inventarios,Gasto de operación,8193.48
+2025-12-31,16:15,usr03,1201-CxC,Compra de mercadería,4459.82
+2025-07-30,17:27,usr11,5101-Costo de ventas,Registro de venta,905.87
+2025-05-29,11:49,admin_ti,4101-Ventas,Compra de mercadería,1775.8
+2025-09-10,12:49,admin_ti,1201-CxC,Registro de venta,8219.72
+2025-07-10,10:47,admin_ti,1201-CxC,Registro de venta,1722.38
+2025-04-11,12:17,admin_ti,5101-Costo de ventas,Ajuste de inventario,8060.89
+2025-12-29,08:15,usr09,4101-Ventas,Registro de venta,1839.39
+2025-07-17,10:08,usr02,5101-Costo de ventas,Compra de mercadería,6047.73
+2025-01-15,14:18,admin_ti,2101-Proveedores,Pago a proveedor,6607.46
+2025-08-15,14:26,usr07,2101-Proveedores,Pago a proveedor,7342.08
+2025-12-10,11:00,admin_ti,4101-Ventas,Pago a proveedor,7438.63
+2025-03-17,11:03,usr06,2101-Proveedores,Cobro de cliente,25000.0
+2025-03-28,13:51,admin_ti,1102-Bancos,Cobro de cliente,8910.62
+2025-05-08,17:09,admin_ti,1201-CxC,Cobro de cliente,4582.49
+2025-06-10,15:19,usr11,5101-Costo de ventas,Ajuste de inventario,768.86
+2025-01-01,16:49,usr11,1301-Inventarios,Cobro de cliente,364.64
+2025-05-16,09:36,usr09,2101-Proveedores,Cobro de cliente,7835.02
+2025-12-31,13:18,usr03,1301-Inventarios,Planilla mensual,5051.5
+2025-08-04,23:11,usr02,1301-Inventarios,Gasto de operación,3702.01
+2025-12-29,08:28,usr03,1102-Bancos,Gasto de operación,3092.09
+2025-06-03,14:56,usr02,1101-Caja,Cobro de cliente,791.05
+2025-03-18,08:56,admin_ti,6101-Gastos de operación,Planilla mensual,5143.5
+2025-10-10,16:19,usr05,1102-Bancos,Cobro de cliente,8753.94
+2025-04-09,11:30,usr07,1201-CxC,Ajuste de inventario,2455.81
+2025-01-28,14:11,usr10,2101-Proveedores,Cobro de cliente,8977.48
+2025-01-13,10:49,admin_ti,1102-Bancos,Planilla mensual,6576.93
+2025-09-12,09:30,usr02,5101-Costo de ventas,Cobro de cliente,3574.12
+2025-11-07,16:19,admin_ti,6101-Gastos de operación,Planilla mensual,5553.36
+2025-09-29,00:59,usr03,1102-Bancos,Planilla mensual,5986.72
+2025-09-12,17:41,usr04,1201-CxC,Pago a proveedor,6056.1
+2025-11-12,11:41,admin_ti,1301-Inventarios,Gasto de operación,3083.63
+2025-04-30,13:48,admin_ti,1301-Inventarios,Registro de venta,1101.87
+2025-12-15,17:12,usr01,1301-Inventarios,Compra de mercadería,3654.93
+2025-12-30,13:13,usr06,4101-Ventas,Planilla mensual,7528.11
+2025-05-05,13:34,admin_ti,4101-Ventas,Planilla mensual,3390.36
+2025-04-22,11:42,usr07,4101-Ventas,Cobro de cliente,7044.42
+2025-08-18,14:01,usr02,6101-Gastos de operación,Compra de mercadería,6588.44
+2025-09-17,13:23,usr10,1102-Bancos,Compra de mercadería,1710.6
+2025-09-25,16:38,usr05,1301-Inventarios,Ajuste de inventario,8858.31
+2025-04-29,09:32,usr03,1101-Caja,Gasto de operación,1000.0
+2025-12-29,15:14,usr04,6101-Gastos de operación,Pago a proveedor,9804.79
+2025-09-19,17:48,usr10,5101-Costo de ventas,Compra de mercadería,6864.89
+2025-01-10,08:19,admin_ti,1102-Bancos,Gasto de operación,1898.66
+2025-06-20,17:33,admin_ti,1201-CxC,Ajuste de inventario,8131.66
+2025-10-15,13:50,admin_ti,1301-Inventarios,Registro de venta,1452.99
+2025-12-30,08:58,usr02,1101-Caja,Registro de venta,9503.66
+2025-11-25,11:45,usr11,1102-Bancos,Pago a proveedor,4554.58
+2025-03-05,15:26,admin_ti,1201-CxC,Compra de mercadería,6310.98
+2025-10-07,10:44,usr08,5101-Costo de ventas,Gasto de operación,6541.67
+2025-11-07,08:49,admin_ti,2101-Proveedores,Registro de venta,2039.63
+2025-07-24,17:41,admin_ti,2101-Proveedores,Ajuste de inventario,3090.89
+2025-11-18,15:22,usr01,1101-Caja,Registro de venta,5000.0
+2025-02-05,16:45,admin_ti,1101-Caja,Ajuste de inventario,7393.83
+2025-06-18,17:41,admin_ti,1201-CxC,Pago a proveedor,4420.99
+2025-12-31,11:12,usr03,4101-Ventas,Gasto de operación,9452.67
+2025-10-01,11:32,usr11,1201-CxC,Planilla mensual,3550.19
+2025-10-24,08:40,admin_ti,4101-Ventas,Gasto de operación,8113.15
+2025-02-07,12:05,usr06,5101-Costo de ventas,Compra de mercadería,2260.7
+2025-03-31,15:28,usr07,2101-Proveedores,Registro de venta,4576.94
+2025-03-20,12:45,usr07,1102-Bancos,Registro de venta,7237.06
+2025-11-19,08:51,usr02,6101-Gastos de operación,Cobro de cliente,1967.95
+2025-12-02,13:24,usr07,4101-Ventas,Compra de mercadería,1000.0
+2025-11-28,11:27,admin_ti,4101-Ventas,Cobro de cliente,8738.09
+2025-08-20,08:03,usr11,2101-Proveedores,Registro de venta,3207.23
+2025-05-30,17:47,usr04,1201-CxC,Compra de mercadería,463.47
+2025-07-02,12:39,usr05,1101-Caja,Pago a proveedor,3600.53
+2025-05-09,09:38,usr04,6101-Gastos de operación,Cobro de cliente,7000.52
+2025-01-03,17:05,usr04,1301-Inventarios,Registro de venta,6853.76
+2025-12-31,13:41,usr07,6101-Gastos de operación,Gasto de operación,11344.08
+2025-09-15,08:09,admin_ti,1101-Caja,Registro de venta,3232.69
+2025-12-05,09:06,usr08,1101-Caja,Pago a proveedor,2439.56
+2025-10-29,16:16,admin_ti,5101-Costo de ventas,Cobro de cliente,1550.99
+2025-11-05,12:40,usr10,1102-Bancos,Pago a proveedor,2467.34
+2025-04-06,11:50,usr01,6101-Gastos de operación,Planilla mensual,2614.13
+2025-02-21,16:19,admin_ti,1101-Caja,Pago a proveedor,4879.52
+2025-03-03,08:31,usr07,2101-Proveedores,Compra de mercadería,8212.53
+2025-08-13,11:19,admin_ti,6101-Gastos de operación,Compra de mercadería,6503.91
+2025-05-14,11:07,usr01,2101-Proveedores,Planilla mensual,6998.84
+2025-04-14,13:21,usr04,1301-Inventarios,Pago a proveedor,2253.23
+2025-12-30,11:17,usr10,2101-Proveedores,Ajuste de inventario,8137.09
+2025-05-01,10:32,usr08,1201-CxC,Pago a proveedor,7334.72
+2025-02-06,13:48,usr03,6101-Gastos de operación,Gasto de operación,2000.0
+2025-03-28,15:35,usr05,1102-Bancos,Ajuste de inventario,2000.0
+2025-06-11,14:41,admin_ti,1301-Inventarios,Pago a proveedor,5118.01
+2025-09-19,08:20,usr10,4101-Ventas,Registro de venta,3738.65
+2025-11-04,10:50,admin_ti,2101-Proveedores,Registro de venta,7923.74
+2025-02-18,11:35,admin_ti,1101-Caja,Compra de mercadería,6906.89
+2025-02-11,09:33,usr03,1102-Bancos,Pago a proveedor,1160.77
+2025-01-21,10:10,admin_ti,4101-Ventas,Ajuste de inventario,4553.16
+2025-11-25,17:56,usr11,1201-CxC,Compra de mercadería,3785.41
+2025-12-30,16:25,usr11,6101-Gastos de operación,Pago a proveedor,9894.07
+2025-10-02,10:25,usr06,6101-Gastos de operación,Planilla mensual,4327.89
+2025-05-10,15:24,usr04,1101-Caja,Cobro de cliente,607.63
+2025-09-03,17:07,usr08,6101-Gastos de operación,Ajuste de inventario,7110.08
+2025-04-17,11:33,usr10,1101-Caja,Planilla mensual,5913.07
+2025-04-18,12:11,admin_ti,4101-Ventas,Planilla mensual,5162.29
+2025-10-10,11:30,admin_ti,1201-CxC,Pago a proveedor,7426.43
+2025-03-24,14:24,usr07,6101-Gastos de operación,Registro de venta,853.1
+2025-03-26,13:28,admin_ti,1101-Caja,Registro de venta,921.21
+2025-05-14,13:33,admin_ti,1102-Bancos,Gasto de operación,3544.75
+2025-10-30,09:31,usr11,1101-Caja,Planilla mensual,5698.76
+2025-11-28,17:05,admin_ti,1102-Bancos,Cobro de cliente,7254.54
+2025-12-31,08:06,usr10,1201-CxC,Ajuste de inventario,2857.1
+2025-12-11,11:38,admin_ti,1201-CxC,Planilla mensual,5020.17
+2025-01-22,14:23,usr11,1201-CxC,Ajuste de inventario,4206.08
+2025-12-30,09:14,usr01,4101-Ventas,Registro de venta,5080.06
+2025-07-14,09:43,usr07,1102-Bancos,Pago a proveedor,1613.52
+2025-07-18,08:34,admin_ti,6101-Gastos de operación,Cobro de cliente,6083.21
+2025-08-11,17:09,usr10,4101-Ventas,Registro de venta,4966.16
+2025-05-19,08:23,admin_ti,1301-Inventarios,Gasto de operación,3605.66
+2025-11-18,08:18,admin_ti,5101-Costo de ventas,Ajuste de inventario,5942.79
+2025-12-02,13:54,usr04,6101-Gastos de operación,Ajuste de inventario,2432.42
+2025-07-04,17:21,admin_ti,1101-Caja,Ajuste de inventario,7958.93
+2025-02-11,13:00,admin_ti,6101-Gastos de operación,Cobro de cliente,6960.1
+2025-12-03,22:21,usr11,6101-Gastos de operación,Registro de venta,4218.65
+2025-12-29,11:54,usr05,2101-Proveedores,Ajuste de inventario,11072.36
+2025-05-26,08:33,usr07,1201-CxC,Ajuste de inventario,4113.98
+2025-02-14,08:22,usr05,1102-Bancos,Ajuste de inventario,3932.05
+2025-03-31,14:55,admin_ti,6101-Gastos de operación,Planilla mensual,3015.39
+2025-11-12,09:29,admin_ti,2101-Proveedores,Ajuste de inventario,5701.31
+2025-09-22,00:50,usr06,5101-Costo de ventas,Pago a proveedor,7493.35
+2025-09-17,17:18,admin_ti,5101-Costo de ventas,Gasto de operación,6861.17
+2025-08-21,15:59,usr04,1102-Bancos,Gasto de operación,5729.35
+2025-08-11,14:34,admin_ti,1301-Inventarios,Gasto de operación,2839.22
+2025-09-03,08:17,usr06,1301-Inventarios,Ajuste de inventario,1694.13
+2025-02-24,17:58,usr01,6101-Gastos de operación,Pago a proveedor,7962.75
+2025-12-30,12:44,usr11,6101-Gastos de operación,Pago a proveedor,10870.87
+2025-03-13,23:07,usr06,2101-Proveedores,Gasto de operación,8618.56
+2025-10-09,01:09,usr10,2101-Proveedores,Planilla mensual,6696.79
+2025-02-11,16:05,admin_ti,5101-Costo de ventas,Planilla mensual,6202.52
+2025-03-05,09:53,admin_ti,2101-Proveedores,Planilla mensual,2409.8
+2025-07-24,08:38,usr11,6101-Gastos de operación,Registro de venta,6048.06
+2025-11-26,17:47,admin_ti,1101-Caja,Registro de venta,3054.72
+2025-03-19,12:17,admin_ti,1101-Caja,Ajuste de inventario,5767.45
+2025-04-01,11:08,usr06,1102-Bancos,Ajuste de inventario,296.61
+2025-05-28,09:14,admin_ti,1201-CxC,Compra de mercadería,4480.81
+2025-08-06,05:07,usr06,1101-Caja,Pago a proveedor,2313.93
+2025-10-17,09:09,usr02,2101-Proveedores,Gasto de operación,8495.91
+2025-01-14,15:25,admin_ti,4101-Ventas,Registro de venta,3714.0
+2025-12-29,17:24,usr01,1101-Caja,Cobro de cliente,4992.16
+2025-09-25,17:15,usr01,1101-Caja,Planilla mensual,2695.56
+2025-07-31,09:20,usr11,1102-Bancos,Gasto de operación,6465.26
+2025-12-16,05:25,usr01,2101-Proveedores,Planilla mensual,3836.88
+2025-10-01,10:09,admin_ti,6101-Gastos de operación,Registro de venta,3133.95
+2025-12-29,10:59,usr04,1201-CxC,Registro de venta,9425.24
+2025-11-07,02:56,usr09,1301-Inventarios,Planilla mensual,5774.26
+2025-02-20,09:40,usr09,1101-Caja,Ajuste de inventario,8000.0
+2025-12-29,09:14,usr04,5101-Costo de ventas,Ajuste de inventario,10687.3
+2025-09-23,12:49,usr09,5101-Costo de ventas,Ajuste de inventario,648.04
+2025-12-22,11:41,usr06,2101-Proveedores,Compra de mercadería,4012.19
+2025-07-15,15:42,usr02,1301-Inventarios,Registro de venta,8309.93
+2025-09-30,16:21,usr08,5101-Costo de ventas,Registro de venta,3666.24
+2025-08-28,09:26,admin_ti,1102-Bancos,Compra de mercadería,8146.94
+2025-08-21,17:29,admin_ti,5101-Costo de ventas,Cobro de cliente,7126.12
+2025-06-09,15:20,admin_ti,1102-Bancos,Ajuste de inventario,8058.15
+2025-06-20,13:13,admin_ti,6101-Gastos de operación,Compra de mercadería,580.35
+2025-03-20,16:00,admin_ti,1102-Bancos,Planilla mensual,898.39
+2025-09-02,16:36,admin_ti,1201-CxC,Compra de mercadería,1571.87
+2025-02-25,11:32,usr09,2101-Proveedores,Registro de venta,15000.0
+2025-11-03,11:11,usr03,1101-Caja,Planilla mensual,5432.42
+2025-10-20,12:35,usr08,6101-Gastos de operación,Ajuste de inventario,8000.0
+2025-07-30,14:15,admin_ti,4101-Ventas,Ajuste de inventario,3862.05
+2025-12-31,10:18,usr01,4101-Ventas,Ajuste de inventario,11938.64
+2025-12-02,09:07,admin_ti,1301-Inventarios,Ajuste de inventario,7909.65
+2025-06-27,17:24,admin_ti,1102-Bancos,Ajuste de inventario,7445.75
+2025-04-09,09:50,usr06,1201-CxC,Cobro de cliente,6678.46
+2025-07-01,08:34,usr05,1101-Caja,Planilla mensual,8187.03
+2025-02-26,15:06,usr05,1301-Inventarios,Compra de mercadería,2814.16
+2025-11-28,11:30,usr03,6101-Gastos de operación,Planilla mensual,7842.97
+2025-01-08,16:30,admin_ti,4101-Ventas,Cobro de cliente,6069.45
+2025-11-12,15:46,usr10,1102-Bancos,Planilla mensual,2871.13
+2025-11-18,12:54,admin_ti,2101-Proveedores,Compra de mercadería,4805.89
+2025-06-25,15:46,admin_ti,2101-Proveedores,Pago a proveedor,4629.02
+2025-01-27,11:31,usr10,1301-Inventarios,Cobro de cliente,5399.97
+2025-08-05,12:26,usr03,5101-Costo de ventas,Compra de mercadería,7431.02
+2025-02-21,16:02,usr05,4101-Ventas,Registro de venta,6594.97
+2025-02-28,11:04,usr09,1102-Bancos,Ajuste de inventario,4928.5
+2025-12-31,17:48,usr03,1201-CxC,Planilla mensual,9312.94
+2025-08-29,03:01,usr05,6101-Gastos de operación,Gasto de operación,5962.86
+2025-03-11,11:26,usr02,5101-Costo de ventas,Planilla mensual,6568.43
+2025-04-04,15:13,usr05,1101-Caja,Gasto de operación,3014.17
+2025-12-11,10:12,usr10,1301-Inventarios,Planilla mensual,7651.0
+2025-01-29,11:32,admin_ti,2101-Proveedores,Planilla mensual,6120.29
+2025-02-14,10:37,usr11,6101-Gastos de operación,Compra de mercadería,405.5
+2025-12-31,10:42,usr02,1101-Caja,Gasto de operación,5969.11
+2025-05-19,09:03,usr11,1301-Inventarios,Gasto de operación,8852.66
+2025-04-09,12:07,admin_ti,5101-Costo de ventas,Compra de mercadería,702.77
+2025-06-23,17:07,usr09,1201-CxC,Gasto de operación,4940.57
+2025-06-24,16:47,usr07,1101-Caja,Registro de venta,7869.45
+2025-09-08,10:08,admin_ti,1201-CxC,Ajuste de inventario,3282.95
+2025-01-20,14:53,admin_ti,1201-CxC,Gasto de operación,2141.93
+2025-12-12,08:45,admin_ti,5101-Costo de ventas,Gasto de operación,4201.95
+2025-03-18,16:11,usr11,1101-Caja,Cobro de cliente,8986.66
+2025-12-29,11:48,usr01,1301-Inventarios,Compra de mercadería,3994.17
+2025-02-09,09:30,usr08,1201-CxC,Ajuste de inventario,8067.73
+2025-11-04,09:33,admin_ti,1301-Inventarios,Compra de mercadería,723.48
+2025-08-22,13:24,usr04,1102-Bancos,Planilla mensual,4066.91
+2025-03-12,05:02,usr09,1101-Caja,Gasto de operación,5251.29
+2025-07-31,16:14,admin_ti,4101-Ventas,Gasto de operación,7544.1
+2025-01-07,05:43,usr01,1102-Bancos,Planilla mensual,1936.1
+2025-01-20,16:28,usr05,1201-CxC,Compra de mercadería,3948.67
+2025-07-15,09:04,usr01,1101-Caja,Cobro de cliente,6841.03
+2025-04-11,14:54,admin_ti,2101-Proveedores,Pago a proveedor,3197.96
+2025-04-22,17:15,usr05,4101-Ventas,Gasto de operación,3848.25
+2025-03-26,09:44,usr08,6101-Gastos de operación,Registro de venta,413.88
+2025-05-19,11:55,admin_ti,2101-Proveedores,Compra de mercadería,1693.49
+2025-01-09,14:42,admin_ti,6101-Gastos de operación,Gasto de operación,522.91
+2025-12-19,13:33,usr05,1102-Bancos,Compra de mercadería,8915.9
+2025-07-22,13:19,usr05,4101-Ventas,Planilla mensual,4234.13
+2025-12-30,12:57,usr06,1101-Caja,Gasto de operación,8236.73
+2025-03-14,10:06,admin_ti,4101-Ventas,Gasto de operación,3307.77
+2025-04-04,10:30,usr08,1301-Inventarios,Compra de mercadería,1203.43
+2025-08-29,09:03,usr06,2101-Proveedores,Registro de venta,3271.66
+2025-02-25,11:01,usr08,1101-Caja,Cobro de cliente,1560.07
+2025-12-30,10:42,usr03,4101-Ventas,Registro de venta,10339.25
+2025-12-30,14:22,usr07,1101-Caja,Cobro de cliente,2967.05
+2025-04-28,13:37,admin_ti,1102-Bancos,Ajuste de inventario,8059.71
+2025-07-21,13:38,usr05,5101-Costo de ventas,Planilla mensual,5192.77
+2025-09-11,09:43,admin_ti,1101-Caja,Planilla mensual,4694.98
+2025-12-17,17:53,usr05,1201-CxC,Compra de mercadería,5159.68
+2025-12-29,10:10,usr06,4101-Ventas,Cobro de cliente,7117.02
+2025-04-03,16:20,usr05,6101-Gastos de operación,Gasto de operación,6445.86
+2025-09-02,09:47,usr02,1101-Caja,Pago a proveedor,6675.78
+2025-12-18,11:40,admin_ti,1101-Caja,Compra de mercadería,1606.97
+2025-08-22,09:02,admin_ti,1201-CxC,Pago a proveedor,3358.78
+2025-07-11,10:35,usr03,2101-Proveedores,Ajuste de inventario,770.38
+2025-07-25,13:20,usr11,4101-Ventas,Pago a proveedor,3857.69
+2025-03-04,11:44,usr08,4101-Ventas,Registro de venta,7948.6
+2025-03-13,17:49,usr07,6101-Gastos de operación,Ajuste de inventario,391.22
+2025-12-31,17:45,usr07,5101-Costo de ventas,Cobro de cliente,764.58
+2025-12-31,12:18,usr09,5101-Costo de ventas,Pago a proveedor,3497.89
+2025-04-25,11:01,usr07,5101-Costo de ventas,Gasto de operación,4115.05
+2025-06-19,10:12,admin_ti,2101-Proveedores,Compra de mercadería,2176.55
+2025-05-14,13:12,admin_ti,1301-Inventarios,Gasto de operación,8781.1
+2025-12-12,16:21,usr03,5101-Costo de ventas,Gasto de operación,2318.77
+2025-03-17,17:48,admin_ti,1301-Inventarios,Cobro de cliente,8967.9
+2025-10-02,09:31,usr10,6101-Gastos de operación,Gasto de operación,15000.0
+2025-04-14,12:06,admin_ti,4101-Ventas,Pago a proveedor,8270.32
+2025-09-03,13:30,usr08,5101-Costo de ventas,Planilla mensual,710.74
+2025-11-04,10:32,admin_ti,6101-Gastos de operación,Planilla mensual,3157.01
+2025-12-29,13:03,usr11,1301-Inventarios,Planilla mensual,617.93
+2025-05-02,16:36,admin_ti,1102-Bancos,Registro de venta,421.78
+2025-06-11,16:30,usr05,6101-Gastos de operación,Registro de venta,1000.0
+2025-01-02,10:07,usr10,5101-Costo de ventas,Gasto de operación,1283.15
+2025-02-11,10:40,admin_ti,1201-CxC,Cobro de cliente,3222.66
+2025-03-25,12:38,admin_ti,6101-Gastos de operación,Ajuste de inventario,3500.02
+2025-09-05,13:05,usr05,6101-Gastos de operación,Registro de venta,7962.74
+2025-06-10,04:05,usr06,1101-Caja,Ajuste de inventario,2232.98
+2025-12-29,12:54,usr02,1102-Bancos,Gasto de operación,5438.13
+2025-11-05,17:42,admin_ti,1102-Bancos,Gasto de operación,1895.62
+2025-01-02,14:47,admin_ti,1201-CxC,Pago a proveedor,1313.82
+2025-11-19,09:06,usr05,1201-CxC,Gasto de operación,5721.28
+2025-10-06,14:41,usr09,4101-Ventas,Gasto de operación,10000.0
+2025-01-09,11:40,admin_ti,1101-Caja,Gasto de operación,8406.2
+2025-12-31,11:25,usr04,4101-Ventas,Cobro de cliente,2351.22
+2025-11-17,13:39,usr03,2101-Proveedores,Ajuste de inventario,5171.86
+2025-04-30,10:17,usr06,6101-Gastos de operación,Ajuste de inventario,442.46
+2025-05-19,13:08,admin_ti,4101-Ventas,Registro de venta,7195.23
+2025-07-04,09:00,usr09,5101-Costo de ventas,Pago a proveedor,175.8
+2025-06-13,13:44,usr09,4101-Ventas,Registro de venta,1356.52
+2025-10-20,16:01,usr02,1102-Bancos,Compra de mercadería,6211.87
+2025-02-07,16:19,usr07,6101-Gastos de operación,Pago a proveedor,8756.1
+2025-05-15,10:26,admin_ti,5101-Costo de ventas,Ajuste de inventario,6747.94
+2025-01-10,14:16,usr06,1102-Bancos,Planilla mensual,3155.67
+2025-07-18,08:17,admin_ti,1301-Inventarios,Pago a proveedor,6397.73
+2025-04-15,14:23,admin_ti,6101-Gastos de operación,Registro de venta,8852.89
+2025-02-03,10:00,usr07,1102-Bancos,Ajuste de inventario,6723.71
+2025-09-22,13:47,usr01,4101-Ventas,Registro de venta,8735.09
+2025-05-26,10:27,admin_ti,4101-Ventas,Planilla mensual,354.94
+2025-12-29,14:29,usr03,6101-Gastos de operación,Pago a proveedor,4767.34
+2025-03-18,12:41,usr11,1102-Bancos,Compra de mercadería,7648.32
+2025-12-31,08:40,usr09,1102-Bancos,Ajuste de inventario,7714.69
+2025-10-20,13:09,usr07,6101-Gastos de operación,Cobro de cliente,8469.2
+2025-03-05,15:54,admin_ti,1102-Bancos,Planilla mensual,7069.05
+2025-10-16,13:22,usr06,1101-Caja,Cobro de cliente,10000.0
+2025-07-30,10:48,usr08,2101-Proveedores,Registro de venta,5826.45
+2025-05-08,15:18,usr01,1101-Caja,Compra de mercadería,1319.67
+2025-05-21,13:02,usr07,1201-CxC,Ajuste de inventario,409.41
+2025-05-22,12:40,usr06,1301-Inventarios,Registro de venta,3662.06
+2025-12-30,11:57,usr05,5101-Costo de ventas,Registro de venta,6781.83
+2025-01-08,10:22,admin_ti,6101-Gastos de operación,Planilla mensual,6605.2
+2025-02-20,13:57,usr11,1301-Inventarios,Ajuste de inventario,578.11
+2025-02-07,15:10,admin_ti,5101-Costo de ventas,Registro de venta,8858.62
+2025-06-12,11:20,admin_ti,4101-Ventas,Pago a proveedor,5246.35
+2025-05-12,11:32,usr01,4101-Ventas,Registro de venta,8593.21
+2025-12-05,12:55,admin_ti,1101-Caja,Ajuste de inventario,2701.68
+2025-12-30,09:24,usr08,1301-Inventarios,Gasto de operación,3280.88
+2025-10-15,02:44,usr04,1101-Caja,Planilla mensual,3345.39
+2025-01-13,12:10,admin_ti,1301-Inventarios,Cobro de cliente,6903.29
+2025-12-29,09:46,usr10,4101-Ventas,Pago a proveedor,5678.71
+2025-09-25,09:42,usr08,4101-Ventas,Compra de mercadería,4550.44
+2025-01-28,08:09,admin_ti,1101-Caja,Pago a proveedor,7892.5
+2025-12-30,08:42,usr10,1301-Inventarios,Compra de mercadería,1728.73
+2025-12-30,12:26,usr03,6101-Gastos de operación,Ajuste de inventario,7848.34
+2025-12-03,08:39,usr11,4101-Ventas,Ajuste de inventario,8456.58
+2025-03-30,09:21,usr02,1102-Bancos,Cobro de cliente,1772.54
+2025-10-01,15:44,usr07,5101-Costo de ventas,Planilla mensual,4334.81
+2025-03-25,12:01,admin_ti,1301-Inventarios,Planilla mensual,8784.86
+2025-01-28,16:50,admin_ti,6101-Gastos de operación,Cobro de cliente,7192.41
+2025-01-23,10:52,usr10,2101-Proveedores,Compra de mercadería,1000.0
+2025-11-12,11:02,usr04,6101-Gastos de operación,Planilla mensual,2245.7
+2025-06-16,17:37,admin_ti,1301-Inventarios,Gasto de operación,2560.84
+2025-03-06,16:36,admin_ti,1101-Caja,Compra de mercadería,1176.52
+2025-04-24,09:38,admin_ti,4101-Ventas,Compra de mercadería,2523.37
+2025-01-13,13:42,usr07,4101-Ventas,Gasto de operación,8072.1
+2025-04-04,14:13,admin_ti,1102-Bancos,Cobro de cliente,4125.17
+2025-02-20,15:08,usr06,1301-Inventarios,Planilla mensual,993.0
+2025-04-21,09:08,usr06,1102-Bancos,Ajuste de inventario,10000.0
+2025-09-11,08:42,usr06,6101-Gastos de operación,Compra de mercadería,3916.88
+2025-01-03,15:09,usr09,2101-Proveedores,Planilla mensual,2447.78
+2025-01-21,12:36,usr07,1301-Inventarios,Cobro de cliente,6122.0
+2025-10-29,15:10,usr11,1102-Bancos,Registro de venta,4692.03
+2025-12-17,09:46,usr07,1301-Inventarios,Registro de venta,4090.72
+2025-03-19,02:17,usr04,2101-Proveedores,Cobro de cliente,5610.33
+2025-07-18,17:33,usr08,5101-Costo de ventas,Compra de mercadería,8316.98
+2025-08-13,17:32,admin_ti,5101-Costo de ventas,Compra de mercadería,8935.52
+2025-03-04,09:42,admin_ti,1301-Inventarios,Gasto de operación,8849.56
+2025-08-19,17:15,admin_ti,1101-Caja,Ajuste de inventario,6209.1
+2025-11-27,04:04,usr03,2101-Proveedores,Pago a proveedor,8549.98
+2025-03-26,17:00,usr04,2101-Proveedores,Ajuste de inventario,4088.48
+2025-01-07,14:00,admin_ti,6101-Gastos de operación,Registro de venta,166.69
+2025-04-04,16:55,usr09,1201-CxC,Cobro de cliente,6347.3
+2025-02-21,02:13,usr01,2101-Proveedores,Ajuste de inventario,2728.19
+2025-01-08,16:36,usr05,4101-Ventas,Compra de mercadería,8737.83
+2025-05-26,10:18,usr01,4101-Ventas,Gasto de operación,1030.34
+2025-09-22,10:15,usr03,4101-Ventas,Ajuste de inventario,3892.53
+2025-04-23,17:28,usr08,1301-Inventarios,Gasto de operación,1497.02
+2025-09-05,14:32,usr08,1201-CxC,Pago a proveedor,5996.73
+2025-10-14,13:36,admin_ti,4101-Ventas,Cobro de cliente,6023.23
+2025-01-29,10:24,usr11,5101-Costo de ventas,Compra de mercadería,5284.74
+2025-09-08,17:05,admin_ti,4101-Ventas,Compra de mercadería,6999.07
+2025-12-31,08:41,usr03,5101-Costo de ventas,Planilla mensual,9344.6
+2025-06-06,15:48,admin_ti,1201-CxC,Gasto de operación,5756.96
+2025-03-14,09:40,usr04,1301-Inventarios,Compra de mercadería,2728.32
+2025-07-14,14:32,usr07,4101-Ventas,Cobro de cliente,5567.9
+2025-02-05,13:57,admin_ti,1301-Inventarios,Ajuste de inventario,8284.91
+2025-02-10,17:01,admin_ti,5101-Costo de ventas,Pago a proveedor,7941.2
+2025-06-12,08:12,admin_ti,1301-Inventarios,Cobro de cliente,8037.65
+2025-05-08,11:21,usr07,5101-Costo de ventas,Compra de mercadería,7416.36
+2025-03-17,11:48,admin_ti,1101-Caja,Cobro de cliente,1650.35
+2025-07-16,14:32,usr05,1201-CxC,Compra de mercadería,2938.47
+2025-09-30,15:20,usr02,4101-Ventas,Planilla mensual,2959.69
+2025-07-01,08:37,usr06,1101-Caja,Ajuste de inventario,5188.61
+2025-01-06,15:11,admin_ti,1101-Caja,Registro de venta,2177.53

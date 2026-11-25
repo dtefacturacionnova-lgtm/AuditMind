@@ -1,0 +1,549 @@
+id_empleado,nombre_empleado,fecha,categoria,monto,aprobado_por
+E001,Marta Escobar,2025-09-05,Alimentación,85.17,G. Contreras
+E020,Walter Mejía,2025-12-19,Hospedaje,95.72,G. Contreras
+E025,Rosa Alvarado,2025-12-24,Hospedaje,24.25,G. Contreras
+E016,Ricardo Rauda,2025-12-09,Combustible,67.41,G. Contreras
+E002,Luis Castillo,2025-05-05,Transporte,61.49,G. Contreras
+E001,Marta Escobar,2025-02-17,Alimentación,94.99,G. Contreras
+E003,Claudia Castillo,2025-09-18,Transporte,71.5,G. Contreras
+E017,Luis Villalta,2025-10-31,Hospedaje,16.35,G. Contreras
+E011,José Portillo,2025-02-26,Atención a clientes,68.89,G. Contreras
+E018,Mario Villalta,2025-09-05,Atención a clientes,67.03,G. Contreras
+E005,Jorge Pineda,2025-11-21,Combustible,30.65,G. Contreras
+E031,Pedro Escobar,2025-08-01,Transporte,29.53,G. Contreras
+E038,Marta Flores,2025-04-25,Combustible,17.13,G. Contreras
+E017,Luis Villalta,2025-10-29,Atención a clientes,64.58,G. Contreras
+E002,Luis Castillo,2025-04-25,Combustible,79.59,G. Contreras
+E002,Luis Castillo,2025-07-25,Atención a clientes,77.24,G. Contreras
+E036,Carlos Flores,2025-10-29,Hospedaje,37.52,G. Contreras
+E040,Karla Lazo,2025-03-13,Transporte,60.89,G. Contreras
+E016,Ricardo Rauda,2025-08-21,Alimentación,29.6,G. Contreras
+E010,Mario Quintanilla,2025-06-23,Hospedaje,47.6,G. Contreras
+E023,Ernesto Barrera,2025-11-24,Atención a clientes,32.58,G. Contreras
+E014,Héctor Mejía,2025-05-21,Atención a clientes,32.04,G. Contreras
+E009,Sofía Flores,2025-10-24,Transporte,66.36,G. Contreras
+E029,Luis Rauda,2025-09-10,Combustible,65.21,G. Contreras
+E026,Patricia Castillo,2025-08-07,Transporte,14.01,G. Contreras
+E003,Claudia Castillo,2025-06-09,Alimentación,75.75,G. Contreras
+E020,Walter Mejía,2025-10-15,Alimentación,48.33,G. Contreras
+E014,Héctor Mejía,2025-07-15,Hospedaje,8.21,G. Contreras
+E001,Marta Escobar,2025-07-01,Combustible,75.83,G. Contreras
+E029,Luis Rauda,2025-08-22,Combustible,19.66,G. Contreras
+E002,Luis Castillo,2025-09-25,Hospedaje,93.0,G. Contreras
+E038,Marta Flores,2025-01-03,Transporte,27.94,G. Contreras
+E013,Marta Guardado,2025-06-10,Alimentación,20.94,G. Contreras
+E018,Mario Villalta,2025-02-06,Hospedaje,62.95,G. Contreras
+E036,Carlos Flores,2025-04-28,Atención a clientes,9.65,G. Contreras
+E011,José Portillo,2025-04-08,Combustible,53.85,G. Contreras
+E010,Mario Quintanilla,2025-07-17,Combustible,26.82,G. Contreras
+E012,Lucía Chávez,2025-08-14,Hospedaje,31.56,G. Contreras
+E021,Sofía Mendoza,2025-03-19,Hospedaje,60.6,G. Contreras
+E040,Karla Lazo,2025-10-10,Atención a clientes,57.18,G. Contreras
+E027,Gloria Escobar,2025-08-21,Atención a clientes,23.31,G. Contreras
+E021,Sofía Mendoza,2025-09-16,Hospedaje,52.5,G. Contreras
+E001,Marta Escobar,2025-12-22,Hospedaje,67.66,G. Contreras
+E030,Carlos Aguilar,2025-08-27,Hospedaje,24.83,G. Contreras
+E001,Marta Escobar,2025-09-05,Transporte,71.24,G. Contreras
+E005,Jorge Pineda,2025-04-15,Transporte,15.13,G. Contreras
+E003,Claudia Castillo,2025-05-05,Atención a clientes,92.21,G. Contreras
+E008,Lucía Portillo,2025-06-01,Hospedaje,26.45,G. Contreras
+E028,Karla Zelaya,2025-08-20,Hospedaje,49.74,G. Contreras
+E023,Ernesto Barrera,2025-06-06,Hospedaje,55.99,G. Contreras
+E003,Claudia Castillo,2025-11-07,Hospedaje,63.74,G. Contreras
+E016,Ricardo Rauda,2025-08-26,Transporte,21.0,G. Contreras
+E019,Claudia Quintanilla,2025-04-28,Hospedaje,18.48,G. Contreras
+E027,Gloria Escobar,2025-07-15,Atención a clientes,58.41,G. Contreras
+E003,Claudia Castillo,2025-09-09,Alimentación,60.11,G. Contreras
+E008,Lucía Portillo,2025-10-13,Combustible,30.86,G. Contreras
+E001,Marta Escobar,2025-03-18,Hospedaje,77.05,G. Contreras
+E007,Mario Mendoza,2025-11-20,Combustible,30.6,G. Contreras
+E013,Marta Guardado,2025-04-22,Alimentación,52.71,G. Contreras
+E002,Luis Castillo,2025-04-18,Transporte,80.58,G. Contreras
+E031,Pedro Escobar,2025-01-03,Alimentación,51.68,G. Contreras
+E003,Claudia Castillo,2025-06-26,Transporte,64.92,G. Contreras
+E003,Claudia Castillo,2025-01-01,Hospedaje,64.03,G. Contreras
+E003,Claudia Castillo,2025-09-05,Atención a clientes,80.33,G. Contreras
+E002,Luis Castillo,2025-08-22,Combustible,93.22,G. Contreras
+E012,Lucía Chávez,2025-12-25,Atención a clientes,38.66,G. Contreras
+E002,Luis Castillo,2025-01-10,Transporte,81.19,G. Contreras
+E019,Claudia Quintanilla,2025-10-13,Transporte,60.95,G. Contreras
+E014,Héctor Mejía,2025-04-17,Combustible,60.42,G. Contreras
+E030,Carlos Aguilar,2025-07-29,Combustible,68.7,G. Contreras
+E040,Karla Lazo,2025-08-27,Combustible,46.26,G. Contreras
+E003,Claudia Castillo,2025-08-18,Hospedaje,90.54,G. Contreras
+E014,Héctor Mejía,2025-07-22,Hospedaje,25.51,G. Contreras
+E003,Claudia Castillo,2025-08-07,Hospedaje,80.69,G. Contreras
+E003,Claudia Castillo,2025-10-16,Alimentación,60.25,G. Contreras
+E001,Marta Escobar,2025-09-15,Combustible,85.09,G. Contreras
+E002,Luis Castillo,2025-11-26,Hospedaje,86.09,G. Contreras
+E040,Karla Lazo,2025-11-10,Combustible,37.95,G. Contreras
+E027,Gloria Escobar,2025-09-22,Combustible,33.87,G. Contreras
+E014,Héctor Mejía,2025-02-25,Transporte,9.23,G. Contreras
+E006,Walter Zelaya,2025-05-29,Atención a clientes,43.93,G. Contreras
+E026,Patricia Castillo,2025-02-03,Atención a clientes,35.21,G. Contreras
+E001,Marta Escobar,2025-12-19,Transporte,91.78,G. Contreras
+E038,Marta Flores,2025-01-13,Atención a clientes,35.2,G. Contreras
+E003,Claudia Castillo,2025-05-26,Atención a clientes,63.76,G. Contreras
+E002,Luis Castillo,2025-07-14,Hospedaje,70.64,G. Contreras
+E012,Lucía Chávez,2025-07-30,Hospedaje,41.79,G. Contreras
+E002,Luis Castillo,2025-11-10,Alimentación,91.08,G. Contreras
+E002,Luis Castillo,2025-01-21,Hospedaje,61.37,G. Contreras
+E010,Mario Quintanilla,2025-09-16,Combustible,49.18,G. Contreras
+E011,José Portillo,2025-06-17,Alimentación,35.78,G. Contreras
+E021,Sofía Mendoza,2025-02-03,Hospedaje,58.01,G. Contreras
+E034,José Campos,2025-05-27,Alimentación,21.75,G. Contreras
+E001,Marta Escobar,2025-02-04,Alimentación,71.7,G. Contreras
+E040,Karla Lazo,2025-11-07,Alimentación,96.59,G. Contreras
+E001,Marta Escobar,2025-02-05,Hospedaje,91.21,G. Contreras
+E003,Claudia Castillo,2025-10-15,Combustible,81.68,G. Contreras
+E011,José Portillo,2025-09-22,Atención a clientes,20.45,G. Contreras
+E030,Carlos Aguilar,2025-12-01,Atención a clientes,29.85,G. Contreras
+E003,Claudia Castillo,2025-02-12,Alimentación,64.51,G. Contreras
+E032,Rafael Zelaya,2025-11-10,Transporte,43.13,G. Contreras
+E002,Luis Castillo,2025-06-09,Combustible,86.25,G. Contreras
+E019,Claudia Quintanilla,2025-03-31,Hospedaje,48.64,G. Contreras
+E001,Marta Escobar,2025-06-11,Hospedaje,84.14,G. Contreras
+E003,Claudia Castillo,2025-04-14,Alimentación,60.34,G. Contreras
+E020,Walter Mejía,2025-08-01,Hospedaje,53.29,G. Contreras
+E025,Rosa Alvarado,2025-02-13,Transporte,96.62,G. Contreras
+E035,Luis Guardado,2025-02-07,Transporte,66.94,G. Contreras
+E001,Marta Escobar,2025-02-20,Alimentación,60.71,G. Contreras
+E001,Marta Escobar,2025-07-07,Alimentación,64.6,G. Contreras
+E031,Pedro Escobar,2025-11-20,Atención a clientes,42.88,G. Contreras
+E038,Marta Flores,2025-05-09,Atención a clientes,38.54,G. Contreras
+E039,Rafael Portillo,2025-02-13,Combustible,59.41,G. Contreras
+E021,Sofía Mendoza,2025-07-18,Combustible,30.93,G. Contreras
+E008,Lucía Portillo,2025-08-27,Alimentación,38.71,G. Contreras
+E006,Walter Zelaya,2025-09-07,Alimentación,40.2,G. Contreras
+E001,Marta Escobar,2025-07-23,Atención a clientes,82.44,G. Contreras
+E031,Pedro Escobar,2025-09-08,Hospedaje,29.08,G. Contreras
+E002,Luis Castillo,2025-09-09,Combustible,90.19,G. Contreras
+E022,Lucía Lazo,2025-06-11,Atención a clientes,22.65,G. Contreras
+E001,Marta Escobar,2025-12-01,Combustible,89.66,G. Contreras
+E030,Carlos Aguilar,2025-02-11,Hospedaje,63.39,G. Contreras
+E011,José Portillo,2025-04-07,Hospedaje,49.25,G. Contreras
+E003,Claudia Castillo,2025-12-09,Combustible,75.98,G. Contreras
+E003,Claudia Castillo,2025-08-05,Hospedaje,72.34,G. Contreras
+E002,Luis Castillo,2025-12-10,Atención a clientes,85.47,G. Contreras
+E028,Karla Zelaya,2025-12-12,Atención a clientes,27.67,G. Contreras
+E003,Claudia Castillo,2025-07-16,Atención a clientes,65.94,G. Contreras
+E024,Jorge Rodríguez,2025-08-01,Hospedaje,46.4,G. Contreras
+E002,Luis Castillo,2025-01-27,Atención a clientes,77.74,G. Contreras
+E016,Ricardo Rauda,2025-02-17,Combustible,47.65,G. Contreras
+E038,Marta Flores,2025-03-05,Atención a clientes,8.08,G. Contreras
+E003,Claudia Castillo,2025-07-31,Atención a clientes,89.53,G. Contreras
+E002,Luis Castillo,2025-03-03,Atención a clientes,64.97,G. Contreras
+E014,Héctor Mejía,2025-05-07,Combustible,13.03,G. Contreras
+E034,José Campos,2025-08-28,Hospedaje,60.78,G. Contreras
+E025,Rosa Alvarado,2025-05-02,Transporte,19.44,G. Contreras
+E001,Marta Escobar,2025-05-23,Transporte,86.73,G. Contreras
+E006,Walter Zelaya,2025-05-16,Combustible,31.63,G. Contreras
+E036,Carlos Flores,2025-02-25,Atención a clientes,67.43,G. Contreras
+E008,Lucía Portillo,2025-01-19,Transporte,73.87,G. Contreras
+E018,Mario Villalta,2025-05-19,Hospedaje,67.13,G. Contreras
+E003,Claudia Castillo,2025-10-03,Hospedaje,65.27,G. Contreras
+E001,Marta Escobar,2025-06-24,Combustible,92.95,G. Contreras
+E012,Lucía Chávez,2025-05-08,Atención a clientes,34.96,G. Contreras
+E029,Luis Rauda,2025-12-17,Alimentación,93.09,G. Contreras
+E017,Luis Villalta,2025-09-08,Transporte,39.32,G. Contreras
+E037,José Castillo,2025-08-24,Atención a clientes,19.53,G. Contreras
+E009,Sofía Flores,2025-11-27,Hospedaje,12.86,G. Contreras
+E003,Claudia Castillo,2025-07-01,Hospedaje,92.68,G. Contreras
+E027,Gloria Escobar,2025-04-29,Hospedaje,52.69,G. Contreras
+E002,Luis Castillo,2025-04-04,Combustible,74.92,G. Contreras
+E037,José Castillo,2025-04-29,Combustible,16.89,G. Contreras
+E001,Marta Escobar,2025-06-18,Alimentación,66.84,G. Contreras
+E003,Claudia Castillo,2025-04-17,Transporte,74.16,G. Contreras
+E014,Héctor Mejía,2025-05-16,Hospedaje,23.91,G. Contreras
+E036,Carlos Flores,2025-07-08,Atención a clientes,61.13,G. Contreras
+E032,Rafael Zelaya,2025-03-06,Hospedaje,52.03,G. Contreras
+E001,Marta Escobar,2025-10-15,Combustible,64.87,G. Contreras
+E001,Marta Escobar,2025-10-10,Atención a clientes,65.79,G. Contreras
+E017,Luis Villalta,2025-05-09,Hospedaje,16.08,G. Contreras
+E022,Lucía Lazo,2025-11-17,Combustible,61.07,G. Contreras
+E003,Claudia Castillo,2025-09-24,Alimentación,85.64,G. Contreras
+E031,Pedro Escobar,2025-04-18,Combustible,10.1,G. Contreras
+E008,Lucía Portillo,2025-01-03,Alimentación,58.57,G. Contreras
+E036,Carlos Flores,2025-03-25,Combustible,31.21,G. Contreras
+E011,José Portillo,2025-01-09,Combustible,51.37,G. Contreras
+E003,Claudia Castillo,2025-12-04,Transporte,62.13,G. Contreras
+E001,Marta Escobar,2025-07-10,Hospedaje,75.23,G. Contreras
+E035,Luis Guardado,2025-12-29,Transporte,66.17,G. Contreras
+E019,Claudia Quintanilla,2025-01-03,Combustible,65.54,G. Contreras
+E002,Luis Castillo,2025-07-08,Transporte,63.76,G. Contreras
+E022,Lucía Lazo,2025-03-24,Hospedaje,19.64,G. Contreras
+E027,Gloria Escobar,2025-02-18,Atención a clientes,64.59,G. Contreras
+E011,José Portillo,2025-12-29,Atención a clientes,51.81,G. Contreras
+E027,Gloria Escobar,2025-07-14,Hospedaje,62.42,G. Contreras
+E012,Lucía Chávez,2025-08-13,Alimentación,37.78,G. Contreras
+E002,Luis Castillo,2025-03-28,Atención a clientes,79.15,G. Contreras
+E003,Claudia Castillo,2025-04-17,Hospedaje,88.65,G. Contreras
+E002,Luis Castillo,2025-05-05,Atención a clientes,63.21,G. Contreras
+E040,Karla Lazo,2025-02-24,Atención a clientes,19.4,G. Contreras
+E001,Marta Escobar,2025-05-13,Hospedaje,92.84,G. Contreras
+E001,Marta Escobar,2025-03-07,Hospedaje,78.15,G. Contreras
+E015,Mauricio Mendoza,2025-03-14,Combustible,49.71,G. Contreras
+E038,Marta Flores,2025-06-25,Hospedaje,96.63,G. Contreras
+E032,Rafael Zelaya,2025-02-11,Atención a clientes,67.76,G. Contreras
+E024,Jorge Rodríguez,2025-08-18,Transporte,52.94,G. Contreras
+E010,Mario Quintanilla,2025-06-18,Hospedaje,35.98,G. Contreras
+E002,Luis Castillo,2025-10-02,Alimentación,73.87,G. Contreras
+E002,Luis Castillo,2025-06-16,Alimentación,75.61,G. Contreras
+E001,Marta Escobar,2025-07-15,Combustible,75.54,G. Contreras
+E003,Claudia Castillo,2025-04-08,Combustible,83.75,G. Contreras
+E017,Luis Villalta,2025-06-25,Combustible,63.59,G. Contreras
+E003,Claudia Castillo,2025-11-04,Hospedaje,91.72,G. Contreras
+E014,Héctor Mejía,2025-03-17,Transporte,30.84,G. Contreras
+E021,Sofía Mendoza,2025-09-15,Transporte,48.08,G. Contreras
+E002,Luis Castillo,2025-10-21,Atención a clientes,83.79,G. Contreras
+E009,Sofía Flores,2025-07-09,Combustible,8.19,G. Contreras
+E039,Rafael Portillo,2025-12-14,Atención a clientes,35.63,G. Contreras
+E001,Marta Escobar,2025-04-11,Atención a clientes,78.96,G. Contreras
+E003,Claudia Castillo,2025-02-17,Hospedaje,68.88,G. Contreras
+E003,Claudia Castillo,2025-08-08,Alimentación,86.96,G. Contreras
+E030,Carlos Aguilar,2025-01-29,Atención a clientes,64.72,G. Contreras
+E026,Patricia Castillo,2025-03-31,Alimentación,56.57,G. Contreras
+E026,Patricia Castillo,2025-12-08,Combustible,40.46,G. Contreras
+E002,Luis Castillo,2025-11-28,Alimentación,78.83,G. Contreras
+E040,Karla Lazo,2025-05-12,Combustible,32.84,G. Contreras
+E020,Walter Mejía,2025-01-20,Combustible,25.77,G. Contreras
+E023,Ernesto Barrera,2025-11-07,Alimentación,95.88,G. Contreras
+E027,Gloria Escobar,2025-10-07,Hospedaje,39.18,G. Contreras
+E002,Luis Castillo,2025-05-26,Hospedaje,86.9,G. Contreras
+E003,Claudia Castillo,2025-06-03,Hospedaje,92.7,G. Contreras
+E002,Luis Castillo,2025-08-01,Combustible,91.52,G. Contreras
+E002,Luis Castillo,2025-05-30,Alimentación,62.15,G. Contreras
+E002,Luis Castillo,2025-01-23,Atención a clientes,70.13,G. Contreras
+E001,Marta Escobar,2025-07-21,Alimentación,91.16,G. Contreras
+E011,José Portillo,2025-07-25,Transporte,42.93,G. Contreras
+E003,Claudia Castillo,2025-11-07,Atención a clientes,66.04,G. Contreras
+E003,Claudia Castillo,2025-01-23,Atención a clientes,91.54,G. Contreras
+E003,Claudia Castillo,2025-08-05,Hospedaje,73.8,G. Contreras
+E003,Claudia Castillo,2025-01-30,Alimentación,75.08,G. Contreras
+E031,Pedro Escobar,2025-10-21,Hospedaje,30.27,G. Contreras
+E028,Karla Zelaya,2025-12-10,Atención a clientes,46.61,G. Contreras
+E031,Pedro Escobar,2025-10-10,Atención a clientes,96.11,G. Contreras
+E002,Luis Castillo,2025-06-17,Alimentación,91.02,G. Contreras
+E030,Carlos Aguilar,2025-10-16,Alimentación,94.92,G. Contreras
+E013,Marta Guardado,2025-03-19,Transporte,95.12,G. Contreras
+E017,Luis Villalta,2025-06-18,Alimentación,8.2,G. Contreras
+E023,Ernesto Barrera,2025-08-25,Transporte,10.81,G. Contreras
+E024,Jorge Rodríguez,2025-12-09,Transporte,47.71,G. Contreras
+E030,Carlos Aguilar,2025-07-09,Transporte,38.38,G. Contreras
+E040,Karla Lazo,2025-04-18,Alimentación,21.02,G. Contreras
+E001,Marta Escobar,2025-07-22,Alimentación,67.31,G. Contreras
+E007,Mario Mendoza,2025-02-07,Hospedaje,18.71,G. Contreras
+E038,Marta Flores,2025-12-02,Alimentación,53.95,G. Contreras
+E005,Jorge Pineda,2025-07-04,Combustible,32.95,G. Contreras
+E001,Marta Escobar,2025-02-25,Hospedaje,70.67,G. Contreras
+E002,Luis Castillo,2025-12-18,Combustible,62.04,G. Contreras
+E001,Marta Escobar,2025-12-08,Transporte,89.96,G. Contreras
+E017,Luis Villalta,2025-06-04,Transporte,21.41,G. Contreras
+E003,Claudia Castillo,2025-03-13,Combustible,89.08,G. Contreras
+E024,Jorge Rodríguez,2025-07-21,Alimentación,11.13,G. Contreras
+E008,Lucía Portillo,2025-07-28,Hospedaje,27.64,G. Contreras
+E018,Mario Villalta,2025-02-11,Combustible,54.13,G. Contreras
+E001,Marta Escobar,2025-06-04,Combustible,63.69,G. Contreras
+E015,Mauricio Mendoza,2025-11-17,Alimentación,23.51,G. Contreras
+E034,José Campos,2025-02-03,Atención a clientes,52.92,G. Contreras
+E003,Claudia Castillo,2025-10-03,Combustible,89.73,G. Contreras
+E039,Rafael Portillo,2025-11-05,Combustible,41.99,G. Contreras
+E002,Luis Castillo,2025-06-17,Transporte,86.09,G. Contreras
+E007,Mario Mendoza,2025-01-14,Combustible,12.22,G. Contreras
+E011,José Portillo,2025-05-08,Atención a clientes,58.76,G. Contreras
+E016,Ricardo Rauda,2025-02-20,Atención a clientes,30.38,G. Contreras
+E022,Lucía Lazo,2025-09-18,Combustible,35.8,G. Contreras
+E002,Luis Castillo,2025-12-19,Alimentación,71.98,G. Contreras
+E003,Claudia Castillo,2025-04-14,Atención a clientes,85.94,G. Contreras
+E020,Walter Mejía,2025-12-08,Transporte,45.39,G. Contreras
+E014,Héctor Mejía,2025-06-11,Hospedaje,81.61,G. Contreras
+E011,José Portillo,2025-04-09,Alimentación,39.32,G. Contreras
+E010,Mario Quintanilla,2025-01-22,Atención a clientes,38.26,G. Contreras
+E003,Claudia Castillo,2025-02-10,Atención a clientes,68.16,G. Contreras
+E001,Marta Escobar,2025-01-02,Atención a clientes,81.71,G. Contreras
+E002,Luis Castillo,2025-09-18,Combustible,63.61,G. Contreras
+E018,Mario Villalta,2025-07-29,Hospedaje,20.04,G. Contreras
+E035,Luis Guardado,2025-10-23,Alimentación,36.51,G. Contreras
+E001,Marta Escobar,2025-11-12,Atención a clientes,72.64,G. Contreras
+E003,Claudia Castillo,2025-10-16,Atención a clientes,87.31,G. Contreras
+E007,Mario Mendoza,2025-08-11,Alimentación,53.6,G. Contreras
+E002,Luis Castillo,2025-08-05,Transporte,81.17,G. Contreras
+E023,Ernesto Barrera,2025-08-27,Alimentación,49.98,G. Contreras
+E032,Rafael Zelaya,2025-01-08,Hospedaje,51.21,G. Contreras
+E034,José Campos,2025-01-24,Hospedaje,42.74,G. Contreras
+E037,José Castillo,2025-11-28,Alimentación,18.96,G. Contreras
+E021,Sofía Mendoza,2025-12-09,Transporte,43.53,G. Contreras
+E023,Ernesto Barrera,2025-06-19,Transporte,54.75,G. Contreras
+E030,Carlos Aguilar,2025-10-07,Hospedaje,37.81,G. Contreras
+E021,Sofía Mendoza,2025-08-10,Atención a clientes,65.46,G. Contreras
+E011,José Portillo,2025-06-23,Transporte,17.71,G. Contreras
+E036,Carlos Flores,2025-03-25,Combustible,31.21,G. Contreras
+E002,Luis Castillo,2025-02-13,Transporte,69.23,G. Contreras
+E001,Marta Escobar,2025-08-07,Hospedaje,85.78,G. Contreras
+E009,Sofía Flores,2025-09-22,Transporte,16.93,G. Contreras
+E001,Marta Escobar,2025-03-17,Alimentación,62.79,G. Contreras
+E002,Luis Castillo,2025-09-30,Transporte,91.99,G. Contreras
+E005,Jorge Pineda,2025-07-10,Combustible,59.21,G. Contreras
+E002,Luis Castillo,2025-08-11,Combustible,60.29,G. Contreras
+E036,Carlos Flores,2025-07-23,Hospedaje,45.5,G. Contreras
+E032,Rafael Zelaya,2025-11-05,Transporte,50.21,G. Contreras
+E011,José Portillo,2025-02-18,Transporte,29.64,G. Contreras
+E001,Marta Escobar,2025-01-10,Hospedaje,64.52,G. Contreras
+E003,Claudia Castillo,2025-05-01,Atención a clientes,83.71,G. Contreras
+E023,Ernesto Barrera,2025-11-04,Combustible,29.18,G. Contreras
+E002,Luis Castillo,2025-07-17,Combustible,82.19,G. Contreras
+E003,Claudia Castillo,2025-01-13,Hospedaje,84.61,G. Contreras
+E019,Claudia Quintanilla,2025-01-13,Combustible,24.87,G. Contreras
+E024,Jorge Rodríguez,2025-02-04,Atención a clientes,53.81,G. Contreras
+E020,Walter Mejía,2025-08-05,Hospedaje,62.84,G. Contreras
+E011,José Portillo,2025-08-11,Alimentación,26.19,G. Contreras
+E025,Rosa Alvarado,2025-05-21,Combustible,12.15,G. Contreras
+E002,Luis Castillo,2025-02-14,Alimentación,72.5,G. Contreras
+E003,Claudia Castillo,2025-01-01,Atención a clientes,68.67,G. Contreras
+E003,Claudia Castillo,2025-03-14,Hospedaje,74.37,G. Contreras
+E012,Lucía Chávez,2025-06-24,Combustible,17.47,G. Contreras
+E002,Luis Castillo,2025-07-14,Transporte,83.73,G. Contreras
+E002,Luis Castillo,2025-08-11,Hospedaje,72.8,G. Contreras
+E002,Luis Castillo,2025-02-06,Transporte,68.19,G. Contreras
+E003,Claudia Castillo,2025-04-22,Hospedaje,73.28,G. Contreras
+E002,Luis Castillo,2025-01-13,Hospedaje,60.64,G. Contreras
+E018,Mario Villalta,2025-09-18,Combustible,15.41,G. Contreras
+E003,Claudia Castillo,2025-11-07,Combustible,85.56,G. Contreras
+E008,Lucía Portillo,2025-05-09,Combustible,66.69,G. Contreras
+E003,Claudia Castillo,2025-07-01,Combustible,92.71,G. Contreras
+E039,Rafael Portillo,2025-02-26,Atención a clientes,27.71,G. Contreras
+E031,Pedro Escobar,2025-02-14,Hospedaje,39.58,G. Contreras
+E002,Luis Castillo,2025-03-21,Hospedaje,89.28,G. Contreras
+E039,Rafael Portillo,2025-09-16,Alimentación,60.94,G. Contreras
+E003,Claudia Castillo,2025-05-02,Combustible,84.05,G. Contreras
+E012,Lucía Chávez,2025-07-28,Combustible,28.75,G. Contreras
+E025,Rosa Alvarado,2025-07-01,Hospedaje,19.49,G. Contreras
+E036,Carlos Flores,2025-09-04,Atención a clientes,52.48,G. Contreras
+E002,Luis Castillo,2025-02-05,Atención a clientes,86.22,G. Contreras
+E001,Marta Escobar,2025-07-11,Hospedaje,94.68,G. Contreras
+E020,Walter Mejía,2025-07-16,Transporte,15.36,G. Contreras
+E036,Carlos Flores,2025-06-10,Transporte,58.35,G. Contreras
+E027,Gloria Escobar,2025-05-06,Combustible,41.25,G. Contreras
+E013,Marta Guardado,2025-09-13,Combustible,52.49,G. Contreras
+E002,Luis Castillo,2025-08-11,Transporte,82.76,G. Contreras
+E001,Marta Escobar,2025-02-13,Alimentación,71.09,G. Contreras
+E013,Marta Guardado,2025-07-31,Hospedaje,62.62,G. Contreras
+E039,Rafael Portillo,2025-12-03,Atención a clientes,35.99,G. Contreras
+E009,Sofía Flores,2025-01-16,Combustible,18.71,G. Contreras
+E001,Marta Escobar,2025-07-08,Combustible,67.48,G. Contreras
+E026,Patricia Castillo,2025-07-28,Transporte,10.69,G. Contreras
+E013,Marta Guardado,2025-02-14,Alimentación,21.37,G. Contreras
+E040,Karla Lazo,2025-04-28,Alimentación,62.31,G. Contreras
+E036,Carlos Flores,2025-12-24,Atención a clientes,17.84,G. Contreras
+E002,Luis Castillo,2025-06-10,Combustible,84.56,G. Contreras
+E017,Luis Villalta,2025-11-19,Combustible,44.35,G. Contreras
+E005,Jorge Pineda,2025-05-31,Atención a clientes,41.06,G. Contreras
+E012,Lucía Chávez,2025-09-18,Alimentación,22.17,G. Contreras
+E002,Luis Castillo,2025-12-19,Combustible,78.64,G. Contreras
+E003,Claudia Castillo,2025-01-09,Alimentación,91.12,G. Contreras
+E002,Luis Castillo,2025-12-30,Hospedaje,85.49,G. Contreras
+E025,Rosa Alvarado,2025-04-15,Alimentación,39.86,G. Contreras
+E032,Rafael Zelaya,2025-11-04,Alimentación,53.13,G. Contreras
+E002,Luis Castillo,2025-09-02,Atención a clientes,65.07,G. Contreras
+E002,Luis Castillo,2025-05-14,Hospedaje,94.14,G. Contreras
+E036,Carlos Flores,2025-12-17,Transporte,47.15,G. Contreras
+E003,Claudia Castillo,2025-02-10,Alimentación,66.02,G. Contreras
+E002,Luis Castillo,2025-06-17,Transporte,84.74,G. Contreras
+E002,Luis Castillo,2025-08-27,Hospedaje,90.39,G. Contreras
+E003,Claudia Castillo,2025-12-10,Transporte,73.06,G. Contreras
+E038,Marta Flores,2025-10-06,Alimentación,20.17,G. Contreras
+E001,Marta Escobar,2025-06-20,Atención a clientes,92.2,G. Contreras
+E036,Carlos Flores,2025-03-24,Transporte,57.37,G. Contreras
+E002,Luis Castillo,2025-08-12,Alimentación,72.17,G. Contreras
+E003,Claudia Castillo,2025-08-06,Atención a clientes,86.67,G. Contreras
+E002,Luis Castillo,2025-03-12,Hospedaje,73.58,G. Contreras
+E002,Luis Castillo,2025-11-25,Alimentación,72.26,G. Contreras
+E002,Luis Castillo,2025-08-28,Combustible,68.92,G. Contreras
+E021,Sofía Mendoza,2025-09-17,Alimentación,48.69,G. Contreras
+E017,Luis Villalta,2025-09-08,Combustible,28.76,G. Contreras
+E020,Walter Mejía,2025-03-26,Transporte,90.23,G. Contreras
+E030,Carlos Aguilar,2025-02-18,Alimentación,52.07,G. Contreras
+E019,Claudia Quintanilla,2025-12-25,Atención a clientes,56.58,G. Contreras
+E030,Carlos Aguilar,2025-01-03,Atención a clientes,32.14,G. Contreras
+E039,Rafael Portillo,2025-11-25,Transporte,31.38,G. Contreras
+E012,Lucía Chávez,2025-09-02,Combustible,31.58,G. Contreras
+E011,José Portillo,2025-04-09,Alimentación,51.33,G. Contreras
+E006,Walter Zelaya,2025-06-06,Combustible,60.58,G. Contreras
+E015,Mauricio Mendoza,2025-09-05,Alimentación,18.99,G. Contreras
+E027,Gloria Escobar,2025-04-25,Hospedaje,56.67,G. Contreras
+E032,Rafael Zelaya,2025-11-03,Atención a clientes,53.39,G. Contreras
+E016,Ricardo Rauda,2025-03-31,Combustible,34.66,G. Contreras
+E009,Sofía Flores,2025-07-02,Hospedaje,53.1,G. Contreras
+E003,Claudia Castillo,2025-09-15,Transporte,73.38,G. Contreras
+E039,Rafael Portillo,2025-07-30,Transporte,21.7,G. Contreras
+E028,Karla Zelaya,2025-12-11,Combustible,44.11,G. Contreras
+E023,Ernesto Barrera,2025-03-20,Transporte,33.74,G. Contreras
+E002,Luis Castillo,2025-07-23,Hospedaje,90.01,G. Contreras
+E001,Marta Escobar,2025-04-30,Alimentación,93.59,G. Contreras
+E001,Marta Escobar,2025-09-19,Transporte,60.12,G. Contreras
+E005,Jorge Pineda,2025-10-16,Combustible,26.43,G. Contreras
+E001,Marta Escobar,2025-05-05,Hospedaje,83.62,G. Contreras
+E015,Mauricio Mendoza,2025-04-14,Transporte,23.35,G. Contreras
+E001,Marta Escobar,2025-11-24,Transporte,81.21,G. Contreras
+E003,Claudia Castillo,2025-05-02,Hospedaje,72.74,G. Contreras
+E005,Jorge Pineda,2025-06-21,Hospedaje,26.32,G. Contreras
+E001,Marta Escobar,2025-02-11,Hospedaje,89.67,G. Contreras
+E035,Luis Guardado,2025-09-26,Alimentación,10.45,G. Contreras
+E003,Claudia Castillo,2025-07-03,Alimentación,73.77,G. Contreras
+E028,Karla Zelaya,2025-06-25,Atención a clientes,21.7,G. Contreras
+E001,Marta Escobar,2025-11-04,Combustible,88.06,G. Contreras
+E001,Marta Escobar,2025-05-14,Combustible,74.34,G. Contreras
+E003,Claudia Castillo,2025-02-12,Hospedaje,69.5,G. Contreras
+E038,Marta Flores,2025-11-04,Alimentación,20.84,G. Contreras
+E040,Karla Lazo,2025-11-09,Combustible,46.58,G. Contreras
+E003,Claudia Castillo,2025-07-09,Combustible,81.09,G. Contreras
+E030,Carlos Aguilar,2025-02-06,Atención a clientes,58.54,G. Contreras
+E001,Marta Escobar,2025-07-02,Alimentación,72.38,G. Contreras
+E012,Lucía Chávez,2025-05-30,Alimentación,21.82,G. Contreras
+E001,Marta Escobar,2025-02-18,Atención a clientes,83.21,G. Contreras
+E035,Luis Guardado,2025-07-17,Alimentación,12.75,G. Contreras
+E038,Marta Flores,2025-06-13,Atención a clientes,69.52,G. Contreras
+E017,Luis Villalta,2025-04-14,Hospedaje,52.63,G. Contreras
+E001,Marta Escobar,2025-08-14,Hospedaje,69.43,G. Contreras
+E008,Lucía Portillo,2025-04-02,Transporte,56.42,G. Contreras
+E002,Luis Castillo,2025-11-06,Atención a clientes,69.07,G. Contreras
+E014,Héctor Mejía,2025-07-16,Hospedaje,38.0,G. Contreras
+E035,Luis Guardado,2025-07-03,Hospedaje,68.52,G. Contreras
+E021,Sofía Mendoza,2025-03-02,Hospedaje,23.4,G. Contreras
+E002,Luis Castillo,2025-05-29,Transporte,91.92,G. Contreras
+E001,Marta Escobar,2025-06-24,Combustible,68.82,G. Contreras
+E023,Ernesto Barrera,2025-10-02,Transporte,64.73,G. Contreras
+E016,Ricardo Rauda,2025-06-13,Atención a clientes,63.41,G. Contreras
+E001,Marta Escobar,2025-10-30,Atención a clientes,89.63,G. Contreras
+E013,Marta Guardado,2025-05-13,Transporte,9.1,G. Contreras
+E001,Marta Escobar,2025-12-16,Alimentación,89.07,G. Contreras
+E001,Marta Escobar,2025-09-16,Hospedaje,90.05,G. Contreras
+E039,Rafael Portillo,2025-04-17,Atención a clientes,66.67,G. Contreras
+E008,Lucía Portillo,2025-02-18,Alimentación,13.11,G. Contreras
+E011,José Portillo,2025-04-08,Combustible,67.79,G. Contreras
+E040,Karla Lazo,2025-06-13,Alimentación,99.66,G. Contreras
+E026,Patricia Castillo,2025-01-24,Transporte,63.22,G. Contreras
+E003,Claudia Castillo,2025-11-19,Combustible,67.87,G. Contreras
+E026,Patricia Castillo,2025-01-04,Alimentación,60.41,G. Contreras
+E005,Jorge Pineda,2025-10-31,Alimentación,34.58,G. Contreras
+E025,Rosa Alvarado,2025-01-20,Atención a clientes,10.4,G. Contreras
+E025,Rosa Alvarado,2025-04-25,Combustible,63.97,G. Contreras
+E038,Marta Flores,2025-03-06,Alimentación,48.28,G. Contreras
+E009,Sofía Flores,2025-07-29,Transporte,22.48,G. Contreras
+E013,Marta Guardado,2025-07-03,Hospedaje,64.68,G. Contreras
+E006,Walter Zelaya,2025-09-24,Alimentación,61.14,G. Contreras
+E019,Claudia Quintanilla,2025-11-11,Atención a clientes,42.55,G. Contreras
+E003,Claudia Castillo,2025-04-08,Hospedaje,88.81,G. Contreras
+E015,Mauricio Mendoza,2025-01-21,Combustible,41.28,G. Contreras
+E002,Luis Castillo,2025-10-10,Hospedaje,73.42,G. Contreras
+E025,Rosa Alvarado,2025-02-20,Hospedaje,35.49,G. Contreras
+E002,Luis Castillo,2025-03-20,Atención a clientes,86.38,G. Contreras
+E016,Ricardo Rauda,2025-10-24,Alimentación,68.27,G. Contreras
+E036,Carlos Flores,2025-06-09,Transporte,50.61,G. Contreras
+E003,Claudia Castillo,2025-08-15,Alimentación,83.53,G. Contreras
+E003,Claudia Castillo,2025-07-08,Atención a clientes,79.31,G. Contreras
+E034,José Campos,2025-02-05,Transporte,43.03,G. Contreras
+E002,Luis Castillo,2025-02-13,Alimentación,62.05,G. Contreras
+E002,Luis Castillo,2025-11-25,Combustible,62.41,G. Contreras
+E009,Sofía Flores,2025-04-21,Alimentación,24.57,G. Contreras
+E014,Héctor Mejía,2025-06-11,Atención a clientes,81.61,G. Contreras
+E023,Ernesto Barrera,2025-11-24,Combustible,32.58,G. Contreras
+E001,Marta Escobar,2025-01-30,Atención a clientes,76.38,G. Contreras
+E003,Claudia Castillo,2025-07-04,Atención a clientes,74.73,G. Contreras
+E003,Claudia Castillo,2025-05-07,Alimentación,92.72,G. Contreras
+E019,Claudia Quintanilla,2025-05-29,Combustible,29.4,G. Contreras
+E030,Carlos Aguilar,2025-02-28,Hospedaje,33.81,G. Contreras
+E027,Gloria Escobar,2025-11-25,Combustible,35.62,G. Contreras
+E022,Lucía Lazo,2025-05-25,Hospedaje,68.29,G. Contreras
+E039,Rafael Portillo,2025-12-19,Atención a clientes,15.12,G. Contreras
+E002,Luis Castillo,2025-05-28,Combustible,69.81,G. Contreras
+E031,Pedro Escobar,2025-04-08,Hospedaje,20.13,G. Contreras
+E002,Luis Castillo,2025-01-08,Alimentación,65.74,G. Contreras
+E003,Claudia Castillo,2025-08-15,Transporte,91.75,G. Contreras
+E002,Luis Castillo,2025-03-14,Hospedaje,62.39,G. Contreras
+E022,Lucía Lazo,2025-10-24,Hospedaje,21.64,G. Contreras
+E005,Jorge Pineda,2025-01-08,Atención a clientes,30.09,G. Contreras
+E019,Claudia Quintanilla,2025-12-01,Combustible,69.03,G. Contreras
+E003,Claudia Castillo,2025-11-12,Hospedaje,63.08,G. Contreras
+E001,Marta Escobar,2025-06-09,Combustible,61.66,G. Contreras
+E003,Claudia Castillo,2025-08-22,Hospedaje,87.56,G. Contreras
+E005,Jorge Pineda,2025-05-28,Transporte,42.95,G. Contreras
+E021,Sofía Mendoza,2025-12-03,Combustible,17.51,G. Contreras
+E001,Marta Escobar,2025-07-22,Alimentación,91.6,G. Contreras
+E001,Marta Escobar,2025-11-13,Hospedaje,62.79,G. Contreras
+E029,Luis Rauda,2025-01-08,Alimentación,68.66,G. Contreras
+E003,Claudia Castillo,2025-11-27,Hospedaje,85.11,G. Contreras
+E034,José Campos,2025-08-29,Hospedaje,35.15,G. Contreras
+E002,Luis Castillo,2025-01-07,Transporte,79.35,G. Contreras
+E027,Gloria Escobar,2025-07-22,Atención a clientes,53.74,G. Contreras
+E001,Marta Escobar,2025-12-15,Combustible,70.16,G. Contreras
+E003,Claudia Castillo,2025-04-10,Hospedaje,82.54,G. Contreras
+E021,Sofía Mendoza,2025-01-15,Combustible,64.55,G. Contreras
+E003,Claudia Castillo,2025-01-03,Hospedaje,90.66,G. Contreras
+E020,Walter Mejía,2025-05-29,Alimentación,32.96,G. Contreras
+E001,Marta Escobar,2025-07-09,Alimentación,91.26,G. Contreras
+E003,Claudia Castillo,2025-09-29,Combustible,62.94,G. Contreras
+E002,Luis Castillo,2025-01-09,Combustible,94.58,G. Contreras
+E001,Marta Escobar,2025-11-18,Alimentación,78.1,G. Contreras
+E012,Lucía Chávez,2025-01-16,Alimentación,42.5,G. Contreras
+E001,Marta Escobar,2025-11-10,Combustible,93.52,G. Contreras
+E027,Gloria Escobar,2025-06-13,Transporte,61.9,G. Contreras
+E011,José Portillo,2025-01-30,Combustible,15.07,G. Contreras
+E002,Luis Castillo,2025-08-19,Transporte,79.86,G. Contreras
+E018,Mario Villalta,2025-05-09,Alimentación,60.85,G. Contreras
+E026,Patricia Castillo,2025-06-06,Transporte,66.99,G. Contreras
+E017,Luis Villalta,2025-01-22,Hospedaje,39.53,G. Contreras
+E011,José Portillo,2025-06-30,Combustible,10.65,G. Contreras
+E001,Marta Escobar,2025-09-02,Alimentación,83.61,G. Contreras
+E023,Ernesto Barrera,2025-06-16,Hospedaje,58.25,G. Contreras
+E006,Walter Zelaya,2025-06-03,Alimentación,44.56,G. Contreras
+E001,Marta Escobar,2025-10-28,Transporte,88.76,G. Contreras
+E038,Marta Flores,2025-09-11,Transporte,46.69,G. Contreras
+E019,Claudia Quintanilla,2025-07-22,Alimentación,57.48,G. Contreras
+E028,Karla Zelaya,2025-11-12,Transporte,14.44,G. Contreras
+E026,Patricia Castillo,2025-07-16,Transporte,62.24,G. Contreras
+E027,Gloria Escobar,2025-10-09,Atención a clientes,30.77,G. Contreras
+E016,Ricardo Rauda,2025-12-17,Hospedaje,13.86,G. Contreras
+E003,Claudia Castillo,2025-10-06,Combustible,84.93,G. Contreras
+E001,Marta Escobar,2025-11-03,Atención a clientes,63.93,G. Contreras
+E034,José Campos,2025-05-14,Hospedaje,57.07,G. Contreras
+E008,Lucía Portillo,2025-02-10,Hospedaje,60.13,G. Contreras
+E007,Mario Mendoza,2025-02-13,Alimentación,37.49,G. Contreras
+E001,Marta Escobar,2025-05-19,Atención a clientes,86.74,G. Contreras
+E002,Luis Castillo,2025-11-12,Transporte,63.81,G. Contreras
+E001,Marta Escobar,2025-01-27,Hospedaje,86.77,G. Contreras
+E006,Walter Zelaya,2025-05-25,Hospedaje,65.36,G. Contreras
+E015,Mauricio Mendoza,2025-12-03,Transporte,31.93,G. Contreras
+E001,Marta Escobar,2025-04-30,Alimentación,68.57,G. Contreras
+E001,Marta Escobar,2025-01-01,Atención a clientes,86.66,G. Contreras
+E011,José Portillo,2025-07-11,Transporte,40.02,G. Contreras
+E027,Gloria Escobar,2025-11-27,Combustible,13.12,G. Contreras
+E001,Marta Escobar,2025-02-24,Alimentación,87.68,G. Contreras
+E001,Marta Escobar,2025-10-23,Combustible,90.4,G. Contreras
+E014,Héctor Mejía,2025-09-04,Alimentación,39.33,G. Contreras
+E040,Karla Lazo,2025-04-25,Atención a clientes,10.46,G. Contreras
+E003,Claudia Castillo,2025-02-19,Transporte,65.47,G. Contreras
+E003,Claudia Castillo,2025-07-07,Atención a clientes,87.16,G. Contreras
+E012,Lucía Chávez,2025-05-22,Alimentación,19.29,G. Contreras
+E011,José Portillo,2025-03-10,Hospedaje,26.74,G. Contreras
+E001,Marta Escobar,2025-02-12,Atención a clientes,77.24,G. Contreras
+E025,Rosa Alvarado,2025-12-22,Alimentación,60.23,G. Contreras
+E001,Marta Escobar,2025-08-08,Hospedaje,92.48,G. Contreras
+E007,Mario Mendoza,2025-02-13,Transporte,37.49,G. Contreras
+E002,Luis Castillo,2025-11-26,Transporte,67.3,G. Contreras
+E002,Luis Castillo,2025-08-19,Hospedaje,67.65,G. Contreras
+E002,Luis Castillo,2025-04-29,Atención a clientes,66.35,G. Contreras
+E003,Claudia Castillo,2025-03-28,Combustible,62.92,G. Contreras
+E002,Luis Castillo,2025-05-07,Transporte,73.61,G. Contreras
+E001,Marta Escobar,2025-09-04,Alimentación,79.68,G. Contreras
+E018,Mario Villalta,2025-09-18,Hospedaje,52.62,G. Contreras
+E022,Lucía Lazo,2025-10-24,Transporte,43.14,G. Contreras
+E024,Jorge Rodríguez,2025-04-02,Combustible,14.92,G. Contreras
+E001,Marta Escobar,2025-05-20,Atención a clientes,84.22,G. Contreras
+E031,Pedro Escobar,2025-02-27,Atención a clientes,14.52,G. Contreras
+E001,Marta Escobar,2025-05-19,Atención a clientes,70.91,G. Contreras
+E017,Luis Villalta,2025-02-18,Hospedaje,16.14,G. Contreras
+E003,Claudia Castillo,2025-01-10,Transporte,60.91,G. Contreras
+E024,Jorge Rodríguez,2025-02-19,Alimentación,90.71,G. Contreras
+E035,Luis Guardado,2025-06-04,Hospedaje,13.85,G. Contreras
+E003,Claudia Castillo,2025-01-01,Atención a clientes,92.82,G. Contreras

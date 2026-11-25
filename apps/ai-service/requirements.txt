@@ -35,6 +35,7 @@ scipy>=1.14.0
 statsmodels>=0.14.0
 scikit-learn>=1.5.0
 openpyxl>=3.1.0
+xlrd>=2.0.1  # lectura de Excel antiguo (.xls) en el portal de CAATs; sin él pandas falla con «Install xlrd»
 jsonschema>=4.23.0
 # Matching difuso de nombres — Motor CAATs #18 (screening de sanciones OFAC/ONU)
 rapidfuzz>=3.9.0

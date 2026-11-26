@@ -30,7 +30,7 @@
 
 ---
 
-## 2. Cómo funciona hoy AuditMind (verificado en el código)
+## 2. Cómo funciona hoy Nova Criterio (verificado en el código)
 
 1. **Dos formas de cargar saldos, ninguna conoce «visitas»:**
    - *Papel B-00 (`TrialBalancePanel`)*: un solo archivo con tres columnas fijas — `saldo_actual`, `saldo_anterior`, `saldo_anterior2` — guardado como valor de la sección del papel. Es la «sola carga» que describes: el año auditado y dos históricos llegan juntos.

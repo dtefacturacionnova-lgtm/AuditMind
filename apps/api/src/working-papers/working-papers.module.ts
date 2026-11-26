@@ -15,11 +15,14 @@ import { ExcelTemplateEngineService } from './excel-templates/excel-template-eng
 import { AiModule } from '../ai/ai.module';
 import { ContentLibraryModule } from '../content-library/content-library.module';
 import { PdfToolsModule } from '../pdf-tools/pdf-tools.module';
+import { PaperLibraryController } from './paper-library/paper-library.controller';
+import { PaperLibraryAdminService } from './paper-library/paper-library-admin.service';
 
 @Module({
   imports: [AiModule, ContentLibraryModule, PdfToolsModule],
-  controllers: [WorkingPapersController],
+  controllers: [WorkingPapersController, PaperLibraryController],
   providers: [
+    PaperLibraryAdminService,      // Biblioteca por papel: ajustes de la organización sobre el catálogo del sistema
     WorkingPapersService,
     PaperGraphService,
     PaperSectionsService,

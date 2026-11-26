@@ -200,6 +200,17 @@ const ROUTE_HELP: RouteHelpEntry[] = [
     },
   },
   {
+    test: p => routeIs(p, '/dashboard/admin/paper-library'),
+    topic: {
+      title: 'Biblioteca por Papel',
+      body: [
+        'Cada papel trae procedimientos ya redactados, con un desarrollo modelo que el auditor completa. «Generar sugerencias» los muestra primero, sin gastar IA; la IA solo amplía si se lo pides.',
+        'Los del sistema se actualizan con cada versión. Puedes ajustarlos u ocultarlos solo para tu organización (y restaurar el original), o agregar los tuyos. Cualquier auditor los ve; editar requiere ser Gerente de Auditoría o superior.',
+        'También puedes guardar un procedimiento ya redactado dentro de un papel con «Guardar en la biblioteca».',
+      ],
+    },
+  },
+  {
     test: p => routeIs(p, '/dashboard/admin/data-sources'),
     topic: {
       title: 'Conectores de Datos',

@@ -29,7 +29,7 @@ function SuggestionCard({
   canApplyToPaper,
 }: {
   suggestion: AiProcedureSuggestion;
-  onApply:    (procedure: string, area: string, niaRef?: string) => Promise<void> | void;
+  onApply:    (suggestion: AiProcedureSuggestion) => Promise<void> | void;
   canApplyToPaper: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -41,7 +41,7 @@ function SuggestionCard({
     e.stopPropagation();
     setBusy(true);
     try {
-      await onApply(suggestion.procedure, suggestion.area, suggestion.niaRef);
+      await onApply(suggestion);
     } finally {
       setBusy(false);
     }
@@ -59,6 +59,21 @@ function SuggestionCard({
           <div className={`mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${pCfg.bg} ${pCfg.color} ${pCfg.border} border`}>
             {pCfg.label}
           </div>
+          {suggestion.source === 'LIBRARY' && (
+            <div
+              title={suggestion.origin === 'OWN'
+                ? 'Procedimiento que tu organización agregó a la biblioteca de este papel: no gastó IA y trae un desarrollo modelo'
+                : suggestion.origin === 'EDITED'
+                  ? 'Procedimiento de la biblioteca de este papel, ajustado por tu organización: no gastó IA y trae un desarrollo modelo'
+                  : 'Procedimiento curado de la biblioteca de este papel: no gastó IA y trae un desarrollo modelo'}
+              className={`mt-0.5 px-2 py-0.5 rounded text-[10px] font-bold shrink-0 border ${
+                suggestion.origin === 'OWN' || suggestion.origin === 'EDITED'
+                  ? 'bg-violet-50 text-violet-700 border-violet-200'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              }`}>
+              {suggestion.origin === 'OWN' || suggestion.origin === 'EDITED' ? 'Tu biblioteca' : 'Biblioteca'}
+            </div>
+          )}
           <div className="min-w-0">
             <p className="text-xs font-semibold text-gray-600 truncate">{suggestion.area}</p>
             <p className="text-sm text-gray-800 mt-0.5 line-clamp-2">{suggestion.procedure}</p>
@@ -81,6 +96,13 @@ function SuggestionCard({
             <Lightbulb className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
             <p className="text-xs text-blue-700">{suggestion.rationale}</p>
           </div>
+
+          {suggestion.development && (
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
+              <p className="text-[10px] font-semibold uppercase text-emerald-700 mb-1">Desarrollo modelo (completa los [corchetes])</p>
+              <p className="text-xs text-gray-700 whitespace-pre-line">{suggestion.development}</p>
+            </div>
+          )}
 
           {/* Source */}
           <p className="text-[10px] text-gray-400 flex items-center gap-1">
@@ -123,19 +145,22 @@ export function CrossAuditSuggestions({ auditId, paperId, onApply }: CrossAuditS
   const generate = useAiSuggestions();
   const append   = useAppendProcedure();
 
-  async function handleGenerate() {
-    const res = await generate.mutateAsync({ auditId, paperId });
+  async function handleGenerate(expand = false) {
+    const res = await generate.mutateAsync({ auditId, paperId, expand });
     setResult(res);
   }
 
   // Aplicar = agregar al papel actual (si hay paperId) o delegar al padre
-  async function handleApplyToPaper(procedure: string, area: string, niaRef?: string) {
+  async function handleApplyToPaper(sug: AiProcedureSuggestion) {
     if (onApply) {
-      onApply(procedure, area);
+      onApply(sug.procedure, sug.area);
       return;
     }
     if (paperId) {
-      await append.mutateAsync({ paperId, procedure, area, niaRef });
+      // Los de biblioteca se aplican completos (título, enunciado y desarrollo modelo); los de IA, como siempre.
+      await append.mutateAsync(sug.source === 'LIBRARY'
+        ? { paperId, title: sug.title, statement: sug.statement, development: sug.development, area: sug.area, niaRef: sug.niaRef }
+        : { paperId, procedure: sug.procedure, area: sug.area, niaRef: sug.niaRef });
     }
   }
 
@@ -154,13 +179,14 @@ export function CrossAuditSuggestions({ auditId, paperId, onApply }: CrossAuditS
             {result && (
               <p className="text-[10px] text-gray-400">
                 {result.basedOnAudits} auditoría(s) anterior(es) · {result.totalFindings} hallazgo(s) analizados
+                {!!result.libraryCount && <span className="text-emerald-600 ml-1.5">· {result.libraryCount} de la biblioteca</span>}
                 {result.aiGenerated && <span className="text-violet-500 ml-1.5">· IA</span>}
               </p>
             )}
           </div>
         </div>
         <button
-          onClick={handleGenerate}
+          onClick={() => handleGenerate(false)}
           disabled={generate.isPending}
           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 rounded-xl hover:bg-violet-700 disabled:opacity-50 transition-colors"
         >
@@ -226,18 +252,31 @@ export function CrossAuditSuggestions({ auditId, paperId, onApply }: CrossAuditS
                 key={sug.id}
                 suggestion={sug}
                 canApplyToPaper={!!paperId || !!onApply}
-                onApply={async (procedure, area, niaRef) => {
+                onApply={async (sg) => {
                   if (onApply || paperId) {
-                    await handleApplyToPaper(procedure, area, niaRef);
+                    await handleApplyToPaper(sg);
                   } else {
                     // Sin papel ni handler → fallback clipboard
-                    const text = `[${area}${niaRef ? ` · ${niaRef}` : ''}]\n${procedure}`;
+                    const text = `[${sg.area}${sg.niaRef ? ` · ${sg.niaRef}` : ''}]\n${sg.procedure}`;
                     try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
                   }
                 }}
               />
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Ampliar con IA: solo cuando el papel tiene biblioteca; la IA recibe lo ya sugerido y propone otros */}
+      {result?.canExpand && !generate.isPending && (
+        <div className="px-4 pb-4 -mt-1 flex items-center gap-3">
+          <button
+            onClick={() => handleGenerate(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded-lg hover:bg-violet-100 transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5" /> Ampliar con IA
+          </button>
+          <p className="text-[11px] text-gray-400">La IA propone otros procedimientos, sin repetir los de la biblioteca (gasta IA).</p>
         </div>
       )}
 
@@ -265,7 +304,7 @@ export function CrossAuditSuggestions({ auditId, paperId, onApply }: CrossAuditS
             Aprende de la historia de auditorías
           </p>
           <p className="text-xs text-gray-400 max-w-xs mx-auto">
-            La IA analiza los hallazgos de auditorías anteriores de la misma entidad para sugerir procedimientos relevantes.
+            Si el papel tiene biblioteca, se muestra primero (sin gastar IA). Si no, la IA analiza el papel y los hallazgos de auditorías anteriores de la misma entidad.
           </p>
         </div>
       )}

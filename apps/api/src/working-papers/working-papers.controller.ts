@@ -596,10 +596,11 @@ export class WorkingPapersController {
   @ApiOperation({ summary: 'Generar sugerencias de procedimientos IA (opcionalmente contextualizadas a un papel)' })
   generateAiSuggestions(
     @Param('auditId') auditId: string,
-    @Body() body: { paperId?: string },
+    @Body() body: { paperId?: string; expand?: boolean },
     @CurrentUser() user: AuthUser,
   ) {
-    return this.crossAudit.generateSuggestions(auditId, user, body?.paperId);
+    // expand: true = pedir a la IA que AMPLÍE lo que ya trae la biblioteca del papel (sin eso, con biblioteca no se gasta IA).
+    return this.crossAudit.generateSuggestions(auditId, user, body?.paperId, body?.expand === true);
   }
 
   // ─── Aplicar un procedimiento sugerido al papel actual ─────────────────────

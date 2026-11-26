@@ -1904,6 +1904,9 @@ model AuditTemplate {
 enum ContentLibraryKind {
   SUBSTANTIVE_PROCEDURE
   COSO_QUESTION
+  // Biblioteca por papel (2026-11): ajustes de la organización sobre el catálogo en código
+  // (working-papers/paper-library/org-library.ts). groupKey = código del papel; ver ese archivo para la forma de itemDetails.
+  PAPER_PROCEDURE
 }
 
 model ContentLibraryItem {

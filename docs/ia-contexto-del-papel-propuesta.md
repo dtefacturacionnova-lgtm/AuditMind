@@ -112,3 +112,38 @@ borradores y programas, que son las llamadas grandes.
 | L2 | Generador del borrador de biblioteca (plantilla + RAG) y revisión de calidad | Opus (diseño del generador y revisión del contenido) |
 | L3 | «Adaptar con IA» sobre un ítem; pantalla de administración por papel | Sonnet |
 | L4 | Sembrado de los papeles prioritarios y guía | Haiku |
+
+## 6. Lo construido: catálogo en código + ajustes por organización (2026-11-26)
+
+El usuario señaló con razón que un catálogo solo en código no se puede ampliar, modificar ni completar desde la app. Se resolvió con
+**dos capas**, sin copiar el catálogo a la base de cada organización (la copia se desactualiza: el patrón «sembrar una vez» de
+`ContentLibraryItem` deja a cada organización con una foto vieja y obliga a «restaurar», que borra sus cambios).
+
+| Capa | Dónde vive | Quién la cambia | Cómo llega |
+|---|---|---|---|
+| Catálogo del sistema (`PAPER_LIBRARY`) | código (`working-papers/paper-library/catalog-*.ts`) | el equipo, con revisión en git y pruebas de calidad | con cada despliegue, a todas las organizaciones |
+| Ajustes de la organización | `content_library_items`, `kind = PAPER_PROCEDURE`, `groupKey` = código del papel | Gerente de Auditoría o superior, desde la app | al guardar, solo para su organización |
+
+**Lo que se sugiere = catálogo − ocultos, con las ediciones encima, + los propios.** Una fila de ajuste puede ser:
+- **propia** (sin `baseId`): procedimiento que creó la organización;
+- **edición** (con `baseId` y el texto completo): reemplaza al del sistema solo para esa organización; guarda el original para mostrarlo y restaurarlo;
+- **oculto** (`baseId` + `hidden`): deja de sugerirse; la IA tampoco lo vuelve a proponer al ampliar;
+- **restaurar** = borrar la fila: vuelve el texto del sistema (y si el sistema lo corrigió, llega la corrección).
+Un ajuste idéntico al del sistema no deja fila. Si el sistema retira un procedimiento, el ajuste sobre él se ignora sin romper nada.
+
+**Reglas de lo que escribe la organización** (más flojas que las del catálogo del sistema a propósito, porque escribe alguien que conoce su
+norma local): título 8–90, enunciado 30–600, desarrollo 80–1500 caracteres; técnica y prioridad de la lista; referencia libre ≤ 60;
+tipos de encargo válidos; sin duplicados por título o enunciado entre lo visible; máx. 60 propios por papel y 1 500 ajustes por organización.
+El formulario sugiere —no exige— los marcadores `[completar: …]`.
+
+**Pantallas:** administración `Biblioteca por Papel` (menú Administración): lista de papeles con conteos, detalle con insignia
+«Del sistema / Ajustado / Propio / Oculto», editar, ocultar/mostrar, restaurar original, eliminar propio, nuevo procedimiento. En cada
+procedimiento de un papel, el botón **«Guardar en la biblioteca»** (Gerente+) lo pasa a la biblioteca de ese papel. En «Generar
+sugerencias», lo ajustado y lo propio llevan la insignia «Tu biblioteca».
+
+**Esquema:** solo `ALTER TYPE "ContentLibraryKind" ADD VALUE 'PAPER_PROCEDURE'` (`infrastructure/db-migrations/2026-11-biblioteca-papel-1-editable.sql`,
+con reversa). Si el valor aún no existe en la base, la lectura de la biblioteca de la organización falla en silencio y se usa el catálogo del
+sistema: **nunca se cae «Generar sugerencias»**; solo no funcionan las pantallas de administración hasta aplicar el SQL.
+
+**Decisiones por defecto** (cambiables): si la organización oculta TODO el catálogo de un papel, ese papel se trata como sin biblioteca y
+va a la IA; un procedimiento oculto no se vuelve a proponer cuando se amplía con IA; no se limitan las referencias normativas de lo propio.

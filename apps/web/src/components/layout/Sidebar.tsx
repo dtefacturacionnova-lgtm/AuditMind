@@ -161,6 +161,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Plantillas de Índice', href: '/dashboard/admin/index-templates', icon: FolderOpen, hint: 'Estructura de fases y carpetas del expediente de cada auditoría.' },
       { label: 'Plantillas de Auditoría', href: '/dashboard/admin/audit-templates', icon: ClipboardList, hint: 'Qué papeles de trabajo se crean solos al iniciar un encargo, según su tipo.' },
       { label: 'Biblioteca de Contenido', href: '/dashboard/admin/content-library', icon: Library, hint: 'Procedimientos y preguntas COSO reutilizables que alimentan los papeles.' },
+      { label: 'Biblioteca por Papel', href: '/dashboard/admin/paper-library', icon: Library, hint: 'Procedimientos con desarrollo modelo que cada papel sugiere sin gastar IA: los del sistema y los de tu organización.' },
       { label: 'Conectores de Datos', href: '/dashboard/admin/data-sources', icon: Plug, hint: 'Conexión con SAP, APIs REST y carga de archivos para los análisis CAATs.' },
       { label: 'Listas de Sanciones', href: '/dashboard/admin/watchlists', icon: ShieldBan, hint: 'OFAC, ONU y UK para el screening de PLD — la misma para todas las organizaciones.' },
       { label: 'Base de Conocimiento', href: '/dashboard/admin/knowledge', icon: BookOpen, hint: 'Leyes, normas y guías que consultan los especialistas de IA.' },

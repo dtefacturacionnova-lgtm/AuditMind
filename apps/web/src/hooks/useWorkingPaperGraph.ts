@@ -641,6 +641,14 @@ export interface AiProcedureSuggestion {
   priority:  SuggestionPriority;
   basedOn:   string;
   niaRef?:   string;
+  /** `LIBRARY` = biblioteca curada del papel (sin gasto de IA); `AI` = generada por la IA. */
+  source?:      'LIBRARY' | 'AI';
+  /** Solo biblioteca: `BASE` del sistema, `EDITED` ajustado por la organización, `OWN` creado por ella. */
+  origin?:      'BASE' | 'EDITED' | 'OWN';
+  /** Solo biblioteca: el ítem completo para aplicarlo al papel (desarrollo modelo con marcadores [completar…]). */
+  title?:       string;
+  statement?:   string;
+  development?: string;
 }
 
 export interface CrossAuditSuggestionsResult {
@@ -654,14 +662,18 @@ export interface CrossAuditSuggestionsResult {
   /** Con papel: la IA no tiene contexto suficiente (o no respondió) y por eso no hay sugerencias; `notice` explica qué falta. */
   insufficientContext?: boolean;
   notice?:       string;
+  /** Con papel: cuántas sugerencias vienen de la biblioteca del papel. */
+  libraryCount?: number;
+  /** El papel tiene biblioteca y se puede pedir a la IA que amplíe sin repetirla. */
+  canExpand?:    boolean;
 }
 
 export function useAiSuggestions() {
   return useMutation({
-    mutationFn: ({ auditId, paperId }: { auditId: string; paperId?: string }) =>
+    mutationFn: ({ auditId, paperId, expand }: { auditId: string; paperId?: string; expand?: boolean }) =>
       apiClient.post<CrossAuditSuggestionsResult>(
         `/working-papers/by-audit/${auditId}/ai-suggestions`,
-        { paperId },
+        { paperId, expand },
       ),
   });
 }

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   ListChecks, Trash2, Loader2, Plus, Sparkles, Wand2, Save, X, Pencil, ChevronDown, ChevronRight,
-  Paperclip, Link2, ExternalLink, FileText,
+  Paperclip, Link2, ExternalLink, FileText, BookmarkPlus,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRef } from 'react';
@@ -13,6 +13,9 @@ import {
   useAttachToProcedure, useRemoveAttachment, useAddCrossRef, useRemoveCrossRef,
 } from '@/hooks/useWorkingPaperGraph';
 import { useWorkingPapersForAudit } from '@/hooks/useWorkingPapers';
+import { useUser } from '@/hooks/useUser';
+import { useCreateLibraryItem } from '@/hooks/usePaperLibrary';
+import { PaperLibraryItemForm, errorText } from './PaperLibraryItemForm';
 
 export interface ProcedureAttachment {
   id: string; filename: string; url: string; mimeType: string; size: number; uploadedAt: string;
@@ -242,6 +245,13 @@ function ProcedureCard({
   const remove  = useRemoveProcedure();
   const draft   = useDraftProcedure();
   const [aiNotice, setAiNotice] = useState('');
+  // Guardar este procedimiento en la biblioteca del papel (solo Gerente o superior, igual que el servidor).
+  const { hasRole } = useUser();
+  const canSaveToLibrary = Boolean(paperCode) && hasRole(['AUDIT_MANAGER']);
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [librarySaved, setLibrarySaved] = useState(false);
+  const saveToLibrary = useCreateLibraryItem();
 
   async function handleSave() {
     await update.mutateAsync({ paperId, procedureId: proc.id, title, statement, development });
@@ -342,6 +352,13 @@ function ProcedureCard({
         {/* Actions */}
         {!readonly && !editing && (
           <div className="flex items-center gap-1 shrink-0">
+            {canSaveToLibrary && (
+              <button onClick={() => setSavingToLibrary(s => !s)}
+                className="p-1.5 rounded-lg text-gray-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                title="Guardar en la biblioteca de este papel (para sugerirlo en otros encargos)">
+                <BookmarkPlus className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button onClick={() => setEditing(true)}
               className="p-1.5 rounded-lg text-gray-300 hover:text-violet-600 hover:bg-violet-50 transition-colors" title="Editar">
               <Pencil className="w-3.5 h-3.5" />
@@ -353,6 +370,36 @@ function ProcedureCard({
           </div>
         )}
       </div>
+
+      {savingToLibrary && canSaveToLibrary && paperCode && (
+        <div className="border-t border-emerald-100 bg-emerald-50/40 p-3">
+          <p className="mb-2 text-xs font-semibold text-emerald-800">Guardar en la biblioteca del papel {paperCode}</p>
+          <PaperLibraryItemForm
+            initial={{
+              title: displayTitle, statement: displayStatement, development: proc.development ?? '',
+              ref: proc.niaRef && proc.niaRef.length <= 60 ? proc.niaRef : undefined,
+            }}
+            submitLabel="Guardar en la biblioteca"
+            saving={saveToLibrary.isPending}
+            error={libraryError}
+            showAuditTypes={false}
+            hint="Se sugerirá en los papeles de este tipo de tu organización. Quita las cifras y resultados de este encargo y deja [completar: …] donde cada auditor documenta lo suyo."
+            onSubmit={(data) => {
+              setLibraryError(null);
+              saveToLibrary.mutate({ paperCode, data }, {
+                onSuccess: () => { setSavingToLibrary(false); setLibrarySaved(true); },
+                onError: (e) => setLibraryError(errorText(e)),
+              });
+            }}
+            onCancel={() => { setSavingToLibrary(false); setLibraryError(null); }}
+          />
+        </div>
+      )}
+      {librarySaved && (
+        <p role="status" className="border-t border-emerald-100 bg-emerald-50/40 px-3 py-1.5 text-[11px] text-emerald-700">
+          Guardado en la biblioteca de este papel. Aparecerá en «Generar sugerencias» como procedimiento de tu organización.
+        </p>
+      )}
     </div>
   );
 }

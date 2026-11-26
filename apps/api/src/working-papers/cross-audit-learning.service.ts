@@ -10,6 +10,8 @@ import {
   BUDGETS, PaperAiInput, assessPaperContext, buildPaperBrief, buildRagBlock, frameworkFor, insufficientInstruction, insufficientMessage,
   loadPaperAiInput, parseInsufficient, ragBaseFor, ragQueryFor,
 } from './paper-ai-context';
+import { PAPER_LIBRARY, PaperLibrary, librarySuggestionsFor } from './paper-library';
+import { OrgLibraryDb, effectiveEntry, loadMergedPaper } from './paper-library/org-library';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,14 @@ export interface AiProcedureSuggestion {
   priority:   SuggestionPriority;
   basedOn:    string;   // human-readable source description
   niaRef?:    string;   // e.g. "NIA 315, NIA 240"
+  /** De dónde sale: `LIBRARY` = biblioteca curada del papel (sin gasto de IA); `AI` = generada por la IA. */
+  source?:      'LIBRARY' | 'AI';
+  /** Solo biblioteca: lo necesario para aplicar el ítem completo al papel (título, enunciado y desarrollo modelo). */
+  title?:       string;
+  statement?:   string;
+  development?: string;
+  /** Solo biblioteca: `BASE` del sistema, `EDITED` ajustado por la organización, `OWN` creado por ella. */
+  origin?:      'BASE' | 'EDITED' | 'OWN';
 }
 
 export interface CrossAuditSuggestionsResult {
@@ -36,6 +46,10 @@ export interface CrossAuditSuggestionsResult {
   /** Con papel: la IA (o el servidor) avisa que no hay contexto suficiente / que la IA no respondió, en vez de rellenar con reglas genéricas. */
   insufficientContext?: boolean;
   notice?:          string;
+  /** Con papel: cuántas sugerencias vienen de la biblioteca del papel. */
+  libraryCount?:    number;
+  /** Con biblioteca: se puede pedir a la IA que AMPLÍE (nuevas sugerencias que no repitan las de la biblioteca). */
+  canExpand?:       boolean;
 }
 
 interface GeminiSuggestion {
@@ -67,6 +81,7 @@ export class CrossAuditLearningService {
     auditId: string,
     user:    AuthUser,
     paperId?: string,
+    expand = false,
   ): Promise<CrossAuditSuggestionsResult> {
     // Validate access
     const audit = await this.prisma.audit.findUnique({
@@ -171,24 +186,48 @@ export class CrossAuditLearningService {
     };
     const llmReady = isLlmConfigured(this.config);
 
-    // ─── 5a. Con papel: sugerencias específicas de ESE papel, o decir que no se puede ──
+    // ─── 5a. Con papel: biblioteca primero (0 tokens), IA solo para ampliar o si no hay biblioteca ──
     if (paperInput) {
+      const applied = paperInput.procedures.flatMap((p) => [p.title, p.area, p.statement, p.procedure].filter((t): t is string => !!t));
+      // Biblioteca de la organización = catálogo del sistema + sus ediciones, ocultos y procedimientos propios. Si la base no responde
+      // (o aún no tiene el valor de enum de esta función), se usa el catálogo del sistema tal cual: nunca se cae la sugerencia por esto.
+      const code = paperInput.paper.code;
+      let orgLibrary: PaperLibrary = PAPER_LIBRARY;
+      let hiddenTitles: string[] = [];
+      if (code) {
+        try {
+          const eff = effectiveEntry(await loadMergedPaper(this.prisma as unknown as OrgLibraryDb, user.organizationId, code));
+          orgLibrary = { ...PAPER_LIBRARY, [code]: eff.entry };
+          hiddenTitles = eff.hiddenTitles;
+        } catch (err) {
+          this.logger.warn(`[CrossAudit] biblioteca de la organización no disponible, uso la del sistema: ${String(err)}`);
+        }
+      }
+      const lib = librarySuggestionsFor(code, audit.type, applied, orgLibrary);
+
+      if (lib.total > 0 && !expand) {
+        return {
+          ...base, suggestions: lib.suggestions, aiGenerated: false, libraryCount: lib.suggestions.length, canExpand: llmReady,
+          ...(lib.suggestions.length === 0 ? { notice: 'Ya aplicaste todos los procedimientos de la biblioteca de este papel. Puedes pedirle a la IA que amplíe con otros.' } : {}),
+        };
+      }
+
       const check = assessPaperContext(paperInput);
       if (!check.enough) {
-        return { ...base, suggestions: [], aiGenerated: false, insufficientContext: true, notice: insufficientMessage(check.missing) };
+        return { ...base, suggestions: lib.suggestions, aiGenerated: false, libraryCount: lib.suggestions.length, insufficientContext: true, notice: insufficientMessage(check.missing) };
       }
       if (!llmReady) {
-        return { ...base, suggestions: [], aiGenerated: false, notice: 'La IA no está configurada en este entorno; no se muestran sugerencias genéricas.' };
+        return { ...base, suggestions: lib.suggestions, aiGenerated: false, libraryCount: lib.suggestions.length, notice: 'La IA no está configurada en este entorno; no se muestran sugerencias genéricas.' };
       }
       try {
-        const out = await this.callLlmForPaper(audit, entityName, sector, pastFindings, recurringAreas, paperInput);
+        const out = await this.callLlmForPaper(audit, entityName, sector, pastFindings, recurringAreas, paperInput, [...lib.allTitles, ...hiddenTitles, ...applied]);
         if ('insufficient' in out) {
-          return { ...base, suggestions: [], aiGenerated: true, insufficientContext: true, notice: insufficientMessage([out.insufficient]) };
+          return { ...base, suggestions: lib.suggestions, aiGenerated: true, libraryCount: lib.suggestions.length, canExpand: lib.total > 0, insufficientContext: true, notice: insufficientMessage([out.insufficient]) };
         }
-        return { ...base, suggestions: out.suggestions, aiGenerated: true };
+        return { ...base, suggestions: [...lib.suggestions, ...out.suggestions], aiGenerated: true, libraryCount: lib.suggestions.length, canExpand: lib.total > 0 };
       } catch (err) {
         this.logger.warn('[CrossAudit] LLM failed (con papel), sin relleno genérico', String(err));
-        return { ...base, suggestions: [], aiGenerated: false, notice: 'La IA no respondió. Intenta de nuevo; no se muestran sugerencias genéricas que no correspondan a este papel.' };
+        return { ...base, suggestions: lib.suggestions, aiGenerated: false, libraryCount: lib.suggestions.length, canExpand: lib.total > 0, notice: 'La IA no respondió. Intenta de nuevo; no se muestran sugerencias genéricas que no correspondan a este papel.' };
       }
     }
 
@@ -348,6 +387,7 @@ INSTRUCCIONES:
     pastFindings:   Array<{ title: string; severity: string; condition: string | null; recommendation: string | null }>,
     recurringAreas: string[],
     paper:          PaperAiInput,
+    exclude:        string[] = [],
   ): Promise<{ suggestions: AiProcedureSuggestion[] } | { insufficient: string }> {
     const brief = buildPaperBrief(paper, BUDGETS.estandar);
 
@@ -365,6 +405,10 @@ INSTRUCCIONES:
     const areasText = recurringAreas.length > 0
       ? `Áreas con hallazgos recurrentes: ${recurringAreas.join(', ')}`
       : 'Sin historial previo de hallazgos en esta entidad.';
+    const excluded = Array.from(new Set(exclude.map((t) => t.trim()).filter(Boolean))).slice(0, 14).map((t) => t.slice(0, 70));
+    const excludeText = excluded.length > 0
+      ? `YA SUGERIDOS O APLICADOS EN ESTE PAPEL (no los repitas; propón procedimientos distintos que los complementen): ${excluded.join('; ')}\n`
+      : '';
 
     const prompt = `Eres un auditor experto en ${frameworkFor(audit.type)}. Sugiere procedimientos de auditoría para UN papel de trabajo concreto, usando también el historial de la entidad.
 
@@ -379,7 +423,7 @@ ${ragBlock}
 ${areasText}
 HALLAZGOS DE AUDITORÍAS ANTERIORES (${pastFindings.length} total):
 ${findingsSummary || 'Sin hallazgos históricos disponibles.'}
-
+${excludeText}
 Genera de 4 a 6 procedimientos específicos de ESTE papel. No repitas los que la ficha ya lista como existentes. Si hay hallazgos recurrentes relevantes a este papel, incluye al menos 1 basado en ellos; si no son relevantes, ignóralos.
 ${insufficientInstruction(true)}
 
@@ -415,6 +459,7 @@ Verbos de acción (verificar, comparar, recalcular, indagar, confirmar). Solo el
         rationale: sg.rationale,
         priority:  sg.priority,
         niaRef:    sg.niaRef,
+        source:    'AI' as const,
         basedOn:   pastFindings.length > 0
           ? `Ficha del papel + ${pastFindings.length} hallazgo(s) en auditorías anteriores`
           : 'Ficha del papel y del encargo',

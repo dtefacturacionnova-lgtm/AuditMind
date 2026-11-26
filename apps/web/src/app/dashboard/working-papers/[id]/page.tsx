@@ -1042,7 +1042,7 @@ export default function WpDetailPage() {
       const blob = await res.blob();
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `auditmind_papel_${(wp?.paperCode ?? wp?.code ?? params.id)}.pdf`;
+      link.download = `novacriterio_papel_${(wp?.paperCode ?? wp?.code ?? params.id)}.pdf`;
       link.click();
       URL.revokeObjectURL(link.href);
     } catch (e) {

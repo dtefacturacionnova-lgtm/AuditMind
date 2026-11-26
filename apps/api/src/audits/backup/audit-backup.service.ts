@@ -63,7 +63,7 @@ export class AuditBackupService {
       .replace(/[áàäâã]/gi, 'a').replace(/[éèëê]/gi, 'e').replace(/[íìïî]/gi, 'i')
       .replace(/[óòöôõ]/gi, 'o').replace(/[úùüû]/gi, 'u').replace(/ñ/gi, 'n')
       .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
-    const nombreArchivo = `AuditMind_Backup_${slugTitulo}_${fecha}.zip`;
+    const nombreArchivo = `NovaCriterio_Backup_${slugTitulo}_${fecha}.zip`;
 
     return {
       buffer, nombreArchivo, advertencias,

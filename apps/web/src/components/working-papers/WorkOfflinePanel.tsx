@@ -60,9 +60,9 @@ export function WorkOfflinePanel({ paperId, sections, readonly }: Props) {
       const query = Array.from(seleccion).join(',');
       const headers = await apiClient.downloadFileWithHeaders(
         `/working-papers/${paperId}/excel-generic?sections=${encodeURIComponent(query)}`,
-        `AuditMind_Generico_${paperId.slice(0, 8)}.xlsx`,
+        `NovaCriterio_Generico_${paperId.slice(0, 8)}.xlsx`,
       );
-      const raw = headers.get('X-Nova Criterio-Omitidas');
+      const raw = headers.get('X-AuditMind-Omitidas');
       if (raw) {
         try { setOmitidas(JSON.parse(decodeURIComponent(raw))); } catch { /* ignore */ }
       }

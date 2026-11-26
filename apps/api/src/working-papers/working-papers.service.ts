@@ -1136,7 +1136,7 @@ export class WorkingPapersService {
       options:  { printPageNumbers: true, format: 'A4', footerNote },
     });
 
-    const filename = `auditmind_papel_${(w.paperCode ?? w.code ?? id).replace(/[^\w-]/g, '_')}.pdf`;
+    const filename = `novacriterio_papel_${(w.paperCode ?? w.code ?? id).replace(/[^\w-]/g, '_')}.pdf`;
     return { buffer, filename };
   }
 

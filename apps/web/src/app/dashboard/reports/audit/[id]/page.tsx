@@ -261,7 +261,7 @@ function ReportContent({ id }: { id: string }) {
               import('@/lib/api-client').then(m =>
                 m.apiClient.downloadFile(
                   `/reports/audit/${id}/pdf`,
-                  `auditmind_informe_${id.slice(0, 8)}.pdf`,
+                  `novacriterio_informe_${id.slice(0, 8)}.pdf`,
                 ).catch(e => alert((e as Error).message))
               );
             }}

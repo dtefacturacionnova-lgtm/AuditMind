@@ -40,7 +40,7 @@ export function ExcelTemplateBar({
       const query = areaKey ? `?areaKey=${encodeURIComponent(areaKey)}` : '';
       await apiClient.downloadFile(
         `/working-papers/${paperId}/excel-template/${templateKey}${query}`,
-        `AuditMind_${templateKey}_${areaKey ? `${areaKey}_` : ''}${paperId.slice(0, 8)}.xlsx`,
+        `NovaCriterio_${templateKey}_${areaKey ? `${areaKey}_` : ''}${paperId.slice(0, 8)}.xlsx`,
       );
     } catch (err) {
       setError((err as Error).message || 'Error al descargar la plantilla');

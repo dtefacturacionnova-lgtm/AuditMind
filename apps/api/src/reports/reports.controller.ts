@@ -37,7 +37,7 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     const pdf = await this.service.generateAuditPdf(id, user);
-    const filename = `auditmind_informe_${id.slice(0, 8)}.pdf`;
+    const filename = `novacriterio_informe_${id.slice(0, 8)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdf.length);
@@ -53,7 +53,7 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     const pdf = await this.service.generateFindingPdf(id, user);
-    const filename = `auditmind_hallazgo_${id.slice(0, 8)}.pdf`;
+    const filename = `novacriterio_hallazgo_${id.slice(0, 8)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdf.length);

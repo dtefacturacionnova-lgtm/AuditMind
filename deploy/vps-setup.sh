@@ -65,7 +65,7 @@ ANTHROPIC_API_KEY=
 # ── Emails ─────────────────────────────────────────────────────────────────
 RESEND_API_KEY=
 EMAIL_FROM=noreply@ianovatechsystems.com
-EMAIL_FROM_NAME=Nova Criterio
+EMAIL_FROM_NAME="Nova Criterio"
 
 # ── Internos ───────────────────────────────────────────────────────────────
 AI_SERVICE_INTERNAL_KEY=auditmind-internal-2026-xK9mP3qR

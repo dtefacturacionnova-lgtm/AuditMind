@@ -150,7 +150,7 @@ export class PdfToolsController {
       { sortType: body?.sortType, generateToc: body?.generateToc === 'true' },
     );
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="auditmind_fusionado.pdf"');
+    res.setHeader('Content-Disposition', 'attachment; filename="novacriterio_fusionado.pdf"');
     res.setHeader('Content-Length', mergedPdf.length);
     res.send(mergedPdf);
   }

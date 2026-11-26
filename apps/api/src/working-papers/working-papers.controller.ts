@@ -219,7 +219,7 @@ export class WorkingPapersController {
       options:  { printPageNumbers: true, format: 'A4', footerNote: `Control Interno — ${data.auditTitle}` },
     });
 
-    const filename = `auditmind_control_interno_${auditId.slice(0, 8)}.pdf`;
+    const filename = `novacriterio_control_interno_${auditId.slice(0, 8)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdf.length);
@@ -892,7 +892,7 @@ export class WorkingPapersController {
     }
     const { buffer, resultado, omitidas } = await this.excelEngine.generarGenerica(id, sectionKeys, user);
     if (omitidas.length > 0) {
-      res.setHeader('X-Nova Criterio-Omitidas', encodeURIComponent(JSON.stringify(omitidas)));
+      res.setHeader('X-AuditMind-Omitidas', encodeURIComponent(JSON.stringify(omitidas)));
     }
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${resultado.nombreArchivo}"`);

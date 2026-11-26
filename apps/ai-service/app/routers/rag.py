@@ -175,7 +175,7 @@ async def ingest_url_endpoint(
     try:
         resp = await safe_get(
             request.url,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; AuditMindRAG/1.0)"},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; NovaCriterioRAG/1.0)"},
             timeout=60.0,
         )
         resp.raise_for_status()

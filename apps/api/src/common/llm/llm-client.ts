@@ -71,7 +71,7 @@ async function viaOpenRouter(config: ConfigReader, req: LlmRequest): Promise<str
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
       'HTTP-Referer': readKey(config, 'OPENROUTER_REFERER') || 'https://auditoria.ianovatechsystems.com',
-      'X-Title': 'AuditMind',
+      'X-Title': 'Nova Criterio',
     },
     body: JSON.stringify({
       model,

@@ -2023,7 +2023,7 @@ model WorkingPaper {
   reviewedAt        DateTime? // Fecha firma revisor
   // ─── Sello de integridad — PDF firmado digitalmente por nivel (2026-08-24) ─
   // Ruta en Supabase Storage (bucket audit-files), no URL — igual patrón que
-  // FieldEvidence.storageKey. Certificado autofirmado por AuditMind, sello de
+  // FieldEvidence.storageKey. Certificado autofirmado por Nova Criterio, sello de
   // integridad interno, no firma con validez legal externa — ver
   // apps/api/src/pdf-tools/signing-identity.service.ts.
   preparedPdfPath   String?

@@ -131,7 +131,7 @@ export class AiController {
       body: renderCaatsPdfBody(type, body.result, body.label),
     });
     const pdf = await this.pdfService.generateFromHtml(html, { printPageNumbers: true, footerNote: `Analytics CAATs — ${body.label}` });
-    const filename = `auditmind_caats_${type}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    const filename = `novacriterio_caats_${type}_${new Date().toISOString().slice(0, 10)}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdf.length);

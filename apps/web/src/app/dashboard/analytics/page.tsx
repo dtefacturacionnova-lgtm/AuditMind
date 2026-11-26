@@ -882,7 +882,7 @@ export default function AnalyticsPage() {
     if (!result) return;
     setExporting('pdf');
     try {
-      const filename = `auditmind_caats_${selected.id}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      const filename = `novacriterio_caats_${selected.id}_${new Date().toISOString().slice(0, 10)}.pdf`;
       await apiClient.postDownload(`/ai/analytics/${selected.id}/pdf`, { result, label: selected.label }, filename);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo generar el PDF');
@@ -942,7 +942,7 @@ export default function AnalyticsPage() {
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Anomalías');
       }
 
-      XLSX.writeFile(wb, `auditmind_caats_${selected.id}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(wb, `novacriterio_caats_${selected.id}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } finally {
       setExporting(null);
     }

@@ -755,7 +755,7 @@ export class ExcelTemplateEngineService {
       .replace(/[áàäâã]/gi, 'a').replace(/[éèëê]/gi, 'e').replace(/[íìïî]/gi, 'i')
       .replace(/[óòöôõ]/gi, 'o').replace(/[úùüû]/gi, 'u').replace(/ñ/gi, 'n')
       .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    return `AuditMind_${slug}_${ctx.paperCode}_${fecha}.xlsx`;
+    return `NovaCriterio_${slug}_${ctx.paperCode}_${fecha}.xlsx`;
   }
 
   // ═══════════════════════════════════════════════════════════════════════

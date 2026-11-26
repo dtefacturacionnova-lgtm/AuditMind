@@ -41,7 +41,7 @@ export class AuditBackupController {
   ) {
     const { buffer, nombreArchivo, advertencias } = await this.backupSvc.exportar(id, user);
     if (advertencias.length > 0) {
-      res.setHeader('X-Nova Criterio-Advertencias', encodeURIComponent(JSON.stringify(advertencias.slice(0, 50))));
+      res.setHeader('X-AuditMind-Advertencias', encodeURIComponent(JSON.stringify(advertencias.slice(0, 50))));
     }
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);

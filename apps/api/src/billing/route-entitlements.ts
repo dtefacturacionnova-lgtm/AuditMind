@@ -35,7 +35,7 @@ export const GATED_ROUTES: ReadonlyArray<readonly [string, EntitlementKey]> = [
 /** Núcleo y plataforma: disponibles en todos los planes (los asistentes de IA y los límites tienen sus propios chequeos). */
 export const CORE_ROUTES: readonly string[] = [
   'auth', 'users', 'organizations', 'catalogs', 'index-templates', 'audit-templates', 'content-library', 'data-sources', 'dashboard',
-  'notifications', 'audits', 'audit-procedures', 'working-papers', 'findings', 'fiscal', 'email', 'ai', 'billing', 'billing-admin', 'public/plans',
+  'notifications', 'audits', 'audit-procedures', 'working-papers', 'paper-library', 'findings', 'fiscal', 'email', 'ai', 'billing', 'billing-admin', 'public/plans',
 ];
 
 export function normalizeRoute(path: string): string {

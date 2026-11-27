@@ -9,6 +9,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        nc: {
+          bg: 'var(--nc-bg)',
+          panel: 'var(--nc-panel)',
+          line: 'var(--nc-line)',
+          'line-strong': 'var(--nc-line-strong)',
+          text: 'var(--nc-text)',
+          muted: 'var(--nc-muted)',
+          accent: 'var(--nc-accent)',
+          'accent-hover': 'var(--nc-accent-hover)',
+          success: 'var(--nc-success)',
+          warning: 'var(--nc-warning)',
+          danger: 'var(--nc-danger)',
+          hover: 'var(--nc-hover)',
+          pressed: 'var(--nc-pressed)',
+          'on-accent': 'var(--nc-on-accent)',
+        },
         primary: {
           DEFAULT: '#0F2D4A',
           light: '#1a4a7a',
@@ -24,8 +40,16 @@ const config: Config = {
           900: '#0F2D4A',
         },
       },
+      // Identidad Nova Criterio (fase 0): claves nuevas con prefijo nc; NO se redefine font-sans ni font-mono (las usan decenas de pantallas).
+      // Los colores apuntan a las variables --nc-* de globals.css, que cambian con el tema (claro/oscuro).
       fontFamily: {
         sans: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
+        'nc-display': ['var(--font-space-grotesk)', "'Space Grotesk'", 'system-ui', 'sans-serif'],
+        'nc-mono': ['var(--font-jetbrains-mono)', "'JetBrains Mono'", 'ui-monospace', 'monospace'],
+        'nc-tagline': ['var(--font-playfair)', "'Playfair Display'", 'Georgia', 'serif'],
+      },
+      borderRadius: {
+        nc: '2px',
       },
       boxShadow: {
         card: '0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05)',

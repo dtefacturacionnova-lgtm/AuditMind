@@ -2,6 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Identidad Nova Criterio (docs/rediseno-identidad-nova-criterio-plan.md, fase 0).
+ * Variables nuevas con prefijo --nc-: NADA las consume todavía, así que no cambian ninguna pantalla.
+ * Valores = apps/web/src/lib/brand/tokens.ts (tokens.spec.ts comprueba que coinciden).
+ * Selección de tema: atributo data-theme="light|dark" en <html>; sin atributo, el del sistema. El selector llega en la fase 1.
+ */
+@layer base {
+  :root, :root[data-theme='light'] {
+    --nc-bg: #F6F3EC;
+    --nc-panel: #FFFFFF;
+    --nc-line: #D8D2C2;
+    --nc-line-strong: #C9C3B2;
+    --nc-text: #0B0E14;
+    --nc-muted: #5A5F66;
+    --nc-accent: #8A6A1F;
+    --nc-accent-hover: #7A5C16;
+    --nc-success: #1F7A58;
+    --nc-warning: #B24A12;
+    --nc-danger: #B8292E;
+    --nc-hover: #EEE9DC;
+    --nc-pressed: #E3DDCC;
+    --nc-on-accent: #FFFFFF;
+  }
+
+  :root[data-theme='dark'] {
+    --nc-bg: #0B2A30;
+    --nc-panel: #103842;
+    --nc-line: #1E4A55;
+    --nc-line-strong: #2C5E6B;
+    --nc-text: #E9E4D6;
+    --nc-muted: #93AAAD;
+    --nc-accent: #B8934A;
+    --nc-accent-hover: #C9A55C;
+    --nc-success: #3FB68B;
+    --nc-warning: #F0702A;
+    --nc-danger: #E5484D;
+    --nc-hover: #15414D;
+    --nc-pressed: #1B4B58;
+    --nc-on-accent: #0B2A30;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --nc-bg: #0B2A30;
+      --nc-panel: #103842;
+      --nc-line: #1E4A55;
+      --nc-line-strong: #2C5E6B;
+      --nc-text: #E9E4D6;
+      --nc-muted: #93AAAD;
+      --nc-accent: #B8934A;
+      --nc-accent-hover: #C9A55C;
+      --nc-success: #3FB68B;
+      --nc-warning: #F0702A;
+      --nc-danger: #E5484D;
+      --nc-hover: #15414D;
+      --nc-pressed: #1B4B58;
+      --nc-on-accent: #0B2A30;
+    }
+  }
+}
+
 @layer base {
   :root {
     --color-primary: #0F2D4A;

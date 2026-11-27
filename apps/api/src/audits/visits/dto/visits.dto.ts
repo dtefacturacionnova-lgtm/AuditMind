@@ -30,6 +30,13 @@ export class VisitAccountDto {
   @IsNumber() @Min(-1e15) @Max(1e15) balance!: number;
 }
 
+/** Cuentas del puente cuyo paso `ROLLFORWARD` sugerido el auditor acepta, y dónde se crean. */
+export class CreateBridgeStepsDto {
+  /** Sección de procedimientos (cuadrícula de un papel del encargo) donde se crea el procedimiento del período restante. */
+  @IsString() @MaxLength(64) sectionId!: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(200) @IsString({ each: true }) @MaxLength(60, { each: true }) codes!: string[];
+}
+
 export class ImportVisitBalanceDto {
   @IsString() @MaxLength(250) filename!: string;
   @IsOptional() @IsString() @MaxLength(120) periodLabel?: string;

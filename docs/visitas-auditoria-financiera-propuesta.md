@@ -211,6 +211,26 @@ Seguimiento de observaciones por visita (F3), matriz de cobertura y diferencias 
 
 **Pendiente de este paso:** verificación visual click a click con una sesión real (la pantalla exige iniciar sesión, y el entorno local comparte la base con producción).
 
+### 8.10 Paso 4 construido (2026-11-27): puente interina → final y pasos `ROLLFORWARD` sugeridos
+**Dónde:** al final de la pestaña **Visitas** de B-00, cuando la interina y la final tienen balance cargado.
+
+**Cálculo** (reglas de §8.5, ya construidas y probadas en el paso 1: `buildBridge`): cuentas de balance alertan cuando |movimiento| supera la materialidad de ejecución; cuentas de resultados, cuando el saldo final se aparta del **esperado** (saldo de la interina × días del ejercicio ÷ días transcurridos) por más de la materialidad **y** del porcentaje elegido (10, 20, 30 o 50 %; por defecto 20 %); una cuenta que existe en una sola visita se lista aparte y alerta si su saldo supera la materialidad. Si el corte de la interina cae fuera del ejercicio, la proyección no se calcula y las cuentas de resultados se comparan por su movimiento (con aviso).
+
+**De dónde sale cada dato (y la pantalla lo dice):**
+- **Materialidad de ejecución:** la del papel A-06 **PT-A4 (S4)** si es un número mayor que cero; si no, la guardada en el encargo; si no hay ninguna, el puente se calcula completo pero **sin alertas por monto** y avisa.
+- **Ejercicio auditado:** `auditPeriodStart` / `auditPeriodEnd` del encargo; si faltan, se asume el año calendario de la fecha de corte de la interina (y la pantalla lo indica).
+
+**Pasos sugeridos:** cada alerta trae un texto de paso de período restante (NIA 330). El auditor marca las cuentas y acepta: se crea el procedimiento **«RF-NIA330 — Período restante»** (una sola vez) en la cuadrícula de procedimientos que elija (por defecto la primera de pruebas sustantivas, «C-…») y un paso por cuenta con `timing = ROLLFORWARD`, estado borrador y conclusión pendiente; en «población» queda el saldo de la interina, el de la final y el movimiento. **Nada se crea solo.**
+- El texto lo arma el **servidor** con el puente recalculado: el cliente solo manda las cuentas y la cuadrícula. Cuentas sin alerta o que no figuran en el puente se omiten con su motivo.
+- **Un paso por cuenta en todo el encargo:** si ya existe, no se repite aunque se elija otra cuadrícula. Dos personas aceptando a la vez no duplican (la creación se serializa por encargo con un candado de transacción).
+- Quien tenga rol Auditor o superior puede aceptar; la sección elegida debe ser una cuadrícula de procedimientos de **este** encargo y de la misma organización.
+
+**API añadida:** `GET /audits/:id/visits/bridge?pct=`, `GET /audits/:id/visits/bridge/targets`, `POST /audits/:id/visits/bridge/steps`. Sin SQL nuevo (usa `audit_procedures` y `audit_steps`, que ya existen).
+
+**Pruebas:** `audit-visits.service.integration.spec.ts` (alertas por tipo, origen de la materialidad y del ejercicio, umbral y su validación, visitas sin balance, aislamiento por organización e investigación, destinos, creación, no repetir, concurrencia, sección inválida) y `lib/visits/bridge-view.spec.ts` (filtros, qué se puede aceptar, selección, destino por defecto).
+
+**Fuera de este paso:** columnas «saldo por visita» en las sumarias (F5), matriz de cobertura (F4) y seguimiento de observaciones (F3).
+
 ---
 
 ## 9. Fuentes

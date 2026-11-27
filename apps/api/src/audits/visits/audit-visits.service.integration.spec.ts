@@ -346,6 +346,203 @@ suite('AuditVisitsService (Postgres real)', () => {
     await expect(svc.compare(a.id, 'INTERIM', 'FINAL', m)).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  // ── Puente interina → final ──────────────────────────────────────────────
+
+  const PERIOD = { auditPeriodStart: new Date('2026-01-01T00:00:00Z'), auditPeriodEnd: new Date('2026-12-31T00:00:00Z') };
+  const INTERIM = [acc('1101', 1000), acc('1201', 400), acc('2101', -400), acc('4101', -9000), acc('5101', 3000), acc('1301', 5000)];
+  const FINAL = [acc('1101', 1500), acc('1201', 450), acc('2101', -400), acc('4101', -17000), acc('5101', 4000), acc('1401', 900)];
+  /** Auditoría con visitas activas y los dos balances cargados (interina y final). */
+  const bridgeWorld = async (extra: Record<string, unknown> = {}, me: number | null = 200) => {
+    const w = await world();
+    const a = await w.audit({ ...PERIOD, ...extra });
+    const m = w.user();
+    await svc.enable(a.id, DATES as any, m);
+    await importTo((await visitOf(a.id, 'INTERIM')).id, m, INTERIM);
+    await importTo((await visitOf(a.id, 'FINAL')).id, m, FINAL);
+    if (me !== null) await paperA4(a.id, me);
+    return { ...w, a, m };
+  };
+  const paperA4 = (auditId: string, s4: unknown) => prisma.workingPaper.create({
+    data: { auditId, code: 'A-06', indexSection: 'A', title: 'Materialidad', type: 'PLANNING_UNDERSTANDING', paperCode: 'PT-A4', sections: { create: [{ sectionKey: 'S4', label: 'ME', fieldType: 'NUMBER', value: s4 as any }] } } as any,
+  });
+  const gridPaper = (auditId: string, code: string, fieldType = 'PROCEDURE_GRID') => prisma.workingPaper.create({
+    data: { auditId, code, indexSection: 'C', title: `Papel ${code}`, type: 'SUBSTANTIVE_TEST', paperCode: 'PT-FIN-C-SUST', sections: { create: [{ sectionKey: 'S3', label: 'Procedimientos', fieldType }] } },
+    include: { sections: true },
+  } as any) as Promise<any>;
+  const row = (b: any, code: string) => b.rows.find((r: any) => r.code === code);
+
+  it('puente: marca movimientos sobre la materialidad y desvíos de resultados sobre el esperado, y muestra de dónde sale cada dato', async () => {
+    const { a, m } = await bridgeWorld();
+    const b = await svc.bridge(a.id, undefined, m);
+    expect(b.materiality).toEqual({ execution: 200, source: 'PT-A4' });
+    expect(b.period).toEqual({ start: '2026-01-01', end: '2026-12-31', source: 'ENCARGO' });
+    expect(b.annualizationFactor).toBeCloseTo(365 / 273, 6);
+    expect(b.pctThreshold).toBe(20);
+    // Balance: |movimiento| 500 > 200 → alerta; 50 no.
+    expect(row(b, '1101')).toMatchObject({ presence: 'AMBAS', movement: 500, alert: true, reason: 'MOVIMIENTO_SOBRE_ME' });
+    expect(row(b, '1201')).toMatchObject({ movement: 50, alert: false });
+    // Resultados: esperado = -9000 × 365/273 = -12032.97; desvío -4967.03 (41 %) → alerta.
+    expect(row(b, '4101')).toMatchObject({ expectedFinal: -12032.97, deviation: -4967.03, alert: true, reason: 'DESVIO_SOBRE_ESPERADO' });
+    expect(row(b, '4101').deviationPct).toBeCloseTo(41.28, 2);
+    // Cuentas en una sola visita.
+    expect(row(b, '1301')).toMatchObject({ presence: 'SOLO_INTERINA', alert: true, reason: 'CUENTA_DESAPARECIDA_MATERIAL' });
+    expect(row(b, '1401')).toMatchObject({ presence: 'SOLO_FINAL', alert: true, reason: 'CUENTA_NUEVA_MATERIAL' });
+    expect(row(b, '4101').suggestedStep).toMatch(/NIA 330/);
+    expect(b.alerts).toBe(b.rows.filter((r: any) => r.alert).length);
+    expect(b.rows.every((r: any) => r.stepId === null)).toBe(true);
+  });
+
+  it('puente: el umbral porcentual se puede cambiar y se valida', async () => {
+    const { a, m } = await bridgeWorld();
+    // 5101: esperado 4010.99, final 4000 → desvío -10.99, menor a la ME: no alerta aunque el umbral sea 0.
+    expect(row(await svc.bridge(a.id, '0', m), '5101').alert).toBe(false);
+    // Con un umbral de 50 % la cuenta 4101 (41 %) deja de alertar.
+    expect(row(await svc.bridge(a.id, '50', m), '4101')).toMatchObject({ alert: false, reason: null, suggestedStep: null });
+    for (const bad of ['abc', '-1', '5000', 'NaN']) await expect(svc.bridge(a.id, bad, m)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('puente: sin la materialidad del papel usa la del encargo; sin ninguna avisa y no marca alertas', async () => {
+    const own = await bridgeWorld({ materialityExecution: 300 }, null);
+    const b1 = await svc.bridge(own.a.id, undefined, own.m);
+    expect(b1.materiality).toEqual({ execution: 300, source: 'ENCARGO' });
+    expect(row(b1, '1101').alert).toBe(true);
+
+    // Un valor no numérico en PT-A4 no cuenta: cae a la del encargo.
+    const bad = await bridgeWorld({ materialityExecution: 300 }, null);
+    await paperA4(bad.a.id, 'n/a');
+    expect((await svc.bridge(bad.a.id, undefined, bad.m)).materiality).toEqual({ execution: 300, source: 'ENCARGO' });
+
+    // Un cero (en el papel o en el encargo) no es una materialidad: no se usa ni se muestra como tal.
+    const zeroPaper = await bridgeWorld({ materialityExecution: 300 }, 0);
+    expect((await svc.bridge(zeroPaper.a.id, undefined, zeroPaper.m)).materiality).toEqual({ execution: 300, source: 'ENCARGO' });
+    const zeroOwn = await bridgeWorld({ materialityExecution: 0 }, null);
+    expect((await svc.bridge(zeroOwn.a.id, undefined, zeroOwn.m)).materiality).toEqual({ execution: null, source: null });
+
+    const none = await bridgeWorld({}, null);
+    const b2 = await svc.bridge(none.a.id, undefined, none.m);
+    expect(b2.materiality).toEqual({ execution: null, source: null });
+    expect(b2.alerts).toBe(0);
+    expect(b2.warnings.join(' ')).toMatch(/no tiene materialidad de ejecución/);
+    expect(row(b2, '1101')).toMatchObject({ movement: 500, alert: false });
+  });
+
+  it('puente: sin ejercicio definido asume el año de la interina; un corte fuera del ejercicio avisa y no proyecta resultados', async () => {
+    const sin = await bridgeWorld({ auditPeriodStart: null, auditPeriodEnd: null });
+    const b = await svc.bridge(sin.a.id, undefined, sin.m);
+    expect(b.period).toEqual({ start: null, end: null, source: 'ANO_CALENDARIO' });
+    expect(b.annualizationFactor).toBeCloseTo(365 / 273, 6);
+
+    const fuera = await bridgeWorld({ auditPeriodStart: new Date('2025-01-01T00:00:00Z'), auditPeriodEnd: new Date('2025-12-31T00:00:00Z') });
+    const f = await svc.bridge(fuera.a.id, undefined, fuera.m);
+    expect(f.annualizationFactor).toBeNull();
+    expect(f.warnings.join(' ')).toMatch(/fuera del ejercicio/);
+    // Sin proyección, una cuenta de resultados se compara por su movimiento (regla del paso 1), y lo dice el aviso.
+    expect(row(f, '4101')).toMatchObject({ expectedFinal: null, deviation: null, alert: true, reason: 'MOVIMIENTO_SOBRE_ME' });
+    expect(row(f, '1101').alert).toBe(true);
+  });
+
+  it('puente: exige las dos visitas con balance y avisa si alguno no cuadra', async () => {
+    const w = await world(); const a = await w.audit(PERIOD); const m = w.user();
+    await expect(svc.bridge(a.id, undefined, m)).rejects.toBeInstanceOf(NotFoundException);
+    await svc.enable(a.id, DATES as any, m);
+    await expect(svc.bridge(a.id, undefined, m)).rejects.toThrow(/interina aún no tiene balance/);
+    await importTo((await visitOf(a.id, 'INTERIM')).id, m, INTERIM);
+    await expect(svc.bridge(a.id, undefined, m)).rejects.toThrow(/final aún no tiene balance/);
+    await importTo((await visitOf(a.id, 'FINAL')).id, m, FINAL);
+    const b = await svc.bridge(a.id, undefined, m);
+    expect(b.warnings.join(' ')).toMatch(/final no cuadra/);
+    expect(b.warnings.join(' ')).not.toMatch(/interina no cuadra/);
+    await importTo((await visitOf(a.id, 'INTERIM')).id, m, [acc('1101', 5)]);
+    expect((await svc.bridge(a.id, undefined, m)).warnings.join(' ')).toMatch(/interina no cuadra/);
+  });
+
+  it('puente: otra organización o una investigación ajena no lo ven ni crean pasos', async () => {
+    const { a } = await bridgeWorld();
+    const grid = await gridPaper(a.id, 'C-01');
+    const otra = (await world()).user();
+    await expect(svc.bridge(a.id, undefined, otra)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.bridgeTargets(a.id, otra)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.createBridgeSteps(a.id, { sectionId: grid.sections[0].id, codes: ['1101'] }, otra)).rejects.toBeInstanceOf(NotFoundException);
+    expect(await prisma.auditStep.count({ where: { procedure: { section: { paper: { auditId: a.id } } } } })).toBe(0);
+
+    const w = await world(); const inv = await w.audit({ ...PERIOD, isInvestigationMode: true });
+    await svc.enable(inv.id, DATES as any, w.user('CAE'));
+    await expect(svc.bridge(inv.id, undefined, w.user('AUDIT_MANAGER'))).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(svc.bridgeTargets(inv.id, w.user('AUDIT_MANAGER'))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('destinos: solo las cuadrículas de procedimientos de ESTE encargo, ordenadas por código', async () => {
+    const { a, m } = await bridgeWorld();
+    await gridPaper(a.id, 'C-10'); await gridPaper(a.id, 'C-02'); await gridPaper(a.id, 'C-03', 'TEXT');
+    const otro = await bridgeWorld(); await gridPaper(otro.a.id, 'C-01');
+    const t = await svc.bridgeTargets(a.id, m);
+    expect(t.map((x) => x.paperCode)).toEqual(['C-02', 'C-10']);
+    expect(t[0]).toMatchObject({ sectionLabel: 'Procedimientos', procedureCount: 0 });
+  });
+
+  it('aceptar pasos: crea el procedimiento del período restante y un paso ROLLFORWARD por cuenta con alerta, con el texto del servidor', async () => {
+    const { a, m } = await bridgeWorld();
+    const grid = await gridPaper(a.id, 'C-01'); const sectionId = grid.sections[0].id;
+    const r = await svc.createBridgeSteps(a.id, { sectionId, codes: ['1101', '4101', '1201', '9999', '1101'] }, m);
+    expect(r.created).toBe(2);
+    expect(r.skipped).toEqual(expect.arrayContaining([
+      { code: '1201', reason: expect.stringMatching(/no tiene alerta/) },
+      { code: '9999', reason: expect.stringMatching(/no figura en el puente/) },
+    ]));
+    const proc = await prisma.auditProcedure.findFirstOrThrow({ where: { sectionId }, include: { steps: { orderBy: { sortOrder: 'asc' } } } });
+    expect(proc).toMatchObject({ refNumber: 'RF-NIA330' });
+    expect(proc.steps.map((s) => [s.refNumber, s.timing, s.status, s.conclusion, s.testType])).toEqual([
+      ['RF-1101', 'ROLLFORWARD', 'DRAFT', 'PENDING', 'DETAIL'], ['RF-4101', 'ROLLFORWARD', 'DRAFT', 'PENDING', 'DETAIL'],
+    ]);
+    expect(proc.steps[0].description).toMatch(/1101/);
+    expect(proc.steps[0].population).toBe('Cuenta 1101: saldo interina 1000.00 → saldo final 1500.00 (movimiento 500.00)');
+
+    // El puente ya sabe qué cuentas tienen paso.
+    const b = await svc.bridge(a.id, undefined, m);
+    expect(row(b, '1101').stepId).toBe(proc.steps[0].id);
+    expect(row(b, '1201').stepId).toBeNull();
+  });
+
+  it('aceptar pasos no se repite: una segunda vez omite las cuentas que ya tienen paso y reutiliza el procedimiento', async () => {
+    const { a, m } = await bridgeWorld();
+    const sectionId = (await gridPaper(a.id, 'C-01')).sections[0].id;
+    await svc.createBridgeSteps(a.id, { sectionId, codes: ['1101'] }, m);
+    const again = await svc.createBridgeSteps(a.id, { sectionId, codes: ['1101', '1401'] }, m);
+    expect(again.created).toBe(1);
+    expect(again.skipped).toEqual([{ code: '1101', reason: expect.stringMatching(/Ya tiene un paso/) }]);
+    // El paso nuevo va después del que ya había.
+    const orden = await prisma.auditStep.findMany({ where: { procedure: { sectionId } }, orderBy: { sortOrder: 'asc' }, select: { refNumber: true, sortOrder: true } });
+    expect(orden).toEqual([{ refNumber: 'RF-1101', sortOrder: 0 }, { refNumber: 'RF-1401', sortOrder: 1 }]);
+    expect(await prisma.auditProcedure.count({ where: { sectionId } })).toBe(1);
+    const only = await svc.createBridgeSteps(a.id, { sectionId, codes: ['1101', '1401'] }, m);
+    expect(only).toMatchObject({ created: 0, procedureId: null });
+    expect(await prisma.auditStep.count({ where: { procedure: { sectionId } } })).toBe(2);
+    // Un paso por cuenta en TODO el encargo: aunque se elija otra cuadrícula, no se duplica.
+    const other = (await gridPaper(a.id, 'C-02')).sections[0].id;
+    expect((await svc.createBridgeSteps(a.id, { sectionId: other, codes: ['1101'] }, m)).created).toBe(0);
+    expect(await prisma.auditProcedure.count({ where: { sectionId: other } })).toBe(0);
+  });
+
+  it('aceptar pasos a la vez no duplica (se serializa por encargo)', async () => {
+    const { a, m } = await bridgeWorld();
+    const sectionId = (await gridPaper(a.id, 'C-01')).sections[0].id;
+    const dto = { sectionId, codes: ['1101', '4101', '1401'] };
+    const todos = await Promise.all(Array.from({ length: 6 }, () => svc.createBridgeSteps(a.id, dto, m)));
+    expect(todos.reduce((n, r) => n + r.created, 0)).toBe(3);
+    expect(await prisma.auditStep.count({ where: { procedure: { sectionId } } })).toBe(3);
+    expect(await prisma.auditProcedure.count({ where: { sectionId } })).toBe(1);
+  });
+
+  it('aceptar pasos solo en una cuadrícula de procedimientos de este encargo', async () => {
+    const { a, m } = await bridgeWorld();
+    const texto = (await gridPaper(a.id, 'C-01', 'TEXT')).sections[0].id;
+    const ajeno = (await gridPaper((await bridgeWorld()).a.id, 'C-01')).sections[0].id;
+    for (const sectionId of [texto, ajeno, 'no-existe']) {
+      await expect(svc.createBridgeSteps(a.id, { sectionId, codes: ['1101'] }, m)).rejects.toBeInstanceOf(NotFoundException);
+    }
+    expect(await prisma.auditProcedure.count({ where: { section: { paper: { auditId: a.id } } } })).toBe(0);
+  });
+
   it('los balances sin visita (carga anterior de B-00) no entran en las visitas', async () => {
     const w = await world(); const a = await w.audit(); const m = w.user();
     await prisma.trialBalance.create({ data: { auditId: a.id, orgId: w.org, filename: 'viejo.xlsx', periodLabel: 'Dic 2025', accounts: BAL_A, totalDebit: 1000, totalCredit: 1000, isBalanced: true, importedById: 'u' } as any });

@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { VisitAccount, VisitAccountInput, VisitKind, VisitStatus } from '@/lib/visits/visit-base';
+import type { BridgeRowView, StepTarget } from '@/lib/visits/bridge-view';
 
 // Visitas del encargo (planificación, interina, final): API en apps/api/src/audits/visits.
 
@@ -147,5 +148,61 @@ export function useImportVisitBalance(auditId: string) {
     mutationFn: ({ visitId, ...body }: { visitId: string; filename: string; periodLabel?: string; accounts: VisitAccountInput[] }) =>
       apiClient.post<ImportedVisitBalance>(`/audits/visits/${visitId}/trial-balance`, body),
     onSuccess: refresh,
+  });
+}
+
+// ── Puente interina → final ──────────────────────────────────────────────────
+
+export interface VisitsBridge {
+  auditId: string;
+  interim: { kind: VisitKind; cutoffDate: string; periodLabel: string | null; importedAt: string; isBalanced: boolean };
+  final: { kind: VisitKind; cutoffDate: string; periodLabel: string | null; importedAt: string; isBalanced: boolean };
+  period: { start: string | null; end: string | null; source: 'ENCARGO' | 'ANO_CALENDARIO' };
+  materiality: { execution: number | null; source: 'PT-A4' | 'ENCARGO' | null };
+  pctThreshold: number;
+  /** Días del ejercicio ÷ días transcurridos a la fecha de corte de la interina; `null` si no se pudo proyectar. */
+  annualizationFactor: number | null;
+  alerts: number;
+  warnings: string[];
+  rows: BridgeRowView[];
+}
+
+export interface CreatedBridgeSteps {
+  created: number;
+  steps: Array<{ id: string; code: string }>;
+  procedureId: string | null;
+  sectionId: string;
+  skipped: Array<{ code: string; reason: string }>;
+}
+
+export function useVisitsBridge(auditId: string, enabled: boolean, pct: number) {
+  return useQuery<VisitsBridge>({
+    queryKey: ['visit-bridge', auditId, pct],
+    queryFn: () => apiClient.get(`/audits/${auditId}/visits/bridge?pct=${pct}`),
+    enabled: enabled && !!auditId,
+    staleTime: 15_000,
+    retry: false,
+  });
+}
+
+export function useBridgeTargets(auditId: string, enabled: boolean) {
+  return useQuery<StepTarget[]>({
+    queryKey: ['visit-bridge-targets', auditId],
+    queryFn: () => apiClient.get(`/audits/${auditId}/visits/bridge/targets`),
+    enabled: enabled && !!auditId,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateBridgeSteps(auditId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { sectionId: string; codes: string[] }) => apiClient.post<CreatedBridgeSteps>(`/audits/${auditId}/visits/bridge/steps`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['visit-bridge', auditId] });
+      qc.invalidateQueries({ queryKey: ['visit-bridge-targets', auditId] });
+      // Los pasos nuevos viven en un papel del encargo: se refrescan los papeles y sus procedimientos.
+      qc.invalidateQueries({ queryKey: ['wp'] });
+    },
   });
 }

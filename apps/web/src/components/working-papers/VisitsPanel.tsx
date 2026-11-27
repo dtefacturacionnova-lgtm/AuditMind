@@ -17,6 +17,7 @@ import {
   statusActions, toVisitAccounts,
 } from '@/lib/visits/visit-base';
 import { parseCSVWithReport } from './TrialBalancePanel';
+import { VisitsBridge } from './VisitsBridge';
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
 
@@ -578,6 +579,13 @@ export function VisitsPanel({ auditId, s1Section, s2Section, readonly, onSaveSec
               </>
             )}
           </div>
+
+          {/* ── Puente interina → final ── */}
+          <VisitsBridge
+            auditId={auditId}
+            ready={Boolean(visits.find((v) => v.kind === 'INTERIM')?.balance && visits.find((v) => v.kind === 'FINAL')?.balance)}
+            canCreate={hasRole(['AUDITOR'])}
+          />
         </>
       )}
     </div>

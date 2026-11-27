@@ -5,12 +5,13 @@ import { AuthUser } from '../../auth/jwt.strategy';
 import { ROLE_HIERARCHY } from '../../common/guards/roles.guard';
 import { AUDIT_ACCESS_SELECT, assertInvestigationAccess } from '../../common/utils/investigation-scope.util';
 import {
-  BalanceAccount, VISIT_KINDS, VisitKind, compareBalances, currentBalance, defaultAnalysisBase, fromCents, normalizeAccounts, toCents, validateVisitCutoffs,
+  BalanceAccount, BridgeRow, DEFAULT_BRIDGE_PCT, VISIT_KINDS, VisitKind, buildBridge, compareBalances, currentBalance, defaultAnalysisBase, fromCents,
+  normalizeAccounts, toCents, validateVisitCutoffs,
 } from './visit-rules';
 import {
   VISIT_AUDIT_TYPES, VISIT_KIND_LABEL, VisitStatusName, balanceWarnings, canChangeVisitStatus, defaultPeriodLabel, isVisitKind, parseDateOnly,
 } from './visit-workflow';
-import { EnableVisitsDto, ImportVisitBalanceDto, UpdateVisitDto } from './dto/visits.dto';
+import { CreateBridgeStepsDto, EnableVisitsDto, ImportVisitBalanceDto, UpdateVisitDto } from './dto/visits.dto';
 
 const BALANCE_SUMMARY = {
   id: true, filename: true, periodLabel: true, importedAt: true, asOfDate: true, totalDebit: true, totalCredit: true, isBalanced: true,
@@ -34,7 +35,7 @@ export class AuditVisitsService {
   private async loadAudit(auditId: string, user: AuthUser) {
     const audit = await this.prisma.audit.findFirst({
       where: { id: auditId, organizationId: user.organizationId },
-      select: { id: true, type: true, ...AUDIT_ACCESS_SELECT },
+      select: { id: true, type: true, auditPeriodStart: true, auditPeriodEnd: true, materialityExecution: true, ...AUDIT_ACCESS_SELECT },
     });
     if (!audit) throw new NotFoundException('Auditoría no encontrada');
     assertInvestigationAccess(audit, user);
@@ -267,7 +268,173 @@ export class AuditVisitsService {
     if (!b.tb.isBalanced) warnings.push(`El balance de la visita ${VISIT_KIND_LABEL[to]} no cuadra.`);
     return { auditId, from: meta(a), to: meta(b), summary: result.summary, rows: result.rows, warnings };
   }
+
+  // ─── Puente interina → final ───────────────────────────────────────────────
+
+  /** La materialidad de ejecución vigente: la del papel A-06 PT-A4 (S4) si es un número válido; si no, la guardada en el encargo. */
+  private async executionMateriality(audit: { id: string; materialityExecution: Prisma.Decimal | null }) {
+    const paper = await this.prisma.workingPaper.findFirst({
+      where: { auditId: audit.id, paperCode: 'PT-A4' },
+      select: { sections: { where: { sectionKey: 'S4' }, select: { value: true } } },
+    });
+    const fromPaper = paper?.sections[0]?.value;
+    const n = fromPaper === null || fromPaper === undefined || fromPaper === '' ? NaN : Number(fromPaper);
+    if (Number.isFinite(n) && n > 0) return { value: n, source: 'PT-A4' as const };
+    const own = audit.materialityExecution === null ? NaN : Number(audit.materialityExecution);
+    if (Number.isFinite(own) && own > 0) return { value: own, source: 'ENCARGO' as const };
+    return { value: null, source: null };
+  }
+
+  private parsePct(raw: string | undefined): number {
+    if (raw === undefined || raw === '') return DEFAULT_BRIDGE_PCT;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0 || n > 1000) throw new BadRequestException('El umbral de variación debe ser un porcentaje entre 0 y 1000.');
+    return n;
+  }
+
+  /** El puente completo del encargo (filas, avisos, de dónde salieron la materialidad y el ejercicio) y los pasos ya creados. */
+  private async buildBridgeFor(auditId: string, pctRaw: string | undefined, user: AuthUser) {
+    const audit = await this.loadAudit(auditId, user);
+    const pct = this.parsePct(pctRaw);
+    const interim = await this.currentOf(auditId, 'INTERIM', user);
+    const final = await this.currentOf(auditId, 'FINAL', user);
+    const me = await this.executionMateriality(audit);
+
+    const result = buildBridge({
+      interim: interim.tb.accounts as unknown as BalanceAccount[],
+      final: final.tb.accounts as unknown as BalanceAccount[],
+      interimCutoff: interim.visit.cutoffDate,
+      periodStart: audit.auditPeriodStart,
+      periodEnd: audit.auditPeriodEnd,
+      executionMateriality: me.value,
+      pctThreshold: pct,
+    });
+
+    const warnings: string[] = [];
+    if (!interim.tb.isBalanced) warnings.push('El balance de la visita interina no cuadra.');
+    if (!final.tb.isBalanced) warnings.push('El balance de la visita final no cuadra.');
+    if (result.warnings.includes('SIN_MATERIALIDAD')) {
+      warnings.push('El encargo no tiene materialidad de ejecución (A-06 PT-A4): el puente se calcula completo pero no marca alertas por monto.');
+    }
+    if (result.warnings.includes('PERIODO_INVALIDO')) {
+      warnings.push('La fecha de corte de la interina cae fuera del ejercicio auditado (o el ejercicio es inválido): no se pudo proyectar el saldo esperado de las cuentas de resultados.');
+    }
+
+    const existing = await this.prisma.auditStep.findMany({
+      where: { timing: 'ROLLFORWARD', refNumber: { startsWith: STEP_REF_PREFIX }, procedure: { section: { paper: { auditId, audit: { organizationId: user.organizationId } } } } },
+      select: { id: true, refNumber: true },
+    });
+    const stepByCode = new Map(existing.map((s) => [s.refNumber.slice(STEP_REF_PREFIX.length), s.id]));
+
+    const meta = (x: typeof interim) => ({ kind: x.visit.kind, cutoffDate: dayStr(x.visit.cutoffDate), balanceId: x.tb.id, periodLabel: x.tb.periodLabel, importedAt: x.tb.importedAt, isBalanced: x.tb.isBalanced });
+    return {
+      result,
+      payload: {
+        auditId,
+        interim: meta(interim),
+        final: meta(final),
+        period: {
+          start: dayStr(audit.auditPeriodStart),
+          end: dayStr(audit.auditPeriodEnd),
+          /** `ENCARGO` = el ejercicio auditado del encargo; `ANO_CALENDARIO` = no está definido y se asumió el año de la fecha de corte. */
+          source: audit.auditPeriodStart && audit.auditPeriodEnd ? ('ENCARGO' as const) : ('ANO_CALENDARIO' as const),
+        },
+        materiality: { execution: me.value, source: me.source },
+        pctThreshold: pct,
+        annualizationFactor: result.annualizationFactor,
+        alerts: result.alerts,
+        warnings,
+        rows: result.rows.map((r) => ({ ...r, stepId: stepByCode.get(r.code) ?? null })),
+      },
+    };
+  }
+
+  async bridge(auditId: string, pct: string | undefined, user: AuthUser) {
+    return (await this.buildBridgeFor(auditId, pct, user)).payload;
+  }
+
+  /** Cuadrículas de procedimientos del encargo donde se pueden crear los pasos sugeridos. */
+  async bridgeTargets(auditId: string, user: AuthUser) {
+    await this.loadAudit(auditId, user);
+    const sections = await this.prisma.paperSection.findMany({
+      where: { fieldType: 'PROCEDURE_GRID', paper: { auditId, audit: { organizationId: user.organizationId } } },
+      select: { id: true, label: true, paper: { select: { code: true, title: true } }, _count: { select: { procedures: true } } },
+    });
+    return sections
+      .map((s) => ({ sectionId: s.id, paperCode: s.paper.code, paperTitle: s.paper.title, sectionLabel: s.label, procedureCount: s._count.procedures }))
+      .sort((x, y) => String(x.paperCode).localeCompare(String(y.paperCode), 'es', { numeric: true }));
+  }
+
+  /**
+   * Crea los pasos `ROLLFORWARD` de las cuentas elegidas. El texto se arma aquí con el puente recalculado (nunca se acepta del cliente) y
+   * solo para cuentas que hoy tienen alerta. Un paso por cuenta: si ya existe uno de esa cuenta en el encargo, no se repite.
+   */
+  async createBridgeSteps(auditId: string, dto: CreateBridgeStepsDto, user: AuthUser) {
+    const { result } = await this.buildBridgeFor(auditId, undefined, user);
+    const section = await this.prisma.paperSection.findFirst({
+      where: { id: dto.sectionId, fieldType: 'PROCEDURE_GRID', paper: { auditId, audit: { organizationId: user.organizationId } } },
+      select: { id: true },
+    });
+    if (!section) throw new NotFoundException('La sección de procedimientos no pertenece a este encargo.');
+
+    const wanted = [...new Set(dto.codes.map((c) => c.trim()).filter((c) => c !== ''))];
+    const byCode = new Map(result.rows.map((r) => [r.code, r]));
+    const skipped: Array<{ code: string; reason: string }> = [];
+    const todo: BridgeRow[] = [];
+    for (const code of wanted) {
+      const row = byCode.get(code);
+      if (!row) skipped.push({ code, reason: 'La cuenta no figura en el puente.' });
+      else if (!row.alert || !row.suggestedStep) skipped.push({ code, reason: 'La cuenta no tiene alerta: no hay paso sugerido.' });
+      else todo.push(row);
+    }
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      // Dos personas aceptando a la vez no duplican pasos: se serializa por encargo.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rollforward:${auditId}`}::text))`;
+      const have = new Set(
+        (await tx.auditStep.findMany({
+          where: { timing: 'ROLLFORWARD', refNumber: { startsWith: STEP_REF_PREFIX }, procedure: { section: { paper: { auditId } } } },
+          select: { refNumber: true },
+        })).map((s) => s.refNumber.slice(STEP_REF_PREFIX.length)),
+      );
+      const fresh = todo.filter((r) => {
+        if (have.has(r.code)) { skipped.push({ code: r.code, reason: 'Ya tiene un paso de período restante en este encargo.' }); return false; }
+        return true;
+      });
+      if (fresh.length === 0) return { procedureId: null as string | null, steps: [] as Array<{ id: string; code: string }> };
+
+      let proc = await tx.auditProcedure.findFirst({ where: { sectionId: section.id, refNumber: PROCEDURE_REF } });
+      if (!proc) {
+        const count = await tx.auditProcedure.count({ where: { sectionId: section.id } });
+        proc = await tx.auditProcedure.create({ data: { sectionId: section.id, refNumber: PROCEDURE_REF, description: PROCEDURE_TEXT, sortOrder: count } });
+      }
+      const base = await tx.auditStep.count({ where: { procedureId: proc.id } });
+      const steps: Array<{ id: string; code: string }> = [];
+      for (const [i, r] of fresh.entries()) {
+        const s = await tx.auditStep.create({
+          data: {
+            procedureId: proc.id,
+            refNumber: `${STEP_REF_PREFIX}${r.code}`,
+            description: r.suggestedStep as string,
+            timing: 'ROLLFORWARD',
+            population: `Cuenta ${r.code}: saldo interina ${fmtMoney(r.interimBalance)} → saldo final ${fmtMoney(r.finalBalance)} (movimiento ${fmtMoney(r.movement)})`,
+            sortOrder: base + i,
+          },
+          select: { id: true },
+        });
+        steps.push({ id: s.id, code: r.code });
+      }
+      return { procedureId: proc.id, steps };
+    });
+
+    return { created: created.steps.length, steps: created.steps, procedureId: created.procedureId, sectionId: section.id, skipped };
+  }
 }
+
+const STEP_REF_PREFIX = 'RF-';
+const PROCEDURE_REF = 'RF-NIA330';
+const PROCEDURE_TEXT = 'Período restante: extender al cierre las conclusiones de la visita interina (NIA 330)';
+const fmtMoney = (n: number | null): string => (n === null ? 'sin saldo' : n.toFixed(2));
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;

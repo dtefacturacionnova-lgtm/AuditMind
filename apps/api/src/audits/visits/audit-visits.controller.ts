@@ -5,7 +5,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthUser } from '../../auth/jwt.strategy';
 import { AuditVisitsService } from './audit-visits.service';
-import { EnableVisitsDto, ImportVisitBalanceDto, UpdateVisitDto } from './dto/visits.dto';
+import { CreateBridgeStepsDto, EnableVisitsDto, ImportVisitBalanceDto, UpdateVisitDto } from './dto/visits.dto';
 
 /** Visitas del encargo (planificación, interina y final). Mismo prefijo `audits` que el resto de las rutas del encargo. */
 @ApiTags('Visitas de auditoría')
@@ -36,6 +36,29 @@ export class AuditVisitsController {
   @ApiQuery({ name: 'to', enum: ['PLANNING', 'INTERIM', 'FINAL'] })
   compare(@Param('id') id: string, @Query('from') from: string, @Query('to') to: string, @CurrentUser() user: AuthUser) {
     return this.service.compare(id, from, to, user);
+  }
+
+  @Get(':id/visits/bridge')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Puente interina → final por cuenta: movimiento, esperado de resultados, alertas y pasos ROLLFORWARD sugeridos (referencia, no conclusión)' })
+  @ApiQuery({ name: 'pct', required: false, description: 'Variación mínima (%) sobre el esperado para alertar en cuentas de resultados. Por defecto 20.' })
+  bridge(@Param('id') id: string, @Query('pct') pct: string | undefined, @CurrentUser() user: AuthUser) {
+    return this.service.bridge(id, pct, user);
+  }
+
+  @Get(':id/visits/bridge/targets')
+  @Roles(UserRole.AUDITOR)
+  @ApiOperation({ summary: 'Cuadrículas de procedimientos del encargo donde se pueden crear los pasos de período restante' })
+  bridgeTargets(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.bridgeTargets(id, user);
+  }
+
+  @Post(':id/visits/bridge/steps')
+  @Roles(UserRole.AUDITOR)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Aceptar los pasos ROLLFORWARD sugeridos de las cuentas elegidas (el texto lo arma el servidor; uno por cuenta)' })
+  createBridgeSteps(@Param('id') id: string, @Body() dto: CreateBridgeStepsDto, @CurrentUser() user: AuthUser) {
+    return this.service.createBridgeSteps(id, dto, user);
   }
 
   @Patch('visits/:visitId')

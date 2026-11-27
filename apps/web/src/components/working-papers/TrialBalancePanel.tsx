@@ -116,7 +116,7 @@ function isValidAccountCode(raw: string): { ok: boolean; reason?: string } {
   return { ok: true };
 }
 
-function parseCSVWithReport(text: string): ParseResult {
+export function parseCSVWithReport(text: string): ParseResult {
   const lines = text.split('\n').map(l => l.replace(/\r/g, '').trim()).filter(Boolean);
   if (lines.length < 2) return { valid: [], skipped: [] };
 

@@ -28,6 +28,11 @@ import type { AiDraftConfig } from './SectionField';
 import { WorkOfflinePanel } from './WorkOfflinePanel';
 import { FieldEvidencePanel } from './FieldEvidencePanel';
 import { TrialBalanceImporter, AccountClassifier, AccountSemaforo } from './TrialBalancePanel';
+import { VisitsPanel } from './VisitsPanel';
+import { useAuditVisits } from '@/hooks/useAuditVisits';
+
+/** Nombre de la pestaña extra de B-00 (no es una sección del papel). */
+const VISITS_TAB = 'Visitas';
 import { MaterialidadPanel } from './MaterialidadPanel';
 import { SamplingExecutionPanel } from './SamplingExecutionPanel';
 import { RatioTrendChart, ConcentrationChart, VariationChart, AjeImpactChart, MaterialityBridgeChart } from './AnalyticsCharts';
@@ -961,6 +966,8 @@ export function SmartPaperSections({
   // Tab selection for papers with many sections grouped via section.tab (e.g. PT-FIN-B00).
   // Declared before the early returns below to respect the Rules of Hooks.
   const [activeTab, setActiveTab] = useState<string | null>(null);
+  // B-00 de una auditoría financiera externa: ¿tiene el encargo la pestaña «Visitas»? (solo se pregunta en B-00).
+  const { data: visitsInfo } = useAuditVisits(auditId, paperCode === 'PT-FIN-B00');
 
   if (isLoading) {
     return (
@@ -999,7 +1006,10 @@ export function SmartPaperSections({
 
   // Group into tabs when the paper's sections declare one (order = first appearance
   // by sortOrder). Papers without tabs render exactly as before — flat, no tab bar.
-  const tabs = Array.from(new Set(sorted.map(s => s.tab).filter((t): t is string => !!t)));
+  const sectionTabs = Array.from(new Set(sorted.map(s => s.tab).filter((t): t is string => !!t)));
+  // La pestaña «Visitas» no es una sección del papel: se agrega al final solo en B-00 cuando el tipo de encargo admite visitas.
+  const showVisitsTab = paperCode === 'PT-FIN-B00' && sectionTabs.length > 0 && visitsInfo?.supported === true;
+  const tabs = showVisitsTab ? [...sectionTabs, VISITS_TAB] : sectionTabs;
   const effectiveTab = tabs.length > 1
     ? (activeTab && tabs.includes(activeTab) ? activeTab : tabs[0])
     : null;
@@ -1093,7 +1103,21 @@ export function SmartPaperSections({
         </div>
       )}
 
+      {/* Pestaña «Visitas» de B-00: reemplaza a las secciones mientras está activa */}
+      {effectiveTab === VISITS_TAB && (
+        <SectionErrorBoundary key="visits" label="Visitas del encargo">
+          <VisitsPanel
+            auditId={auditId}
+            s1Section={s1Section}
+            s2Section={s2Section}
+            readonly={readonly}
+            onSaveSection={handleSave}
+          />
+        </SectionErrorBoundary>
+      )}
+
       {/* Sections */}
+      {effectiveTab !== VISITS_TAB && (
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-5 divide-y divide-gray-100">
         {visibleSections.map(section => {
           // PT-FIN-B00: S1 → importador de balance, S2 → clasificador de cuentas
@@ -1586,6 +1610,7 @@ export function SmartPaperSections({
           );
         })}
       </div>
+      )}
     </div>
   );
 }

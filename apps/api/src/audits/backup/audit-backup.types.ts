@@ -87,6 +87,7 @@ export const AUDIT_SCOPED_MODELS: AuditScopedModel[] = [
   { model: 'auditProgram',          filtro: { tipo: 'auditId_directo' }, nivel: 1 },
   { model: 'externalConfirmation',  filtro: { tipo: 'auditId_directo' }, nivel: 1 },
   { model: 'pbcRequest',            filtro: { tipo: 'auditId_directo' }, nivel: 1 },
+  { model: 'auditVisit',            filtro: { tipo: 'auditId_directo' }, nivel: 1 }, // Visitas (2026-11-26) — ANTES de trialBalance: TrialBalance.visitId apunta a ella; sin esto un respaldo perdía a qué visita pertenecía cada balance
   { model: 'trialBalance',          filtro: { tipo: 'auditId_directo' }, nivel: 1 },
   { model: 'finding',               filtro: { tipo: 'auditId_directo' }, nivel: 1 },
   { model: 'dataAnalysisJob',       filtro: { tipo: 'auditId_directo' }, nivel: 1 },

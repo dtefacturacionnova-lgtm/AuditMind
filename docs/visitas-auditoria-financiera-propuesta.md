@@ -191,6 +191,26 @@ Se puede desplegar tras el paso 3 (saldos por visita) y luego el puente.
 ### 8.8 Lo que queda fuera de esta entrega
 Seguimiento de observaciones por visita (F3), matriz de cobertura y diferencias por visita (F4), B-07 en tres ejes (F5). El diseño de §4 sigue vigente para esas fases.
 
+### 8.9 Paso 3 construido (2026-11-27): pestaña «Visitas» en B-00
+**Dónde:** B-00 (`PT-FIN-B00`) muestra una pestaña **Visitas** al final de su barra solo cuando el tipo de encargo admite visitas (financiera externa, financiera, externa). No es una sección del papel: no cambia la plantilla ni lo ya guardado. Un encargo sin visitas ve «Activar visitas» y nada más cambia.
+
+**Qué hace:**
+- **Activar** (Gerente): tres fechas de corte (propuestas: 31/03, 30/09 y 31/12 del año, editables), validadas en orden estricto.
+- **Línea de tiempo**: una tarjeta por visita con estado (planificada / en curso / cerrada), fecha de corte, balance vigente (archivo, cuentas, fecha de carga, cuadre, cuántas cargas) y la marca «Base de análisis» o «Sugerida».
+- **Cargar balance** (Auditor o más): mismo lector de S1 (Excel/CSV con Cuenta, Descripción, Saldo). Muestra una **vista previa** (cuentas, totales, si cuadra, filas omitidas) y solo guarda al confirmar. Una carga nueva no pisa la anterior: queda como vigente y la anterior como historia. En una visita cerrada solo un Gerente carga correcciones.
+- **Estados y fecha** (Gerente): iniciar, cerrar, reabrir; cambiar la fecha de corte mientras no esté cerrada.
+- **Usar como base de análisis** (Gerente, papel no bloqueado): marca la visita y **copia su balance a `saldo_actual` de S1**, con confirmación. Reglas de la copia (`buildS1FromVisit`): los históricos (`saldo_anterior`, `saldo_anterior2`) y las descripciones ya escritas no se tocan; una cuenta de S1 que la visita no trae queda en **cero, no se borra** (puede tener histórico y es una baja que el auditor debe ver); las cuentas nuevas se agregan al final con histórico en cero; un código repetido en S1 recibe el saldo una sola vez.
+- **No recalcula solo**: tras copiar, avisa que en la clasificación (S2) hay que usar «Sync desde balance», «Guardar Clasificación» y «Propagar a Cédulas». Un bloque **«Base de los análisis»** compara en vivo S1 contra la visita base y S2 contra S1 (por código, en centavos) y muestra el aviso «Los análisis se calcularon con otra base» mientras no coincidan; no guarda ningún estado aparte que pueda quedar viejo.
+- **Comparar visitas**: dos visitas con balance, filtros (con diferencias, nuevas, desaparecidas, pasaron a cero, con cambio, sin cambio) y tabla con variación $ y %; muestra hasta 300 filas y lo dice.
+
+**API añadida:** `GET /audits/visits/:visitId/trial-balance` (Auditor): las cuentas del balance vigente de la visita, normalizadas (una fila por código, saldo neto). La copia a S1 se hace desde la pantalla con el mismo guardado de sección de siempre, así que respeta los mismos permisos y bloqueos del papel.
+
+**Corrección encontrada al probar:** una diferencia de **un centavo** se daba por «cuadrada» (`1000.01 − 1000` da `0.00999…` y se comparaba `< 0.01`). Ahora el cuadre se decide en centavos enteros, en la API (`isBalanced`) y en la pantalla.
+
+**Pruebas:** `lib/visits/visit-base.spec.ts` (lógica de la copia, comparación con S1/S2, archivo → cuentas, fechas y estados) y ampliación de `audit-visits.service.integration.spec.ts` (cuentas vigentes normalizadas, visita sin balance, otra organización, investigación ajena, diferencia de un centavo). Sin SQL nuevo.
+
+**Pendiente de este paso:** verificación visual click a click con una sesión real (la pantalla exige iniciar sesión, y el entorno local comparte la base con producción).
+
 ---
 
 ## 9. Fuentes

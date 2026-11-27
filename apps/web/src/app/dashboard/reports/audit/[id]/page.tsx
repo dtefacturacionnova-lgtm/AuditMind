@@ -261,7 +261,7 @@ function ReportContent({ id }: { id: string }) {
               import('@/lib/api-client').then(m =>
                 m.apiClient.downloadFile(
                   `/reports/audit/${id}/pdf`,
-                  `auditmind_informe_${id.slice(0, 8)}.pdf`,
+                  `novacriterio_informe_${id.slice(0, 8)}.pdf`,
                 ).catch(e => alert((e as Error).message))
               );
             }}
@@ -591,7 +591,7 @@ function ReportContent({ id }: { id: string }) {
 
         {/* ── Footer ───────────────────────────────────────────────────────── */}
         <div className="mt-10 pt-6 border-t border-gray-200 text-center text-xs text-gray-400 print:mt-6">
-          <p>{audit.organization.name} · Unidad de Auditoría Interna · AuditMind</p>
+          <p>{audit.organization.name} · Unidad de Auditoría Interna · Nova Criterio</p>
           <p>Informe generado: {new Date(report.generatedAt).toLocaleString('es-CL')}</p>
           {isPreliminary
             ? <p className="mt-1 text-amber-500 font-semibold">BORRADOR PRELIMINAR — CONFIDENCIAL — NO DISTRIBUIR</p>

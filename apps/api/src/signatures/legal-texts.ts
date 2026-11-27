@@ -17,7 +17,7 @@ const CONSENT_TEXT_V1 =
   'electrónico y la huella digital (SHA-256) del documento, sirva como constancia de mi firma.';
 
 const PRIVACY_NOTICE_V1 =
-  '{Organización} utiliza AuditMind para gestionar esta firma. Para dejar constancia se registran tu nombre, ' +
+  '{Organización} utiliza Nova Criterio para gestionar esta firma. Para dejar constancia se registran tu nombre, ' +
   'cargo, correo electrónico, dirección IP, navegador, fecha y hora, y los archivos que adjuntes. Estos datos ' +
   'se conservan junto con el documento como evidencia del trabajo de auditoría, durante el plazo de conservación ' +
   'de {Organización}, y solo los consulta su equipo, conforme a la legislación aplicable de protección de datos personales.';

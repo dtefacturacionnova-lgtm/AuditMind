@@ -108,7 +108,7 @@ export function VerifyDocument() {
                 <BadgeCheck className="mt-0.5 h-8 w-8 shrink-0 text-emerald-600" aria-hidden="true" />
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">Firma registrada y vigente</h2>
-                  <p className="text-sm text-gray-600">Este documento fue firmado electrónicamente y su constancia existe en AuditMind.</p>
+                  <p className="text-sm text-gray-600">Este documento fue firmado electrónicamente y su constancia existe en Nova Criterio.</p>
                 </div>
               </div>
             ) : (

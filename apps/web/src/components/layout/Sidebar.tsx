@@ -294,7 +294,7 @@ export function Sidebar() {
           <Bot className="h-5 w-5 text-white" />
         </div>
         <div>
-          <p className="text-sm font-bold text-white leading-tight">AuditMind</p>
+          <p className="text-sm font-bold text-white leading-tight">Nova Criterio</p>
           <p className="text-[10px] text-slate-400">Intelligence Platform</p>
         </div>
       </div>

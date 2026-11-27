@@ -13,7 +13,7 @@ const ROLE_HOME: Record<string, string> = {
   READ_ONLY: '/dashboard',
 };
 
-// Páginas públicas para externos (firma por enlace, verificación, portal PBC y precios): no usan la sesión de AuditMind.
+// Páginas públicas para externos (firma por enlace, verificación, portal PBC y precios): no usan la sesión de Nova Criterio.
 // Se salta Supabase por completo (ni consulta de usuario ni cookies de sesión en una página que abre un tercero).
 const PUBLIC_SIGNATURE_PATHS = ['/firmar', '/verificar', '/portal', '/precios'];
 

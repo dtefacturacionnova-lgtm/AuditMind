@@ -176,7 +176,7 @@ export default function AuditDetailPage() {
     try {
       await apiClient.downloadFile(
         `/audits/${id}/backup`,
-        `AuditMind_Backup_${id.slice(0, 8)}.zip`,
+        `NovaCriterio_Backup_${id.slice(0, 8)}.zip`,
       );
     } catch (err) {
       alert((err as Error).message || 'Error al descargar el backup');

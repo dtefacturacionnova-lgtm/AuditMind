@@ -12,7 +12,7 @@ import { AuthUser } from '../../auth/jwt.strategy';
  * Idea central (Nivel 1 del documento — el mismo patrón de CaseWare
  * "Spreadsheet Analysis" / Workiva "smart linking" / TeamMate+):
  *
- *   1. GENERAR  — AuditMind escribe un .xlsx donde cada dato del encargo vive
+ *   1. GENERAR  — Nova Criterio escribe un .xlsx donde cada dato del encargo vive
  *      en un RANGO CON NOMBRE. Los rangos de zona CONTROLADA quedan bloqueados
  *      por protección de hoja; los de zona LIBRE quedan desbloqueados para que
  *      el auditor trabaje (concilia partidas, escribe explicaciones, etc.).
@@ -67,7 +67,7 @@ export type ExcelTemplateRegistry = Record<ExcelTemplateKey, ExcelTemplateDef>;
 /**
  * Zona de edición de un rango (o de una columna dentro de una tabla).
  *
- * - `CONTROLADA`: la escribe AuditMind y queda BLOQUEADA (`protection.locked = true`
+ * - `CONTROLADA`: la escribe Nova Criterio y queda BLOQUEADA (`protection.locked = true`
  *   + `worksheet.protect()`). Es el dato del encargo; el auditor no debe alterarlo.
  * - `LIBRE`: queda DESBLOQUEADA (`protection.locked = false`). Es donde el auditor
  *   trabaja. Una columna LIBRE dentro de una tabla CONTROLADA es el caso normal

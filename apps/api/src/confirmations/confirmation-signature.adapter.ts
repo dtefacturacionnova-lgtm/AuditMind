@@ -220,7 +220,7 @@ Responda <strong>directamente a ${escHtml(org.name)}</strong>, no a la entidad a
     const sender = await tx.user.findUnique({ where: { id: request.createdById }, select: { name: true, email: true } });
     const res = await tx.externalConfirmation.updateMany({
       where: { id: request.targetId, audit: { organizationId: request.organizationId }, status: { in: SENDABLE } },
-      data: { status: ConfirmationStatus.SENT, sentAt: new Date(), sentBy: sender?.name ?? sender?.email ?? 'AuditMind' },
+      data: { status: ConfirmationStatus.SENT, sentAt: new Date(), sentBy: sender?.name ?? sender?.email ?? 'Nova Criterio' },
     });
     if (res.count === 0) throw new ConflictException('La confirmación cambió de estado mientras se enviaba. Inténtalo de nuevo.');
     // La fila ya quedó bloqueada por la escritura: si alguien editó la confirmación entre que se armó el PDF y ahora,

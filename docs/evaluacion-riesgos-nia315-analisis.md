@@ -1,14 +1,14 @@
-# Evaluación de Riesgos NIA 315/330 — Análisis de Brechas AuditMind
+# Evaluación de Riesgos NIA 315/330 — Análisis de Brechas Nova Criterio
 
 > Análisis realizado: 2026-08-10  
 > NIAs referenciadas: 220 · 240 · 300 · 315 Rev.2019 · 320 · 330 · 530  
-> Contexto: Auditoría Financiera Externa — Plantilla estándar AuditMind
+> Contexto: Auditoría Financiera Externa — Plantilla estándar Nova Criterio
 
 ---
 
 ## 1. Flujo completo del proceso (9 pasos)
 
-| Paso | NIA | Papel AuditMind | Estado |
+| Paso | NIA | Papel Nova Criterio | Estado |
 |------|-----|-----------------|--------|
 | 1. Aceptación y Continuidad | NIA 220 | PT-FIN-ENCARGO | ✅ (sin sección de evaluación de continuidad) |
 | 2. Entendimiento de la Entidad | NIA 315.11-24 | PT-A1 + PT-FIN-A3-KC | ✅ (leve solapamiento entre ambos) |

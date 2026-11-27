@@ -63,7 +63,7 @@ export class AuditBackupController {
   ) {
     if (!file) throw new BadRequestException('No se recibió archivo');
     if (!/\.zip$/i.test(file.originalname)) {
-      throw new BadRequestException('Solo se aceptan archivos .zip generados por AuditMind');
+      throw new BadRequestException('Solo se aceptan archivos .zip generados por Nova Criterio');
     }
     return this.restoreSvc.restaurarComoNuevo(file.buffer, user, titulo);
   }
@@ -83,7 +83,7 @@ export class AuditBackupController {
   ) {
     if (!file) throw new BadRequestException('No se recibió archivo');
     if (!/\.zip$/i.test(file.originalname)) {
-      throw new BadRequestException('Solo se aceptan archivos .zip generados por AuditMind');
+      throw new BadRequestException('Solo se aceptan archivos .zip generados por Nova Criterio');
     }
     return this.restoreSvc.previsualizarRestauracionDestructiva(id, file.buffer, user);
   }
@@ -100,7 +100,7 @@ export class AuditBackupController {
   ) {
     if (!file) throw new BadRequestException('No se recibió archivo');
     if (!/\.zip$/i.test(file.originalname)) {
-      throw new BadRequestException('Solo se aceptan archivos .zip generados por AuditMind');
+      throw new BadRequestException('Solo se aceptan archivos .zip generados por Nova Criterio');
     }
     return this.restoreSvc.restaurarDestructivo(id, file.buffer, user, confirmarTitulo);
   }

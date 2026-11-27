@@ -1,9 +1,9 @@
 @echo off
-title AuditMind AI Service - Puerto 3003
+title Nova Criterio AI Service - Puerto 3003
 cd /d "%~dp0"
 
 echo.
-echo  AuditMind AI Service v2.0
+echo  Nova Criterio AI Service v2.0
 echo  Modelo: Claude Sonnet + Gemini Embeddings (3072 dims)
 echo  Puerto: http://localhost:3003
 echo  Docs:   http://localhost:3003/docs

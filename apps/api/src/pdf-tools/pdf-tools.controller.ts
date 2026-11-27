@@ -54,7 +54,7 @@ export class PdfToolsController {
   // El llamador aporta su propio certificado (PEM: clave privada PKCS#1 +
   // certificado) — para cuando se quiera firmar con un certificado externo
   // (ej. de un Prestador de Servicios de Certificación acreditado, a futuro).
-  // Para el uso normal dentro de AuditMind ver POST sign-internal, que usa el
+  // Para el uso normal dentro de Nova Criterio ver POST sign-internal, que usa el
   // certificado autofirmado propio del usuario logueado.
   @Post('sign')
   @ApiOperation({ summary: 'Firmar un PDF con un certificado digital (PEM) — herramienta genérica' })
@@ -96,12 +96,12 @@ export class PdfToolsController {
   }
 
   // ─── Firma digital con el certificado interno del usuario logueado ───────────
-  // Custodia de certificados (2026-08-24): AuditMind emite y guarda (cifrado)
+  // Custodia de certificados (2026-08-24): Nova Criterio emite y guarda (cifrado)
   // un certificado autofirmado por usuario, generado automáticamente en el
   // primer uso — sello de integridad interno, NO firma con validez legal
   // externa (ver memoria de sesión "project_pdf_tools_stirling" para el
   // camino a futuro vía la Unidad de Firma Electrónica / Ministerio de
-  // Economía). Este es el endpoint que debe usar el resto de AuditMind.
+  // Economía). Este es el endpoint que debe usar el resto de Nova Criterio.
   @Post('sign-internal')
   @ApiOperation({ summary: 'Firmar un PDF con el certificado interno del usuario logueado (se genera automáticamente si no existe)' })
   @ApiConsumes('multipart/form-data')
@@ -120,8 +120,8 @@ export class PdfToolsController {
       { privateKeyPem: Buffer.from(identity.privateKeyPem), certPem: Buffer.from(identity.certPem), password: '' },
       {
         name: user.name,
-        reason: body?.reason || 'Aprobación en AuditMind',
-        location: body?.location || 'AuditMind',
+        reason: body?.reason || 'Aprobación en Nova Criterio',
+        location: body?.location || 'Nova Criterio',
         pageNumber: body?.pageNumber ? parseInt(body.pageNumber, 10) : undefined,
         showSignature: true,
         showLogo: false,
@@ -150,7 +150,7 @@ export class PdfToolsController {
       { sortType: body?.sortType, generateToc: body?.generateToc === 'true' },
     );
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="auditmind_fusionado.pdf"');
+    res.setHeader('Content-Disposition', 'attachment; filename="novacriterio_fusionado.pdf"');
     res.setHeader('Content-Length', mergedPdf.length);
     res.send(mergedPdf);
   }

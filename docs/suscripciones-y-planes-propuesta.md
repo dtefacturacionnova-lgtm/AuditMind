@@ -1,15 +1,15 @@
-# AuditMind — Propuesta de planes y suscripciones
+# Nova Criterio — Propuesta de planes y suscripciones
 
 **Fecha:** 2026-11-21 · **Estado:** PROPUESTA — nada de esto está implementado ni aprobado. Se espera tu decisión antes de construir.
 **Versión:** v3 — el §10 (Personas/Empresas, módulos y asistentes seleccionables) **reemplaza al catálogo de §4.2** donde difieran, y el §11 (almacenamiento y **peticiones de IA**, pedido del usuario) **reemplaza los límites de espacio e IA** de §4.2 y §10.5: la IA se limita en peticiones, no en dólares.
-**Origen:** revisión de código (solo lectura) de `dtes-y-analítica-sv`, `Nexus Finance` y `validador-de-expedientes-inteligente` (AFEXIA) + estado actual de AuditMind.
+**Origen:** revisión de código (solo lectura) de `dtes-y-analítica-sv`, `Nexus Finance` y `validador-de-expedientes-inteligente` (AFEXIA) + estado actual de Nova Criterio.
 **Alcance de la verificación:** se leyó código y documentos; **no se consultaron las bases de producción** de las otras apps. Los datos «en vivo» (qué interruptor está encendido, qué precios reales hay cargados) salen de sus documentos y pueden diferir. Los precios de esta propuesta son **hipótesis a validar**, no datos de mercado.
 
 ---
 
 ## 1. Resumen en una página
 
-**Dónde estás hoy.** AuditMind tiene un campo `Organization.plan` (texto: starter / professional / enterprise) y `trialEndsAt`, y el módulo Organizaciones permite elegirlo… pero **nada lo lee**: no hay límites, no hay cobro, no hay página de precios (`/` redirige a `/login`), y el consumo de IA ni siquiera se mide (las tablas `AIInteraction` y `LLMRouterLog` existen y nadie escribe en ellas). Hoy todo cliente tiene acceso total, y todo se da de alta a mano.
+**Dónde estás hoy.** Nova Criterio tiene un campo `Organization.plan` (texto: starter / professional / enterprise) y `trialEndsAt`, y el módulo Organizaciones permite elegirlo… pero **nada lo lee**: no hay límites, no hay cobro, no hay página de precios (`/` redirige a `/login`), y el consumo de IA ni siquiera se mide (las tablas `AIInteraction` y `LLMRouterLog` existen y nadie escribe en ellas). Hoy todo cliente tiene acceso total, y todo se da de alta a mano.
 
 **Qué aprendí de tus otras tres apps.** Las tres resolvieron lo mismo con la misma receta, y las tres dejaron los mismos huecos (sección 2). La buena noticia: **ya tienes diseñado y probado casi todo lo difícil** (planes como datos, instantánea del plan por cliente, pago manual con aprobación, función de activación única, webhook de Wompi con firma, modo solo lectura al vencer). La mala: **las tres tienen el cumplimiento de límites apagado o a medias y ninguna cobra en línea hoy** (Wompi está apagado en dtes-y-analítica-sv, sin aplicar en AFEXIA —le falta la cuenta— y no existe en Nexus).
 
@@ -20,7 +20,7 @@
 | **A — Venta asistida** | Planes como datos, suscripción por organización, tope de usuarios, **solo lectura al vencer**, pantalla «Mi plan», pago por transferencia/QR con comprobante y aprobación tuya, recordatorios | Cobrar a los primeros clientes (tú los das de alta y apruebas el pago) | ~2 semanas |
 | **B — Autoservicio** | Página pública `/precios`, prueba gratuita autoservicio, pago en línea con Wompi, medición de IA/almacenamiento con avisos | Vender sin tu intervención | ~2 semanas más |
 
-**Planes (hipótesis, USD/mes sin IVA):** Independiente **$49** · Despacho **$129** · Firma **$299** · Institucional **a convenir** · más un plan **Piloto** con precio pactado para los clientes que ya usan AuditMind. Anual = 10 meses (dos gratis).
+**Planes (hipótesis, USD/mes sin IVA):** Independiente **$49** · Despacho **$129** · Firma **$299** · Institucional **a convenir** · más un plan **Piloto** con precio pactado para los clientes que ya usan Nova Criterio. Anual = 10 meses (dos gratis).
 
 **Lo que necesito que decidas** está en la sección 9 (8 preguntas; las 3 que más bloquean son precios, IVA/factura y cuenta de Wompi).
 
@@ -61,7 +61,7 @@
 
 ---
 
-## 3. Punto de partida de AuditMind (hechos verificados en el repositorio)
+## 3. Punto de partida de Nova Criterio (hechos verificados en el repositorio)
 
 - `Organization.plan` (texto, por defecto `starter`) y `trialEndsAt` — guardados, **sin ningún lector**. `organizations.service.ts` lo asigna al crear y lo cambia solo el SUPER_ADMIN; el DTO acepta `maxUsers` pero no se persiste ni se aplica.
 - `auditModality` (INTERNAL / EXTERNAL / BOTH) **sí** filtra módulos: es un eje natural de plan ya existente.
@@ -105,7 +105,7 @@ Los **15 asistentes de IA y las bases RAG van en todos los planes**; lo que camb
 | Marca propia (logo/colores en informes) | — | ✔ | ✔ | ✔ |
 
 **Cómo salen estos números (para que los discutas, no para que los aceptes):**
-- Anclas internas: Nexus «Empresa» $39 / $89 / $179; AFEXIA (hipótesis) $29 / $89 / $249. AuditMind es una plataforma profesional de auditoría (más valor y más costo de cambio que un ERP de entrada), por eso el escalón sube.
+- Anclas internas: Nexus «Empresa» $39 / $89 / $179; AFEXIA (hipótesis) $29 / $89 / $249. Nova Criterio es una plataforma profesional de auditoría (más valor y más costo de cambio que un ERP de entrada), por eso el escalón sube.
 - Margen: el costo variable por cliente es de centavos a pocos dólares (IA ≈ 2–8 USD **como tope**, normalmente mucho menos). Con costos fijos de ~$60–100/mes (VPS + Supabase Pro + correo; **confírmalos**), **2–3 clientes «Despacho» ya cubren la operación**.
 - Anual con 2 meses gratis (como Nexus ya tiene guardado): incentiva el pago adelantado, que además reduce el trabajo manual de cobrar cada mes mientras no haya pasarela.
 
@@ -174,9 +174,9 @@ PRUEBA (14 d) ──paga──▶ ACTIVA ──vence──▶ GRACIA (7 d, aviso
 | Webhook Wompi (firma HMAC en tiempo constante, confirmación al centavo, conciliación 15 min), pruebas | dtes-y-analítica-sv (`billing-routes.ts`) | Lógica y casos de prueba |
 | Modos `off / observe / enforce` | Nexus (`lib/modules/decide.ts`) | Concepto |
 | Banners de plan, recordatorios 80 %/100 %/7 días | AFEXIA (`PlanBannerHost`), dtes (`LicenciaBanner`) | Diseño de UX |
-| Guardián de solo lectura | AuditMind (`roles.guard.ts`, recién probado por HTTP real) | Mismo patrón para `SubscriptionGuard` |
+| Guardián de solo lectura | Nova Criterio (`roles.guard.ts`, recién probado por HTTP real) | Mismo patrón para `SubscriptionGuard` |
 
-**No se copia código tal cual:** las tres apps son otros stacks. Se copia el diseño y los casos de prueba; el código se reescribe sobre los patrones de AuditMind (`assertInOrg`, interceptores, pruebas con Postgres real).
+**No se copia código tal cual:** las tres apps son otros stacks. Se copia el diseño y los casos de prueba; el código se reescribe sobre los patrones de Nova Criterio (`assertInOrg`, interceptores, pruebas con Postgres real).
 
 ---
 
@@ -238,7 +238,7 @@ PRUEBA (14 d) ──paga──▶ ACTIVA ──vence──▶ GRACIA (7 d, aviso
 
 ### 10.1 ¿Se puede? Sí. Qué existe ya y qué falta
 
-| Pieza | Hoy en AuditMind | Qué falta |
+| Pieza | Hoy en Nova Criterio | Qué falta |
 |---|---|---|
 | **Módulos por plan** | El menú (`Sidebar.tsx`) ya etiqueta cada grupo con `module` y filtra según `auditModality` (INTERNAL / EXTERNAL / BOTH). | Hoy **solo oculta cosas en pantalla** y solo distingue 2 valores. Hay que (a) generalizar a una **lista de módulos por plan**, y (b) **proteger el API y las rutas**: quien escriba la URL a mano o llame al API hoy entra igual. Es la parte importante (seguridad), no la cosmética. |
 | **Asistentes por plan** | 15 agentes; el chat pasa por `AiService.chat` y el servicio de IA recibe `agent_type`. | Una lista `asistentes` por plan y una verificación en `AiService.chat` y en los endpoints de Scriptorium (que usan agentes por dentro). |

@@ -276,14 +276,14 @@ suite('avisos de uso contra Postgres real', () => {
       await alerts.run(NOW);
       expect(await kinds(o.id)).toEqual(['STORAGE_80']);
       expect(emailsTo(o.admin)).toHaveLength(1);
-      expect(emailsTo(o.admin)[0].subject).toBe('Usaste el 87 % de tu espacio en AuditMind');
+      expect(emailsTo(o.admin)[0].subject).toBe('Usaste el 87 % de tu espacio en Nova Criterio');
       expect(emailsTo(o.admin)[0].paragraphs[0]).toContain('0.9 GB de 1 GB');
 
       await addFile(audit.id, lead.id, 200); // 1,100 MB: lleno
       await alerts.run(NOW);
       await alerts.run(NOW);
       expect(await kinds(o.id)).toEqual(['STORAGE_80', 'STORAGE_100']);
-      expect(emailsTo(o.admin)[1].subject).toBe('Tu espacio en AuditMind está lleno');
+      expect(emailsTo(o.admin)[1].subject).toBe('Tu espacio en Nova Criterio está lleno');
       expect((await notificationsOf(o.id)).map((n: any) => n.type)).toEqual(['USAGE_STORAGE_80', 'USAGE_STORAGE_100']);
     });
 
@@ -443,7 +443,7 @@ suite('avisos de uso contra Postgres real', () => {
       await alerts.run(NOW);
       await reminders.run(NOW);
       await alerts.run(NOW);
-      expect(emailsTo(o.admin).map((m) => m.subject).sort()).toEqual(['Llevas el 90 % de tus peticiones de IA de este mes', 'Tu licencia de AuditMind vence en 3 días']);
+      expect(emailsTo(o.admin).map((m) => m.subject).sort()).toEqual(['Llevas el 90 % de tus peticiones de IA de este mes', 'Tu licencia de Nova Criterio vence en 3 días']);
       expect(await eventsOf(o.id, 'REMINDER_SENT')).toHaveLength(1);
       expect(await eventsOf(o.id, 'USAGE_ALERT_SENT')).toHaveLength(1);
     });

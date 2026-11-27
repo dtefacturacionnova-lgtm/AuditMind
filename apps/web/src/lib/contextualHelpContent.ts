@@ -8,7 +8,7 @@ export interface HelpTopic {
 export const SIGNATURE_HELP: HelpTopic = {
   title: 'Firma electrónica por enlace',
   body: [
-    'Envías el documento por correo y el firmante lo firma desde un enlace, sin cuenta en AuditMind. Antes de ver el documento confirma su identidad con un código de 6 dígitos que llega a ese mismo correo.',
+    'Envías el documento por correo y el firmante lo firma desde un enlace, sin cuenta en Nova Criterio. Antes de ver el documento confirma su identidad con un código de 6 dígitos que llega a ese mismo correo.',
     'Al enviar, el documento se convierte en PDF y queda congelado: el firmante ve exactamente ese archivo. Si cambias el documento después, la solicitud se revoca y hay que enviarla otra vez.',
     'El enlace completo se muestra una sola vez, en la ventana de envío. Si lo pierdes o el correo no llega, usa «Reenviar»: genera uno nuevo y el anterior deja de funcionar.',
     'Al firmar queda guardado el nombre y el cargo que escribió, la fecha y la hora, la dirección IP, el navegador, el correo verificado, el texto del consentimiento y la huella (SHA-256) del documento, en una bitácora donde cualquier cambio se nota.',
@@ -384,7 +384,7 @@ const ROUTE_HELP: RouteHelpEntry[] = [
 ];
 
 const DEFAULT_HELP: HelpTopic = {
-  title: 'AuditMind',
+  title: 'Nova Criterio',
   body: [
     'Usa el buscador (⌘K) para saltar rápido a cualquier auditoría, cliente o papel de trabajo.',
     'Cada pantalla de Cartera y de papeles de trabajo específicos tiene su propia ayuda contextual — este es el contenido general.',

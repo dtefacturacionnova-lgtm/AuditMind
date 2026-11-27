@@ -125,7 +125,7 @@ class Chat(Base):
         req = self.peticiones[0]
         self.assertEqual(str(req.url), "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(req.headers["authorization"], f"Bearer {CLAVE}")
-        self.assertEqual(req.headers["x-title"], "AuditMind")
+        self.assertEqual(req.headers["x-title"], "Nova Criterio")
         self.assertIn("http-referer", req.headers)
         b = self.cuerpo()
         self.assertEqual(b["model"], "anthropic/claude-sonnet-5.5")

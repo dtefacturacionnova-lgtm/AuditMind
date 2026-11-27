@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# AuditMind — Deploy script para Hostinger VPS
+# Nova Criterio — Deploy script para Hostinger VPS
 # Subdominio:     auditoria.ianovatechsystems.com
 # Web (Next.js):  puerto 3008  — público vía nginx /
 # API (NestJS):   puerto 4003  — público vía nginx /api/

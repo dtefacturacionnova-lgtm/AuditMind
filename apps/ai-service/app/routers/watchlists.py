@@ -75,7 +75,7 @@ async def parse_watchlist(
         async with httpx.AsyncClient(follow_redirects=True, timeout=90) as client:
             # User-Agent explícito — las 3 fuentes devuelven contenido vacío
             # o bloquean sin uno (confirmado en vivo al diseñar esta feature).
-            response = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (AuditMind CAATs watchlist sync)"})
+            response = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Nova Criterio CAATs watchlist sync)"})
             response.raise_for_status()
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Error descargando la lista '{source}': {e}")

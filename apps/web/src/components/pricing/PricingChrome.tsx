@@ -10,7 +10,7 @@ export function PricingHeader({ demoHref }: { demoHref: string | null }) {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
         <Link href="/precios" className={`flex items-baseline gap-2 rounded ${FOCUS}`}>
-          <span className="text-lg font-bold tracking-tight text-primary">AuditMind</span>
+          <span className="text-lg font-bold tracking-tight text-primary">Nova Criterio</span>
           <span className="hidden text-[11px] font-medium uppercase tracking-widest text-slate-600 sm:inline">Intelligence Platform</span>
         </Link>
         <nav aria-label="Principal" className="flex items-center gap-1.5">
@@ -32,7 +32,7 @@ export function PricingFooter() {
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-6 text-sm text-slate-600 sm:px-6 lg:px-8">
-        <p>© {new Date().getFullYear()} AuditMind · Plataforma de auditoría inteligente</p>
+        <p>© {new Date().getFullYear()} Nova Criterio · Plataforma de auditoría inteligente</p>
         <p>Precios en dólares (USD).</p>
       </div>
     </footer>

@@ -1,6 +1,6 @@
 # Maqueta de suscripciones (2026-11-21)
 
-Copia de seguridad de la maqueta navegable de planes y suscripciones de AuditMind. Es el **diseño aprobado por el usuario** como punto de partida de la construcción; el documento que lo explica es `../suscripciones-y-planes-propuesta.md` (§10 y §11).
+Copia de seguridad de la maqueta navegable de planes y suscripciones de Nova Criterio. Es el **diseño aprobado por el usuario** como punto de partida de la construcción; el documento que lo explica es `../suscripciones-y-planes-propuesta.md` (§10 y §11).
 
 - **Enlace vivo (artefacto privado de Claude):** https://claude.ai/artifact/1LQYJfPmGBFZB7toSi2GmP
 - **Qué hay aquí:** el código fuente de cada pantalla (`*.dc.html`, formato de lienzo de diseño de Claude) y `canvas.json` (posición de las pantallas). No se ejecutan dentro de la aplicación: son referencia visual.

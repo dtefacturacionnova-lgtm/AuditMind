@@ -3,7 +3,7 @@
 > Investigación realizada: 2026-08-10  
 > Fuente: ISA 230, ISA 315 Rev.2019, ISA 330, PCAOB AS 1215/AS 2301  
 > Plataformas analizadas: EY Canvas, KPMG Clara, PwC Aura, Deloitte Omnia, CaseWare  
-> Contexto: Propuesta de implementación para AuditMind PT-PROG
+> Contexto: Propuesta de implementación para Nova Criterio PT-PROG
 
 ---
 
@@ -230,7 +230,7 @@ model StepEvidence {
 
 ---
 
-## 10. Flujo completo en AuditMind
+## 10. Flujo completo en Nova Criterio
 
 ```
 PT-A5 S1 (RMM) → PT-PROG (NTE) → Cédulas B-01… (evidencia) → PT-DIFS (excepciones) → Opinión NIA 700

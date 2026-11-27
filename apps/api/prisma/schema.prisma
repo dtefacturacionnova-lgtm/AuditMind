@@ -505,7 +505,7 @@ model User {
 
   // Firma digital real (sello de integridad interno, no firma con validez legal
   // externa — ver memoria de sesión "project_pdf_tools_stirling"). Certificado
-  // autofirmado emitido por AuditMind la primera vez que el usuario firma algo;
+  // autofirmado emitido por Nova Criterio la primera vez que el usuario firma algo;
   // certPem es público, keyEncrypted va cifrado (AES-256-GCM, ver
   // common/crypto/signing-key.util.ts) con ENCRYPTION_KEY como llave maestra.
   signingCertPem      String?
@@ -2026,7 +2026,7 @@ model WorkingPaper {
   reviewedAt        DateTime? // Fecha firma revisor
   // ─── Sello de integridad — PDF firmado digitalmente por nivel (2026-08-24) ─
   // Ruta en Supabase Storage (bucket audit-files), no URL — igual patrón que
-  // FieldEvidence.storageKey. Certificado autofirmado por AuditMind, sello de
+  // FieldEvidence.storageKey. Certificado autofirmado por Nova Criterio, sello de
   // integridad interno, no firma con validez legal externa — ver
   // apps/api/src/pdf-tools/signing-identity.service.ts.
   preparedPdfPath   String?

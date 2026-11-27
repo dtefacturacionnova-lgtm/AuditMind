@@ -250,7 +250,7 @@ export const CONFORMITY_COLORS: Record<string, { bg: string; text: string }> = {
 
 // ─── Clasificación por área de auditoría (AuditArea en caats-methodology.ts) ──
 // Fiscal / Financiero / Operativo son las 3 líneas de encargo del propio
-// AuditMind (plantillas "Auditoría Fiscal El Salvador", "Auditoría Financiera
+// Nova Criterio (plantillas "Auditoría Fiscal El Salvador", "Auditoría Financiera
 // Externa", "Auditoría Interna NOGAI/IIA"); Transversal marca las técnicas
 // genéricas que sirven por igual a las tres.
 export const AREA_LABELS: Record<string, string> = {

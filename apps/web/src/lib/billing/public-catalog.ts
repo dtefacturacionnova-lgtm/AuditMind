@@ -268,12 +268,12 @@ export function contactMessage(intent: ContactIntent, plan?: Pick<PublicPlan, 'n
   const when = months ? ` (${durationLabel(months).toLowerCase()})` : '';
   if (intent === 'TRIAL' && plan) {
     const days = plan.trialDays > 0 ? ` de ${plan.trialDays} días` : '';
-    return { subject: `Quiero la prueba${days} del plan ${plan.name}`, body: `Hola, quiero probar AuditMind con el plan ${plan.name}${when}.\n\nNombre:\nDespacho o empresa:\nTeléfono:` };
+    return { subject: `Quiero la prueba${days} del plan ${plan.name}`, body: `Hola, quiero probar Nova Criterio con el plan ${plan.name}${when}.\n\nNombre:\nDespacho o empresa:\nTeléfono:` };
   }
   if (intent === 'CORPORATE') {
-    return { subject: 'Plan institucional de AuditMind', body: 'Hola, represento a una auditoría interna corporativa o institución y quiero conocer el plan institucional.\n\nNombre:\nInstitución:\nTeléfono:' };
+    return { subject: 'Plan institucional de Nova Criterio', body: 'Hola, represento a una auditoría interna corporativa o institución y quiero conocer el plan institucional.\n\nNombre:\nInstitución:\nTeléfono:' };
   }
-  return { subject: 'Quiero una demo de AuditMind', body: 'Hola, quiero ver una demo de AuditMind.\n\nNombre:\nDespacho o empresa:\nTeléfono:' };
+  return { subject: 'Quiero una demo de Nova Criterio', body: 'Hola, quiero ver una demo de Nova Criterio.\n\nNombre:\nDespacho o empresa:\nTeléfono:' };
 }
 
 /** Enlace de contacto: correo si hay; si no, WhatsApp; si no, null (la página no muestra botones). Todo va codificado. */

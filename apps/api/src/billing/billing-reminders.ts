@@ -93,7 +93,7 @@ export function describeNotice(decision: NoticeDecision, ctx: NoticeContext): No
   const trial = ctx.storedStatus === 'TRIAL';
   const what = trial ? 'prueba' : 'licencia';
   const planLine = `Plan: ${ctx.planName || 'sin nombre'} · Organización: ${ctx.orgName}.`;
-  const renew = 'Para renovar o ampliar tu plan, contacta al equipo de AuditMind. Nada de lo que guardaste se borra.';
+  const renew = 'Para renovar o ampliar tu plan, contacta al equipo de Nova Criterio. Nada de lo que guardaste se borra.';
 
   if (decision.kind === 'EXPIRING') {
     const left = daysUntil(ctx.endsAt, ctx.now);
@@ -104,7 +104,7 @@ export function describeNotice(decision: NoticeDecision, ctx: NoticeContext): No
     return {
       level: 'warning',
       notificationType: 'SUBSCRIPTION_EXPIRING',
-      subject: headline.replace(/^Tu (prueba|licencia)/, 'Tu $1 de AuditMind'),
+      subject: headline.replace(/^Tu (prueba|licencia)/, 'Tu $1 de Nova Criterio'),
       heading: headline,
       paragraphs: [
         `Tu ${what} termina el ${fmtDate(ctx.endsAt)}. ${planLine}`,
@@ -125,7 +125,7 @@ export function describeNotice(decision: NoticeDecision, ctx: NoticeContext): No
     return {
       level: 'warning',
       notificationType: 'SUBSCRIPTION_GRACE',
-      subject: trial ? 'Tu prueba de AuditMind terminó' : 'Tu licencia de AuditMind venció',
+      subject: trial ? 'Tu prueba de Nova Criterio terminó' : 'Tu licencia de Nova Criterio venció',
       heading: trial ? 'Tu prueba terminó' : 'Tu licencia venció',
       paragraphs: [
         `Tu ${what} terminó el ${fmtDate(ctx.endsAt)}. ${planLine}`,
@@ -141,7 +141,7 @@ export function describeNotice(decision: NoticeDecision, ctx: NoticeContext): No
   return {
     level: 'critical',
     notificationType: 'SUBSCRIPTION_READ_ONLY',
-    subject: 'Tu cuenta de AuditMind está en solo lectura',
+    subject: 'Tu cuenta de Nova Criterio está en solo lectura',
     heading: 'Tu cuenta está en solo lectura',
     paragraphs: [
       `Tu ${what} terminó el ${fmtDate(ctx.endsAt)} y el periodo de gracia ya pasó. ${planLine}`,

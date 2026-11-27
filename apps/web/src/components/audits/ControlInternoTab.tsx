@@ -73,7 +73,7 @@ export function ControlInternoTab({ auditId }: { auditId: string }) {
     try {
       await apiClient.downloadFile(
         `/working-papers/control-interno-report/${auditId}/pdf`,
-        `AuditMind_Control_Interno_${auditId.slice(0, 8)}.pdf`,
+        `NovaCriterio_Control_Interno_${auditId.slice(0, 8)}.pdf`,
       );
     } catch (err) {
       alert((err as Error).message || 'Error al descargar el Reporte Integrado');

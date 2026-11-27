@@ -1,4 +1,4 @@
-# AuditMind Intelligence Platform
+# Nova Criterio Intelligence Platform
 
 > Plataforma de auditoría inteligente de clase mundial — Score 91/100
 

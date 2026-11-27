@@ -2284,7 +2284,7 @@ export class AuditTemplatesService {
         data: {
           organizationId:  user.organizationId,
           name:            'Empresa Comercial Demo SA de CV',
-          description:     'Entidad de demostración del sistema AuditMind. Empresa mediana del sector comercio mayorista (El Salvador). NIT: 0614-010185-101-7.',
+          description:     'Entidad de demostración del sistema Nova Criterio. Empresa mediana del sector comercio mayorista (El Salvador). NIT: 0614-010185-101-7.',
           entityType:      'COMPANY',
           sector:          'Comercio al por mayor de mercancías generales',
           responsible:     'Lic. Roberto Morales — Gerente Financiero',

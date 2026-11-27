@@ -1,4 +1,4 @@
-// AuditMind — PM2 ecosystem (Hostinger VPS)
+// Nova Criterio — PM2 ecosystem (Hostinger VPS)
 // Web (Next.js):  puerto 3008
 // API (NestJS):   puerto 4003
 // ai-service:     puerto 8003 (interno — solo 127.0.0.1)

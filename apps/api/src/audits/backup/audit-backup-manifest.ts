@@ -67,7 +67,7 @@ export function verificarBackupManifest(
   const a = Buffer.from(firmaEsperada, 'hex');
   const b = Buffer.from(completo.firma, 'hex');
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-    return { ok: false, razon: 'La firma del backup no es válida — pudo ser alterado o no fue generado por AuditMind' };
+    return { ok: false, razon: 'La firma del backup no es válida — pudo ser alterado o no fue generado por Nova Criterio' };
   }
 
   if (completo.hashDatos !== hashDatosReal) {

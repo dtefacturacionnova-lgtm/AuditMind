@@ -1,4 +1,4 @@
-"""AuditMind AI Service — FastAPI + Claude API + Gemini Embeddings + pgvector RAG"""
+"""Nova Criterio AI Service — FastAPI + Claude API + Gemini Embeddings + pgvector RAG"""
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -15,7 +15,7 @@ from app.services.rag_pipeline import _ensure_pgvector_tables
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"🚀 AuditMind AI Service — LLM primario: {'OpenRouter (' + settings.OPENROUTER_MODEL_STANDARD + ')' if settings.OPENROUTER_API_KEY else 'Gemini (OPENROUTER_API_KEY sin configurar)'}")
+    print(f"🚀 Nova Criterio AI Service — LLM primario: {'OpenRouter (' + settings.OPENROUTER_MODEL_STANDARD + ')' if settings.OPENROUTER_API_KEY else 'Gemini (OPENROUTER_API_KEY sin configurar)'}")
     print(f"   Embeddings: {settings.EMBEDDING_MODEL} ({settings.EMBEDDING_DIMENSIONS} dims)")
     # Migra el esquema de pgvector al arrancar (idempotente — ADD COLUMN IF NOT
     # EXISTS) en vez de esperar a la primera ingesta, para que /rag/documents y
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AuditMind AI Service",
+    title="Nova Criterio AI Service",
     version="2.0.0",
     description="Motor de Inteligencia Artificial — 14 Agentes, 9 RAG Bases, CAATs, Claude API",
     lifespan=lifespan,

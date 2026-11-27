@@ -65,7 +65,7 @@ export function ResendDialog({ request, onClose }: { request: SignatureRequestVi
 /**
  * «Firma presencial»: rota el enlace SIN enviar correo y lo muestra UNA vez, para abrirlo en el teléfono de la persona o en
  * una ventana privada. Ya no se abre solo en una pestaña del navegador del auditor: esa pestaña compartiría su sesión de
- * AuditMind con quien reciba el equipo (revisión de seguridad F5b, 2026-10-19). El código llega al correo del firmante.
+ * Nova Criterio con quien reciba el equipo (revisión de seguridad F5b, 2026-10-19). El código llega al correo del firmante.
  */
 export function InPersonDialog({ request, onClose }: { request: SignatureRequestView; onClose: () => void }) {
   const inPerson = useInPersonSignatureRequest();

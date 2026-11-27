@@ -13,8 +13,8 @@ import { contactHref, contactMessage } from '@/lib/billing/public-catalog';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Planes y precios — AuditMind',
-  description: 'Planes de AuditMind para auditores independientes y equipos de auditoría interna y externa: módulos, espacio, asistentes de IA y precios.',
+  title: 'Planes y precios — Nova Criterio',
+  description: 'Planes de Nova Criterio para auditores independientes y equipos de auditoría interna y externa: módulos, espacio, asistentes de IA y precios.',
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';

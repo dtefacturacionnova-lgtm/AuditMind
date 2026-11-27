@@ -506,7 +506,7 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
                     <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <span style={{ fontSize: 18 }}>📋</span>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#93c5fd', letterSpacing: '0.08em' }}>AUDITMIND — Intelligence Platform</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#93c5fd', letterSpacing: '0.08em' }}>NOVA CRITERIO — Intelligence Platform</span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ margin: 0, fontSize: 10, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Generado el</p>
@@ -1007,7 +1007,7 @@ export function WorkingPaperIndexReport({ auditId, onClose }: Props) {
                 justifyContent: 'space-between',
               }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: C.navy }}>AuditMind — Reporte Completo de Auditoría</p>
+                  <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: C.navy }}>Nova Criterio — Reporte Completo de Auditoría</p>
                   <p style={{ margin: 0, fontSize: 9, color: '#94a3b8' }}>
                     {audit!.title} · {audit!.code} · {nowFull()}
                   </p>

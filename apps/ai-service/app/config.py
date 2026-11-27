@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     OPENROUTER_REASONING_EFFORT: str = "low"
     # Cabeceras de atribución que OpenRouter pide (aparecen en su panel de uso). No son secretas.
     OPENROUTER_REFERER: str = "https://auditoria.ianovatechsystems.com"
-    OPENROUTER_TITLE: str = "AuditMind"
+    OPENROUTER_TITLE: str = "Nova Criterio"
 
     # Anthropic (Claude) directo — último recurso de la cadena (OpenRouter → Gemini → Claude).
     # Si está vacío se salta; una clave inválida solo agrega un intento fallido al final.

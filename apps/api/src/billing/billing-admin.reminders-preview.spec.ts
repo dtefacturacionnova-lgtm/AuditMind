@@ -11,7 +11,7 @@ describe('GET billing-admin/reminders/preview', () => {
         items: [{
           organizationId: 'org1', organizationName: 'Despacho Norte', subscriptionId: 'sub1', planName: 'Despacho',
           decision: { kind: 'EXPIRING', days: 7 }, endsAt: new Date('2026-12-01T00:00:00Z'),
-          text: { subject: 'Tu licencia de AuditMind vence en 5 días', paragraphs: ['texto privado'], heading: 'h', title: 't', body: 'b', level: 'warning', notificationType: 'X' },
+          text: { subject: 'Tu licencia de Nova Criterio vence en 5 días', paragraphs: ['texto privado'], heading: 'h', title: 't', body: 'b', level: 'warning', notificationType: 'X' },
         }],
       })),
     };
@@ -22,7 +22,7 @@ describe('GET billing-admin/reminders/preview', () => {
           organizationId: 'org2', organizationName: 'Auditores Sur', subscriptionId: 'sub2', planName: 'Plus',
           decision: { kind: 'STORAGE_80', percent: 85, used: 8.5 * GB, capacity: 10 * GB, remaining: 1.5 * GB },
           key: { kind: 'STORAGE_80', capacityGb: 10 }, since: new Date(),
-          text: { subject: 'Usaste el 85 % de tu espacio en AuditMind', paragraphs: ['texto privado'], heading: 'h', title: 't', body: 'b', level: 'warning', notificationType: 'Y' },
+          text: { subject: 'Usaste el 85 % de tu espacio en Nova Criterio', paragraphs: ['texto privado'], heading: 'h', title: 't', body: 'b', level: 'warning', notificationType: 'Y' },
         }],
       })),
     };
@@ -39,11 +39,11 @@ describe('GET billing-admin/reminders/preview', () => {
     expect(r.checked).toBe(4);
     expect(r.items).toEqual([{
       organizationId: 'org1', organizationName: 'Despacho Norte', planName: 'Despacho', kind: 'EXPIRING', days: 7,
-      endsAt: new Date('2026-12-01T00:00:00Z'), subject: 'Tu licencia de AuditMind vence en 5 días',
+      endsAt: new Date('2026-12-01T00:00:00Z'), subject: 'Tu licencia de Nova Criterio vence en 5 días',
     }]);
     expect(r.usage).toEqual({
       checked: 4,
-      items: [{ organizationId: 'org2', organizationName: 'Auditores Sur', planName: 'Plus', kind: 'STORAGE_80', percent: 85, subject: 'Usaste el 85 % de tu espacio en AuditMind' }],
+      items: [{ organizationId: 'org2', organizationName: 'Auditores Sur', planName: 'Plus', kind: 'STORAGE_80', percent: 85, subject: 'Usaste el 85 % de tu espacio en Nova Criterio' }],
     });
   });
 

@@ -39,7 +39,7 @@ Precisiones de la revisión de seguridad F5b (2026-10-19):
 - **Adjuntos:** límites de cantidad y tamaño, estado de la solicitud y vigencia de la sesión se vuelven a comprobar BAJO EL BLOQUEO de la solicitud al registrar el adjunto (si falla, se borran los archivos); quitar un adjunto también va bajo el bloqueo. Imágenes de más de 50 megapíxeles (o sin cabecera legible) se rechazan antes de llegar a Stirling. Stirling tiene ahora tope de memoria (`mem_limit: 6g`, `MaxRAMPercentage=60`, `pids_limit`): **hay que recrear el contenedor al desplegar**.
 - **Sellado:** `sealRequest` nunca rechaza su promesa (un error de BD en segundo plano tumbaba el proceso de Node); «Reintentar sellado» espera 1 minuto entre intentos y, tras un fallo de INTEGRIDAD, solo lo hace un gerente; el sello de tiempo pendiente se aplica solo si la huella del PDF sellado guardado coincide con la registrada.
 - **Límite por IP:** una IPv6 cuenta por su /64 (hoy el dominio no tiene registro AAAA, pero así no hay que acordarse).
-- **Firma presencial:** el enlace ya no se abre solo en una pestaña del navegador del auditor (compartía su sesión de AuditMind con quien recibiera el equipo). Se muestra para abrirlo en el teléfono de la persona o en una ventana privada, con aviso explícito.
+- **Firma presencial:** el enlace ya no se abre solo en una pestaña del navegador del auditor (compartía su sesión de Nova Criterio con quien recibiera el equipo). Se muestra para abrirlo en el teléfono de la persona o en una ventana privada, con aviso explícito.
 - **Páginas públicas:** `error.tsx` propio en `/firmar`, `/verificar` y `/portal`; `/verificar#%E0` ya no rompe la página.
 - **Aceptado o pendiente, sin corregir aquí:** el historial global del navegador conserva la URL con `#token` (en `/firmar` hace falta además el código; el portal PBC no tiene segundo paso → tarea aparte: código por correo en el portal); `/verificar` muestra el nombre de quien firmó y el título a quien tenga el código (el código solo está impreso en el PDF sellado, que ya trae esos datos); `/verificar` confía en las huellas guardadas en la BD (un MAC con clave del servidor lo endurecería; requiere columna nueva → tarea aparte); el límite por IP y la guardia de sellado viven en memoria del único proceso de la API (antes de escalar a varios, Redis).
 
@@ -119,9 +119,9 @@ Precisiones surgidas al construir F1a (el diseño no cambia, solo se concreta):
 
 ## 0. Resumen
 
-Un tercero sin cuenta en AuditMind recibe un correo, verifica su identidad con un código enviado a ese mismo correo, lee el documento y lo firma o lo rechaza.
+Un tercero sin cuenta en Nova Criterio recibe un correo, verifica su identidad con un código enviado a ese mismo correo, lee el documento y lo firma o lo rechaza.
 
-AuditMind guarda:
+Nova Criterio guarda:
 - la evidencia de la firma;
 - una bitácora encadenada por hash, que deja ver cualquier alteración posterior;
 - un PDF final sellado por la organización con sello de tiempo RFC 3161.
@@ -189,7 +189,7 @@ Cualquier persona puede verificar el PDF con un código impreso en el propio doc
 | A4 | Tercero malicioso | Subir malware o un PDF con JavaScript que el auditor luego abre | Tipos permitidos por firma de bytes, ClamAV, CDR (Stirling), original en cuarentena |
 | A5 | Tercero malicioso | Inyección de HTML/JS en campos de texto que se muestran a auditores, en PDF o en correo | DTO con límites; todo se escapa al renderizar (React, `esc()` en PDF, `escHtml()` en correo) |
 | A6 | Sitio malicioso | Clickjacking de la página de firma | `X-Frame-Options: DENY` y `frame-ancestors 'none'` |
-| A7 | Usuario interno malicioso | Usar AuditMind para enviar spam o phishing desde nuestro dominio | Rol mínimo, tope de correos por organización y día, destinatario solo por solicitud real |
+| A7 | Usuario interno malicioso | Usar Nova Criterio para enviar spam o phishing desde nuestro dominio | Rol mínimo, tope de correos por organización y día, destinatario solo por solicitud real |
 | A8 | Usuario interno malicioso | Fabricar o alterar una firma, o editar la evidencia en la BD | La firma solo se crea por el flujo público; bitácora encadenada por hash; PDF sellado con huella publicada; verificación de integridad |
 | A9 | Alguien que lee una copia de la BD | Firmar con tokens o códigos robados | Tokens, sesiones y códigos guardados como hash/HMAC; el HMAC usa una clave derivada que no está en la BD |
 | A10 | Fallo de Stirling, ClamAV o la autoridad de sello de tiempo | Perder la firma o dejarla a medias | La firma queda en BD de forma atómica; el sellado se reintenta; los adjuntos fallan **cerrados** (sin escaneo no se aceptan) |
@@ -558,9 +558,9 @@ Con sesión; todo filtrado por `organizationId`. El documento de origen se valid
      - adjuntos con nombre, tamaño, SHA-256 original y reconstruido, y resultado del antivirus;
      - bitácora (tipo, fecha, IP);
      - cabeza de la cadena (`eventsHeadHash`);
-     - leyenda: "Firma electrónica simple registrada por AuditMind y sellada por {Organización}."
+     - leyenda: "Firma electrónica simple registrada por Nova Criterio y sellada por {Organización}."
    - `mergePdfs([original, evidencia])`.
-   - `signPdf` con el **sello de la organización**: `name = "{Organización} · Sello de evidencia"`, `reason = "Constancia de firma electrónica simple"`, `location = "AuditMind"`, firma visible en la **última página** (la hoja de evidencia).
+   - `signPdf` con el **sello de la organización**: `name = "{Organización} · Sello de evidencia"`, `reason = "Constancia de firma electrónica simple"`, `location = "Nova Criterio"`, firma visible en la **última página** (la hoja de evidencia).
    - `timestampPdf` probando en orden las autoridades de `SIGNATURE_TSA_URLS` (por defecto `http://timestamp.digicert.com,http://timestamp.sectigo.com`); se guarda `tsaUrlUsed`.
    - Subir `signed.pdf` y calcular `signedPdfSha256`; `eventsHeadHash`, `sealedAt`, `sealStatus = SEALED`, evento `SEALED`.
    - Efecto posterior al sellado en el documento de origen (§11).
@@ -697,7 +697,7 @@ Todas las plantillas van con `escHtml`. `replyTo` = correo del creador de la sol
 | `sendSignatureOtp` | firmante | `otp/send` | Código grande en el cuerpo (nunca en el asunto), vigencia de 10 min, "si no lo pediste, ignora este correo" |
 | `sendSignatureReminder` | firmante | 3 días antes del vencimiento, una sola vez, si sigue `PENDING`/`VIEWED` y `reminderEnabled` | Igual que la solicitud, con **el mismo enlace** (se descifra `tokenEncrypted`; no se rota, así el correo original sigue sirviendo) |
 | `sendSignatureCompleted` | firmante | al sellar | "Tu firma quedó registrada", código de verificación, y que puede descargar la copia en el mismo enlace durante 30 días |
-| `sendSignatureOutcome` | creador | al firmar o rechazar | Resultado y enlace al documento en AuditMind |
+| `sendSignatureOutcome` | creador | al firmar o rechazar | Resultado y enlace al documento en Nova Criterio |
 | `sendSealFailed` | creador | `sealStatus = FAILED` | Aviso con enlace al panel |
 
 **Recomendación de DNS (la hace el usuario, no bloquea):**
@@ -764,7 +764,7 @@ Están en `apps/api/src/signatures/legal-texts.ts`. Cada firma guarda la versió
 
 **`PRIVACY_NOTICE` v1:**
 
-> {Organización} utiliza AuditMind para gestionar esta firma. Para dejar constancia se registran tu nombre, cargo, correo electrónico, dirección IP, navegador, fecha y hora, y los archivos que adjuntes. Estos datos se conservan junto con el documento como evidencia del trabajo de auditoría, durante el plazo de conservación de {Organización}, y solo los consulta su equipo, conforme a la legislación aplicable de protección de datos personales.
+> {Organización} utiliza Nova Criterio para gestionar esta firma. Para dejar constancia se registran tu nombre, cargo, correo electrónico, dirección IP, navegador, fecha y hora, y los archivos que adjuntes. Estos datos se conservan junto con el documento como evidencia del trabajo de auditoría, durante el plazo de conservación de {Organización}, y solo los consulta su equipo, conforme a la legislación aplicable de protección de datos personales.
 
 **`DECLINE_NOTICE` v1:**
 

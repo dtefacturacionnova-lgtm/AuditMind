@@ -6,7 +6,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'AuditMind — Intelligence Platform',
+  title: 'Nova Criterio — Intelligence Platform',
   description: 'Plataforma de auditoría inteligente',
 };
 

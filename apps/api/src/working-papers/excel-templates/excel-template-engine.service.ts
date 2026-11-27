@@ -116,7 +116,7 @@ export class ExcelTemplateEngineService {
     const advertencias: ExcelAdvertencia[] = [];
 
     const workbook = new Workbook();
-    workbook.creator = 'AuditMind';
+    workbook.creator = 'Nova Criterio';
     workbook.created = ctx.generadoEn;
 
     const hojasExcel = new Map<string, Worksheet>();
@@ -622,7 +622,7 @@ export class ExcelTemplateEngineService {
   private escribirCabeceraEncargo(ws: Worksheet, ctx: ExcelTemplateContext, label: string) {
     ws.mergeCells(1, 1, 1, 6);
     const titulo = ws.getCell(1, 1);
-    titulo.value = `AuditMind — ${label}`;
+    titulo.value = `Nova Criterio — ${label}`;
     titulo.font = { bold: true, size: 14 };
     titulo.protection = { locked: true };
 
@@ -755,7 +755,7 @@ export class ExcelTemplateEngineService {
       .replace(/[áàäâã]/gi, 'a').replace(/[éèëê]/gi, 'e').replace(/[íìïî]/gi, 'i')
       .replace(/[óòöôõ]/gi, 'o').replace(/[úùüû]/gi, 'u').replace(/ñ/gi, 'n')
       .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    return `AuditMind_${slug}_${ctx.paperCode}_${fecha}.xlsx`;
+    return `NovaCriterio_${slug}_${ctx.paperCode}_${fecha}.xlsx`;
   }
 
   // ═══════════════════════════════════════════════════════════════════════

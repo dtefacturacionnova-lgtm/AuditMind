@@ -3,7 +3,7 @@ import { SectionTemplate } from './dto/paper-section.dto';
 
 /**
  * PAPER_TEMPLATES — Plantillas de secciones para los 5 papeles de trabajo
- * inteligentes del sistema AuditMind.
+ * inteligentes del sistema Nova Criterio.
  *
  * Claves = paperCode (PT-A1, PT-A2, PT-A4, PT-MEMO, PT-PROG)
  */
@@ -3240,7 +3240,7 @@ export const PAPER_TEMPLATES: Record<string, SectionTemplate[]> = {
     {
       sectionKey:  'S8',
       label:       'Saldos de Apertura — NIA 510 (Primer Encargo o Cambio de Auditor)',
-      description: 'ACTIVA ESTA SECCIÓN cuando es el primer año de auditoría del cliente en AuditMind o hubo cambio de firma. NIA 510 requiere que el auditor obtenga evidencia suficiente de que los saldos iniciales no contienen incorrecciones que afecten los EEFF actuales.',
+      description: 'ACTIVA ESTA SECCIÓN cuando es el primer año de auditoría del cliente en Nova Criterio o hubo cambio de firma. NIA 510 requiere que el auditor obtenga evidencia suficiente de que los saldos iniciales no contienen incorrecciones que afecten los EEFF actuales.',
       fieldType:   FieldType.MATRIX,
       isRequired:  false,
       isAutoFilled:false,

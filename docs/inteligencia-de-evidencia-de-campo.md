@@ -1,15 +1,15 @@
 # Inteligencia de Evidencia de Campo — Propuesta de Funcionalidad
 
 > Investigación realizada: 2026-08-16
-> Fuentes: dos documentos aportados por el usuario (`AuditMind_Integraciones_v14.0.docx.md` — investigación de mercado de 10 capacidades de sistemas líderes; `Modulo_IA_Analisis_Entrevistas_Auditoria.md` — propuesta técnica de cadena de transcripción/análisis de entrevistas) + verificación directa contra el código real de AuditMind + investigación externa sobre captura de video/anotaciones/notas de campo en herramientas adyacentes.
-> Contexto: el usuario pidió evaluar ambos documentos, investigar cómo lo implementan las firmas grandes, y proponer cómo integrar esto a AuditMind — cubriendo no solo audio, sino video corto, anotaciones y lluvia de ideas, en un flujo campo↔oficina, con IA que ordene y busque pistas de auditoría/fraude/riesgo.
+> Fuentes: dos documentos aportados por el usuario (`AuditMind_Integraciones_v14.0.docx.md` — investigación de mercado de 10 capacidades de sistemas líderes; `Modulo_IA_Analisis_Entrevistas_Auditoria.md` — propuesta técnica de cadena de transcripción/análisis de entrevistas) + verificación directa contra el código real de Nova Criterio + investigación externa sobre captura de video/anotaciones/notas de campo en herramientas adyacentes.
+> Contexto: el usuario pidió evaluar ambos documentos, investigar cómo lo implementan las firmas grandes, y proponer cómo integrar esto a Nova Criterio — cubriendo no solo audio, sino video corto, anotaciones y lluvia de ideas, en un flujo campo↔oficina, con IA que ordene y busque pistas de auditoría/fraude/riesgo.
 > **Estado: DISEÑO APROBADO, sin implementar.** Las preguntas abiertas están resueltas (§5, EVD-01) y el diseño técnico completo del pipeline está en §6 (EVD-02, 2026-08-17) — las actividades EVD-03..11 (Fase 1) implementan ese contrato tal cual.
 
 ---
 
 ## 0. Corrección importante antes de proponer nada
 
-El documento `AuditMind_Integraciones_v14.0` describe varias cosas como si **ya existieran** en AuditMind (un "Grabador Inteligente de Entrevistas" en el "Plan Enterprise", agentes especializados con capacidades concretas, un concepto "PT Vivo"). Verifiqué cada afirmación contra el código real antes de proponer nada — construir sobre una base que no existe habría producido un plan mal calibrado.
+El documento `AuditMind_Integraciones_v14.0` describe varias cosas como si **ya existieran** en Nova Criterio (un "Grabador Inteligente de Entrevistas" en el "Plan Enterprise", agentes especializados con capacidades concretas, un concepto "PT Vivo"). Verifiqué cada afirmación contra el código real antes de proponer nada — construir sobre una base que no existe habría producido un plan mal calibrado.
 
 | Afirmación del documento | Estado real (verificado en código) |
 |---|---|
@@ -19,9 +19,9 @@ El documento `AuditMind_Integraciones_v14.0` describe varias cosas como si **ya 
 | "Grafo de conocimiento" con trazabilidad | **Real y en uso activo** — `PaperLink`, `PaperGraphService`, `PapersGraphView.tsx`, referencias sección-a-sección. No verificado que la trazabilidad llegue a nivel de oración individual del Memorando como afirma el documento (el grafo opera a nivel de papel/sección/campo). |
 | "Portal del Auditado" con PBC | **Real y funcional** — `PbcRequest`, `PbcMessage`, `PbcPaperLink`, portal con token en el fragmento de la URL (`apps/web/src/app/portal/`, endurecido en F1e de la firma por enlace), ya en producción. |
 
-**Conclusión de esta verificación**: la parte de la propuesta de entrevistas (documento 2) es la más honesta y técnicamente sólida de los dos documentos — está escrita como diseño a construir, no como algo ya hecho. Este documento retoma esa base y la adapta a lo que realmente existe en AuditMind, con dos decisiones de diseño que el documento 2 no tenía que tomar (porque solo cubría audio): si esto va atado a "entrevistas" o es una capacidad general, y cómo extenderlo a video/anotaciones/lluvia de ideas sin construir cuatro sistemas separados.
+**Conclusión de esta verificación**: la parte de la propuesta de entrevistas (documento 2) es la más honesta y técnicamente sólida de los dos documentos — está escrita como diseño a construir, no como algo ya hecho. Este documento retoma esa base y la adapta a lo que realmente existe en Nova Criterio, con dos decisiones de diseño que el documento 2 no tenía que tomar (porque solo cubría audio): si esto va atado a "entrevistas" o es una capacidad general, y cómo extenderlo a video/anotaciones/lluvia de ideas sin construir cuatro sistemas separados.
 
-También verifiqué (investigación externa) dos cifras citadas en el documento 1: **DataSnipper "$1.4B en ahorros" y "1,100% de crecimiento" son datos autorreportados por el propio proveedor, sin metodología publicada** — cítalos como cifras de marketing del proveedor si los usas en material comercial, no como prueba independiente. Y **Sally AI es real pero es una herramienta horizontal de transcripción de reuniones** (también se vende para Ventas, RRHH, Gerencia) — el ángulo "para auditores" aparece solo en un post de blog suyo, no es un producto nativo de auditoría. Ningún sistema de auditoría del mercado (AuditBoard, TeamMate+, Workiva, MindBridge) hace hoy análisis de IA sobre **video** capturado por el auditor — es un vacío real del mercado, no solo de AuditMind.
+También verifiqué (investigación externa) dos cifras citadas en el documento 1: **DataSnipper "$1.4B en ahorros" y "1,100% de crecimiento" son datos autorreportados por el propio proveedor, sin metodología publicada** — cítalos como cifras de marketing del proveedor si los usas en material comercial, no como prueba independiente. Y **Sally AI es real pero es una herramienta horizontal de transcripción de reuniones** (también se vende para Ventas, RRHH, Gerencia) — el ángulo "para auditores" aparece solo en un post de blog suyo, no es un producto nativo de auditoría. Ningún sistema de auditoría del mercado (AuditBoard, TeamMate+, Workiva, MindBridge) hace hoy análisis de IA sobre **video** capturado por el auditor — es un vacío real del mercado, no solo de Nova Criterio.
 
 ---
 

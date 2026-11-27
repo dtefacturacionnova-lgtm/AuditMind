@@ -14,7 +14,7 @@ export interface SigningIdentity {
 // externa (eso requeriría un certificado emitido por un Prestador de
 // Servicios de Certificación acreditado ante la Unidad de Firma Electrónica
 // del Ministerio de Economía; ver memoria de sesión "project_pdf_tools_stirling"
-// para el camino a futuro). AuditMind emite un certificado autofirmado por
+// para el camino a futuro). Nova Criterio emite un certificado autofirmado por
 // usuario la primera vez que lo necesita — prueba que ESE usuario aprobó ESA
 // versión exacta de un documento, no más que eso.
 @Injectable()
@@ -75,7 +75,7 @@ export class SigningIdentityService {
     const attrs = [
       { name: 'commonName', value: name },
       { name: 'emailAddress', value: email },
-      { name: 'organizationName', value: 'AuditMind' },
+      { name: 'organizationName', value: 'Nova Criterio' },
       { name: 'countryName', value: 'SV' },
     ];
     cert.setSubject(attrs);

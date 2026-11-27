@@ -59,7 +59,7 @@ const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} M
 export function renderEvidenceBody(d: EvidenceData): string {
   const parts: string[] = [];
 
-  parts.push(`<p style="margin:0 0 2mm 0;font-size:8.5pt;color:#4a5568;">Constancia generada por AuditMind para <strong>${esc(d.orgName)}</strong>. ` +
+  parts.push(`<p style="margin:0 0 2mm 0;font-size:8.5pt;color:#4a5568;">Constancia generada por Nova Criterio para <strong>${esc(d.orgName)}</strong>. ` +
     `Acompaña al documento «${esc(d.title)}» (${esc(d.documentLabel)}) y forma parte de un mismo archivo sellado.</p>`);
 
   parts.push(`<div style="border:1.5px solid #0F2D4A;border-radius:3mm;padding:3mm 4mm;margin:2mm 0 3mm 0;">` +
@@ -101,7 +101,7 @@ export function renderEvidenceBody(d: EvidenceData): string {
     row(`${e.seq}. ${EVENT_LABEL[e.type] ?? e.type}`, `${esc(fmtUtc(e.at))}${e.ip ? ` · ${esc(e.ip)}` : ''}`)).join('')));
   parts.push(table(row('Huella de la bitácora (cabeza de la cadena)', mono(d.headHash))));
 
-  parts.push(`<p style="margin:5mm 0 0 0;font-size:8pt;color:#718096;">Firma electrónica simple registrada por AuditMind y sellada por ${esc(d.orgName)}. ` +
+  parts.push(`<p style="margin:5mm 0 0 0;font-size:8pt;color:#718096;">Firma electrónica simple registrada por Nova Criterio y sellada por ${esc(d.orgName)}. ` +
     `La bitácora está encadenada por huellas: cualquier alteración posterior se detecta al verificarla.</p>`);
 
   return parts.join('\n');

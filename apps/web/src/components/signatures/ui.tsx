@@ -125,7 +125,7 @@ export function openSignUrl(url: string): void {
 }
 
 /**
- * Firma presencial en el equipo del auditor: el navegador comparte la sesión de AuditMind entre pestañas, así que quien
+ * Firma presencial en el equipo del auditor: el navegador comparte la sesión de Nova Criterio entre pestañas, así que quien
  * reciba el equipo podría abrir el panel con el rol del auditor (revisión de seguridad F5b, 2026-10-19). Por eso el
  * enlace ya no se abre solo: se recomienda el teléfono de la persona o una ventana privada.
  */
@@ -133,7 +133,7 @@ export function InPersonWarning() {
   return (
     <Note tone="warn">
       <strong>Si la persona va a firmar en tu equipo</strong>, abre el enlace en una <strong>ventana privada</strong> (Ctrl+Shift+N en Chrome o Edge,
-      Ctrl+Shift+P en Firefox) y ciérrala al terminar. En una pestaña normal, quien use el equipo podría entrar a tu sesión de AuditMind.
+      Ctrl+Shift+P en Firefox) y ciérrala al terminar. En una pestaña normal, quien use el equipo podría entrar a tu sesión de Nova Criterio.
     </Note>
   );
 }

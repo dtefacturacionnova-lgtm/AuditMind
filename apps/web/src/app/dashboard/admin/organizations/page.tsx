@@ -312,7 +312,7 @@ export default function OrganizationsPage() {
       ? `¿Reactivar la organización "${org.name}"? Sus usuarios podrán volver a entrar.`
       : `¿Desactivar la organización "${org.name}"?
 
-Todos sus usuarios dejarán de poder usar AuditMind hasta que la reactives. Sus datos no se borran.`;
+Todos sus usuarios dejarán de poder usar Nova Criterio hasta que la reactives. Sus datos no se borran.`;
     if (!window.confirm(msg)) return;
     try {
       await toggle.mutateAsync({ id: org.id, active: next });

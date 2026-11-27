@@ -81,7 +81,7 @@ export function verificarManifest(
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return {
       ok: false,
-      razon: 'La firma del archivo no es válida — pudo ser alterado o no fue generado por AuditMind',
+      razon: 'La firma del archivo no es válida — pudo ser alterado o no fue generado por Nova Criterio',
     };
   }
 

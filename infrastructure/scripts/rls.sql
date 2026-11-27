@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════
--- AuditMind — Row Level Security (RLS) Multi-Tenant
+-- Nova Criterio — Row Level Security (RLS) Multi-Tenant
 -- Columnas en camelCase (Prisma default, sin @@map en campos)
 -- ═══════════════════════════════════════════════════════════════════════
 

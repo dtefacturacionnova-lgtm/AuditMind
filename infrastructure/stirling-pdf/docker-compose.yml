@@ -1,5 +1,5 @@
 # Stirling-PDF — servicio de herramientas PDF (OCR self-hosted, sin límite de
-# cuota) para AuditMind. Ver plan de OCR (2026-08-24) para el contexto completo.
+# cuota) para Nova Criterio. Ver plan de OCR (2026-08-24) para el contexto completo.
 #
 # IMPORTANTE — aislamiento de red: el puerto se publica SOLO en 127.0.0.1.
 # Nunca cambiar "127.0.0.1:8090:8080" por "8090:8080" a secas — eso expondría
@@ -13,7 +13,7 @@
 #   docker compose -f infrastructure/stirling-pdf/docker-compose.yml up -d
 #
 # Nota de licencia: se usa la imagen oficial tal cual (incluye físicamente el
-# código de app/proprietary y app/saas, aunque AuditMind solo invoca endpoints
+# código de app/proprietary y app/saas, aunque Nova Criterio solo invoca endpoints
 # de app/core vía pdf-tools.service.ts en NestJS) — riesgo de licencia
 # aceptado conscientemente, no resuelto legalmente. Ver plan de OCR.
 

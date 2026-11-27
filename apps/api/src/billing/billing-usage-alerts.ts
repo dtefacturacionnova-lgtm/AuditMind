@@ -86,7 +86,7 @@ export interface UsageNoticeContext {
 
 export function describeUsageAlert(d: UsageAlertDecision, ctx: UsageNoticeContext): NoticeText {
   const planLine = `Plan: ${ctx.planName || 'sin nombre'} · Organización: ${ctx.orgName}.`;
-  const extra = 'Puedes ampliar tu plan o comprar más; contacta al equipo de AuditMind.';
+  const extra = 'Puedes ampliar tu plan o comprar más; contacta al equipo de Nova Criterio.';
 
   if (d.kind === 'AI_80') {
     return {
@@ -119,7 +119,7 @@ export function describeUsageAlert(d: UsageAlertDecision, ctx: UsageNoticeContex
   if (d.kind === 'STORAGE_80') {
     return {
       level: 'warning', notificationType: 'USAGE_STORAGE_80',
-      subject: `Usaste el ${d.percent} % de tu espacio en AuditMind`,
+      subject: `Usaste el ${d.percent} % de tu espacio en Nova Criterio`,
       heading: `Usaste el ${d.percent} % de tu espacio`,
       paragraphs: [
         `Estás usando ${fmtGb(d.used)} de ${fmtGb(d.capacity)} y te quedan ${fmtGb(d.remaining)}. ${planLine}`,
@@ -132,7 +132,7 @@ export function describeUsageAlert(d: UsageAlertDecision, ctx: UsageNoticeContex
   }
   return {
     level: 'critical', notificationType: 'USAGE_STORAGE_100',
-    subject: 'Tu espacio en AuditMind está lleno',
+    subject: 'Tu espacio en Nova Criterio está lleno',
     heading: 'Tu espacio está lleno',
     paragraphs: [
       `Usaste los ${fmtGb(d.capacity)} de tu espacio. ${planLine}`,
